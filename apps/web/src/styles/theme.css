@@ -1,0 +1,56 @@
+:root {
+  color-scheme: light dark;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 20rem;
+  min-height: 100vh;
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+[data-theme='light'] {
+  --page-background: #f4f6fa;
+  --surface: #ffffff;
+  --surface-muted: #f7f8fb;
+  --text-primary: #172033;
+  --text-muted: #687288;
+  --border-subtle: #d8dde8;
+  --accent: #5361d5;
+  --accent-hover: #4552c5;
+  --tag-background: #eef0ff;
+  --tag-border: #cfd4ff;
+  --tag-border-hover: #929bfa;
+  --tag-text: #343e95;
+  --tag-remove-hover: #daddff;
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --page-background: #11141b;
+  --surface: #1a1f29;
+  --surface-muted: #151922;
+  --text-primary: #edf1f7;
+  --text-muted: #9da7b9;
+  --border-subtle: #343b49;
+  --accent: #929bfa;
+  --accent-hover: #a8afff;
+  --tag-background: #292f48;
+  --tag-border: #444d78;
+  --tag-border-hover: #7782d7;
+  --tag-text: #e0e3ff;
+  --tag-remove-hover: #3a4265;
+  color-scheme: dark;
+}

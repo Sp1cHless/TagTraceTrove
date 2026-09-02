@@ -1,0 +1,29 @@
+{
+  "name": "@t3/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "db:doctor": "tsx src/database/doctor-cli.ts",
+    "db:probe": "tsx src/database/probe-cli.ts",
+    "dev": "tsx --watch src/http/server-cli.ts",
+    "import:commit": "tsx src/import/commit-cli.ts",
+    "import:site-probe": "tsx src/import/cli.ts",
+    "merge:authors": "tsx src/import/merge-producers-cli.ts",
+    "start": "tsx src/http/server-cli.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "@t3/shared": "workspace:*",
+    "better-sqlite3": "^12.2.0",
+    "hono": "^4.13.5",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "tsx": "^4.23.13"
+  }
+}

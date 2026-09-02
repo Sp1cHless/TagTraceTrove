@@ -1,0 +1,32 @@
+{
+  "name": "tag-trace-trove",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "db:doctor": "pnpm --filter @t3/server db:doctor",
+    "db:probe": "pnpm --filter @t3/server db:probe",
+    "dev:server": "pnpm --filter @t3/server dev",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "import:site-probe": "pnpm --filter @t3/server import:site-probe",
+    "import:commit": "pnpm --filter @t3/server import:commit",
+    "merge:authors": "pnpm --filter @t3/server merge:authors",
+    "test": "vitest run --exclude '**/*.integration.test.ts'",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "start:server": "pnpm --filter @t3/server start"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@types/node": "^22.18.0",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/test-utils": "^2.5.0",
+    "eslint": "^9.34.0",
+    "jsdom": "^30.0.1",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.41.0",
+    "vitest": "^3.2.4",
+    "vue": "^3.5.42"
+  }
+}

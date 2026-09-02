@@ -1,0 +1,22 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+.data/
+*.log
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+.DS_Store
+# Import-commit scratch database (holds a library copy during CLI commits)
+/.tmp-commit/
+# T3 tray launcher (repo-root copy + build artifacts)
+/T3.exe
+/T3.runtimeconfig.json
+/t3-server.log
+tools/t3-launcher/bin/
+tools/t3-launcher/obj/
+tools/t3-launcher/dist/
