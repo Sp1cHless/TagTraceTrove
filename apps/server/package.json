@@ -8,6 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "db:doctor": "tsx src/database/doctor-cli.ts",
     "db:probe": "tsx src/database/probe-cli.ts",
+    "db:backup": "tsx src/database/backup-cli.ts",
+    "db:restore": "tsx src/database/restore-cli.ts",
     "dev": "tsx --watch src/http/server-cli.ts",
     "import:commit": "tsx src/import/commit-cli.ts",
     "import:site-probe": "tsx src/import/cli.ts",

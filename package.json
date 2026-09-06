@@ -7,6 +7,8 @@
     "build": "pnpm -r build",
     "db:doctor": "pnpm --filter @t3/server db:doctor",
     "db:probe": "pnpm --filter @t3/server db:probe",
+    "db:backup": "pnpm --filter @t3/server db:backup",
+    "db:restore": "pnpm --filter @t3/server db:restore",
     "dev:server": "pnpm --filter @t3/server dev",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",

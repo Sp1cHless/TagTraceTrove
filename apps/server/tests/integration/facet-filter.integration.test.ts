@@ -12,6 +12,7 @@ import {
   createProducer,
   linkEntryProducer,
 } from '../../src/repositories/producer-repository.js';
+import { createRatingSlot, setEntryRating } from '../../src/repositories/rating-repository.js';
 
 type TestDatabase = ReturnType<typeof createMigratedMemoryDatabase>;
 
@@ -128,6 +129,7 @@ describe('listFacetFilterOptions', () => {
       facets: [],
       allTags: [],
       authors: [],
+      ratingSlots: [],
     });
   });
 
@@ -387,5 +389,78 @@ describe('Facet filter HTTP routes', () => {
       }),
     });
     expect(duplicateTags.status).toBe(400);
+  });
+
+  it('filters and sorts by rating slots, sinking unrated entries', () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const slot = createRatingSlot(database, { kind: 'entry', entryType: 'comic', name: 'Quality' });
+    const rated5 = createEntry(database, { title: 'Rated Five', type: 'comic' }).id;
+    const rated3 = createEntry(database, { title: 'Rated Three', type: 'comic' }).id;
+    const unrated = createEntry(database, { title: 'Unrated Work', type: 'comic' }).id;
+    setEntryRating(database, { entryId: rated5, slotId: slot.id, stars: 5 });
+    setEntryRating(database, { entryId: rated3, slotId: slot.id, stars: 3 });
+
+    const filter = (ratingConditions: never[] = [], ratingSort: unknown = null) => (
+      findEntriesByFacetFilters(database, {
+        entryType: 'comic',
+        conditions: [],
+        authorIds: [],
+        ratingConditions,
+        ratingSort: ratingSort as never,
+      }).map((entry) => entry.id)
+    );
+
+    expect(filter([{ slotId: slot.id, operator: 'eq', stars: 5 } as never]))
+      .toEqual([rated5]);
+    expect(filter([{ slotId: slot.id, operator: 'gt', stars: 2.5 } as never]))
+      .toEqual(expect.arrayContaining([rated3, rated5]));
+    expect(filter([{ slotId: slot.id, operator: 'lt', stars: 4 } as never]))
+      .toEqual([rated3]);
+    // Unrated means "no stars given" — never zero.
+    expect(filter([{ slotId: slot.id, operator: 'unrated', stars: null } as never]))
+      .toEqual([unrated]);
+    // eq combined with a rating AND across conditions.
+    expect(filter([
+      { slotId: slot.id, operator: 'gt', stars: 2 } as never,
+      { slotId: slot.id, operator: 'lt', stars: 4 } as never,
+    ])).toEqual([rated3]);
+
+    // Sort: high to low, unrated sinks below every rated entry.
+    expect(filter([], { slotId: slot.id, direction: 'desc' }))
+      .toEqual([rated5, rated3, unrated]);
+
+    // Options surface the shared slots for the filter UI.
+    expect(listFacetFilterOptions(database, 'comic').ratingSlots)
+      .toEqual([{ id: slot.id, name: 'Quality', sortOrder: 0 }]);
+  });
+
+  it('rejects rating conditions pointing at a foreign Gallery', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const slot = createRatingSlot(database, { kind: 'entry', entryType: 'manga', name: 'Style' });
+    createEntry(database, { title: 'Work', type: 'comic' });
+
+    expect(() => findEntriesByFacetFilters(database, {
+      entryType: 'comic',
+      conditions: [],
+      authorIds: [],
+      ratingConditions: [{ slotId: slot.id, operator: 'eq', stars: 4 }],
+      ratingSort: null,
+    })).toThrow(/does not belong/);
+
+    const app = createApiApp(database);
+    const response = await app.request('/api/entries/filter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        entryType: 'comic',
+        conditions: [],
+        authorIds: [],
+        ratingConditions: [{ slotId: slot.id, operator: 'unrated', stars: null }],
+        ratingSort: null,
+      }),
+    });
+    expect(response.status).toBe(409);
   });
 });

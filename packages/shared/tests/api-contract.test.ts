@@ -63,6 +63,8 @@ describe('entry API contracts', () => {
         }],
       }],
       contents: [{ id: 6, contentType: 'short review', content: '不错', sortOrder: 0 }],
+      ratings: [{ slotId: 7, name: '画质', stars: 4.5 }, { slotId: 8, name: '剧情', stars: null }],
+      usage: { viewCount: 3, likeCount: 5, lastViewedAt: '2026-09-04T10:00:00Z' },
     });
 
     expect(detail.sections[0]?.facets[0]?.name).toBe('');

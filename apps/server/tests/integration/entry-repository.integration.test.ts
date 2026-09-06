@@ -163,6 +163,8 @@ describe('entry repository', () => {
             sortOrder: 2,
           },
         ],
+        ratings: [],
+        usage: { viewCount: 0, likeCount: 0, lastViewedAt: null },
       });
     } finally {
       database.close();

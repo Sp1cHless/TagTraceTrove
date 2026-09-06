@@ -1,6 +1,9 @@
 import type { T3Database } from '../database/connection.js';
 import { listEntryTags } from './entry-tag-repository.js';
 import { listLayout } from './layout-repository.js';
+import { listEntryRatings, type RatingRowRecord } from './rating-repository.js';
+import { getEntryUsage } from './usage-repository.js';
+import { listNsfwGalleryTypes } from './partition-repository.js';
 
 export interface EntryDetailTag {
   id: number;
@@ -49,6 +52,8 @@ export interface EntryDetail {
   producers: EntryDetailProducer[];
   sections: EntryDetailSection[];
   contents: EntryDetailContent[];
+  ratings: RatingRowRecord[];
+  usage: { viewCount: number; lastViewedAt: string | null };
 }
 
 export interface EntryRecord {
@@ -65,6 +70,7 @@ export interface EntryRecord {
 export interface GallerySummary {
   type: string;
   entryCount: number;
+  nsfw: boolean;
 }
 
 export interface CreateEntryInput {
@@ -181,7 +187,12 @@ export function listGalleries(database: T3Database): GallerySummary[] {
     GROUP BY type
     ORDER BY type COLLATE NOCASE, type
   `).all() as Array<{ type: string; entry_count: number }>;
-  return rows.map((row) => ({ type: row.type, entryCount: row.entry_count }));
+  const nsfwTypes = listNsfwGalleryTypes(database);
+  return rows.map((row) => ({
+    type: row.type,
+    entryCount: row.entry_count,
+    nsfw: nsfwTypes.has(row.type),
+  }));
 }
 
 export function updateEntry(
@@ -319,6 +330,8 @@ export function getEntryDetail(database: T3Database, entryId: number): EntryDeta
       content: content.content,
       sortOrder: content.sort_order,
     })),
+    ratings: listEntryRatings(database, entry.id),
+    usage: getEntryUsage(database, entry.id),
   };
 }
 

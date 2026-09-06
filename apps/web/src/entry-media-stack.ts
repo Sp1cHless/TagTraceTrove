@@ -1,0 +1,34 @@
+export interface EntryStackMedia {
+  coverRef: string | null;
+  previewRefs: readonly string[];
+}
+
+const MAX_VISIBLE_LAYERS = 4;
+
+export function entryStackLayers(entry: EntryStackMedia): string[] {
+  return [...new Set([
+    ...(entry.coverRef ? [entry.coverRef] : []),
+    ...entry.previewRefs,
+  ])].slice(0, MAX_VISIBLE_LAYERS);
+}
+
+export function entryStackLayerStyle(index: number, count: number): Record<string, string> {
+  const visibleCount = Math.max(1, Math.min(count, MAX_VISIBLE_LAYERS));
+  const layerIndex = Math.max(0, Math.min(index, visibleCount - 1));
+  const totalSpread = visibleCount > 1 ? Math.min(34, (visibleCount - 1) * 17) : 0;
+  const step = visibleCount > 1 ? totalSpread / (visibleCount - 1) : 0;
+
+  return {
+    left: `${43 - (layerIndex * step)}%`,
+    top: `${2 + (layerIndex * 2.5)}%`,
+    width: 'auto',
+    height: `${94 - (layerIndex * 7)}%`,
+    maxWidth: '82%',
+    objectFit: 'contain',
+    background: 'transparent',
+    transform: 'rotateY(30deg)',
+    transformOrigin: '50% 50%',
+    backfaceVisibility: 'hidden',
+    zIndex: String(visibleCount - layerIndex),
+  };
+}

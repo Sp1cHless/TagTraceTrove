@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createGalleryApi } from '../src/api/gallery.js';
+import { createGalleryApi, resolveDefaultApiBaseUrl } from '../src/api/gallery.js';
 import type { ApiClient } from '../src/api/client.js';
+
+describe('default GalleryApi origin', () => {
+  it('uses the serving origin in production while retaining the 8765 development default', () => {
+    expect(resolveDefaultApiBaseUrl(undefined, true, 'http://127.0.0.1:8799')).toBe('http://127.0.0.1:8799/api/');
+    expect(resolveDefaultApiBaseUrl(undefined, false, 'http://127.0.0.1:5173')).toBe('http://127.0.0.1:8765/api/');
+    expect(resolveDefaultApiBaseUrl('http://localhost:9000/custom/', true, 'http://127.0.0.1:8799'))
+      .toBe('http://localhost:9000/custom/');
+  });
+});
 
 describe('GalleryApi Entry Content', () => {
   it('previews a selected export folder and commits its reviewed mapping', async () => {
@@ -75,10 +84,32 @@ describe('GalleryApi Entry Content', () => {
     expect(formData.get('file')).toBe(file);
   });
 
+  it('calls the three global search endpoints with the entered query', async () => {
+    const request = vi.fn(async (path: string) => {
+      if (path === 'search/entries') return [
+        { id: 1, title: 'Endfield', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
+      ];
+      if (path === 'search/tags') return [
+        { tagId: 8, name: 'Endfield', normalizedName: 'endfield', entryCount: 1 },
+      ];
+      return [
+        { id: 9, name: 'Hypergryph', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false },
+      ];
+    });
+    const api = createGalleryApi({ request } as unknown as ApiClient);
+
+    await expect(api.searchEntries('end')).resolves.toHaveLength(1);
+    await expect(api.searchTags('end', false)).resolves.toHaveLength(1);
+    await expect(api.searchAuthors('hyper')).resolves.toHaveLength(1);
+    expect(request).toHaveBeenNthCalledWith(1, 'search/entries', { query: { q: 'end' } });
+    expect(request).toHaveBeenNthCalledWith(2, 'search/tags', { query: { q: 'end', includeNsfw: 'false' } });
+    expect(request).toHaveBeenNthCalledWith(3, 'search/producers', { query: { q: 'hyper' } });
+  });
+
   it('finds Entries across Gallery types through one Entry Tag', async () => {
     const request = vi.fn(async () => [
-      { id: 1, title: 'Endfield', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null },
-      { id: 2, title: 'Witch Hat Atelier', type: 'manga', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null },
+      { id: 1, title: 'Endfield', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
+      { id: 2, title: 'Witch Hat Atelier', type: 'manga', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
     ]);
     const api = createGalleryApi({ request } as unknown as ApiClient);
 
@@ -173,12 +204,35 @@ describe('GalleryApi Entry Content', () => {
 });
 
 describe('GalleryApi Authors', () => {
+  it('loads Author filter options and combines both independent Tag groups', async () => {
+    const summary = { id: 3, name: 'Author', covers: [], galleryType: 'Comic', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false };
+    const request = vi.fn(async (path: string) => (path === 'producers/filter-options'
+      ? {
+          authorTags: [{ tagId: 2, name: 'Circle' }],
+          workTags: [{ tagId: 5, name: 'Action' }],
+        }
+      : [summary]));
+    const api = createGalleryApi({ request } as unknown as ApiClient);
+
+    await expect(api.listAuthorFilterOptions('Comic', false)).resolves.toEqual({
+      authorTags: [{ tagId: 2, name: 'Circle' }],
+      workTags: [{ tagId: 5, name: 'Action' }],
+    });
+    await expect(api.filterAuthors([2, 3], [5, 8])).resolves.toEqual([summary]);
+    expect(request).toHaveBeenCalledWith('producers/filter-options', {
+      query: { entryType: 'Comic', includeNsfw: 'false' },
+    });
+    expect(request).toHaveBeenCalledWith('producers', {
+      query: { ownTagIds: '2,3', relatedEntryTagIds: '5,8' },
+    });
+  });
+
   it('finds Authors through the independent Producer Tag vocabulary', async () => {
-    const request = vi.fn(async () => [{ id: 3, name: 'Author', covers: [], galleryType: null }]);
+    const request = vi.fn(async () => [{ id: 3, name: 'Author', covers: [], galleryType: null, viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }]);
     const api = createGalleryApi({ request } as unknown as ApiClient);
 
     await expect(api.findAuthorsByTag(8)).resolves.toEqual(
-      [{ id: 3, name: 'Author', covers: [], galleryType: null }],
+      [{ id: 3, name: 'Author', covers: [], galleryType: null, viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }],
     );
     expect(request).toHaveBeenCalledWith('producers', {
       query: { ownTagIds: '8' },
@@ -198,7 +252,7 @@ describe('GalleryApi Authors', () => {
       if (path === 'producers' && options?.method === 'POST') {
         return { id: 3, name: 'Author', occupation: null, artworkRef: null, content: null };
       }
-      if (path === 'producers') return [{ id: 3, name: 'Author', galleryType: null }];
+      if (path === 'producers') return [{ id: 3, name: 'Author', galleryType: null, viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }];
       if (path === 'producers/3' && options?.method === 'PATCH') {
         return { id: 3, name: 'Author', occupation: null, artworkRef: null, content: 'Note' };
       }
@@ -212,12 +266,22 @@ describe('GalleryApi Authors', () => {
         tags: [],
         looseEntries: [],
         directories: [],
+        ratings: [],
+        usage: { viewCount: 0, likeCount: 0, lastViewedAt: null },
       };
       if (path === 'producers/3/directories') return directory;
       if (path === 'author-directories/5') return { ...directory, title: 'Selected works' };
       if (path.includes('/directories/5/entries/7')) return {
         ...directory,
-        entries: [{ id: 7, title: 'Work', type: 'manga', coverRef: null }],
+        entries: [{
+          id: 7,
+          title: 'Work',
+          type: 'manga',
+          coverRef: null,
+          viewCount: 0,
+          likeCount: 0,
+          lastViewedAt: null,
+        }],
       };
       if (path.includes('/tags')) return { tagId: 8, name: 'Artist', normalizedName: 'artist' };
       if (path === 'entries/7/producers/3') return { ok: true };
@@ -226,7 +290,7 @@ describe('GalleryApi Authors', () => {
     const api = createGalleryApi({ request } as unknown as ApiClient);
 
     await expect(api.listAuthors()).resolves.toEqual(
-      [{ id: 3, name: 'Author', covers: [], galleryType: null }],
+      [{ id: 3, name: 'Author', covers: [], galleryType: null, viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }],
     );
     await expect(api.getAuthor(3)).resolves.toMatchObject({ id: 3, directories: [] });
     await api.createAuthor({ name: 'Author' });

@@ -5,6 +5,8 @@ import {
   authorDetailResponseSchema,
   authorDirectoryIdParamsSchema,
   authorDirectorySchema,
+  authorFilterOptionsResponseSchema,
+  authorFilterOptionsQuerySchema,
   assignEntryTagRequestSchema,
   assignProducerTagRequestSchema,
   contentIdParamsSchema,
@@ -14,6 +16,7 @@ import {
   createFacetRequestSchema,
   createFacetResponseSchema,
   createProducerRequestSchema,
+  createRatingSlotRequestSchema,
   createSectionRequestSchema,
   createSectionResponseSchema,
   entryContentRecordSchema,
@@ -31,7 +34,17 @@ import {
   facetIdParamsSchema,
   findEntriesQuerySchema,
   findProducersQuerySchema,
+  collectionIdParamsSchema,
+  collectionKindSchema,
+  collectionRecordSchema,
+  createCollectionRequestSchema,
+  galleryPartitionRequestSchema,
   gallerySummarySchema,
+  reorderCollectionsRequestSchema,
+  searchQuerySchema,
+  tagSearchQuerySchema,
+  updateCollectionRequestSchema,
+  tagSearchHitSchema,
   importBatchSchema,
   importCommitMappingSchema,
   importTaxonomyAliasesRequestSchema,
@@ -39,6 +52,9 @@ import {
   layoutTemplateApplyResponseSchema,
   moveEntryTagRequestSchema,
   mutationSuccessResponseSchema,
+  authorAliasGroupsResponseSchema,
+  saveAuthorAliasGroupRequestSchema,
+  saveAuthorAliasGroupResponseSchema,
   producerIdParamsSchema,
   producerMergePlanResponseSchema,
   producerMergeResponseSchema,
@@ -48,22 +64,33 @@ import {
   renameEntryTagRequestSchema,
   renameProducerTagRequestSchema,
   renameTagGroupRequestSchema,
+  ratingRowSchema,
+  ratingSlotSchema,
+  ratingSlotsQuerySchema,
   reorderEntryContentsRequestSchema,
+  reorderRatingSlotsRequestSchema,
   reorderSectionFacetsRequestSchema,
   reorderTagGroupRequestSchema,
   sectionIdParamsSchema,
+  setRatingRequestSchema,
   tagGroupIdParamsSchema,
   tagIdParamsSchema,
   tagLayoutApplyResponseSchema,
+  templateSummarySchema,
   taxonomyAliasIdParamsSchema,
   taxonomyAliasesQuerySchema,
   taxonomyAliasSchema,
+  unassignedTagGroupsResponseSchema,
+  unassignedTagMoveRequestSchema,
+  unassignedTagMoveResponseSchema,
   upsertTaxonomyAliasRequestSchema,
   updateEntryContentRequestSchema,
   updateAuthorDirectoryRequestSchema,
   updateEntryRequestSchema,
   updateProducerRequestSchema,
+  usageInfoSchema,
 } from '@t3/shared';
+import { normalizeTag } from '@t3/shared';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -97,10 +124,15 @@ import {
   findEntriesByTags,
   listEntryTags,
   listEntryTagsForType,
+  listEntryTagsGlobally,
   listFacetFilterOptions,
+  listUnassignedTags,
   moveEntryTag,
+  moveUnassignedTagToFacet,
   renameEntryTag,
   removeEntryTag,
+  searchEntriesByTitle,
+  searchEntryTags,
 } from '../repositories/entry-tag-repository.js';
 import {
   applyLayoutTemplate,
@@ -130,10 +162,47 @@ import {
 import {
   assignProducerTag,
   findProducers,
+  listAuthorFilterOptions,
   listProducerTags,
   renameProducerTag,
   removeProducerTag,
 } from '../repositories/producer-tag-repository.js';
+import {
+  createEntryRatingSlot,
+  createProducerRatingSlot,
+  listRatingSlots,
+  reorderEntryRatingSlots,
+  reorderProducerRatingSlots,
+  setEntryRating,
+  setProducerRating,
+} from '../repositories/rating-repository.js';
+import { likeEntry, recordEntryView } from '../repositories/usage-repository.js';
+import { setGalleryPartition } from '../repositories/partition-repository.js';
+import {
+  listAuthorAliasGroups,
+  writeAuthorAliasGroup,
+} from '../repositories/author-alias-repository.js';
+import {
+  listTemplateSummaries,
+  templatesDirFor,
+  writeTemplateFiles,
+} from '../repositories/template-export.js';
+import {
+  addCollectionEntry,
+  addCollectionProducer,
+  createCollection,
+  deleteCollection,
+  getCollection,
+  listCollections,
+  listCollectionIdsForEntry,
+  listCollectionIdsForProducer,
+  removeCollectionEntry,
+  removeCollectionProducer,
+  reorderCollections,
+  setCollectionNsfw,
+  updateCollection,
+} from '../repositories/collection-repository.js';
+import { searchProducersByName } from '../repositories/producer-tag-repository.js';
 import {
   deleteTaxonomyAlias,
   importTaxonomyAliases,
@@ -297,7 +366,148 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
   app.get('/api/entry-tags', (context) => {
     const { entryType } = entryTypeQuerySchema.parse(context.req.query());
     return context.json(entryTagUsageSchema.array().parse(
-      listEntryTagsForType(database, entryType),
+      entryType === undefined
+        ? listEntryTagsGlobally(database)
+        : listEntryTagsForType(database, entryType),
+    ));
+  });
+
+  app.get('/api/collections', (context) => {
+    const kind = collectionKindSchema.parse(context.req.query().kind);
+    return context.json(z.array(collectionRecordSchema).parse(listCollections(database, kind)));
+  });
+
+  app.post('/api/collections', async (context) => {
+    const input = await parseJson(context.req.raw, createCollectionRequestSchema);
+    const record = createCollection(database, input);
+    return context.json(collectionRecordSchema.parse(record), 201);
+  });
+
+  app.get('/api/collections/:collectionId', (context) => {
+    const { collectionId } = collectionIdParamsSchema.parse({
+      collectionId: context.req.param('collectionId'),
+    });
+    const record = getCollection(database, collectionId);
+    if (!record) {
+      return context.json(errorPayload('NOT_FOUND', 'collection not found'), 404);
+    }
+    return context.json(collectionRecordSchema.parse(record));
+  });
+
+  app.patch('/api/collections/:collectionId', async (context) => {
+    const { collectionId } = collectionIdParamsSchema.parse({
+      collectionId: context.req.param('collectionId'),
+    });
+    const input = await parseJson(context.req.raw, updateCollectionRequestSchema);
+    return context.json(collectionRecordSchema.parse(updateCollection(database, collectionId, input)));
+  });
+
+  app.delete('/api/collections/:collectionId', (context) => {
+    const { collectionId } = collectionIdParamsSchema.parse({
+      collectionId: context.req.param('collectionId'),
+    });
+    deleteCollection(database, collectionId);
+    return context.json(mutationSuccessResponseSchema.parse({ ok: true }));
+  });
+
+  app.put('/api/collections/:collectionId/nsfw', async (context) => {
+    const { collectionId } = collectionIdParamsSchema.parse({
+      collectionId: context.req.param('collectionId'),
+    });
+    const input = await parseJson(context.req.raw, z.strictObject({ nsfw: z.boolean() }));
+    setCollectionNsfw(database, collectionId, input.nsfw);
+    return context.json(collectionRecordSchema.parse(getCollection(database, collectionId)));
+  });
+
+  app.put('/api/collections/order', async (context) => {
+    const input = await parseJson(context.req.raw, reorderCollectionsRequestSchema);
+    const kind = collectionKindSchema.parse(context.req.query().kind);
+    reorderCollections(database, kind, input.orderedCollectionIds);
+    return context.json(mutationSuccessResponseSchema.parse({ ok: true }));
+  });
+
+  app.put('/api/collections/:collectionId/entries/:entryId', (context) => {
+    const { collectionId } = collectionIdParamsSchema.parse({
+      collectionId: context.req.param('collectionId'),
+    });
+    const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+    addCollectionEntry(database, collectionId, entryId);
+    return context.json(mutationSuccessResponseSchema.parse({ ok: true }));
+  });
+
+  app.delete('/api/collections/:collectionId/entries/:entryId', (context) => {
+    const { collectionId } = collectionIdParamsSchema.parse({
+      collectionId: context.req.param('collectionId'),
+    });
+    const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+    removeCollectionEntry(database, collectionId, entryId);
+    return context.json(mutationSuccessResponseSchema.parse({ ok: true }));
+  });
+
+  app.put('/api/collections/:collectionId/producers/:producerId', (context) => {
+    const { collectionId } = collectionIdParamsSchema.parse({
+      collectionId: context.req.param('collectionId'),
+    });
+    const { producerId } = producerIdParamsSchema.parse({
+      producerId: context.req.param('producerId'),
+    });
+    addCollectionProducer(database, collectionId, producerId);
+    return context.json(mutationSuccessResponseSchema.parse({ ok: true }));
+  });
+
+  app.delete('/api/collections/:collectionId/producers/:producerId', (context) => {
+    const { collectionId } = collectionIdParamsSchema.parse({
+      collectionId: context.req.param('collectionId'),
+    });
+    const { producerId } = producerIdParamsSchema.parse({
+      producerId: context.req.param('producerId'),
+    });
+    removeCollectionProducer(database, collectionId, producerId);
+    return context.json(mutationSuccessResponseSchema.parse({ ok: true }));
+  });
+
+  app.get('/api/collections/for-entry/:entryId', (context) => {
+    const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+    return context.json(z.array(z.number().int()).parse(listCollectionIdsForEntry(database, entryId)));
+  });
+
+  app.get('/api/collections/for-producer/:producerId', (context) => {
+    const { producerId } = producerIdParamsSchema.parse({
+      producerId: context.req.param('producerId'),
+    });
+    return context.json(z.array(z.number().int()).parse(listCollectionIdsForProducer(database, producerId)));
+  });
+
+  app.get('/api/search/entries', (context) => {
+    const { q, entryType } = searchQuerySchema.parse(context.req.query());
+    return context.json(entrySummarySchema.array().parse(
+      searchEntriesByTitle(database, q, entryType ?? null),
+    ));
+  });
+
+  app.get('/api/search/tags', (context) => {
+    const { q, includeNsfw } = tagSearchQuerySchema.parse(context.req.query());
+    return context.json(tagSearchHitSchema.array().parse(
+      searchEntryTags(database, q, includeNsfw !== 'false'),
+    ));
+  });
+
+  app.get('/api/search/producers', (context) => {
+    const { q } = searchQuerySchema.parse(context.req.query());
+    return context.json(producerSummarySchema.array().parse(searchProducersByName(database, q)));
+  });
+
+  app.put('/api/galleries/:entryType/partition', async (context) => {
+    const { entryType } = entryTypeParamsSchema.parse({ entryType: context.req.param('entryType') });
+    const input = await parseJson(context.req.raw, galleryPartitionRequestSchema);
+    setGalleryPartition(database, entryType, input.nsfw);
+    return context.json(mutationSuccessResponseSchema.parse({ ok: true }));
+  });
+
+  app.get('/api/rating-slots', (context) => {
+    const { entryType } = ratingSlotsQuerySchema.parse(context.req.query());
+    return context.json(ratingSlotSchema.array().parse(
+      listRatingSlots(database, 'entry', entryType),
     ));
   });
 
@@ -351,6 +561,19 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
   app.post('/api/entries/filter', async (context) => {
     const input = await parseJson(context.req.raw, facetFilterEntriesRequestSchema);
     return context.json(entrySummarySchema.array().parse(findEntriesByFacetFilters(database, input)));
+  });
+
+  app.get('/api/tags/unassigned', (context) => {
+    return context.json(
+      unassignedTagGroupsResponseSchema.parse(listUnassignedTags(database)),
+    );
+  });
+
+  app.post('/api/tags/unassigned/move', async (context) => {
+    const input = await parseJson(context.req.raw, unassignedTagMoveRequestSchema);
+    return context.json(
+      unassignedTagMoveResponseSchema.parse(moveUnassignedTagToFacet(database, input)),
+    );
   });
 
   app.post('/api/sections', async (context) => {
@@ -438,6 +661,37 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     return context.json(mutationSuccessResponseSchema.parse({ ok: true }));
   });
 
+  app.post('/api/entries/:entryId/rating-slots', async (context) => {
+    const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+    const input = await parseJson(context.req.raw, createRatingSlotRequestSchema);
+    const slot = createEntryRatingSlot(database, { entryId, name: input.name });
+    return context.json(ratingSlotSchema.parse(slot), 201);
+  });
+
+  app.put('/api/entries/:entryId/ratings', async (context) => {
+    const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+    const input = await parseJson(context.req.raw, setRatingRequestSchema);
+    const row = setEntryRating(database, { entryId, slotId: input.slotId, stars: input.stars });
+    return context.json(ratingRowSchema.parse(row));
+  });
+
+  app.post('/api/entries/:entryId/views', (context) => {
+    const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+    return context.json(usageInfoSchema.parse(recordEntryView(database, entryId)));
+  });
+
+  app.post('/api/entries/:entryId/likes', (context) => {
+    const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+    return context.json(usageInfoSchema.parse(likeEntry(database, entryId)));
+  });
+
+  app.put('/api/entries/:entryId/rating-slots/order', async (context) => {
+    const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+    const input = await parseJson(context.req.raw, reorderRatingSlotsRequestSchema);
+    reorderEntryRatingSlots(database, entryId, input.orderedSlotIds);
+    return context.json(mutationSuccessResponseSchema.parse({ ok: true }));
+  });
+
   app.post('/api/entries/:entryId/contents', async (context) => {
     const { entryId } = entryIdParamsSchema.parse(context.req.param());
     const input = await parseJson(context.req.raw, createEntryContentRequestSchema);
@@ -467,6 +721,14 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
   app.post('/api/producers', async (context) => {
     const input = await parseJson(context.req.raw, createProducerRequestSchema);
     return context.json(producerRecordSchema.parse(createProducer(database, input)), 201);
+  });
+
+  app.get('/api/producers/filter-options', (context) => {
+    const query = authorFilterOptionsQuerySchema.parse(context.req.query());
+    return context.json(authorFilterOptionsResponseSchema.parse(listAuthorFilterOptions(database, {
+      ...(query.entryType === undefined ? {} : { entryType: query.entryType }),
+      includeNsfw: query.includeNsfw === 'true',
+    })));
   });
 
   app.get('/api/producers/:producerId', (context) => {
@@ -550,7 +812,13 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     return context.json(producerMergePlanResponseSchema.parse({ plans }));
   });
 
-  app.post('/api/producers/merge', async (context) => {
+  /**
+   * Plans, snapshots (file-backed databases), and executes every currently
+   * pending producer merge. Shared by the merge route and the author-alias
+   * group save (a newly saved group makes existing duplicate spellings
+   * mergeable).
+   */
+  async function runProducerMerge(): Promise<z.infer<typeof producerMergeResponseSchema>> {
     const emptyTotals = {
       deletedProducers: 0,
       worksRelinked: 0,
@@ -563,14 +831,14 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     };
     const plans = planProducerMerges(database);
     if (plans.length === 0) {
-      return context.json(producerMergeResponseSchema.parse({
+      return producerMergeResponseSchema.parse({
         backupPath: null,
         plans: [],
         totals: emptyTotals,
         foreignKeyCheckPass: true,
         doctorPass: true,
         doctorIssues: [],
-      }));
+      });
     }
 
     const backupPath = options.databasePath === undefined
@@ -623,14 +891,63 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
       };
     });
 
-    return context.json(producerMergeResponseSchema.parse({
+    return producerMergeResponseSchema.parse({
       backupPath,
       plans: executionItems,
       totals,
       foreignKeyCheckPass: foreignKeyIssues.length === 0,
       doctorPass: doctor.ok,
       doctorIssues: doctor.issues,
-    }));
+    });
+  }
+
+  app.post('/api/producers/merge', async (context) => (
+    context.json(await runProducerMerge())
+  ));
+
+  app.get('/api/author-alias-groups', (context) => (
+    context.json(authorAliasGroupsResponseSchema.parse({
+      groups: listAuthorAliasGroups(database),
+    }))
+  ));
+
+  app.post('/api/author-alias-groups', async (context) => {
+    const input = await parseJson(context.req.raw, saveAuthorAliasGroupRequestSchema);
+    writeAuthorAliasGroup(database, input);
+    const merge = await runProducerMerge();
+    const groups = listAuthorAliasGroups(database);
+    const displayNormalized = normalizeTag(input.displayName);
+    const group = groups.find((candidate) => (
+      normalizeTag(candidate.canonicalName) === displayNormalized
+    )) ?? {
+      canonicalName: input.displayName,
+      aliases: [],
+      producerId: null,
+      producerName: null,
+    };
+    return context.json(saveAuthorAliasGroupResponseSchema.parse({ group, merge }), 201);
+  });
+
+  function templatesDir(): string | null {
+    return options.databasePath === undefined ? null : templatesDirFor(options.databasePath);
+  }
+
+  function refreshTemplateFiles(entryType: string): { templatePath: string; tagLayoutPath: string } | null {
+    const dir = templatesDir();
+    if (dir === null) return null;
+    try {
+      const written = writeTemplateFiles(database, entryType, dir);
+      // Only the schema-shaped fields may leak into the response.
+      return { templatePath: written.templatePath, tagLayoutPath: written.tagLayoutPath };
+    } catch {
+      return null;
+    }
+  }
+
+  app.get('/api/templates', (context) => {
+    const dir = templatesDir();
+    const summaries = dir === null ? [] : listTemplateSummaries(database, dir);
+    return context.json(z.array(templateSummarySchema).parse(summaries));
   });
 
   app.post('/api/entries/:entryId/template/apply', async (context) => {
@@ -652,11 +969,13 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     }
 
     const result = applyLayoutTemplate(database, entryId);
+    const templateFiles = refreshTemplateFiles(entry.type);
     const foreignKeyIssues = database.pragma('foreign_key_check') as unknown as unknown[];
     const doctor = inspectDatabase(database);
 
     return context.json(layoutTemplateApplyResponseSchema.parse({
       ...result,
+      templateFiles,
       backupPath,
       foreignKeyCheckPass: foreignKeyIssues.length === 0,
       doctorPass: doctor.ok,
@@ -683,11 +1002,13 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     }
 
     const result = applyEntryTagLayout(database, entryId);
+    const templateFiles = refreshTemplateFiles(entry.type);
     const foreignKeyIssues = database.pragma('foreign_key_check') as unknown as unknown[];
     const doctor = inspectDatabase(database);
 
     return context.json(tagLayoutApplyResponseSchema.parse({
       ...result,
+      templateFiles,
       backupPath,
       foreignKeyCheckPass: foreignKeyIssues.length === 0,
       doctorPass: doctor.ok,
@@ -750,6 +1071,33 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     });
     const { tagId } = tagIdParamsSchema.parse({ tagId: context.req.param('tagId') });
     removeProducerTag(database, producerId, tagId);
+    return context.json(mutationSuccessResponseSchema.parse({ ok: true }));
+  });
+
+  app.post('/api/producers/:producerId/rating-slots', async (context) => {
+    const { producerId } = producerIdParamsSchema.parse({
+      producerId: context.req.param('producerId'),
+    });
+    const input = await parseJson(context.req.raw, createRatingSlotRequestSchema);
+    const slot = createProducerRatingSlot(database, { producerId, name: input.name });
+    return context.json(ratingSlotSchema.parse(slot), 201);
+  });
+
+  app.put('/api/producers/:producerId/ratings', async (context) => {
+    const { producerId } = producerIdParamsSchema.parse({
+      producerId: context.req.param('producerId'),
+    });
+    const input = await parseJson(context.req.raw, setRatingRequestSchema);
+    const row = setProducerRating(database, { producerId, slotId: input.slotId, stars: input.stars });
+    return context.json(ratingRowSchema.parse(row));
+  });
+
+  app.put('/api/producers/:producerId/rating-slots/order', async (context) => {
+    const { producerId } = producerIdParamsSchema.parse({
+      producerId: context.req.param('producerId'),
+    });
+    const input = await parseJson(context.req.raw, reorderRatingSlotsRequestSchema);
+    reorderProducerRatingSlots(database, producerId, input.orderedSlotIds);
     return context.json(mutationSuccessResponseSchema.parse({ ok: true }));
   });
 

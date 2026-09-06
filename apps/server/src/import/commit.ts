@@ -17,6 +17,7 @@ import {
   type ProducerRecord,
 } from '../repositories/producer-repository.js';
 import { resolveTaxonomyName } from '../repositories/taxonomy-repository.js';
+import { majorityFacetForTag } from '../repositories/template-export.js';
 
 export interface ImportCommitEntryResult {
   entryId: number;
@@ -127,11 +128,15 @@ function collectTags(
   database: T3Database,
   entry: ImportEntry,
   mapping: ImportCommitMapping,
-): PendingTag[] {
-  const tags = new Map<string, PendingTag>();
-  const addTag = (name: string, facetId: number): void => {
+): PendingTag[] {  const tags = new Map<string, PendingTag>();
+  const addTag = (name: string, fallbackFacetId: number): void => {
     const resolvedName = resolveTaxonomyName(database, 'entry', name);
     const key = normalizeName(resolvedName);
+    // The saved gallery tag layout wins: a tag that already has an established
+    // placement in this Gallery goes straight there; only unseen tags fall
+    // back to the reviewed mapping (default position).
+    const layoutFacet = majorityFacetForTag(database, mapping.entryType, resolvedName);
+    const facetId = layoutFacet?.facetId ?? fallbackFacetId;
     const previous = tags.get(key);
     if (previous && previous.facetId !== facetId) {
       throw new Error(`Tag "${resolvedName}" is mapped to more than one Facet for the same Entry`);
@@ -153,6 +158,29 @@ function collectTags(
     }
   }
   return [...tags.values()];
+}
+
+const ORIGINAL_SERIES_TAG = 'Original';
+
+/**
+ * A work whose meta carries no series at all is almost always an original
+ * standalone piece: auto-assign "Original" under the Gallery's Series facet
+ * so it does not sit unfiled. Skipped when the Gallery has no Series facet or
+ * the entry already carries any series tag.
+ */
+function originalSeriesTag(
+  database: T3Database,
+  entryType: string,
+  assigned: PendingTag[],
+): PendingTag | null {
+  const facets = database.prepare(`
+    SELECT id, name FROM tag_groups
+    WHERE group_kind = 'facet' AND entry_type = ?
+  `).all(entryType) as Array<{ id: number; name: string }>;
+  const seriesFacetId = facets.find((facet) => normalizeName(facet.name) === 'series')?.id;
+  if (seriesFacetId === undefined) return null;
+  if (assigned.some((tag) => tag.facetId === seriesFacetId)) return null;
+  return { name: ORIGINAL_SERIES_TAG, facetId: seriesFacetId };
 }
 
 function buildExistingProducerMap(
@@ -212,11 +240,22 @@ export function commitImportBatch(
         ...(entry.externalKey === undefined ? {} : { externalKey: entry.externalKey }),
       });
 
-      for (const tag of collectTags(database, entry, mapping)) {
+      const collectedTags = collectTags(database, entry, mapping);
+      for (const tag of collectedTags) {
         assignEntryTag(database, {
           entryId: createdEntry.id,
           facetId: tag.facetId,
           name: tag.name,
+        });
+        tagAssignmentCount += 1;
+      }
+
+      const original = originalSeriesTag(database, mapping.entryType, collectedTags);
+      if (original !== null) {
+        assignEntryTag(database, {
+          entryId: createdEntry.id,
+          facetId: original.facetId,
+          name: original.name,
         });
         tagAssignmentCount += 1;
       }

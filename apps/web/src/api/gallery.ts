@@ -3,11 +3,13 @@ import {
   assignEntryTagRequestSchema,
   authorDetailResponseSchema,
   authorDirectorySchema,
+  authorFilterOptionsResponseSchema,
   createAuthorDirectoryRequestSchema,
   createEntryContentRequestSchema,
   createEntryRequestSchema,
   createProducerRequestSchema,
   createFacetRequestSchema,
+  createRatingSlotRequestSchema,
   createSectionRequestSchema,
   entryDetailResponseSchema,
   entryContentRecordSchema,
@@ -17,6 +19,9 @@ import {
   entryTagUsageSchema,
   facetFilterEntriesRequestSchema,
   facetFilterOptionsResponseSchema,
+  collectionRecordSchema,
+  createCollectionRequestSchema,
+  galleryPartitionRequestSchema,
   gallerySummarySchema,
   importCommitRequestSchema,
   importCommitResultSchema,
@@ -34,14 +39,31 @@ import {
   renameProducerTagRequestSchema,
   reorderEntryContentsRequestSchema,
   reorderSectionFacetsRequestSchema,
+  ratingRowSchema,
+  ratingSlotSchema,
+  numberIdListSchema,
+  reorderCollectionsRequestSchema,
+  reorderRatingSlotsRequestSchema,
+  setRatingRequestSchema,
+  updateCollectionRequestSchema,
   tagLayoutApplyResponseSchema,
+  tagSearchHitSchema,
+  templateSummarySchema,
   taxonomyAliasSchema,
+  unassignedTagGroupsResponseSchema,
+  unassignedTagMoveRequestSchema,
+  unassignedTagMoveResponseSchema,
+  usageInfoSchema,
   upsertTaxonomyAliasRequestSchema,
+  authorAliasGroupsResponseSchema,
+  saveAuthorAliasGroupRequestSchema,
+  saveAuthorAliasGroupResponseSchema,
   updateEntryContentRequestSchema,
   updateAuthorDirectoryRequestSchema,
   updateProducerRequestSchema,
   type AuthorDetailResponse,
   type AuthorDirectoryDto,
+  type AuthorFilterOptions,
   type CreateAuthorDirectoryRequest,
   type AssignEntryTagRequest,
   type CreateEntryContentRequest,
@@ -53,8 +75,16 @@ import {
   type EntryTagUsage,
   type FacetFilterCondition,
   type FacetFilterOptions,
+  type RatingFilterCondition,
+  type RatingSort,
   type GallerySummary,
   type ImportBatch,
+  type UnassignedTagGroups,
+  type UnassignedTagMoveRequest,
+  type UsageFilterCondition,
+  type UsageSort,
+  type UsageInfo,
+  type UnassignedTagMoveResponse,
   type ImportCommitMapping,
   type ImportCommitResult,
   type ImportPreview,
@@ -63,8 +93,17 @@ import {
   type ProducerRecordDto,
   type ProducerMergePlanResponse,
   type ProducerMergeResponse,
+  type AuthorAliasGroup,
+  type SaveAuthorAliasGroupRequest,
+  type SaveAuthorAliasGroupResponse,
+  type CollectionKind,
+  type CollectionRecordDto,
+  type TemplateSummary,
+  type RatingRow,
+  type RatingSlotDto,
   type LayoutTemplateApplyResponse,
   type TagLayoutApplyResponse,
+  type TagSearchHit,
   type TaxonomyAliasDto,
   type TaxonomyVocabulary,
   type UpsertTaxonomyAliasRequest,
@@ -83,6 +122,20 @@ export interface GalleryEntrySummary {
   previewRefs: string[];
   uploadDate: string | null;
   pageCount: number | null;
+  viewCount: number;
+  likeCount: number;
+  lastViewedAt: string | null;
+}
+
+export interface GalleryAuthorSummary {
+  id: number;
+  name: string;
+  covers: string[];
+  galleryType: string | null;
+  viewCount: number;
+  likeCount: number;
+  lastViewedAt: string | null;
+  nsfw: boolean;
 }
 
 export interface EntryListFilters {
@@ -94,14 +147,25 @@ export interface GalleryApi {
   assetUrl(path: string): string;
   listGalleries(): Promise<GallerySummary[]>;
   listEntries(type: string, filters?: EntryListFilters): Promise<GalleryEntrySummary[]>;
+  searchEntries(query: string, entryType?: string): Promise<GalleryEntrySummary[]>;
+  searchTags(query: string, includeNsfw?: boolean): Promise<TagSearchHit[]>;
+  searchAuthors(query: string): Promise<GalleryAuthorSummary[]>;
   listFacetFilterOptions(type: string, authorId?: number): Promise<FacetFilterOptions>;
   filterEntriesByFacets(
     type: string,
     conditions: FacetFilterCondition[],
     authorIds: number[],
+    options?: {
+      ratingConditions?: RatingFilterCondition[];
+      ratingSort?: RatingSort | null;
+      usageConditions?: UsageFilterCondition[];
+      usageSort?: UsageSort | null;
+    },
   ): Promise<GalleryEntrySummary[]>;
   findEntriesByTag(tagId: number): Promise<GalleryEntrySummary[]>;
-  listGalleryTags(type: string): Promise<EntryTagUsage[]>;
+  listGalleryTags(type?: string): Promise<EntryTagUsage[]>;
+  listUnassignedTags(): Promise<UnassignedTagGroups>;
+  moveUnassignedTag(input: UnassignedTagMoveRequest): Promise<UnassignedTagMoveResponse>;
   createEntry(input: CreateEntryRequest): Promise<EntryRecordDto>;
   deleteEntry(entryId: number): Promise<void>;
   uploadEntryMedia(
@@ -115,6 +179,8 @@ export interface GalleryApi {
   upsertTaxonomyAlias(input: UpsertTaxonomyAliasRequest): Promise<TaxonomyAliasDto>;
   importTaxonomyAliases(input: ImportTaxonomyAliasesRequest): Promise<TaxonomyAliasDto[]>;
   deleteTaxonomyAlias(aliasId: number): Promise<void>;
+  listAuthorAliasGroups(): Promise<AuthorAliasGroup[]>;
+  saveAuthorAliasGroup(input: SaveAuthorAliasGroupRequest): Promise<SaveAuthorAliasGroupResponse>;
   planProducerMerge(): Promise<ProducerMergePlanResponse>;
   executeProducerMerge(): Promise<ProducerMergeResponse>;
   applyEntryLayoutTemplate(entryId: number): Promise<LayoutTemplateApplyResponse>;
@@ -134,7 +200,31 @@ export interface GalleryApi {
   reorderSectionFacets(sectionId: number, orderedFacetIds: number[]): Promise<void>;
   createSection(input: CreateSectionRequest): Promise<void>;
   createFacet(input: CreateFacetRequest): Promise<void>;
+  createEntryRatingSlot(entryId: number, name: string): Promise<RatingSlotDto>;
+  listRatingSlots(entryType: string): Promise<RatingSlotDto[]>;
+  setEntryRating(entryId: number, slotId: number, stars: number | null): Promise<RatingRow>;
+  reorderEntryRatingSlots(entryId: number, orderedSlotIds: number[]): Promise<void>;
+  createAuthorRatingSlot(authorId: number, name: string): Promise<RatingSlotDto>;
+  setAuthorRating(authorId: number, slotId: number, stars: number | null): Promise<RatingRow>;
+  reorderAuthorRatingSlots(authorId: number, orderedSlotIds: number[]): Promise<void>;
   deleteFacet(facetId: number): Promise<void>;
+  setGalleryPartition(entryType: string, nsfw: boolean): Promise<void>;
+  listCollections(kind: CollectionKind): Promise<CollectionRecordDto[]>;
+  getCollection(collectionId: number): Promise<CollectionRecordDto>;
+  createCollection(input: { kind: CollectionKind; title: string; description?: string; parentId?: number }): Promise<CollectionRecordDto>;
+  updateCollection(collectionId: number, input: { title?: string; description?: string }): Promise<CollectionRecordDto>;
+  deleteCollection(collectionId: number): Promise<void>;
+  setCollectionNsfw(collectionId: number, nsfw: boolean): Promise<CollectionRecordDto>;
+  reorderCollections(kind: CollectionKind, orderedCollectionIds: number[]): Promise<void>;
+  addCollectionEntry(collectionId: number, entryId: number): Promise<void>;
+  removeCollectionEntry(collectionId: number, entryId: number): Promise<void>;
+  addCollectionProducer(collectionId: number, producerId: number): Promise<void>;
+  removeCollectionProducer(collectionId: number, producerId: number): Promise<void>;
+  listCollectionsForEntry(entryId: number): Promise<number[]>;
+  listTemplates(): Promise<TemplateSummary[]>;
+  listCollectionsForProducer(producerId: number): Promise<number[]>;
+  recordEntryView(entryId: number): Promise<UsageInfo>;
+  likeEntry(entryId: number): Promise<UsageInfo>;
   assignEntryTag(entryId: number, input: AssignEntryTagRequest): Promise<void>;
   moveEntryTag(entryId: number, tagId: number, targetFacetId: number): Promise<void>;
   renameEntryTag(entryId: number, tagId: number, name: string): Promise<void>;
@@ -144,7 +234,13 @@ export interface GalleryApi {
     name: string;
     covers: string[];
     galleryType: string | null;
+    viewCount: number;
+    likeCount: number;
+    lastViewedAt: string | null;
+    nsfw: boolean;
   }>>;
+  listAuthorFilterOptions(entryType?: string, includeNsfw?: boolean): Promise<AuthorFilterOptions>;
+  filterAuthors(ownTagIds: number[], relatedEntryTagIds: number[]): Promise<GalleryAuthorSummary[]>;
   findAuthorsByTag(tagId: number): Promise<Array<{ id: number; name: string }>>;
   getAuthor(authorId: number): Promise<AuthorDetailResponse>;
   createAuthor(input: CreateProducerRequest): Promise<ProducerRecordDto>;
@@ -192,6 +288,21 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
         },
       }));
     },
+    async searchEntries(query, entryType) {
+      return entrySummarySchema.array().parse(await client.request('search/entries', {
+        query: { q: query, ...(entryType === undefined ? {} : { entryType }) },
+      }));
+    },
+    async searchTags(query, includeNsfw = true) {
+      return tagSearchHitSchema.array().parse(await client.request('search/tags', {
+        query: { q: query, includeNsfw: String(includeNsfw) },
+      }));
+    },
+    async searchAuthors(query) {
+      return producerSummarySchema.array().parse(await client.request('search/producers', {
+        query: { q: query },
+      }));
+    },
     async listFacetFilterOptions(type, authorId) {
       return facetFilterOptionsResponseSchema.parse(
         await client.request(`entries/facet-options/${encodeURIComponent(type)}`, {
@@ -199,10 +310,18 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
         }),
       );
     },
-    async filterEntriesByFacets(type, conditions, authorIds) {
+    async filterEntriesByFacets(type, conditions, authorIds, options = {}) {
       return entrySummarySchema.array().parse(await client.request('entries/filter', {
         method: 'POST',
-        body: facetFilterEntriesRequestSchema.parse({ entryType: type, conditions, authorIds }),
+        body: facetFilterEntriesRequestSchema.parse({
+          entryType: type,
+          conditions,
+          authorIds,
+          ratingConditions: options.ratingConditions ?? [],
+          ratingSort: options.ratingSort ?? null,
+          usageConditions: options.usageConditions ?? [],
+          usageSort: options.usageSort ?? null,
+        }),
       }));
     },
     async findEntriesByTag(tagId) {
@@ -213,6 +332,17 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
     async listGalleryTags(type) {
       return entryTagUsageSchema.array().parse(await client.request('entry-tags', {
         query: { entryType: type },
+      }));
+    },
+    async listUnassignedTags() {
+      return unassignedTagGroupsResponseSchema.parse(
+        await client.request('tags/unassigned'),
+      );
+    },
+    async moveUnassignedTag(input) {
+      return unassignedTagMoveResponseSchema.parse(await client.request('tags/unassigned/move', {
+        method: 'POST',
+        body: unassignedTagMoveRequestSchema.parse(input),
       }));
     },
     async createEntry(input) {
@@ -280,6 +410,17 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
     async deleteTaxonomyAlias(aliasId) {
       await client.request(`taxonomy-aliases/${aliasId}`, { method: 'DELETE' });
     },
+    async listAuthorAliasGroups() {
+      return authorAliasGroupsResponseSchema.parse(
+        await client.request('author-alias-groups'),
+      ).groups;
+    },
+    async saveAuthorAliasGroup(input) {
+      return saveAuthorAliasGroupResponseSchema.parse(await client.request('author-alias-groups', {
+        method: 'POST',
+        body: saveAuthorAliasGroupRequestSchema.parse(input),
+      }));
+    },
     async planProducerMerge() {
       return producerMergePlanResponseSchema.parse(
         await client.request('producers/merge/plan', { method: 'POST' }),
@@ -345,8 +486,122 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
         body: createFacetRequestSchema.parse(input),
       });
     },
+    async createEntryRatingSlot(entryId, name) {
+      return ratingSlotSchema.parse(await client.request(`entries/${entryId}/rating-slots`, {
+        method: 'POST',
+        body: createRatingSlotRequestSchema.parse({ name }),
+      }));
+    },
+    async listRatingSlots(entryType) {
+      return ratingSlotSchema.array().parse(await client.request('rating-slots', {
+        query: { entryType },
+      }));
+    },
+    async setEntryRating(entryId, slotId, stars) {
+      return ratingRowSchema.parse(await client.request(`entries/${entryId}/ratings`, {
+        method: 'PUT',
+        body: setRatingRequestSchema.parse({ slotId, stars }),
+      }));
+    },
+    async reorderEntryRatingSlots(entryId, orderedSlotIds) {
+      await client.request(`entries/${entryId}/rating-slots/order`, {
+        method: 'PUT',
+        body: reorderRatingSlotsRequestSchema.parse({ orderedSlotIds }),
+      });
+    },
+    async createAuthorRatingSlot(authorId, name) {
+      return ratingSlotSchema.parse(await client.request(`producers/${authorId}/rating-slots`, {
+        method: 'POST',
+        body: createRatingSlotRequestSchema.parse({ name }),
+      }));
+    },
+    async setAuthorRating(authorId, slotId, stars) {
+      return ratingRowSchema.parse(await client.request(`producers/${authorId}/ratings`, {
+        method: 'PUT',
+        body: setRatingRequestSchema.parse({ slotId, stars }),
+      }));
+    },
+    async reorderAuthorRatingSlots(authorId, orderedSlotIds) {
+      await client.request(`producers/${authorId}/rating-slots/order`, {
+        method: 'PUT',
+        body: reorderRatingSlotsRequestSchema.parse({ orderedSlotIds }),
+      });
+    },
     async deleteFacet(facetId) {
       await client.request(`facets/${facetId}`, { method: 'DELETE' });
+    },
+    async likeEntry(entryId) {
+      return usageInfoSchema.parse(await client.request(`entries/${entryId}/likes`, {
+        method: 'POST',
+      }));
+    },
+    async listCollections(kind) {
+      return collectionRecordSchema.array().parse(await client.request('collections', {
+        query: { kind },
+      }));
+    },
+    async getCollection(collectionId) {
+      return collectionRecordSchema.parse(await client.request(`collections/${collectionId}`));
+    },
+    async createCollection(input) {
+      return collectionRecordSchema.parse(await client.request('collections', {
+        method: 'POST',
+        body: createCollectionRequestSchema.parse(input),
+      }));
+    },
+    async updateCollection(collectionId, input) {
+      return collectionRecordSchema.parse(await client.request(`collections/${collectionId}`, {
+        method: 'PATCH',
+        body: updateCollectionRequestSchema.parse(input),
+      }));
+    },
+    async deleteCollection(collectionId) {
+      await client.request(`collections/${collectionId}`, { method: 'DELETE' });
+    },
+    async setCollectionNsfw(collectionId, nsfw) {
+      return collectionRecordSchema.parse(await client.request(`collections/${collectionId}/nsfw`, {
+        method: 'PUT',
+        body: { nsfw },
+      }));
+    },
+    async reorderCollections(kind, orderedCollectionIds) {
+      await client.request('collections/order', {
+        method: 'PUT',
+        query: { kind },
+        body: reorderCollectionsRequestSchema.parse({ orderedCollectionIds }),
+      });
+    },
+    async addCollectionEntry(collectionId, entryId) {
+      await client.request(`collections/${collectionId}/entries/${entryId}`, { method: 'PUT' });
+    },
+    async removeCollectionEntry(collectionId, entryId) {
+      await client.request(`collections/${collectionId}/entries/${entryId}`, { method: 'DELETE' });
+    },
+    async addCollectionProducer(collectionId, producerId) {
+      await client.request(`collections/${collectionId}/producers/${producerId}`, { method: 'PUT' });
+    },
+    async removeCollectionProducer(collectionId, producerId) {
+      await client.request(`collections/${collectionId}/producers/${producerId}`, { method: 'DELETE' });
+    },
+    async listTemplates() {
+      return templateSummarySchema.array().parse(await client.request('templates'));
+    },
+    async listCollectionsForEntry(entryId) {
+      return numberIdListSchema.parse(await client.request(`collections/for-entry/${entryId}`));
+    },
+    async listCollectionsForProducer(producerId) {
+      return numberIdListSchema.parse(await client.request(`collections/for-producer/${producerId}`));
+    },
+    async setGalleryPartition(entryType, nsfw) {
+      await client.request(`galleries/${encodeURIComponent(entryType)}/partition`, {
+        method: 'PUT',
+        body: galleryPartitionRequestSchema.parse({ nsfw }),
+      });
+    },
+    async recordEntryView(entryId) {
+      return usageInfoSchema.parse(await client.request(`entries/${entryId}/views`, {
+        method: 'POST',
+      }));
     },
     async assignEntryTag(entryId, input) {
       entryTagAssignmentSchema.parse(await client.request(`entries/${entryId}/tags`, {
@@ -371,6 +626,22 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
     },
     async listAuthors() {
       return producerSummarySchema.array().parse(await client.request('producers'));
+    },
+    async listAuthorFilterOptions(entryType, includeNsfw = true) {
+      return authorFilterOptionsResponseSchema.parse(await client.request('producers/filter-options', {
+        query: {
+          ...(entryType === undefined ? {} : { entryType }),
+          includeNsfw: String(includeNsfw),
+        },
+      }));
+    },
+    async filterAuthors(ownTagIds, relatedEntryTagIds) {
+      return producerSummarySchema.array().parse(await client.request('producers', {
+        query: {
+          ownTagIds: ownTagIds.join(','),
+          relatedEntryTagIds: relatedEntryTagIds.join(','),
+        },
+      }));
     },
     async findAuthorsByTag(tagId) {
       return producerSummarySchema.array().parse(await client.request('producers', {
@@ -445,7 +716,22 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
   };
 }
 
+export function resolveDefaultApiBaseUrl(
+  configuredBaseUrl: string | undefined,
+  production: boolean,
+  origin: string,
+): string {
+  if (configuredBaseUrl?.trim()) return configuredBaseUrl;
+  return production
+    ? new URL('/api/', origin).toString()
+    : 'http://127.0.0.1:8765/api/';
+}
+
 export function createDefaultGalleryApi(): GalleryApi {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8765/api/';
+  const baseUrl = resolveDefaultApiBaseUrl(
+    import.meta.env.VITE_API_BASE_URL,
+    import.meta.env.PROD,
+    window.location.origin,
+  );
   return createGalleryApi(createApiClient({ baseUrl }), new URL('/', baseUrl).toString());
 }

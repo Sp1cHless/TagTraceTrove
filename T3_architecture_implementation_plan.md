@@ -1,6 +1,9 @@
 # T³ architecture and implementation plan
 
 > Current execution architecture. This document supersedes the earlier Collection/Field Definition/Typed Value plan.
+>
+> 执行状态:Implementation order 1–6 已全部完成(2026-09-03,含备份/恢复)。
+> 后续新需求见 `docs/roadmap.md`。
 
 ## Goals and non-goals
 

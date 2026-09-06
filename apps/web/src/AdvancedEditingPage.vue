@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import type {
+  AuthorAliasGroup,
   ProducerMergeExecutionItem,
   ProducerMergePlanItem,
   ProducerMergePlanResponse,
   ProducerMergeResponse,
   TaxonomyAliasDto,
   TaxonomyVocabulary,
+  UnassignedTagGroup,
   UpsertTaxonomyAliasRequest,
 } from '@t3/shared';
 import type { GalleryApi } from './api/gallery.js';
 import { useI18n } from './i18n.js';
 import { parseTaxonomyDictionary } from './taxonomy-dictionary.js';
+import { useArmableAction } from './armable.js';
 
 const props = defineProps<{ api: GalleryApi }>();
 const emit = defineEmits<{
@@ -19,10 +22,76 @@ const emit = defineEmits<{
   'authors-changed': [];
 }>();
 const { t } = useI18n();
+const { armedKey, arm, disarm } = useArmableAction();
 
-type Tab = 'dictionary' | 'merge';
+type Tab = 'dictionary' | 'merge' | 'unassigned' | 'templates' | 'authors';
+
+interface TemplateSummaryDto {
+  entryType: string;
+  sections: Array<{ name: string; facets: string[] }>;
+  mappings: Array<{ tag: string; section: string; facet: string }>;
+  templatePath: string;
+  tagLayoutPath: string;
+  templateExists: boolean;
+  tagLayoutExists: boolean;
+}
+
+const templates = ref<TemplateSummaryDto[]>([]);
+const templatesLoaded = ref(false);
+// The preview sketches the whole card: the gallery's shared rating slots and
+// a generic Content block below the Section → Facet layout.
+const templateRatingSlots = ref<Record<string, Array<{ id: number; name: string; sortOrder: number }>>>({});
 const tab = ref<Tab>('dictionary');
 const error = ref<string | null>(null);
+
+// ---------------------------------------------------------------------------
+// Unassigned tags (per gallery). Lazy-loaded on first visit of the tab so
+// opening Advanced editing does not pay for an extra request.
+// ---------------------------------------------------------------------------
+const unassignedGroups = ref<UnassignedTagGroup[]>([]);
+const unassignedLoaded = ref(false);
+const expandedUnassigned = ref<Set<string>>(new Set());
+const targetForTag = ref<Record<number, number>>({});
+const movingTagId = ref<number | null>(null);
+const unassignedNotice = ref('');
+
+async function fetchUnassigned(): Promise<void> {
+  unassignedGroups.value = await props.api.listUnassignedTags();
+  unassignedLoaded.value = true;
+}
+
+async function moveTag(group: UnassignedTagGroup, tagName: string, tagId: number, facetId: number | undefined): Promise<void> {
+  const target = facetId ?? targetForTag.value[tagId];
+  if (target === undefined) return;
+  movingTagId.value = tagId;
+  unassignedNotice.value = '';
+  try {
+    const result = await props.api.moveUnassignedTag({
+      entryType: group.entryType,
+      tagId,
+      targetFacetId: target,
+    });
+    const targetName = group.facets.find((facet) => facet.facetId === target)?.facetName ?? '';
+    unassignedNotice.value = t('unassigned.moved', {
+      tag: tagName,
+      facet: targetName,
+      count: String(result.moved),
+    });
+    await fetchUnassigned(); // refresh the group so the row disappears
+    delete targetForTag.value[tagId];
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    movingTagId.value = null;
+  }
+}
+
+function toggleUnassignedGroup(entryType: string): void {
+  const next = new Set(expandedUnassigned.value);
+  if (next.has(entryType)) next.delete(entryType);
+  else next.add(entryType);
+  expandedUnassigned.value = next;
+}
 
 // ---------------------------------------------------------------------------
 // Dictionary (tag aliases), partitioned like the tag taxonomy
@@ -233,7 +302,8 @@ function planLine(item: ProducerMergePlanItem): string {
 
 async function runMerge(): Promise<void> {
   if (!plan.value || plan.value.plans.length === 0) return;
-  if (!window.confirm(t('merge.confirm', { count: plan.value.plans.length }))) return;
+  if (!arm('run-merge')) return;
+  disarm('run-merge');
   mergeBusy.value = true;
   error.value = null;
   try {
@@ -274,7 +344,109 @@ function resultDetail(item: ProducerMergeExecutionItem): string[] {
   return parts;
 }
 
+// ---------------------------------------------------------------------------
+// Author alias groups: one display name plus every tag-name spelling that
+// must resolve to it. Saving writes producer-vocabulary dictionary rows and
+// merges existing duplicate author rows into the display-name producer.
+// ---------------------------------------------------------------------------
+const authorAliasGroups = ref<AuthorAliasGroup[]>([]);
+const authorAliasLoaded = ref(false);
+const aliasDisplayName = ref('');
+const aliasTagNames = ref<string[]>([]);
+const aliasGroupBusy = ref(false);
+const aliasGroupNotice = ref('');
+
+async function loadAuthorAliasGroups(): Promise<void> {
+  try {
+    authorAliasGroups.value = await props.api.listAuthorAliasGroups();
+    authorAliasLoaded.value = true;
+    error.value = null;
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('advanced.loadError');
+  }
+}
+
+function addAliasTagRow(): void {
+  aliasTagNames.value.push('');
+}
+
+function removeAliasTagRow(index: number): void {
+  aliasTagNames.value.splice(index, 1);
+}
+
+async function saveAuthorAliasGroup(): Promise<void> {
+  const displayName = aliasDisplayName.value.trim();
+  const tagNames = aliasTagNames.value.map((name) => name.trim()).filter((name) => name !== '');
+  if (!displayName || tagNames.length === 0) return;
+  aliasGroupBusy.value = true;
+  aliasGroupNotice.value = '';
+  error.value = null;
+  try {
+    const result = await props.api.saveAuthorAliasGroup({ displayName, tagNames });
+    const { deletedProducers, worksRelinked, renamed } = result.merge.totals;
+    aliasGroupNotice.value = deletedProducers > 0 || renamed > 0
+      ? t('authorAlias.mergeSummary', {
+        display: result.group.canonicalName,
+        merged: String(deletedProducers),
+        works: String(worksRelinked),
+        renamed: String(renamed),
+      })
+      : t('authorAlias.saved', { display: result.group.canonicalName });
+    aliasDisplayName.value = '';
+    aliasTagNames.value = [];
+    await loadAuthorAliasGroups();
+    emit('authors-changed');
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('authorAlias.saveError');
+  } finally {
+    aliasGroupBusy.value = false;
+  }
+}
+
+async function removeAuthorAlias(aliasId: number): Promise<void> {
+  aliasGroupBusy.value = true;
+  error.value = null;
+  try {
+    await props.api.deleteTaxonomyAlias(aliasId);
+    await Promise.all([loadAuthorAliasGroups(), loadAliases()]);
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('taxonomy.deleteError');
+  } finally {
+    aliasGroupBusy.value = false;
+  }
+}
+
 onMounted(loadAliases);
+
+watch(tab, (value) => {
+  if (value === 'templates' && !templatesLoaded.value) {
+    void props.api.listTemplates().then(async (summaries) => {
+      templates.value = summaries;
+      const slotLists = await Promise.all(summaries.map(async (summary) => {
+        try {
+          return await props.api.listRatingSlots(summary.entryType);
+        } catch {
+          return [];
+        }
+      }));
+      templateRatingSlots.value = Object.fromEntries(summaries.map((summary, index) => ([
+        summary.entryType,
+        slotLists[index]!.map((slot) => ({ id: slot.id, name: slot.name, sortOrder: slot.sortOrder })),
+      ])));
+      templatesLoaded.value = true;
+    }).catch((cause) => {
+      error.value = cause instanceof Error ? cause.message : t('advanced.loadError');
+    });
+  }
+  if (value === 'unassigned' && !unassignedLoaded.value) {
+    fetchUnassigned().catch((reason) => {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+    });
+  }
+  if (value === 'authors' && !authorAliasLoaded.value) {
+    void loadAuthorAliasGroups();
+  }
+});
 </script>
 
 <template>
@@ -304,6 +476,33 @@ onMounted(loadAliases);
         @click="tab = 'merge'"
       >
         {{ t('advanced.mergeTab') }}
+      </button>
+      <button
+        data-testid="advanced-tab-unassigned"
+        class="secondary-button"
+        type="button"
+        :class="{ active: tab === 'unassigned' }"
+        @click="tab = 'unassigned'"
+      >
+        {{ t('advanced.unassignedTab') }}
+      </button>
+      <button
+        data-testid="advanced-tab-templates"
+        class="secondary-button"
+        type="button"
+        :class="{ active: tab === 'templates' }"
+        @click="tab = 'templates'"
+      >
+        {{ t('advanced.templatesTab') }}
+      </button>
+      <button
+        data-testid="advanced-tab-authors"
+        class="secondary-button"
+        type="button"
+        :class="{ active: tab === 'authors' }"
+        @click="tab = 'authors'"
+      >
+        {{ t('advanced.authorsTab') }}
       </button>
     </nav>
 
@@ -425,7 +624,7 @@ onMounted(loadAliases);
       </p>
     </section>
 
-    <section v-else data-testid="advanced-merge" class="advanced-card">
+    <section v-else-if="tab === 'merge'" data-testid="advanced-merge" class="advanced-card">
       <h3>{{ t('advanced.mergeTab') }}</h3>
       <p class="muted">{{ t('merge.hint') }}</p>
 
@@ -443,11 +642,14 @@ onMounted(loadAliases);
           v-if="plan && plan.plans.length > 0"
           data-testid="merge-run-button"
           class="secondary-button danger-button"
+          :class="{ 'armable-armed': armedKey === 'run-merge' }"
           type="button"
           :disabled="mergeBusy"
           @click="runMerge"
         >
-          {{ mergeBusy ? t('merge.executing') : t('merge.execute') }}
+          {{ mergeBusy
+            ? t('merge.executing')
+            : armedKey === 'run-merge' ? t('merge.confirmRunShort', { count: String(plan?.plans.length ?? 0) }) : t('merge.execute') }}
         </button>
       </div>
 
@@ -493,6 +695,237 @@ onMounted(loadAliases);
         </p>
       </section>
     </section>
+
+    <section v-else-if="tab === 'unassigned'" data-testid="advanced-unassigned" class="advanced-card">
+      <h3>{{ t('unassigned.title') }}</h3>
+      <p class="muted">{{ t('unassigned.hint') }}</p>
+      <p v-if="unassignedNotice" class="merge-integrity merge-integrity-pass" data-testid="unassigned-notice" role="status">
+        {{ unassignedNotice }}
+      </p>
+
+      <div v-for="group in unassignedGroups" :key="group.entryType" class="alias-group">
+        <button
+          type="button"
+          class="alias-group-header"
+          :data-testid="`unassigned-group-${group.entryType}`"
+          :aria-expanded="expandedUnassigned.has(group.entryType)"
+          @click="toggleUnassignedGroup(group.entryType)"
+        >
+          <span class="alias-group-title">
+            <span class="alias-caret" aria-hidden="true">{{ expandedUnassigned.has(group.entryType) ? '▾' : '▸' }}</span>
+            {{ group.entryType }}
+            <small>{{ group.tags.length }}</small>
+          </span>
+        </button>
+        <ul v-if="expandedUnassigned.has(group.entryType)" data-testid="unassigned-tag-list" class="taxonomy-alias-list">
+          <li
+            v-for="tag in group.tags"
+            :key="`${group.entryType}-${tag.tagId}`"
+            :data-testid="`unassigned-tag-${tag.tagId}`"
+            class="unassigned-row"
+          >
+            <span class="unassigned-tag-name">
+              {{ tag.tagName }}
+              <small>{{ t('unassigned.entries', { count: String(tag.entryCount) }) }}</small>
+            </span>
+            <label class="unassigned-target">
+              {{ t('unassigned.moveTo') }}
+              <select
+                v-model.number="targetForTag[tag.tagId]"
+                :data-testid="`unassigned-target-${tag.tagId}`"
+              >
+                <option :value="undefined" disabled>{{ t('unassigned.chooseFacet') }}</option>
+                <option v-for="facet in group.facets" :key="facet.facetId" :value="facet.facetId">
+                  {{ facet.facetName }}
+                </option>
+              </select>
+            </label>
+            <button
+              type="button"
+              class="secondary-button"
+              :disabled="movingTagId === tag.tagId || targetForTag[tag.tagId] === undefined"
+              :data-testid="`unassigned-move-${tag.tagId}`"
+              @click="moveTag(group, tag.tagName, tag.tagId, undefined)"
+            >
+              {{ movingTagId === tag.tagId ? t('unassigned.moving') : t('unassigned.move') }}
+            </button>
+            <span v-if="tag.suggestion" class="unassigned-suggestion">
+              {{ t('unassigned.majority', {
+                facet: tag.suggestion.facetName,
+                count: String(tag.suggestion.count),
+              }) }}
+              <button
+                type="button"
+                class="alias-action"
+                :disabled="movingTagId === tag.tagId"
+                :data-testid="`unassigned-follow-${tag.tagId}`"
+                @click="moveTag(group, tag.tagName, tag.tagId, tag.suggestion!.facetId)"
+              >
+                {{ t('unassigned.follow') }}
+              </button>
+            </span>
+          </li>
+        </ul>
+      </div>
+      <p v-if="unassignedLoaded && unassignedGroups.length === 0" class="muted" data-testid="unassigned-empty">
+        {{ t('unassigned.empty') }}
+      </p>
+    </section>
+
+    <section v-else-if="tab === 'templates'" data-testid="advanced-templates" class="advanced-card">
+      <h3>{{ t('advanced.templatesTab') }}</h3>
+      <p class="muted">{{ t('templates.hint') }}</p>
+      <p v-if="templatesLoaded && templates.length === 0" class="muted" data-testid="gallery-templates-empty">
+        {{ t('templates.empty') }}
+      </p>
+      <div v-for="summary in templates" :key="summary.entryType" class="alias-group">
+        <button
+          type="button"
+          class="alias-group-header"
+          :data-testid="`gallery-template-${summary.entryType}`"
+          :aria-expanded="expandedGroups.has(`template-${summary.entryType}`)"
+          @click="toggleGroup(`template-${summary.entryType}`)"
+        >
+          <span class="alias-group-title">
+            <span class="alias-caret" aria-hidden="true">{{ expandedGroups.has(`template-${summary.entryType}`) ? '▾' : '▸' }}</span>
+            {{ summary.entryType }}
+            <small>{{ t('templates.sectionsCount', { count: String(summary.sections.length) }) }}</small>
+          </span>
+        </button>
+        <div v-if="expandedGroups.has(`template-${summary.entryType}`)" class="gallery-template-body">
+          <!-- Rough preview of a full entry card under this template:
+               Section → Facet layout, then Ratings, then Content. -->
+          <div class="template-card-preview" :data-testid="`gallery-template-preview-${summary.entryType}`">
+            <div v-for="section in summary.sections" :key="`${summary.entryType}-${section.name}`" class="template-preview-section">
+              <span class="template-preview-section-name">{{ section.name }}</span>
+              <div class="template-preview-facet-rows">
+                <div
+                  v-for="(facet, facetIndex) in section.facets"
+                  :key="`${summary.entryType}-${section.name}-${facetIndex}`"
+                  class="template-preview-facet-row"
+                >
+                  <span v-if="facet !== ''" class="template-preview-facet-label">{{ facet }}</span>
+                  <span class="template-preview-facet-slot" />
+                </div>
+              </div>
+            </div>
+            <div class="template-preview-section" data-testid="gallery-template-preview-ratings">
+              <span class="template-preview-section-name">{{ t('rating.title') }}</span>
+              <div class="template-preview-facet-rows">
+                <div
+                  v-for="slot in templateRatingSlots[summary.entryType] ?? []"
+                  :key="slot.id"
+                  class="template-preview-facet-row"
+                >
+                  <span class="template-preview-facet-label">{{ slot.name }}</span>
+                  <span class="template-preview-stars">★★★★★</span>
+                </div>
+                <span v-if="(templateRatingSlots[summary.entryType] ?? []).length === 0" class="template-preview-empty">
+                  {{ t('templates.noRatingSlots') }}
+                </span>
+              </div>
+            </div>
+            <div class="template-preview-section">
+              <span class="template-preview-section-name">{{ t('author.content') }}</span>
+              <div class="template-preview-facet-rows">
+                <div class="template-preview-facet-row">
+                  <span class="template-preview-facet-label">source url</span>
+                  <span class="template-preview-facet-slot" />
+                </div>
+                <div class="template-preview-facet-row">
+                  <span class="template-preview-facet-slot template-preview-content-slot" />
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="muted">{{ t('templates.pathHint') }}</p>
+          <p class="muted" :data-testid="`gallery-template-files-${summary.entryType}`">
+            <span>{{ summary.templateExists
+              ? t('templates.templateFile', { path: summary.templatePath })
+              : t('templates.fileMissing') }}</span>
+            <span>{{ summary.tagLayoutExists
+              ? t('templates.tagLayoutFile', { path: summary.tagLayoutPath })
+              : t('templates.fileMissing') }}</span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section v-else-if="tab === 'authors'" data-testid="advanced-authors" class="advanced-card">
+      <h3>{{ t('advanced.authorsTab') }}</h3>
+      <p class="muted">{{ t('authorAlias.hint') }}</p>
+      <p v-if="aliasGroupNotice" class="merge-integrity merge-integrity-pass" data-testid="author-alias-notice" role="status">
+        {{ aliasGroupNotice }}
+      </p>
+
+      <form data-testid="author-alias-form" class="alias-form" @submit.prevent="saveAuthorAliasGroup">
+        <label>
+          {{ t('authorAlias.displayName') }}
+          <input
+            v-model="aliasDisplayName"
+            name="authorAliasDisplayName"
+            :placeholder="t('authorAlias.displayNamePlaceholder')"
+            required
+            autocomplete="off"
+          >
+        </label>
+        <div class="alias-tag-rows">
+          <label v-for="(_name, index) in aliasTagNames" :key="`alias-tag-${index}`">
+            {{ t('authorAlias.tagName') }}
+            <span class="alias-tag-row">
+              <input
+                v-model="aliasTagNames[index]"
+                :name="`authorAliasTag${index}`"
+                :data-testid="`author-alias-tag-${index}`"
+                :placeholder="t('authorAlias.tagNamePlaceholder')"
+                autocomplete="off"
+              >
+              <button
+                type="button"
+                class="remove-tag-button"
+                :aria-label="t('authorAlias.removeTag')"
+                @click="removeAliasTagRow(index)"
+              >×</button>
+            </span>
+          </label>
+          <button
+            type="button"
+            class="alias-action"
+            data-testid="author-alias-add-tag"
+            @click="addAliasTagRow"
+          >{{ t('authorAlias.addTag') }}</button>
+        </div>
+        <button class="primary-button" type="submit" :disabled="aliasGroupBusy || aliasTagNames.length === 0">
+          {{ t('content.save') }}
+        </button>
+      </form>
+
+      <h4>{{ t('authorAlias.groupsHeading') }}</h4>
+      <p v-if="authorAliasLoaded && authorAliasGroups.length === 0" class="muted" data-testid="author-alias-empty">
+        {{ t('authorAlias.empty') }}
+      </p>
+      <ul v-else data-testid="author-alias-group-list" class="merge-list">
+        <li v-for="group in authorAliasGroups" :key="group.canonicalName" :data-testid="`author-alias-group-${group.canonicalName}`">
+          <span class="unassigned-tag-name">
+            {{ group.canonicalName }}
+            <small v-if="group.producerName === null">{{ t('authorAlias.noProducer') }}</small>
+          </span>
+          <span class="author-alias-chips">
+            <span v-for="alias in group.aliases" :key="alias.id" class="author-alias-chip">
+              {{ alias.name }}
+              <button
+                type="button"
+                class="remove-tag-button"
+                :disabled="aliasGroupBusy"
+                :aria-label="t('taxonomy.deleteAlias', { alias: alias.name })"
+                :data-testid="`author-alias-remove-${alias.id}`"
+                @click="removeAuthorAlias(alias.id)"
+              >×</button>
+            </span>
+          </span>
+        </li>
+      </ul>
+    </section>
   </section>
 </template>
 
@@ -532,6 +965,7 @@ onMounted(loadAliases);
 .secondary-button:disabled { opacity: 0.55; cursor: default; }
 .back-button { padding: 0; border: 0; color: var(--accent); background: transparent; font: inherit; cursor: pointer; }
 .danger-button { border-color: #a12626; color: #a12626; }
+.armable-armed { border-color: #a12626; color: #a12626; background: #fff0f0; }
 .unmatched-filter {
   display: flex;
   align-items: center;
@@ -594,10 +1028,53 @@ onMounted(loadAliases);
 }
 .merge-list small { color: var(--text-muted); }
 .merge-result { display: grid; gap: 0.6rem; }
+.alias-tag-rows { display: grid; gap: 0.55rem; }
+.alias-tag-row { display: flex; align-items: center; gap: 0.4rem; }
+.alias-tag-row input { flex: 1; }
+.author-alias-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.author-alias-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--tag-border);
+  border-radius: 999px;
+  color: var(--tag-text);
+  background: var(--tag-background);
+  font-size: 0.78rem;
+}
+.gallery-template-body { display: grid; gap: 0.4rem; padding: 0.35rem 0.55rem 0.55rem; }
+.gallery-template-body .muted { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0; }
+/* Rough sketch of an entry card under the saved template: section dividers
+   with a label column and an empty tag slot per facet row. */
+.template-card-preview {
+  display: grid;
+  gap: 0;
+  max-width: 22rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.6rem;
+  background: var(--surface-muted);
+  padding: 0.6rem 0.7rem;
+}
+.template-preview-section { display: grid; gap: 0.35rem; padding: 0.5rem 0; border-top: 1px dashed var(--border-subtle); }
+.template-preview-section:first-child { border-top: 0; padding-top: 0.15rem; }
+.template-preview-section-name { color: var(--text-primary); font-weight: 800; font-size: 0.82rem; }
+.template-preview-facet-rows { display: grid; gap: 0.35rem; }
+.template-preview-facet-row { display: grid; grid-template-columns: minmax(3.5rem, 7rem) minmax(0, 1fr); align-items: center; gap: 0.7rem; }
+.template-preview-facet-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 0.78rem; }
+.template-preview-facet-slot { display: block; height: 1.15rem; border: 1px dashed var(--border-subtle); border-radius: 0.4rem; background: var(--surface); opacity: 0.75; }
+.template-preview-content-slot { grid-column: 1 / -1; }
+.template-preview-stars { color: var(--text-muted); opacity: 0.6; font-size: 0.85rem; letter-spacing: 0.08em; }
+.template-preview-empty { color: var(--text-muted); font-size: 0.75rem; opacity: 0.7; }
 .merge-result h4 { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.8rem; color: var(--text-muted); }
 .merge-integrity { margin: 0; font-size: 0.8rem; }
 .merge-integrity-pass { color: var(--accent); }
 .merge-integrity-fail { color: #a12626; }
+.unassigned-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; }
+.unassigned-tag-name { display: inline-flex; align-items: baseline; gap: 0.4rem; font-weight: 600; font-size: 0.88rem; }
+.unassigned-tag-name small { color: var(--text-muted); font-weight: 400; }
+.unassigned-target { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; color: var(--text-muted); }
+.unassigned-suggestion { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.78rem; color: var(--text-muted); }
 .error-message { margin: 0; padding: 0.75rem; border-radius: 0.6rem; color: #a12626; background: #fff0f0; }
 @media (min-width: 34rem) {
   .alias-form { grid-template-columns: minmax(7rem, 0.4fr) minmax(9rem, 0.5fr) minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: end; }

@@ -4,18 +4,31 @@ import { normalizeTag } from '@t3/shared';
 import type {
   AuthorDetailResponse,
   AuthorDirectoryDto,
+  AuthorFilterOptions,
   FacetFilterOptions,
   ProducerRecordDto,
+  RatingRow,
 } from '@t3/shared';
 import type { GalleryApi } from './api/gallery.js';
 import FacetFilterBar, { type GalleryFacetFilters } from './components/FacetFilterBar.vue';
+import AppIcon from './components/AppIcon.vue';
+import IconButton from './components/IconButton.vue';
+import TagCombobox from './components/TagCombobox.vue';
+import { showNsfw } from './stores/preferences.js';
+import { flattenCollectionOptions, type CollectionMenuOption } from './collection-tree.js';
+import type { CollectionRecordDto } from '@t3/shared';
 import { useI18n } from './i18n.js';
+import { useArmableAction } from './armable.js';
 
 interface AuthorSummary {
   id: number;
   name: string;
   covers: string[];
   galleryType: string | null;
+  viewCount: number;
+  likeCount: number;
+  lastViewedAt: string | null;
+  nsfw: boolean;
 }
 
 type AuthorWork = AuthorDetailResponse['looseEntries'][number];
@@ -48,6 +61,7 @@ const emit = defineEmits<{
   'authors-changed': [];
 }>();
 const { t } = useI18n();
+const { armedKey, arm, disarm } = useArmableAction();
 const activeAuthor = ref<AuthorDetailResponse | null>(null);
 const activeDirectoryId = ref<number | null>(null);
 const editingAuthor = ref(false);
@@ -62,6 +76,44 @@ const authorArtwork = ref('');
 const authorContent = ref('');
 const tagEditorOpen = ref(false);
 const tagName = ref('');
+
+// Add-to-collection menu on the author detail toolbar (same pattern as the
+// Entry detail toolbar).
+const authorCollectionOptions = ref<CollectionMenuOption[]>([]);
+const authorCollectionIds = ref<number[]>([]);
+const authorCollectionMenuOpen = ref(false);
+
+async function toggleAuthorCollectionMenu(): Promise<void> {
+  authorCollectionMenuOpen.value = !authorCollectionMenuOpen.value;
+  if (authorCollectionMenuOpen.value && activeAuthor.value) {
+    try {
+      const [collectionTree, memberIds] = await Promise.all([
+        props.api.listCollections('producer'),
+        props.api.listCollectionsForProducer(activeAuthor.value.id),
+      ]);
+      authorCollectionOptions.value = flattenCollectionOptions(collectionTree);
+      authorCollectionIds.value = memberIds;
+    } catch {
+      // Keep cached options; the menu still renders.
+    }
+  }
+}
+
+async function addAuthorToCollection(collectionId: number): Promise<void> {
+  if (!activeAuthor.value) return;
+  authorCollectionMenuOpen.value = false;
+  error.value = null;
+  try {
+    await props.api.addCollectionProducer(collectionId, activeAuthor.value.id);
+    authorCollectionIds.value = [...authorCollectionIds.value, collectionId];
+    await refreshAuthor();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.createEntry');
+  }
+}
+
+const ratingEditorOpen = ref(false);
+const ratingName = ref('');
 const editingTagId = ref<number | null>(null);
 const editingTagName = ref('');
 const directoryTitle = ref('');
@@ -75,6 +127,7 @@ const authorSort = ref<AuthorSort>('date-desc');
 // One page of loose works; Directories always render above them (they are
 // drop targets, so they must never be pushed onto a later page).
 const pageSize = 26;
+const serverWorkSortRanks = ref<Map<number, number> | null>(null);
 
 function directoryDate(directory: AuthorDirectoryDto): number {
   return Math.max(0, ...directory.entries.map((entry) => entry.id));
@@ -85,6 +138,11 @@ function byTitle(left: string, right: string): number {
 }
 
 function compareAuthorCards(left: AuthorCard, right: AuthorCard): number {
+  if (serverWorkSortRanks.value && left.kind === 'work' && right.kind === 'work') {
+    const leftRank = serverWorkSortRanks.value.get(left.work.id) ?? Number.MAX_SAFE_INTEGER;
+    const rightRank = serverWorkSortRanks.value.get(right.work.id) ?? Number.MAX_SAFE_INTEGER;
+    if (leftRank !== rightRank) return leftRank - rightRank;
+  }
   const direction = authorSort.value.endsWith('-desc') ? -1 : 1;
   const sortKey = authorSort.value === 'type' ? 'date-desc' : authorSort.value;
   const leftTitle = left.kind === 'directory' ? left.directory.title : left.work.title;
@@ -125,8 +183,132 @@ const workCards = computed<WorkCard[]>(() => {
 // author's works inside his dominant Gallery type; the filter bar only
 // appears when all of his works share one type.
 const authorFilterOptions = ref<FacetFilterOptions | null>(null);
-const authorFilters = ref<GalleryFacetFilters>({ conditions: [], authorIds: [] });
+const authorFilters = ref<GalleryFacetFilters>({
+  conditions: [],
+  authorIds: [],
+  ratingConditions: [],
+  ratingSort: null,
+  usageConditions: [],
+  usageSort: null,
+});
 const matchedWorkIds = ref<Set<number> | null>(null);
+// Author list usage controls: filter by the dominant Gallery type and toggle
+// between Last viewed (★) and Most viewed (♥). null = no usage note shown.
+const authorTypeFilter = ref('');
+const authorUsageMode = ref<'lastViewed' | 'mostViewed' | 'mostLiked' | null>(null);
+const authorListFilterOptions = ref<AuthorFilterOptions>({ authorTags: [], workTags: [] });
+const authorTagFilters = ref<Array<number | null>>([]);
+const workTagFilters = ref<Array<number | null>>([]);
+const tagFilteredAuthors = ref<AuthorSummary[] | null>(null);
+let authorListFilterRequest = 0;
+
+const authorGalleryTypes = computed<string[]>(() => (
+  [...new Set(props.authors.map((author) => author.galleryType).filter((type): type is string => type !== null))]
+));
+
+const visibleAuthors = computed(() => {
+  let list = (tagFilteredAuthors.value ?? props.authors)
+    .filter((author) => showNsfw.value || !author.nsfw);
+  if (authorTypeFilter.value !== '') {
+    list = list.filter((author) => author.galleryType === authorTypeFilter.value);
+  }
+  if (authorUsageMode.value === 'mostViewed') {
+    list = [...list].sort((left, right) => right.viewCount - left.viewCount || left.id - right.id);
+  } else if (authorUsageMode.value === 'mostLiked') {
+    list = [...list].sort((left, right) => right.likeCount - left.likeCount || left.id - right.id);
+  } else if (authorUsageMode.value === 'lastViewed') {
+    list = [...list].sort((left, right) => {
+      const leftTime = left.lastViewedAt ?? '';
+      const rightTime = right.lastViewedAt ?? '';
+      return rightTime.localeCompare(leftTime) || left.id - right.id;
+    });
+  }
+  return list;
+});
+
+function selectedTagIds(rows: Array<number | null>): number[] {
+  return [...new Set(rows.filter((tagId): tagId is number => tagId !== null))];
+}
+
+async function loadAuthorListFilterOptions(): Promise<void> {
+  try {
+    authorListFilterOptions.value = await props.api.listAuthorFilterOptions(undefined, showNsfw.value);
+  } catch {
+    authorListFilterOptions.value = { authorTags: [], workTags: [] };
+  }
+}
+
+async function applyAuthorListFilters(): Promise<void> {
+  const ownTagIds = selectedTagIds(authorTagFilters.value);
+  const relatedEntryTagIds = selectedTagIds(workTagFilters.value);
+  if (ownTagIds.length === 0 && relatedEntryTagIds.length === 0) {
+    authorListFilterRequest += 1;
+    tagFilteredAuthors.value = null;
+    return;
+  }
+  const request = ++authorListFilterRequest;
+  error.value = null;
+  try {
+    const authors = await props.api.filterAuthors(ownTagIds, relatedEntryTagIds);
+    if (request === authorListFilterRequest) tagFilteredAuthors.value = authors;
+  } catch (cause) {
+    if (request !== authorListFilterRequest) return;
+    error.value = cause instanceof Error ? cause.message : t('author.listFilterError');
+    tagFilteredAuthors.value = null;
+  }
+}
+
+function addAuthorTagFilter(): void {
+  if (authorTagFilters.value.length >= authorListFilterOptions.value.authorTags.length) return;
+  authorTagFilters.value.push(null);
+}
+
+function addWorkTagFilter(): void {
+  if (workTagFilters.value.length >= authorListFilterOptions.value.workTags.length) return;
+  workTagFilters.value.push(null);
+}
+
+function tagSelectedInAnotherRow(rows: Array<number | null>, tagId: number, index: number): boolean {
+  return rows.some((selected, selectedIndex) => selectedIndex !== index && selected === tagId);
+}
+
+function removeAuthorTagFilter(index: number): void {
+  authorTagFilters.value.splice(index, 1);
+  void applyAuthorListFilters();
+}
+
+function removeWorkTagFilter(index: number): void {
+  workTagFilters.value.splice(index, 1);
+  void applyAuthorListFilters();
+}
+
+watch(showNsfw, async () => {
+  await loadAuthorListFilterOptions();
+  const availableAuthorTags = new Set(authorListFilterOptions.value.authorTags.map((tag) => tag.tagId));
+  const availableWorkTags = new Set(authorListFilterOptions.value.workTags.map((tag) => tag.tagId));
+  authorTagFilters.value = authorTagFilters.value
+    .filter((tagId) => tagId === null || availableAuthorTags.has(tagId));
+  workTagFilters.value = workTagFilters.value
+    .filter((tagId) => tagId === null || availableWorkTags.has(tagId));
+  await applyAuthorListFilters();
+});
+
+function formatDate(isoTimestamp: string): string {
+  const date = new Date(isoTimestamp);
+  return Number.isNaN(date.getTime()) ? isoTimestamp.slice(0, 10) : date.toISOString().slice(0, 10);
+}
+
+function authorWorkUsageNote(work: AuthorWork): string | null {
+  const field = authorFilters.value.usageSort?.field
+    ?? authorFilters.value.usageConditions.at(-1)?.field;
+  if (field === 'views') return t('usage.viewCount', { count: work.viewCount });
+  if (field === 'lastViewed') {
+    return work.lastViewedAt ? t('usage.lastViewed', { date: formatDate(work.lastViewedAt) }) : t('usage.lastViewed', { date: '—' });
+  }
+  if (field === 'likes') return `👍 ${work.likeCount}`;
+  return null;
+}
+
 const authorWorksList = computed<Array<{ id: number; type: string }>>(() => {
   if (!activeAuthor.value) return [];
   return [
@@ -142,14 +324,19 @@ const authorFilterType = computed<string | null>(() => {
 });
 const filterActive = computed<boolean>(() => (
   authorFilters.value.conditions.some((condition) => condition.tagIds.length > 0)
+  || authorFilters.value.ratingConditions.length > 0
+  || authorFilters.value.ratingSort !== null
+  || authorFilters.value.usageConditions.length > 0
+  || authorFilters.value.usageSort !== null
 ));
 function workMatches(workId: number): boolean {
   return matchedWorkIds.value === null || matchedWorkIds.value.has(workId);
 }
 
 async function resetAuthorFilters(): Promise<void> {
-  authorFilters.value = { conditions: [], authorIds: [] };
+  authorFilters.value = { conditions: [], authorIds: [], ratingConditions: [], ratingSort: null, usageConditions: [], usageSort: null };
   matchedWorkIds.value = null;
+  serverWorkSortRanks.value = null;
   authorFilterOptions.value = null;
   const type = authorFilterType.value;
   if (!activeAuthor.value || !type) return;
@@ -166,23 +353,39 @@ async function onAuthorFiltersChange(filters: GalleryFacetFilters): Promise<void
   const activeConditions = filters.conditions.filter((condition) => condition.tagIds.length > 0);
   const type = authorFilterType.value;
   const authorId = activeAuthor.value?.id;
-  if (activeConditions.length === 0 || type === null || authorId === undefined) {
+  const hasFilterOrSort = activeConditions.length > 0
+    || filters.ratingConditions.length > 0
+    || filters.ratingSort !== null
+    || filters.usageConditions.length > 0
+    || filters.usageSort !== null;
+  if (!hasFilterOrSort || type === null || authorId === undefined) {
     matchedWorkIds.value = null;
+    serverWorkSortRanks.value = null;
     return;
   }
   try {
-    const summaries = await props.api.filterEntriesByFacets(type, activeConditions, [authorId]);
+    const summaries = await props.api.filterEntriesByFacets(type, activeConditions, [authorId], {
+      ratingConditions: filters.ratingConditions,
+      ratingSort: filters.ratingSort,
+      usageConditions: filters.usageConditions,
+      usageSort: filters.usageSort,
+    });
     matchedWorkIds.value = new Set(summaries.map((summary) => summary.id));
+    serverWorkSortRanks.value = filters.ratingSort !== null || filters.usageSort !== null
+      ? new Map(summaries.map((summary, index) => [summary.id, index]))
+      : null;
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('author.filterError');
     matchedWorkIds.value = null;
+    serverWorkSortRanks.value = null;
   }
 }
 
 watch(() => activeAuthor.value?.id, (id) => {
   if (id === undefined) {
-    authorFilters.value = { conditions: [], authorIds: [] };
+    authorFilters.value = { conditions: [], authorIds: [], ratingConditions: [], ratingSort: null, usageConditions: [], usageSort: null };
     matchedWorkIds.value = null;
+    serverWorkSortRanks.value = null;
     authorFilterOptions.value = null;
     return;
   }
@@ -267,7 +470,14 @@ async function loadAuthorAlternates(): Promise<void> {
 
 async function refreshAuthor(): Promise<void> {
   if (!activeAuthor.value) return;
-  activeAuthor.value = await props.api.getAuthor(activeAuthor.value.id);
+  const [detail, collectionOptions, memberIds] = await Promise.all([
+    props.api.getAuthor(activeAuthor.value.id),
+    props.api.listCollections('producer'),
+    props.api.listCollectionsForProducer(activeAuthor.value.id),
+  ]);
+  authorCollectionOptions.value = flattenCollectionOptions(collectionOptions);
+  authorCollectionIds.value = memberIds;
+  activeAuthor.value = detail;
   if (page.value > pageCount.value) page.value = pageCount.value;
 }
 
@@ -295,7 +505,7 @@ function openWork(work: AuthorWork): void {
 }
 
 onMounted(async () => {
-  await loadAuthorAlternates();
+  await Promise.all([loadAuthorAlternates(), loadAuthorListFilterOptions()]);
   if (props.initialAuthorId) {
     await openAuthor(props.initialAuthorId);
     if (props.initialDirectoryId) activeDirectoryId.value = props.initialDirectoryId;
@@ -319,6 +529,7 @@ function beginAuthorEdit(): void {
   authorOccupation.value = activeAuthor.value.occupation ?? '';
   authorArtwork.value = activeAuthor.value.artworkRef ?? '';
   authorContent.value = activeAuthor.value.content ?? '';
+  ratingEditorOpen.value = false;
   editingAuthor.value = true;
 }
 
@@ -342,7 +553,8 @@ async function saveAuthor(): Promise<void> {
 
 async function deleteActiveAuthor(): Promise<void> {
   if (!activeAuthor.value) return;
-  if (!window.confirm(t('author.deleteConfirm', { name: activeAuthor.value.name }))) return;
+  if (!arm('delete-author')) return;
+  disarm('delete-author');
   error.value = null;
   try {
     await props.api.deleteAuthor(activeAuthor.value.id);
@@ -361,8 +573,66 @@ async function addTag(): Promise<void> {
     tagName.value = '';
     tagEditorOpen.value = false;
     await refreshAuthor();
+    await loadAuthorListFilterOptions();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.addAuthorTag');
+  }
+}
+
+function applyAuthorRatingRow(row: RatingRow): void {
+  const author = activeAuthor.value;
+  if (!author) return;
+  author.ratings = author.ratings.map((item) => (item.slotId === row.slotId ? row : item));
+}
+
+async function createAuthorRatingSlot(): Promise<void> {
+  if (!activeAuthor.value || !ratingName.value.trim()) return;
+  error.value = null;
+  try {
+    await props.api.createAuthorRatingSlot(activeAuthor.value.id, ratingName.value.trim());
+    ratingName.value = '';
+    ratingEditorOpen.value = false;
+    await refreshAuthor();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.createRatingSlot');
+  }
+}
+
+async function chooseAuthorStars(slotId: number, stars: number): Promise<void> {
+  if (!activeAuthor.value) return;
+  error.value = null;
+  try {
+    applyAuthorRatingRow(await props.api.setAuthorRating(activeAuthor.value.id, slotId, stars));
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.setRating');
+  }
+}
+
+async function clearAuthorStars(slotId: number): Promise<void> {
+  if (!activeAuthor.value) return;
+  error.value = null;
+  try {
+    applyAuthorRatingRow(await props.api.setAuthorRating(activeAuthor.value.id, slotId, null));
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.setRating');
+  }
+}
+
+async function moveAuthorRatingSlot(slotId: number, direction: -1 | 1): Promise<void> {
+  const author = activeAuthor.value;
+  if (!author) return;
+  const orderedIds = author.ratings.map((row) => row.slotId);
+  const index = orderedIds.indexOf(slotId);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= orderedIds.length) return;
+  [orderedIds[index], orderedIds[target]] = [orderedIds[target]!, orderedIds[index]!];
+  error.value = null;
+  try {
+    // The order is shared per dominant-Gallery partition, like the slots.
+    await props.api.reorderAuthorRatingSlots(author.id, orderedIds);
+    await refreshAuthor();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.reorderRating');
   }
 }
 
@@ -379,6 +649,7 @@ async function saveTagRename(tagId: number): Promise<void> {
     editingTagId.value = null;
     editingTagName.value = '';
     await refreshAuthor();
+    await loadAuthorListFilterOptions();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.renameAuthorTag');
   }
@@ -389,6 +660,7 @@ async function removeTag(tagId: number): Promise<void> {
   try {
     await props.api.removeAuthorTag(activeAuthor.value.id, tagId);
     await refreshAuthor();
+    await loadAuthorListFilterOptions();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.removeAuthorTag');
   }
@@ -506,15 +778,13 @@ async function removeFromDirectory(): Promise<void> {
         <button type="button" class="text-button" @click="activeDirectoryId = null">
           {{ t('directory.back', { author: activeAuthor.name }) }}
         </button>
-        <button
+        <IconButton
           v-if="!editingDirectory"
           data-testid="start-directory-editing"
-          type="button"
-          class="secondary-button"
+          icon="edit"
+          :label="t('directory.edit')"
           @click="beginDirectoryEdit"
-        >
-          {{ t('directory.edit') }}
-        </button>
+        />
         <div v-else class="directory-edit-actions">
           <button
             data-testid="finish-directory-editing"
@@ -574,26 +844,57 @@ async function removeFromDirectory(): Promise<void> {
           <button type="button" class="text-button" @click="closeAuthor">
             {{ props.backLabel ?? t('author.backToList') }}
           </button>
-          <button
+          <IconButton
             v-if="!editingAuthor"
             data-testid="start-author-editing"
-            type="button"
-            class="secondary-button"
+            icon="edit"
+            :label="t('author.edit')"
             @click="beginAuthorEdit"
-          >
-            {{ t('author.edit') }}
-          </button>
+          />
           <button v-else type="button" class="secondary-button" @click="editingAuthor = false">
             {{ t('author.done') }}
           </button>
+          <div class="add-to-collection" data-testid="author-add-to-collection">
+            <IconButton
+              icon="folder-plus"
+              :label="t('a11y.addToCollection')"
+              :active="authorCollectionMenuOpen"
+              aria-haspopup="menu"
+              :aria-expanded="authorCollectionMenuOpen"
+              :aria-controls="authorCollectionMenuOpen ? 'author-collection-menu' : undefined"
+              @click="toggleAuthorCollectionMenu"
+            />
+            <div
+              v-if="authorCollectionMenuOpen"
+              id="author-collection-menu"
+              class="add-to-collection-menu"
+              role="menu"
+            >
+              <p v-if="authorCollectionOptions.length === 0" class="muted">
+                {{ t('collections.empty') }}
+              </p>
+              <button
+                v-for="collection in authorCollectionOptions"
+                :key="collection.id"
+                type="button"
+                role="menuitem"
+                class="add-to-collection-option"
+                :disabled="authorCollectionIds.includes(collection.id)"
+                @click="addAuthorToCollection(collection.id)"
+              >
+                {{ authorCollectionIds.includes(collection.id) ? '✓ ' : '' }}{{ collection.title }}
+              </button>
+            </div>
+          </div>
           <button
             v-if="editingAuthor"
             data-testid="delete-author"
             type="button"
             class="secondary-button danger-button"
+            :class="{ 'armable-armed': armedKey === 'delete-author' }"
             @click="deleteActiveAuthor"
           >
-            {{ t('author.delete') }}
+            {{ armedKey === 'delete-author' ? t('author.deleteConfirmShort', { name: activeAuthor?.name }) : t('author.delete') }}
           </button>
         </div>
         <form v-if="editingAuthor" class="author-edit-form" @submit.prevent="saveAuthor">
@@ -619,7 +920,20 @@ async function removeFromDirectory(): Promise<void> {
                 {{ activeAuthor.galleryType }}
               </span>
             </h2>
+            <small
+              v-if="alternatesFor(activeAuthor.name)"
+              class="author-name-alternates"
+              data-testid="author-detail-alternates"
+            >{{ alternatesFor(activeAuthor.name) }}</small>
             <p>{{ activeAuthor.occupation }}</p>
+            <p class="author-usage-summary" data-testid="author-usage-summary">
+              <span class="detail-usage-count">{{ t('usage.viewCount', { count: activeAuthor.usage.viewCount }) }}</span>
+              <span v-if="activeAuthor.usage.likeCount > 0" class="detail-usage-count">👍 {{ activeAuthor.usage.likeCount }}</span>
+              <span
+                v-if="activeAuthor.usage.lastViewedAt"
+                class="detail-usage-date"
+              >{{ t('usage.lastViewed', { date: formatDate(activeAuthor.usage.lastViewedAt) }) }}</span>
+            </p>
           </div>
         </div>
 
@@ -655,9 +969,111 @@ async function removeFromDirectory(): Promise<void> {
             </form>
           </div>
         </div>
-        <div class="author-row author-content-row">
+        <!-- Read-mode only: while editing, the form's Content field above is
+             the single editor for this text. -->
+        <div v-if="!editingAuthor" class="author-row author-content-row">
           <strong>{{ t('author.content') }}</strong>
           <p>{{ activeAuthor.content }}</p>
+        </div>
+        <div
+          v-if="activeAuthor.ratings.length > 0 || editingAuthor"
+          class="author-row author-rating-row"
+          data-testid="author-ratings"
+        >
+          <strong>{{ t('rating.title') }}</strong>
+          <div class="rating-rows">
+            <p v-if="activeAuthor.ratings.length === 0 && editingAuthor" class="muted">
+              {{ activeAuthor.galleryType === null ? t('rating.noWorks') : t('rating.empty') }}
+            </p>
+            <div
+              v-for="row in activeAuthor.ratings"
+              :key="row.slotId"
+              class="rating-row"
+              :data-rating-slot-id="row.slotId"
+            >
+              <span class="rating-name">{{ row.name }}</span>
+              <span
+                v-if="editingAuthor && activeAuthor.ratings.length > 1"
+                class="rating-sort-controls"
+              >
+                <button
+                  type="button"
+                  :data-move-rating-up-id="row.slotId"
+                  :disabled="row.slotId === activeAuthor.ratings[0]?.slotId"
+                  :aria-label="t('rating.moveUp', { name: row.name })"
+                  @click="moveAuthorRatingSlot(row.slotId, -1)"
+                >↑</button>
+                <button
+                  type="button"
+                  :data-move-rating-down-id="row.slotId"
+                  :disabled="row.slotId === activeAuthor.ratings[activeAuthor.ratings.length - 1]?.slotId"
+                  :aria-label="t('rating.moveDown', { name: row.name })"
+                  @click="moveAuthorRatingSlot(row.slotId, 1)"
+                >↓</button>
+              </span>
+              <template v-if="editingAuthor">
+                <span class="star-picker">
+                  <span class="star-display">
+                    <span class="star-display-base">★★★★★</span>
+                    <span
+                      class="star-display-fill"
+                      :style="{ width: row.stars === null ? '0%' : `${(row.stars / 5) * 100}%` }"
+                    >★★★★★</span>
+                    <span class="star-picker-zones">
+                      <button
+                        v-for="half in 10"
+                        :key="half"
+                        type="button"
+                        :data-set-stars="half / 2"
+                        :aria-label="t('rating.set', { name: row.name, stars: half / 2 })"
+                        @click="chooseAuthorStars(row.slotId, half / 2)"
+                      />
+                    </span>
+                  </span>
+                  <button
+                    v-if="row.stars !== null"
+                    type="button"
+                    class="remove-tag-button"
+                    :data-clear-rating-slot-id="row.slotId"
+                    :aria-label="t('rating.clear', { name: row.name })"
+                    @click="clearAuthorStars(row.slotId)"
+                  >×</button>
+                </span>
+              </template>
+              <span v-else-if="row.stars !== null" class="star-display">
+                <span class="star-display-base">★★★★★</span>
+                <span
+                  class="star-display-fill"
+                  :style="{ width: `${(row.stars / 5) * 100}%` }"
+                >★★★★★</span>
+              </span>
+              <span v-else class="rating-unrated">{{ t('rating.unrated') }}</span>
+            </div>
+            <button
+              v-if="editingAuthor && !ratingEditorOpen"
+              data-testid="add-author-rating-button"
+              type="button"
+              class="add-button"
+              @click="ratingEditorOpen = true"
+            >
+              {{ t('rating.add') }}
+            </button>
+            <form
+              v-else-if="editingAuthor"
+              data-testid="create-author-rating-form"
+              class="compact-editor"
+              @submit.prevent="createAuthorRatingSlot"
+            >
+              <input
+                v-model="ratingName"
+                name="authorRatingName"
+                required
+                autocomplete="off"
+                :placeholder="t('rating.namePlaceholder')"
+                @blur="ratingName.trim() && createAuthorRatingSlot()"
+              >
+            </form>
+          </div>
         </div>
       </section>
 
@@ -760,7 +1176,15 @@ async function removeFromDirectory(): Promise<void> {
               <button type="button" class="author-card-main" @click="openWork(card.work)">
                 <img v-if="card.work.coverRef" :src="api.assetUrl(card.work.coverRef)" :alt="card.work.title">
                 <span v-else class="cover-placeholder">{{ card.work.title.slice(0, 1).toUpperCase() }}</span>
-                <span class="author-card-meta"><strong>{{ card.work.title }}</strong><small>{{ card.work.type }}</small></span>
+                <span class="author-card-meta">
+                  <strong>{{ card.work.title }}</strong>
+                  <small>{{ card.work.type }}</small>
+                  <small
+                    v-if="authorWorkUsageNote(card.work)"
+                    class="author-work-usage-note"
+                    data-testid="author-work-usage-note"
+                  >{{ authorWorkUsageNote(card.work) }}</small>
+                </span>
               </button>
             </article>
           </div>
@@ -774,9 +1198,127 @@ async function removeFromDirectory(): Promise<void> {
     </template>
 
     <template v-else>
-      <header class="author-list-heading"><p class="eyebrow">{{ t('author.navigation') }}</p><h2>{{ t('author.title') }}</h2><p>{{ t('author.subtitle') }}</p></header>
-      <div class="author-list">
-        <button v-for="author in authors" :key="author.id" type="button" class="author-list-card" :data-author-id="author.id" @click="openAuthor(author.id)">
+      <header class="author-list-heading">
+        <p class="eyebrow">{{ t('author.navigation') }}</p>
+        <h2>{{ t('author.title') }} <span class="muted" data-testid="author-list-count">{{ t('author.count', { count: visibleAuthors.length }) }}</span></h2>
+        <p>{{ t('author.subtitle') }}</p>
+      </header>
+      <div class="author-list-controls">
+        <div class="author-type-filter" data-testid="author-type-filter">
+          <button
+            type="button"
+            class="recent-tab"
+            :class="{ 'recent-tab-active': authorTypeFilter === '' }"
+            @click="authorTypeFilter = ''"
+          >{{ t('filter.allTags') }}</button>
+          <button
+            v-for="type in authorGalleryTypes"
+            :key="type"
+            type="button"
+            class="recent-tab"
+            :class="{ 'recent-tab-active': authorTypeFilter === type }"
+            :data-author-type-filter="type"
+            @click="authorTypeFilter = type"
+          >{{ type }}</button>
+        </div>
+        <div class="recent-mode-switch" role="group" :aria-label="t('sort.groupLabel')">
+          <button
+            type="button"
+            class="recent-mode-button author-mode-star"
+            :class="{ 'recent-mode-active': authorUsageMode === 'lastViewed' }"
+            data-testid="author-mode-last-viewed"
+            :aria-pressed="authorUsageMode === 'lastViewed'"
+            :aria-label="t('author.sortByLastViewed')"
+            :title="t('author.sortByLastViewed')"
+            @click="authorUsageMode = authorUsageMode === 'lastViewed' ? null : 'lastViewed'"
+          ><AppIcon name="history" :size="16" /></button>
+          <button
+            type="button"
+            class="recent-mode-button author-mode-heart"
+            :class="{ 'recent-mode-active': authorUsageMode === 'mostViewed' }"
+            data-testid="author-mode-most-viewed"
+            :aria-pressed="authorUsageMode === 'mostViewed'"
+            :aria-label="t('author.sortByViews')"
+            :title="t('author.sortByViews')"
+            @click="authorUsageMode = authorUsageMode === 'mostViewed' ? null : 'mostViewed'"
+          ><AppIcon name="view-count" :size="16" /></button>
+          <button
+            type="button"
+            class="recent-mode-button author-mode-like"
+            :class="{ 'recent-mode-active': authorUsageMode === 'mostLiked' }"
+            data-testid="author-mode-most-liked"
+            :aria-pressed="authorUsageMode === 'mostLiked'"
+            :aria-label="t('author.sortByLikes')"
+            :title="t('author.sortByLikes')"
+            @click="authorUsageMode = authorUsageMode === 'mostLiked' ? null : 'mostLiked'"
+          ><AppIcon name="thumb-up" :size="16" /></button>
+        </div>
+      </div>
+      <div class="author-list-tag-filters" data-testid="author-list-tag-filters">
+        <div class="author-list-filter-actions">
+          <button
+            type="button"
+            class="add-button"
+            data-testid="add-author-tag-filter"
+            :disabled="authorTagFilters.length >= authorListFilterOptions.authorTags.length"
+            @click="addAuthorTagFilter"
+          >{{ t('author.addAuthorTagFilter') }}</button>
+          <button
+            type="button"
+            class="add-button"
+            data-testid="add-work-tag-filter"
+            :disabled="workTagFilters.length >= authorListFilterOptions.workTags.length"
+            @click="addWorkTagFilter"
+          >{{ t('author.addWorkTagFilter') }}</button>
+        </div>
+        <div
+          v-for="(_tagId, index) in authorTagFilters"
+          :key="`author-tag-${index}`"
+          class="author-list-filter-row"
+        >
+          <label>
+            <span>{{ t('author.authorTags') }}</span>
+            <TagCombobox
+              :model-value="authorTagFilters[index] ?? null"
+              :options="authorListFilterOptions.authorTags.map((tag) => ({ id: tag.tagId, name: tag.name }))"
+              test-id-prefix="author-tag"
+              :taken-ids="authorTagFilters.filter((id): id is number => id !== null && id !== authorTagFilters[index])"
+              @update:model-value="(value) => { authorTagFilters[index] = value; applyAuthorListFilters(); }"
+            />
+          </label>
+          <button
+            type="button"
+            class="remove-tag-filter"
+            :aria-label="t('author.removeTagFilter')"
+            @click="removeAuthorTagFilter(index)"
+          >×</button>
+        </div>
+        <div
+          v-for="(_tagId, index) in workTagFilters"
+          :key="`work-tag-${index}`"
+          class="author-list-filter-row"
+        >
+          <label>
+            <span>{{ t('author.worksContainTags') }}</span>
+            <TagCombobox
+              :model-value="workTagFilters[index] ?? null"
+              :options="authorListFilterOptions.workTags.map((tag) => ({ id: tag.tagId, name: tag.name }))"
+              test-id-prefix="work-tag"
+              :taken-ids="workTagFilters.filter((id): id is number => id !== null && id !== workTagFilters[index])"
+              @update:model-value="(value) => { workTagFilters[index] = value; applyAuthorListFilters(); }"
+            />
+          </label>
+          <button
+            type="button"
+            class="remove-tag-filter"
+            :aria-label="t('author.removeTagFilter')"
+            @click="removeWorkTagFilter(index)"
+          >×</button>
+        </div>
+      </div>
+      <p v-if="visibleAuthors.length === 0" class="muted">{{ t('author.noFilteredAuthors') }}</p>
+      <div v-else class="author-list">
+        <button v-for="author in visibleAuthors" :key="author.id" type="button" class="author-list-card" :data-author-id="author.id" @click="openAuthor(author.id)">
           <span v-if="author.covers.length" class="author-list-cover">
             <img v-for="coverRef in author.covers" :key="coverRef" :src="api.assetUrl(coverRef)" :alt="author.name">
           </span>
@@ -788,6 +1330,13 @@ async function removeFromDirectory(): Promise<void> {
           <small v-if="alternatesFor(author.name)" class="author-name-alternates">
             {{ alternatesFor(author.name) }}
           </small>
+          <small v-if="authorUsageMode !== null" class="author-usage-note" data-testid="author-usage-note">
+            {{ authorUsageMode === 'mostLiked'
+              ? t('card.likeCount', { count: author.likeCount })
+              : authorUsageMode === 'mostViewed'
+                ? t('card.viewCount', { count: author.viewCount })
+                : t('author.lastViewed', { date: author.lastViewedAt ? formatDate(author.lastViewedAt) : '—' }) }}
+          </small>
         </button>
       </div>
     </template>
@@ -796,13 +1345,31 @@ async function removeFromDirectory(): Promise<void> {
 
 <style scoped>
 .author-page { display: grid; gap: 1rem; }
-.author-toolbar, .works-heading, .pagination { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.author-list-controls { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.author-type-filter { display: flex; flex-wrap: wrap; align-items: end; gap: 0.25rem; padding: 0 0.55rem; }
+.author-list-tag-filters { display: grid; gap: 0.55rem; }
+.author-list-filter-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.author-list-filter-actions .add-button:disabled { cursor: default; opacity: 0.45; }
+.author-list-filter-row { display: flex; align-items: end; gap: 0.45rem; max-width: 28rem; }
+.author-list-filter-row label { display: grid; flex: 1; gap: 0.25rem; color: var(--text-muted); font-size: 0.75rem; font-weight: 700; }
+.author-list-filter-row select { min-width: 0; padding: 0.48rem 0.6rem; border: 1px solid var(--border-subtle); border-radius: 0.55rem; color: var(--text-primary); background: var(--surface); font: inherit; }
+.remove-tag-filter { width: 2.15rem; height: 2.15rem; padding: 0; border: 1px solid var(--border-subtle); border-radius: 0.55rem; color: var(--text-muted); background: transparent; font: inherit; cursor: pointer; }
+.author-usage-note { color: var(--text-muted); font-size: 0.75rem; }
+.rating-rows { display: grid; gap: 0.35rem; justify-items: start; }
+.rating-row { display: flex; align-items: center; gap: 0.85rem; min-height: 2rem; }
+.author-usage-summary { display: flex; align-items: baseline; gap: 0.8rem; margin: 0.35rem 0 0; color: var(--text-muted); font-size: 0.82rem; }
+.detail-usage-count { font-weight: 700; color: var(--text-primary); }
+.works-heading, .pagination { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+/* Back link stays left; Done / Delete and the edit button group on the right. */
+.author-toolbar { display: flex; align-items: center; gap: 0.75rem; }
+.author-toolbar .text-button { margin-right: auto; }
 .directory-edit-actions { display: grid; justify-items: stretch; gap: 0.35rem; }
 .directory-remove-target { padding: 0.35rem 0.6rem; border: 1px dashed #b84a4a; border-radius: 0.5rem; color: #a12626; background: transparent; font: inherit; cursor: pointer; transition: transform 140ms ease, background 140ms ease; }
 .directory-remove-target.drop-target { transform: scale(1.04); background: color-mix(in srgb, #b84a4a 14%, transparent); }
 .text-button { padding: 0; border: 0; color: var(--accent); background: transparent; font: inherit; cursor: pointer; }
 .secondary-button, .primary-button, .add-button, .pagination button { padding: 0.45rem 0.7rem; border: 1px solid var(--border-subtle); border-radius: 0.55rem; color: var(--text-primary); background: var(--surface); font: inherit; cursor: pointer; }
 .danger-button { border-color: #a12626; color: #a12626; }
+.armable-armed { border-color: #a12626; color: #a12626; background: #fff0f0; }
 .primary-button { color: white; border-color: var(--accent); background: var(--accent); }
 .add-button { border-style: dashed; color: var(--text-muted); background: transparent; }
 .author-information-board { overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 0.9rem; background: var(--surface-muted); }
@@ -816,10 +1383,60 @@ async function removeFromDirectory(): Promise<void> {
 .author-cover-grid img { width: 100%; height: 100%; object-fit: cover; border-radius: 0.15rem; min-width: 0; }
 .author-cover-placeholder { display: grid; place-items: center; color: var(--tag-text); background: var(--tag-background); font-size: 2rem; font-weight: 850; }
 .sort-control { display: flex; align-items: center; gap: 0.4rem; margin-left: auto; color: var(--text-muted); font-size: 0.85rem; }
-.sort-control select { font: inherit; }
+.sort-control select { min-height: var(--control-min-height); padding: 0.3rem 0.6rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface); font: inherit; }
+.recent-mode-switch { display: inline-flex; gap: 0.3rem; }
+/* Sort state buttons share one look; active is expressed by container colors,
+   never by a filled icon (icon brief §4). */
+.recent-mode-button {
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: var(--icon-button-size);
+  height: var(--icon-button-size);
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  color: var(--icon-muted);
+  background: transparent;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--transition-duration) ease, background-color var(--transition-duration) ease, border-color var(--transition-duration) ease;
+}
+.recent-mode-button:hover {
+  color: var(--accent);
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+.recent-mode-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.recent-mode-button.recent-mode-active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+/* Kept for the existing test selectors; the glyphs themselves are unified. */
+.author-mode-star, .author-mode-heart, .author-mode-like { color: inherit; }
+.recent-mode-button.recent-mode-active.author-mode-star,
+.recent-mode-button.recent-mode-active.author-mode-heart,
+.recent-mode-button.recent-mode-active.author-mode-like { color: var(--accent); }
 .author-row { display: grid; grid-template-columns: 7rem minmax(0, 1fr); align-items: start; gap: 1rem; }
 .author-row > strong { font-size: 0.8rem; }
 .author-content-row p { margin: 0; white-space: pre-wrap; }
+.rating-rows { display: grid; gap: 0.35rem; }
+.rating-row { display: flex; align-items: center; gap: 0.85rem; min-height: 2rem; }
+.rating-name { min-width: 7rem; color: var(--text-muted); font-size: 0.8rem; }
+.rating-unrated { color: var(--text-muted); font-size: 0.82rem; }
+.star-display { position: relative; display: inline-block; line-height: 1; font-size: 1.05rem; letter-spacing: 0.08em; }
+.star-display-base { color: color-mix(in srgb, var(--text-muted) 45%, transparent); }
+.star-display-fill { position: absolute; top: 0; left: 0; height: 100%; overflow: hidden; white-space: nowrap; color: #e8a33d; pointer-events: none; }
+.star-picker { display: inline-flex; align-items: center; gap: 0.35rem; }
+.star-picker-zones { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(10, 1fr); }
+.star-picker-zones button { appearance: none; background: none; border: none; padding: 0; margin: 0; cursor: pointer; }
+.rating-sort-controls { display: inline-flex; gap: 0.2rem; }
+.rating-sort-controls button { border: none; background: none; cursor: pointer; color: var(--text-muted); padding: 0 0.2rem; }
+.rating-sort-controls button:disabled { opacity: 0.3; cursor: default; }
 .tag-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .author-tag { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.35rem 0.6rem; border: 1px solid var(--tag-border); border-radius: 999px; color: var(--tag-text); background: var(--tag-background); font-size: 0.78rem; }
 .author-tag button { border: 0; color: inherit; background: transparent; cursor: pointer; }
@@ -860,6 +1477,7 @@ async function removeFromDirectory(): Promise<void> {
 .author-list-badge { display: grid; place-items: center; width: 100%; aspect-ratio: 3 / 4; border-radius: 0.5rem; color: var(--tag-text); background: var(--tag-background); font-size: 2rem; font-weight: 850; }
 .author-list-card > strong { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .author-name-alternates { font-size: 0.66rem; font-weight: 400; color: var(--text-muted); opacity: 0.72; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.author-basics .author-name-alternates { font-size: 0.8rem; margin-top: 0.1rem; }
 .directory-heading p, .author-list-heading p, .muted { color: var(--text-muted); }
 .pagination { justify-content: center; }
 .pagination button:disabled { cursor: default; opacity: 0.4; }

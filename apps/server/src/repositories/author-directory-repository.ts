@@ -5,6 +5,9 @@ export interface AuthorWorkSummary {
   title: string;
   type: string;
   coverRef: string | null;
+  viewCount: number;
+  likeCount: number;
+  lastViewedAt: string | null;
 }
 
 export interface AuthorDirectoryRecord {
@@ -47,6 +50,9 @@ interface WorkRow {
   title: string;
   type: string;
   cover_ref: string | null;
+  view_count: number;
+  like_count: number;
+  last_viewed_at: string | null;
 }
 
 function mapWork(row: WorkRow): AuthorWorkSummary {
@@ -55,14 +61,21 @@ function mapWork(row: WorkRow): AuthorWorkSummary {
     title: row.title,
     type: row.type,
     coverRef: row.cover_ref,
+    viewCount: row.view_count,
+    likeCount: row.like_count,
+    lastViewedAt: row.last_viewed_at,
   };
 }
 
 function listDirectoryEntries(database: T3Database, directoryId: number): AuthorWorkSummary[] {
   const rows = database.prepare(`
-    SELECT entry.id, entry.title, entry.type, entry.cover_ref
+    SELECT entry.id, entry.title, entry.type, entry.cover_ref,
+      COALESCE(usage.view_count, 0) AS view_count,
+      COALESCE(usage.like_count, 0) AS like_count,
+      usage.last_viewed_at AS last_viewed_at
     FROM author_directory_entries AS membership
     JOIN entries AS entry ON entry.id = membership.entry_id
+    LEFT JOIN entry_usage AS usage ON usage.entry_id = entry.id
     WHERE membership.directory_id = ?
     ORDER BY membership.sort_order, membership.entry_id
   `).all(directoryId) as WorkRow[];

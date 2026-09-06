@@ -49,6 +49,48 @@ describe('database verification', () => {
     }
   });
 
+  it('reports rating slots, nesting depth, and collection-kind violations', () => {
+    const database = createMigratedMemoryDatabase();
+
+    try {
+      // A producer rating value pointed at an 'entry' slot: the FK holds but
+      // the subject kinds do not match.
+      const slot = database.prepare(`
+        INSERT INTO rating_slots (subject_kind, entry_type, name, sort_order)
+        VALUES ('entry', 'game', 'Quality', 0)
+      `).run();
+      database.pragma('foreign_keys = OFF');
+      database.prepare(
+        'INSERT INTO producer_rating_values (producer_id, slot_id, stars) VALUES (1, ?, 4)',
+      ).run(slot.lastInsertRowid);
+      // A child folder that is itself a parent — more than one nesting level.
+      const parent = database.prepare(`
+        INSERT INTO collections (kind, title) VALUES ('entry', 'Parent')
+      `).run();
+      const child = database.prepare(`
+        INSERT INTO collections (kind, title, parent_id) VALUES ('entry', 'Child', ?)
+      `).run(parent.lastInsertRowid);
+      database.prepare(`
+        INSERT INTO collections (kind, title, parent_id) VALUES ('entry', 'Grandchild', ?)
+      `).run(child.lastInsertRowid);
+      // An entry member hanging off a producer collection.
+      const authors = database.prepare(`
+        INSERT INTO collections (kind, title) VALUES ('producer', 'Authors')
+      `).run();
+      database.prepare(
+        'INSERT INTO collection_entries (collection_id, entry_id) VALUES (?, 1)',
+      ).run(authors.lastInsertRowid);
+      database.pragma('foreign_keys = ON');
+
+      const issues = inspectDatabase(database).issues;
+      expect(issues.some((issue) => issue.startsWith('invalid producer rating slot:'))).toBe(true);
+      expect(issues.some((issue) => issue.startsWith('collection nested too deep:'))).toBe(true);
+      expect(issues.some((issue) => issue.startsWith('invalid collection entry member:'))).toBe(true);
+    } finally {
+      database.close();
+    }
+  });
+
   it('proves the core entry, producer, facet, tag, and content paths', () => {
     const result = runDatabaseProbe();
 

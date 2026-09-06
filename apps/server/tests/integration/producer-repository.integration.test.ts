@@ -109,12 +109,17 @@ describe('producer repository', () => {
           title: 'Loose Work',
           type: 'game',
           coverRef: 'loose.webp',
+          viewCount: 0,
+          likeCount: 0,
+          lastViewedAt: null,
         }],
         directories: [expect.objectContaining({
           id: directory.id,
           title: 'Manga',
           entries: [expect.objectContaining({ id: grouped.id })],
         })],
+        ratings: [],
+        usage: { viewCount: 0, likeCount: 0, lastViewedAt: null },
       });
       expect(getAuthorDetail(database, 999)).toBeNull();
     } finally {

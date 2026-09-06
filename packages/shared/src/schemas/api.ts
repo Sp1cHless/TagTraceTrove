@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizeTag } from '../normalize/tag.js';
 
 export const apiIdSchema = z.number().int().positive();
 const requiredTextSchema = z.string().trim().min(1);
@@ -30,6 +31,13 @@ export const updateEntryRequestSchema = createEntryRequestSchema
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one entry field is required',
   });
+
+export const usageInfoSchema = z.strictObject({
+  viewCount: z.number().int().min(0),
+  likeCount: z.number().int().min(0),
+  /** ISO 8601 UTC timestamp of the most recent view; null = never viewed. */
+  lastViewedAt: nullableTextSchema,
+});
 
 export const entryDetailTagSchema = z.strictObject({
   id: apiIdSchema,
@@ -66,10 +74,40 @@ export const entryDetailContentSchema = z.strictObject({
   sortOrder: sortOrderSchema,
 });
 
+export const ratingSubjectKindSchema = z.enum(['entry', 'producer']);
+
+export const ratingSlotSchema = z.strictObject({
+  id: apiIdSchema,
+  name: requiredTextSchema,
+  sortOrder: sortOrderSchema,
+});
+
+/**
+ * One displayed rating line: the shared slot name plus the subject's stars.
+ * `stars` null = the slot exists on the card but is unrated (never zero).
+ */
+export const ratingRowSchema = z.strictObject({
+  slotId: apiIdSchema,
+  name: requiredTextSchema,
+  stars: z.number().min(0.5).max(5).multipleOf(0.5).nullable(),
+});
+
+export const createRatingSlotRequestSchema = z.strictObject({
+  name: requiredTextSchema,
+});
+
+export const setRatingRequestSchema = z.strictObject({
+  slotId: apiIdSchema,
+  stars: z.number().min(0.5).max(5).multipleOf(0.5).nullable(),
+});
+
+
 export const entryDetailResponseSchema = entryRecordSchema.extend({
   producers: z.array(entryDetailProducerSchema),
   sections: z.array(entryDetailSectionSchema),
   contents: z.array(entryDetailContentSchema),
+  ratings: z.array(ratingRowSchema),
+  usage: usageInfoSchema,
 });
 
 export const createSectionRequestSchema = z.strictObject({
@@ -184,6 +222,8 @@ export const facetFilterOptionsResponseSchema = z.strictObject({
   allTags: z.array(facetFilterOptionTagSchema),
   // Producers linked to Entries of this type (Author filter options).
   authors: z.array(facetFilterAuthorOptionSchema),
+  // Shared rating slots of the type (rating filter/sort options).
+  ratingSlots: z.array(ratingSlotSchema).default([]),
 });
 
 export const facetFilterConditionSchema = z.strictObject({
@@ -197,16 +237,184 @@ export const facetFilterConditionSchema = z.strictObject({
   message: 'At least one tag id is required',
 });
 
+/** Mirrors the Content/Facet reorder contract: every slot exactly once. */
+export const reorderRatingSlotsRequestSchema = z.strictObject({
+  orderedSlotIds: uniqueIdArraySchema,
+});
+
+export const ratingFilterOperatorSchema = z.enum(['eq', 'gt', 'lt', 'unrated']);
+
+export const ratingFilterConditionSchema = z.strictObject({
+  slotId: apiIdSchema,
+  operator: ratingFilterOperatorSchema,
+  stars: z.number().min(0.5).max(5).multipleOf(0.5).nullable(),
+}).refine(
+  (condition) => (condition.operator === 'unrated' ? condition.stars === null : condition.stars !== null),
+  { message: 'unrated takes no stars; every other operator requires stars' },
+);
+
+export const ratingSortSchema = z.strictObject({
+  slotId: apiIdSchema,
+  // Ratings sort from high to low; unrated entries sink to the bottom.
+  direction: z.literal('desc'),
+});
+
+export const usageFieldSchema = z.enum(['views', 'lastViewed', 'likes']);
+
+export const usageFilterConditionSchema = z.strictObject({
+  field: usageFieldSchema,
+  operator: z.enum(['eq', 'gt', 'lt']),
+  // views: non-negative integer; lastViewed: UTC date (yyyy-mm-dd).
+  value: z.union([z.number().int().min(0), z.string().regex(/^\d{4}-\d{2}-\d{2}$/u)]),
+}).refine(
+  (condition) => (condition.field === 'views' ? typeof condition.value === 'number' : typeof condition.value === 'string'),
+  { message: 'views takes a count, lastViewed takes a yyyy-mm-dd date' },
+);
+
+export const usageSortSchema = z.strictObject({
+  field: usageFieldSchema,
+  direction: z.enum(['desc', 'asc']),
+});
+
 export const facetFilterEntriesRequestSchema = z.strictObject({
   entryType: requiredTextSchema,
   // Empty when filtering by Author(s) only.
   conditions: z.array(facetFilterConditionSchema).default([]),
   // Author conditions OR within the list and AND with every tag row.
   authorIds: uniqueIdArraySchema.default([]),
+  // Rating conditions AND with every tag row and the author list.
+  ratingConditions: z.array(ratingFilterConditionSchema).default([]),
+  // Optional single-slot rating sort; null keeps the default order.
+  ratingSort: ratingSortSchema.nullable().default(null),
+  // Usage (view tracking) conditions AND with everything above.
+  usageConditions: z.array(usageFilterConditionSchema).default([]),
+  // Optional usage sort (view count / last view date); null keeps the default.
+  usageSort: usageSortSchema.nullable().default(null),
 });
 
 export const entryTypeQuerySchema = z.strictObject({
+  entryType: requiredTextSchema.optional(),
+});
+
+export const ratingSlotsQuerySchema = z.strictObject({
   entryType: requiredTextSchema,
+});
+
+export const collectionKindSchema = z.enum(['entry', 'producer']);
+
+export const collectionEntryMemberSchema = z.strictObject({
+  id: apiIdSchema,
+  title: requiredTextSchema,
+  type: requiredTextSchema,
+  coverRef: nullableTextSchema,
+  previewRefs: z.array(requiredTextSchema).default([]),
+});
+
+export const collectionProducerMemberSchema = z.strictObject({
+  id: apiIdSchema,
+  name: requiredTextSchema,
+  covers: z.array(z.string()).default([]),
+});
+
+export interface CollectionRecordDto {
+  id: number;
+  kind: 'entry' | 'producer';
+  title: string;
+  description: string;
+  nsfw: boolean;
+  sortOrder: number;
+  children: CollectionRecordDto[];
+  entries: Array<{ id: number; title: string; type: string; coverRef: string | null; previewRefs: string[] }>;
+  producers: Array<{ id: number; name: string; covers: string[] }>;
+}
+
+export const collectionRecordSchema: z.ZodType<CollectionRecordDto> = z.lazy(() => z.strictObject({
+  id: apiIdSchema,
+  kind: collectionKindSchema,
+  title: requiredTextSchema,
+  description: z.string(),
+  nsfw: z.boolean(),
+  sortOrder: sortOrderSchema,
+  children: z.array(collectionRecordSchema),
+  entries: z.array(collectionEntryMemberSchema),
+  producers: z.array(collectionProducerMemberSchema),
+}));
+
+export const createCollectionRequestSchema = z.strictObject({
+  kind: collectionKindSchema,
+  title: requiredTextSchema,
+  description: z.string().optional(),
+  parentId: apiIdSchema.optional(),
+});
+
+export const updateCollectionRequestSchema = z.strictObject({
+  title: requiredTextSchema.optional(),
+  description: z.string().optional(),
+}).refine((value) => Object.keys(value).length > 0, {
+  message: 'At least one collection field is required',
+});
+
+export const reorderCollectionsRequestSchema = z.strictObject({
+  orderedCollectionIds: uniqueIdArraySchema,
+});
+
+export const searchScopeSchema = z.enum(['entries', 'tags', 'producers']);
+
+export const searchQuerySchema = z.strictObject({
+  q: requiredTextSchema,
+  entryType: requiredTextSchema.optional(),
+});
+
+export const tagSearchQuerySchema = z.strictObject({
+  q: requiredTextSchema,
+  includeNsfw: z.enum(['true', 'false']).optional(),
+});
+
+/** Tag search returns the vocabulary hit plus where it is used. */
+export const tagSearchHitSchema = z.strictObject({
+  tagId: apiIdSchema,
+  name: requiredTextSchema,
+  normalizedName: requiredTextSchema,
+  entryCount: z.number().int().min(0),
+});
+
+export const unassignedTagSuggestionSchema = z.strictObject({
+  facetId: apiIdSchema,
+  facetName: requiredTextSchema,
+  count: apiIdSchema,
+});
+
+export const unassignedTagItemSchema = z.strictObject({
+  tagId: apiIdSchema,
+  tagName: requiredTextSchema,
+  // Entries carrying this tag in the unnamed default Facet (the ones to move).
+  entryCount: apiIdSchema,
+  // Where the OTHER entries of this type keep this tag, if anywhere.
+  suggestion: unassignedTagSuggestionSchema.nullable(),
+});
+
+export const unassignedTagGroupSchema = z.strictObject({
+  entryType: requiredTextSchema,
+  facets: z.array(z.strictObject({
+    facetId: apiIdSchema,
+    facetName: requiredTextSchema,
+  })),
+  tags: z.array(unassignedTagItemSchema),
+});
+
+export const unassignedTagGroupsResponseSchema = z.array(unassignedTagGroupSchema);
+
+export const unassignedTagMoveRequestSchema = z.strictObject({
+  entryType: requiredTextSchema,
+  tagId: apiIdSchema,
+  targetFacetId: apiIdSchema,
+});
+
+export const unassignedTagMoveResponseSchema = z.strictObject({
+  entryType: requiredTextSchema,
+  tagId: apiIdSchema,
+  moved: apiIdSchema,
+  targetFacetId: apiIdSchema,
 });
 
 export const entrySummarySchema = z.strictObject({
@@ -218,11 +426,20 @@ export const entrySummarySchema = z.strictObject({
   previewRefs: z.array(requiredTextSchema),
   uploadDate: nullableTextSchema,
   pageCount: z.number().int().nullable(),
+  viewCount: z.number().int().min(0),
+  likeCount: z.number().int().min(0),
+  lastViewedAt: nullableTextSchema,
 });
 
 export const gallerySummarySchema = z.strictObject({
   type: requiredTextSchema,
   entryCount: z.number().int().positive(),
+  // Whole-Gallery SFW/NSFW partition; Authors inherit from their works.
+  nsfw: z.boolean(),
+});
+
+export const galleryPartitionRequestSchema = z.strictObject({
+  nsfw: z.boolean(),
 });
 
 export const createEntryContentRequestSchema = z.strictObject({
@@ -289,6 +506,9 @@ export const authorWorkSummarySchema = z.strictObject({
   title: requiredTextSchema,
   type: requiredTextSchema,
   coverRef: nullableTextSchema,
+  viewCount: z.number().int().min(0),
+  likeCount: z.number().int().min(0),
+  lastViewedAt: nullableTextSchema,
 });
 
 export const authorDirectorySchema = z.strictObject({
@@ -305,6 +525,8 @@ export const authorDetailResponseSchema = producerRecordSchema.extend({
   tags: z.array(producerTagAssignmentSchema),
   looseEntries: z.array(authorWorkSummarySchema),
   directories: z.array(authorDirectorySchema),
+  ratings: z.array(ratingRowSchema),
+  usage: usageInfoSchema,
 });
 
 export const createAuthorDirectoryRequestSchema = z.strictObject({
@@ -325,6 +547,16 @@ export const findProducersQuerySchema = z.strictObject({
   relatedEntryTagIds: queryIdArraySchema.optional().default([]),
 });
 
+export const authorFilterOptionsResponseSchema = z.strictObject({
+  authorTags: z.array(facetFilterOptionTagSchema),
+  workTags: z.array(facetFilterOptionTagSchema),
+});
+
+export const authorFilterOptionsQuerySchema = z.strictObject({
+  entryType: requiredTextSchema.optional(),
+  includeNsfw: z.enum(['true', 'false']).optional().default('true'),
+});
+
 export const producerSummarySchema = z.strictObject({
   id: apiIdSchema,
   name: requiredTextSchema,
@@ -332,6 +564,12 @@ export const producerSummarySchema = z.strictObject({
   // The Author's dominant Gallery (Entry type with the most works); null when
   // the Author has no works. Derived, never stored on the producer row.
   galleryType: nullableTextSchema,
+  // Derived from the Author's works' usage rows (sum / max).
+  viewCount: z.number().int().min(0),
+  likeCount: z.number().int().min(0),
+  lastViewedAt: nullableTextSchema,
+  // Derived: any work of the Author sits in an NSFW Gallery.
+  nsfw: z.boolean(),
 });
 
 export const taxonomyVocabularySchema = z.enum(['entry', 'producer']);
@@ -438,7 +676,57 @@ export const producerMergeResponseSchema = z.strictObject({
   doctorIssues: z.array(z.string()),
 });
 
-export const layoutTemplateApplyResponseSchema = z.strictObject({
+/** One author alias group: a display name plus every spelling that maps to it. */
+export const authorAliasGroupSchema = z.strictObject({
+  canonicalName: requiredTextSchema,
+  aliases: z.array(z.strictObject({
+    id: apiIdSchema,
+    name: requiredTextSchema,
+  })),
+  producerId: apiIdSchema.nullable(),
+  producerName: requiredTextSchema.nullable(),
+});
+
+export const authorAliasGroupsResponseSchema = z.strictObject({
+  groups: authorAliasGroupSchema.array(),
+});
+
+export const saveAuthorAliasGroupRequestSchema = z.strictObject({
+  displayName: requiredTextSchema,
+  tagNames: requiredTextSchema.array().min(1).max(64),
+}).superRefine((value, issue) => {
+  // Duplicate spellings must fail loudly (400), not silently drop one name;
+  // spellings equal to the display name are harmless and dropped server-side.
+  const seen = new Set<string>();
+  for (const tagName of value.tagNames) {
+    const normalized = normalizeTag(tagName);
+    if (seen.has(normalized)) {
+      issue.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['tagNames'],
+        message: `duplicate author tag name: ${tagName}`,
+      });
+      return;
+    }
+    seen.add(normalized);
+  }
+});
+
+export const saveAuthorAliasGroupResponseSchema = z.strictObject({
+  group: authorAliasGroupSchema,
+  merge: producerMergeResponseSchema,
+});
+
+export const templateFileSummarySchema = z.strictObject({
+  templatePath: nullableTextSchema,
+  tagLayoutPath: nullableTextSchema,
+});
+
+// Loose on purpose: these two responses gain fields (e.g. templateFiles) as
+// the template feature evolves, and the server and the browser bundle are
+// versioned together only as tightly as the user's cache allows. Unknown
+// keys must never break an apply that actually succeeded.
+export const layoutTemplateApplyResponseSchema = z.object({
   entryType: z.string(),
   entriesAffected: mergeWorkCountSchema,
   tagsRelinked: mergeWorkCountSchema,
@@ -448,10 +736,11 @@ export const layoutTemplateApplyResponseSchema = z.strictObject({
   foreignKeyCheckPass: z.boolean(),
   doctorPass: z.boolean(),
   doctorIssues: z.array(z.string()),
+  templateFiles: templateFileSummarySchema.nullable().default(null),
 });
 export type LayoutTemplateApplyResponse = z.infer<typeof layoutTemplateApplyResponseSchema>;
 
-export const tagLayoutApplyResponseSchema = z.strictObject({
+export const tagLayoutApplyResponseSchema = z.object({
   entryType: z.string(),
   // Other entries of the same type whose tag placements changed.
   entriesAffected: mergeWorkCountSchema,
@@ -463,6 +752,7 @@ export const tagLayoutApplyResponseSchema = z.strictObject({
   foreignKeyCheckPass: z.boolean(),
   doctorPass: z.boolean(),
   doctorIssues: z.array(z.string()),
+  templateFiles: templateFileSummarySchema.nullable().default(null),
 });
 export type TagLayoutApplyResponse = z.infer<typeof tagLayoutApplyResponseSchema>;
 
@@ -470,6 +760,27 @@ const pathIdSchema = z.coerce.number().int().positive();
 export const entryIdParamsSchema = z.strictObject({ entryId: pathIdSchema });
 export const entryTypeParamsSchema = z.strictObject({ entryType: requiredTextSchema });
 export const producerIdParamsSchema = z.strictObject({ producerId: pathIdSchema });
+export const collectionIdParamsSchema = z.strictObject({ collectionId: pathIdSchema });
+export const numberIdListSchema = z.array(z.number().int());
+
+export const templateSummarySchema = z.strictObject({
+  entryType: requiredTextSchema,
+  // Real layouts always contain the unnamed default Facet (name '') and tags
+  // parked in it — these strings may be empty and the UI hides them.
+  sections: z.array(z.strictObject({
+    name: z.string(),
+    facets: z.array(z.string()),
+  })),
+  mappings: z.array(z.strictObject({
+    tag: requiredTextSchema,
+    section: z.string(),
+    facet: z.string(),
+  })),
+  templatePath: requiredTextSchema,
+  tagLayoutPath: requiredTextSchema,
+  templateExists: z.boolean(),
+  tagLayoutExists: z.boolean(),
+});
 export const tagGroupIdParamsSchema = z.strictObject({ groupId: pathIdSchema });
 export const facetIdParamsSchema = z.strictObject({ facetId: pathIdSchema });
 export const sectionIdParamsSchema = z.strictObject({ sectionId: pathIdSchema });
@@ -506,7 +817,18 @@ export type EntryRecordDto = z.infer<typeof entryRecordSchema>;
 export type CreateEntryRequest = z.infer<typeof createEntryRequestSchema>;
 export type UpdateEntryRequest = z.infer<typeof updateEntryRequestSchema>;
 export type EntryDetailResponse = z.infer<typeof entryDetailResponseSchema>;
+export type RatingSubjectKind = z.infer<typeof ratingSubjectKindSchema>;
+export type RatingSlotDto = z.infer<typeof ratingSlotSchema>;
+export type RatingRow = z.infer<typeof ratingRowSchema>;
+export type CreateRatingSlotRequest = z.infer<typeof createRatingSlotRequestSchema>;
+export type SetRatingRequest = z.infer<typeof setRatingRequestSchema>;
+export type ReorderRatingSlotsRequest = z.infer<typeof reorderRatingSlotsRequestSchema>;
 export type GallerySummary = z.infer<typeof gallerySummarySchema>;
+export type GalleryPartitionRequest = z.infer<typeof galleryPartitionRequestSchema>;
+export type SearchScope = z.infer<typeof searchScopeSchema>;
+export type TagSearchHit = z.infer<typeof tagSearchHitSchema>;
+export type TemplateSummary = z.infer<typeof templateSummarySchema>;
+export type CollectionKind = z.infer<typeof collectionKindSchema>;
 export type CreateSectionRequest = z.infer<typeof createSectionRequestSchema>;
 export type CreateFacetRequest = z.infer<typeof createFacetRequestSchema>;
 export type AssignEntryTagRequest = z.infer<typeof assignEntryTagRequestSchema>;
@@ -518,12 +840,25 @@ export type FacetFilterOption = z.infer<typeof facetFilterOptionSchema>;
 export type FacetFilterOptionTag = z.infer<typeof facetFilterOptionTagSchema>;
 export type FacetFilterAuthorOption = z.infer<typeof facetFilterAuthorOptionSchema>;
 export type FacetFilterCondition = z.infer<typeof facetFilterConditionSchema>;
+export type RatingFilterOperator = z.infer<typeof ratingFilterOperatorSchema>;
+export type RatingFilterCondition = z.infer<typeof ratingFilterConditionSchema>;
+export type RatingSort = z.infer<typeof ratingSortSchema>;
+export type UsageInfo = z.infer<typeof usageInfoSchema>;
+export type UsageField = z.infer<typeof usageFieldSchema>;
+export type UsageFilterCondition = z.infer<typeof usageFilterConditionSchema>;
+export type UsageSort = z.infer<typeof usageSortSchema>;
+export type UnassignedTagGroups = z.infer<typeof unassignedTagGroupsResponseSchema>;
+export type UnassignedTagGroup = z.infer<typeof unassignedTagGroupSchema>;
+export type UnassignedTagItem = z.infer<typeof unassignedTagItemSchema>;
+export type UnassignedTagMoveRequest = z.infer<typeof unassignedTagMoveRequestSchema>;
+export type UnassignedTagMoveResponse = z.infer<typeof unassignedTagMoveResponseSchema>;
 export type CreateEntryContentRequest = z.infer<typeof createEntryContentRequestSchema>;
 export type UpdateEntryContentRequest = z.infer<typeof updateEntryContentRequestSchema>;
 export type ProducerRecordDto = z.infer<typeof producerRecordSchema>;
 export type CreateProducerRequest = z.infer<typeof createProducerRequestSchema>;
 export type UpdateProducerRequest = z.infer<typeof updateProducerRequestSchema>;
 export type FindProducersQuery = z.infer<typeof findProducersQuerySchema>;
+export type AuthorFilterOptions = z.infer<typeof authorFilterOptionsResponseSchema>;
 export type AuthorDetailResponse = z.infer<typeof authorDetailResponseSchema>;
 export type AuthorDirectoryDto = z.infer<typeof authorDirectorySchema>;
 export type CreateAuthorDirectoryRequest = z.infer<typeof createAuthorDirectoryRequestSchema>;
@@ -538,4 +873,8 @@ export type ProducerMergePlanResponse = z.infer<typeof producerMergePlanResponse
 export type ProducerMergeExecutionItem = z.infer<typeof producerMergeExecutionItemSchema>;
 export type ProducerMergeTotals = z.infer<typeof producerMergeTotalsSchema>;
 export type ProducerMergeResponse = z.infer<typeof producerMergeResponseSchema>;
+export type AuthorAliasGroup = z.infer<typeof authorAliasGroupSchema>;
+export type AuthorAliasGroupsResponse = z.infer<typeof authorAliasGroupsResponseSchema>;
+export type SaveAuthorAliasGroupRequest = z.infer<typeof saveAuthorAliasGroupRequestSchema>;
+export type SaveAuthorAliasGroupResponse = z.infer<typeof saveAuthorAliasGroupResponseSchema>;
 export type ApiErrorResponse = z.infer<typeof apiErrorResponseSchema>;

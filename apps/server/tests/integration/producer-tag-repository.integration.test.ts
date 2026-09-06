@@ -78,7 +78,7 @@ describe('producer tag repository', () => {
     }
   });
 
-  it('finds producers by own tags and the union of their works tags', () => {
+  it('finds producers by own tags and one work containing every selected work tag', () => {
     const database = createMigratedMemoryDatabase();
 
     try {
@@ -114,14 +114,23 @@ describe('producer tag repository', () => {
 
       expect(findProducers(database, {
         relatedEntryTagIds: [action.tagId, favorite.tagId],
-      })).toEqual([{ id: firstProducer.id, name: 'First Creator', covers: [], galleryType: 'game' }]);
+      })).toEqual([]);
+
+      assignEntryTag(database, {
+        entryId: firstWork.id,
+        facetId: section.defaultFacetId,
+        name: 'Favorite',
+      });
+      expect(findProducers(database, {
+        relatedEntryTagIds: [action.tagId, favorite.tagId],
+      })).toEqual([{ id: firstProducer.id, name: 'First Creator', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }]);
       expect(findProducers(database, {
         ownTagIds: [featured.tagId],
-      })).toEqual([{ id: firstProducer.id, name: 'First Creator', covers: [], galleryType: 'game' }]);
+      })).toEqual([{ id: firstProducer.id, name: 'First Creator', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }]);
       expect(findProducers(database, {
         ownTagIds: [featured.tagId],
         relatedEntryTagIds: [action.tagId, favorite.tagId],
-      })).toEqual([{ id: firstProducer.id, name: 'First Creator', covers: [], galleryType: 'game' }]);
+      })).toEqual([{ id: firstProducer.id, name: 'First Creator', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }]);
     } finally {
       database.close();
     }

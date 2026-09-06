@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>T³ Home Sample</title>
+<style>
+:root{--page:#f3eee6;--panel:#fbf8f3;--surface:#fffdf9;--muted:#f4efe8;--text:#2b2926;--text2:#766f67;--border:#ddd4ca;--accent:#b66f35;--accent-soft:#f3e4d5;--shadow:0 20px 60px rgba(72,55,38,.10)}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--page);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}button{font:inherit}.shell{width:min(1180px,calc(100% - 48px));margin:48px auto}.appbar{display:flex;justify-content:space-between;align-items:center;margin:0 4px 14px}.brand{font-size:18px;font-weight:700}.app-actions{display:flex;gap:8px}.icon-btn{width:44px;height:44px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.55);color:var(--text2);display:grid;place-items:center}.home{background:var(--panel);border:1px solid var(--border);border-radius:24px;box-shadow:var(--shadow);padding:44px}.hero{min-height:305px;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(270px,.72fr);gap:36px;align-items:center;padding-bottom:36px;border-bottom:1px solid var(--border)}.eyebrow{display:inline-flex;gap:8px;align-items:center;color:var(--accent);font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:16px}.eyebrow-dot{width:7px;height:7px;border-radius:50%;background:var(--accent)}h1{margin:0;max-width:720px;font-size:clamp(38px,5vw,64px);line-height:1.08;letter-spacing:-.035em}.sub{max-width:620px;margin:18px 0 0;color:var(--text2);line-height:1.75;font-size:16px}.hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:28px}.primary,.secondary{min-height:44px;border-radius:12px;padding:0 18px;font-weight:700;cursor:pointer}.primary{border:0;background:var(--accent);color:white}.secondary{border:1px solid var(--border);background:var(--surface);color:var(--text)}.ambient-card{min-height:172px;border:1px solid var(--border);border-radius:18px;background:var(--surface);padding:22px;display:flex;flex-direction:column;justify-content:space-between}.ambient-label{font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--text2)}.ambient-value-wrap{min-height:72px;display:flex;align-items:center}.ambient-value{font-size:27px;font-weight:720;line-height:1.25;letter-spacing:-.02em}.ambient-value small{display:block;margin-top:8px;font-size:13px;font-weight:500;color:var(--text2)}.dots{display:flex;gap:6px}.dot{width:22px;height:4px;border:0;border-radius:999px;background:var(--border);padding:0}.dot.active{background:var(--accent)}.ambient-enter{animation:ambientIn .32s ease-out both}@keyframes ambientIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}.section{padding-top:34px}.section-head{display:flex;justify-content:space-between;align-items:end;gap:24px;margin-bottom:16px}.section-title{font-size:18px;font-weight:720}.section-note{font-size:13px;color:var(--text2)}.recent-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.entry-card,.gallery-card{border:1px solid var(--border);background:var(--surface);border-radius:14px}.entry-card{padding:12px}.cover{aspect-ratio:4/3;border-radius:10px;background:var(--muted);display:flex;align-items:end;padding:12px;color:var(--text2);font-size:12px}.entry-title{margin-top:12px;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.entry-meta,.gallery-meta{margin-top:4px;font-size:12px;color:var(--text2)}.gallery-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.gallery-card{padding:18px;display:flex;gap:14px;align-items:center}.gallery-mark{width:42px;height:42px;border-radius:12px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:800}.gallery-name{font-size:14px;font-weight:700}.empty{display:none;min-height:430px;place-items:center;text-align:center;padding:48px 24px}.empty-inner{max-width:620px}.empty-symbol{width:74px;height:74px;border-radius:22px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;margin:0 auto 22px;font-size:32px}.empty p{color:var(--text2);line-height:1.75}.demo-toggle{position:fixed;right:22px;bottom:22px;display:flex;gap:8px;align-items:center;padding:8px;border:1px solid var(--border);border-radius:14px;background:rgba(255,253,249,.96);box-shadow:0 10px 30px rgba(0,0,0,.08);font-size:12px;color:var(--text2)}.demo-toggle button{border:0;border-radius:9px;background:var(--muted);padding:8px 10px;cursor:pointer}.demo-toggle button.active{background:var(--accent-soft);color:var(--accent);font-weight:700}
+@media(max-width:900px){.shell{width:min(100% - 24px,1180px);margin:20px auto}.home{padding:26px}.hero{grid-template-columns:1fr}.recent-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.gallery-row{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<main class="shell">
+  <div class="appbar"><div class="brand">Galleries</div><div class="app-actions"><button class="icon-btn" aria-label="搜索">⌕</button><button class="icon-btn" aria-label="设置">⚙</button></div></div>
+
+  <section class="home" id="fullHome">
+    <div class="hero">
+      <div>
+        <div class="eyebrow"><span class="eyebrow-dot"></span>Home</div>
+        <h1>欢迎回来，今天想看点什么？</h1>
+        <p class="sub">从最近看过的继续，或者随手收录新的作品。首页只做轻量的迎接和回到内容，不把收藏空间变成统计面板。</p>
+        <div class="hero-actions"><button class="primary">收录新作品</button><button class="secondary">查看全部 Gallery</button></div>
+      </div>
+      <aside class="ambient-card" aria-label="收藏概览">
+        <div class="ambient-label">YOUR SPACE</div>
+        <div class="ambient-value-wrap"><div id="ambientValue" class="ambient-value"></div></div>
+        <div id="ambientDots" class="dots"></div>
+      </aside>
+    </div>
+
+    <section class="section">
+      <div class="section-head"><div class="section-title">最近看过</div><div class="section-note">只保留少量入口，让首页继续以“欢迎”为主</div></div>
+      <div class="recent-grid">
+        <article class="entry-card"><div class="cover">最近查看 · 12 分钟前</div><div class="entry-title">示例作品 A</div><div class="entry-meta">Illustration · Gallery 01</div></article>
+        <article class="entry-card"><div class="cover">昨天</div><div class="entry-title">示例作品 B</div><div class="entry-meta">Comic · Gallery 02</div></article>
+        <article class="entry-card"><div class="cover">2 天前</div><div class="entry-title">示例作品 C</div><div class="entry-meta">Movie · Gallery 01</div></article>
+        <article class="entry-card"><div class="cover">4 天前</div><div class="entry-title">示例作品 D</div><div class="entry-meta">Illustration · Gallery 03</div></article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><div class="section-title">最近的 Gallery</div><div class="section-note">3 个入口足够，不做完整 dashboard</div></div>
+      <div class="gallery-row">
+        <article class="gallery-card"><div class="gallery-mark">01</div><div><div class="gallery-name">Illustration</div><div class="gallery-meta">126 entries</div></div></article>
+        <article class="gallery-card"><div class="gallery-mark">02</div><div><div class="gallery-name">Comics</div><div class="gallery-meta">74 entries</div></div></article>
+        <article class="gallery-card"><div class="gallery-mark">03</div><div><div class="gallery-name">Movies</div><div class="gallery-meta">48 entries</div></div></article>
+      </div>
+    </section>
+  </section>
+
+  <section class="home empty" id="emptyHome">
+    <div class="empty-inner"><div class="empty-symbol">＋</div><div class="eyebrow"><span class="eyebrow-dot"></span>Welcome</div><h1>先收录第一条作品吧。</h1><p>这里之后会慢慢变成你的收藏入口：最近浏览、Gallery 和一些轻量的小提示。现在只需要从第一条记录开始。</p><div class="hero-actions" style="justify-content:center"><button class="primary">收录第一条作品</button><button class="secondary">创建 Gallery</button></div></div>
+  </section>
+</main>
+<div class="demo-toggle"><span>仅用于样例预览</span><button id="fullBtn" class="active">有数据</button><button id="emptyBtn">空状态</button></div>
+<script>
+const items=[
+ {title:'已收录 248 个作品',detail:'只是轻量提示，不做严肃统计'},
+ {title:'当前有 12 个 Gallery',detail:'数字只是首页氛围的一部分'},
+ {title:'最近看过《示例作品 A》',detail:'12 分钟前'}
+];
+const value=document.getElementById('ambientValue'),dots=document.getElementById('ambientDots');let i=0,timer=null;const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function draw(){const x=items[i];value.classList.remove('ambient-enter');void value.offsetWidth;value.innerHTML=`${x.title}<small>${x.detail}</small>`;value.classList.add('ambient-enter');dots.innerHTML='';items.forEach((_,n)=>{const b=document.createElement('button');b.className='dot'+(n===i?' active':'');b.onclick=()=>{i=n;draw();restart()};dots.appendChild(b)})}
+function restart(){if(timer)clearInterval(timer);if(!reduce)timer=setInterval(()=>{i=(i+1)%items.length;draw()},5200)}
+document.querySelector('.ambient-card').addEventListener('mouseenter',()=>timer&&clearInterval(timer));document.querySelector('.ambient-card').addEventListener('mouseleave',restart);document.addEventListener('visibilitychange',()=>document.hidden?(timer&&clearInterval(timer)):restart());draw();restart();
+const full=document.getElementById('fullHome'),empty=document.getElementById('emptyHome'),fb=document.getElementById('fullBtn'),eb=document.getElementById('emptyBtn');fb.onclick=()=>{full.style.display='block';empty.style.display='none';fb.classList.add('active');eb.classList.remove('active')};eb.onclick=()=>{full.style.display='none';empty.style.display='grid';eb.classList.add('active');fb.classList.remove('active')};
+</script>
+</body>
+</html>

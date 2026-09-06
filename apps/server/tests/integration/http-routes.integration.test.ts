@@ -8,6 +8,7 @@ import { createEntryContent } from '../../src/repositories/entry-content-reposit
 import { createEntry } from '../../src/repositories/entry-repository.js';
 import { assignEntryTag } from '../../src/repositories/entry-tag-repository.js';
 import { createFacet, createSection } from '../../src/repositories/layout-repository.js';
+import { setGalleryPartition } from '../../src/repositories/partition-repository.js';
 import { createProducer, linkEntryProducer } from '../../src/repositories/producer-repository.js';
 import { assignProducerTag } from '../../src/repositories/producer-tag-repository.js';
 
@@ -152,8 +153,8 @@ describe('Entry HTTP routes', () => {
     const response = await app.request('/api/galleries');
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual([
-      { type: 'game', entryCount: 2 },
-      { type: 'manga', entryCount: 1 },
+      { type: 'game', entryCount: 2, nsfw: false },
+      { type: 'manga', entryCount: 1, nsfw: false },
     ]);
   });
 
@@ -309,8 +310,38 @@ describe('Producer HTTP routes', () => {
     );
     expect(searchResponse.status).toBe(200);
     await expect(searchResponse.json()).resolves.toEqual([
-      { id: producer.id, name: 'Hypergryph', covers: [], galleryType: 'game' },
+      { id: producer.id, name: 'Hypergryph', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false },
     ]);
+
+    const filterOptionsResponse = await app.request('/api/producers/filter-options');
+    expect(filterOptionsResponse.status).toBe(200);
+    await expect(filterOptionsResponse.json()).resolves.toEqual({
+      authorTags: [{ tagId: producerTag.tagId, name: 'Studio' }],
+      workTags: [{ tagId: entryTag.tagId, name: 'ARPG' }],
+    });
+
+    const adultSection = createSection(database, { entryType: 'adult', name: 'Tags' });
+    const adultEntry = createEntry(database, { title: 'Adult work', type: 'adult' });
+    const adultAuthor = createProducer(database, { name: 'Adult author' });
+    linkEntryProducer(database, adultEntry.id, adultAuthor.id);
+    const adultAuthorTag = assignProducerTag(database, { producerId: adultAuthor.id, name: 'Adult author tag' });
+    const adultWorkTag = assignEntryTag(database, {
+      entryId: adultEntry.id,
+      facetId: adultSection.defaultFacetId,
+      name: 'Adult work tag',
+    });
+    setGalleryPartition(database, 'adult', true);
+
+    await expect((await app.request('/api/producers/filter-options?includeNsfw=false')).json())
+      .resolves.toEqual({
+        authorTags: [{ tagId: producerTag.tagId, name: 'Studio' }],
+        workTags: [{ tagId: entryTag.tagId, name: 'ARPG' }],
+      });
+    await expect((await app.request('/api/producers/filter-options?entryType=adult&includeNsfw=true')).json())
+      .resolves.toEqual({
+        authorTags: [{ tagId: adultAuthorTag.tagId, name: 'Adult author tag' }],
+        workTags: [{ tagId: adultWorkTag.tagId, name: 'Adult work tag' }],
+      });
 
     const detail = await (await app.request(`/api/entries/${entry.id}`)).json();
     expect(detail).toMatchObject({ producers: [{ id: producer.id, name: 'Hypergryph' }] });
@@ -501,7 +532,7 @@ describe('Entry management HTTP routes', () => {
 
     const search = await app.request(`/api/entries?entryType=game&includeTagIds=${tag.tagId}`);
     await expect(search.json()).resolves.toEqual([
-      { id: entry.id, title: 'Endfield', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null },
+      { id: entry.id, title: 'Endfield', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
     ]);
     await expect((await app.request(`/api/entries/${entry.id}/tags`)).json()).resolves.toEqual([
       expect.objectContaining({ tagId: tag.tagId, facetId: facet.id }),
@@ -918,5 +949,96 @@ describe('Layout template HTTP route', () => {
 
     const missing = await app.request('/api/entries/9999/template/apply', { method: 'POST' });
     expect(missing.status).toBe(404);
+  });
+});
+
+describe('Author alias group HTTP routes', () => {
+  it('saves a group, merges duplicate spellings, and lists it back', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const app = createApiApp(database);
+
+    const englishWork = createEntry(database, { title: 'English work', type: 'comic' });
+    const displayWork = createEntry(database, { title: 'Display work', type: 'comic' });
+    const english = createProducer(database, { name: 'pirate cat' });
+    const display = createProducer(database, { name: '海盗猫' });
+    linkEntryProducer(database, englishWork.id, english.id);
+    linkEntryProducer(database, displayWork.id, display.id);
+
+    const saveResponse = await app.request('/api/author-alias-groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: '海盗猫', tagNames: ['pirate cat', '海盜貓'] }),
+    });
+    expect(saveResponse.status).toBe(201);
+    const saved = await saveResponse.json() as {
+      group: { canonicalName: string; aliases: unknown[]; producerId: number | null };
+      merge: { totals: { deletedProducers: number; renamed: number } };
+    };
+    expect(saved.group.canonicalName).toBe('海盗猫');
+    // The dictionary merge collapsed the alias-spelled producer into the
+    // display-name row and relinked its work.
+    expect(saved.merge.totals.deletedProducers).toBe(1);
+    expect(saved.group.producerId).toBe(display.id);
+
+    const listResponse = await app.request('/api/author-alias-groups');
+    expect(listResponse.status).toBe(200);
+    const listed = await listResponse.json() as {
+      groups: Array<{ canonicalName: string; aliases: Array<{ name: string }>; producerId: number | null }>;
+    };
+    expect(listed.groups).toHaveLength(1);
+    expect(listed.groups[0]!.aliases.map((alias) => alias.name).sort())
+      .toEqual(['pirate cat', '海盜貓']);
+    expect(listed.groups[0]!.producerId).toBe(display.id);
+
+    const works = database.prepare(
+      'SELECT entry_id FROM entry_producers WHERE producer_id = ? ORDER BY entry_id',
+    ).pluck().all(display.id) as number[];
+    expect(works.sort((left, right) => left - right)).toEqual([englishWork.id, displayWork.id]);
+    expect(database.pragma('foreign_key_check')).toEqual([]);
+  });
+
+  it('lists gallery template summaries even with unnamed facets and unfiled tags', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const section = createSection(database, { entryType: 'comic', name: 'Info' });
+    // A tag parked in the section's unnamed default Facet (name '') is normal
+    // real-library data; the strict summary schema used to reject it with a
+    // 400 Invalid request before the preview ever rendered.
+    const work = createEntry(database, { title: 'Work', type: 'comic' });
+    assignEntryTag(database, {
+      entryId: work.id,
+      facetId: section.defaultFacetId,
+      name: 'Unfiled tag',
+    });
+
+    // The templates dir derives from the live database path.
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 't3-template-preview-'));
+    temporaryDirectories.push(temporaryDirectory);
+    const app = createApiApp(database, { databasePath: join(temporaryDirectory, 'library.db') });
+    const response = await app.request('/api/templates');
+    expect(response.status).toBe(200);
+    const summaries = await response.json() as Array<{
+      entryType: string;
+      sections: Array<{ name: string; facets: string[] }>;
+      mappings: Array<{ tag: string; section: string; facet: string }>;
+    }>;
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]!.entryType).toBe('comic');
+    expect(summaries[0]!.sections[0]).toEqual({ name: 'Info', facets: [''] });
+    expect(summaries[0]!.mappings[0]).toMatchObject({ tag: 'Unfiled tag', facet: '' });
+  });
+
+  it('rejects a group with duplicate tag names (400)', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const app = createApiApp(database);
+
+    const response = await app.request('/api/author-alias-groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: '海盗猫', tagNames: ['pirate cat', 'pirate cat'] }),
+    });
+    expect(response.status).toBe(400);
   });
 });

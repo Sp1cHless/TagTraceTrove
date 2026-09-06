@@ -2,7 +2,7 @@
 
 T³ is a lightweight personal collection index.
 
-Current data model: Entry and Producer are the core subjects. `Entry.type` supplies classification; there is no Collection entity. Entry and Producer tags use separate vocabularies. Entry tags always belong to Facets, and Facets always belong to Sections of the same Entry type. See `docs/current-architecture.md`.
+Current data model: Entry and Producer are the core subjects. `Entry.type` supplies classification. Collections (migration `010_collections.sql`) are lightweight user-curated folders of Entries or Producers — the only stored grouping subject; Gallery itself remains a read-time projection of `Entry.type`, never a table. Entry and Producer tags use separate vocabularies. Entry tags always belong to Facets, and Facets always belong to Sections of the same Entry type. See `docs/current-architecture.md`.
 
 Product priorities:
 1. fast daily use

@@ -1,4 +1,6 @@
 import { normalizeTag } from '@t3/shared';
+import { authorHasNsfwWorks, listNsfwGalleryTypes } from './partition-repository.js';
+import { rankSearchResults } from './search-ranking.js';
 import type { T3Database } from '../database/connection.js';
 
 export interface AssignProducerTagInput {
@@ -27,6 +29,22 @@ export interface ProducerSummary {
   covers: string[];
   /** Dominant Entry type (Gallery) of the Author's works; null with no works. */
   galleryType: string | null;
+  /** Derived from the Author's works' usage rows (sum of views / max date). */
+  viewCount: number;
+  likeCount: number;
+  lastViewedAt: string | null;
+  /** Derived: any work of the Author sits in an NSFW Gallery. */
+  nsfw: boolean;
+}
+
+export interface AuthorFilterOptions {
+  authorTags: Array<{ tagId: number; name: string }>;
+  workTags: Array<{ tagId: number; name: string }>;
+}
+
+export interface ListAuthorFilterOptionsInput {
+  entryType?: string;
+  includeNsfw?: boolean;
 }
 
 /**
@@ -168,6 +186,81 @@ export function listProducerTags(
   }));
 }
 
+export function listAuthorFilterOptions(
+  database: T3Database,
+  input: ListAuthorFilterOptionsInput = {},
+): AuthorFilterOptions {
+  const eligibleProducerIds = findProducers(database)
+    .filter((author) => (input.includeNsfw ?? true) || !author.nsfw)
+    .filter((author) => input.entryType === undefined || author.galleryType === input.entryType)
+    .map((author) => author.id);
+  if (eligibleProducerIds.length === 0) return { authorTags: [], workTags: [] };
+  const placeholders = eligibleProducerIds.map(() => '?').join(', ');
+  const authorTags = database.prepare(`
+    SELECT DISTINCT tag.id AS tag_id, tag.name
+    FROM producer_tag_assignments AS assignment
+    JOIN producer_tags AS tag ON tag.id = assignment.tag_id
+    WHERE assignment.producer_id IN (${placeholders})
+    ORDER BY tag.normalized_name, tag.id
+  `).all(...eligibleProducerIds) as Array<{ tag_id: number; name: string }>;
+  const workTags = database.prepare(`
+    SELECT DISTINCT tag.id AS tag_id, tag.name
+    FROM entry_producers AS relation
+    JOIN entry_tags AS assignment ON assignment.entry_id = relation.entry_id
+    JOIN tags AS tag ON tag.id = assignment.tag_id
+    WHERE relation.producer_id IN (${placeholders})
+    ORDER BY tag.normalized_name, tag.id
+  `).all(...eligibleProducerIds) as Array<{ tag_id: number; name: string }>;
+  return {
+    authorTags: authorTags.map((tag) => ({ tagId: tag.tag_id, name: tag.name })),
+    workTags: workTags.map((tag) => ({ tagId: tag.tag_id, name: tag.name })),
+  };
+}
+
+/** Case-insensitive substring search over Author names. */
+export function searchProducersByName(
+  database: T3Database,
+  query: string,
+): ProducerSummary[] {
+  const rows = database.prepare(`
+    SELECT producer.id, producer.name
+    FROM producers AS producer
+    ORDER BY producer.name COLLATE NOCASE, producer.id
+  `).all() as Array<{ id: number; name: string }>;
+  const coverStatement = database.prepare(`
+    SELECT entry.cover_ref
+    FROM entries AS entry
+    JOIN entry_producers AS relation ON relation.entry_id = entry.id
+    WHERE relation.producer_id = ? AND entry.cover_ref IS NOT NULL
+    ORDER BY entry.id ASC
+    LIMIT 4
+  `);
+  const usageRows = database.prepare(`
+    SELECT relation.producer_id AS producer_id,
+           SUM(usage.view_count) AS view_count,
+           SUM(usage.like_count) AS like_count,
+           MAX(usage.last_viewed_at) AS last_viewed_at
+    FROM entry_producers AS relation
+    JOIN entry_usage AS usage ON usage.entry_id = relation.entry_id
+    GROUP BY relation.producer_id
+  `).all() as Array<{ producer_id: number; view_count: number | null; like_count: number | null; last_viewed_at: string | null }>;
+  const usageByProducer = new Map(usageRows.map((row) => [row.producer_id, row]));
+  const nsfwTypes = listNsfwGalleryTypes(database);
+  return rankSearchResults(rows, query, (row) => row.name).map((row) => {
+    const usage = usageByProducer.get(row.id);
+    return {
+      ...row,
+      covers: (coverStatement.all(row.id) as Array<{ cover_ref: string }>)
+        .map((entry) => entry.cover_ref),
+      galleryType: galleryTypeForProducer(database, row.id),
+      viewCount: usage?.view_count ?? 0,
+      likeCount: usage?.like_count ?? 0,
+      lastViewedAt: usage?.last_viewed_at ?? null,
+      nsfw: authorHasNsfwWorks(database, row.id, nsfwTypes),
+    };
+  });
+}
+
 export function findProducers(
   database: T3Database,
   input: FindProducersInput = {},
@@ -187,13 +280,15 @@ export function findProducers(
     values.push(...ownTagIds, ownTagIds.length);
   }
   if (relatedEntryTagIds.length > 0) {
-    clauses.push(`(
-      SELECT COUNT(DISTINCT entry_tag.tag_id)
+    clauses.push(`EXISTS (
+      SELECT 1
       FROM entry_producers AS relation
       JOIN entry_tags AS entry_tag ON entry_tag.entry_id = relation.entry_id
       WHERE relation.producer_id = producer.id
         AND entry_tag.tag_id IN (${relatedEntryTagIds.map(() => '?').join(', ')})
-    ) = ?`);
+      GROUP BY relation.entry_id
+      HAVING COUNT(DISTINCT entry_tag.tag_id) = ?
+    )`);
     values.push(...relatedEntryTagIds, relatedEntryTagIds.length);
   }
 
@@ -212,10 +307,30 @@ export function findProducers(
     ORDER BY entry.id ASC
     LIMIT 4
   `);
-  return rows.map((row) => ({
-    ...row,
-    covers: (coverStatement.all(row.id) as Array<{ cover_ref: string }>)
-      .map((entry) => entry.cover_ref),
-    galleryType: galleryTypeForProducer(database, row.id),
-  }));
+  // One aggregate query for every Author's derived usage (views sum, last view max).
+  const usageRows = database.prepare(`
+    SELECT relation.producer_id AS producer_id,
+           SUM(usage.view_count) AS view_count,
+           SUM(usage.like_count) AS like_count,
+           MAX(usage.last_viewed_at) AS last_viewed_at
+    FROM entry_producers AS relation
+    JOIN entry_usage AS usage ON usage.entry_id = relation.entry_id
+    GROUP BY relation.producer_id
+  `).all() as Array<{ producer_id: number; view_count: number | null; like_count: number | null; last_viewed_at: string | null }>;
+  const usageByProducer = new Map(usageRows.map((row) => [row.producer_id, row]));
+
+  const nsfwTypes = listNsfwGalleryTypes(database);
+  return rows.map((row) => {
+    const usage = usageByProducer.get(row.id);
+    return {
+      ...row,
+      covers: (coverStatement.all(row.id) as Array<{ cover_ref: string }>)
+        .map((entry) => entry.cover_ref),
+      galleryType: galleryTypeForProducer(database, row.id),
+      viewCount: usage?.view_count ?? 0,
+      likeCount: usage?.like_count ?? 0,
+      lastViewedAt: usage?.last_viewed_at ?? null,
+      nsfw: authorHasNsfwWorks(database, row.id, nsfwTypes),
+    };
+  });
 }

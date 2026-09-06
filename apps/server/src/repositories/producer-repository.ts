@@ -5,6 +5,8 @@ import {
   type AuthorWorkSummary,
 } from './author-directory-repository.js';
 import { listProducerTags, galleryTypeForProducer, type ProducerTagAssignment } from './producer-tag-repository.js';
+import { listProducerRatings, type RatingRowRecord } from './rating-repository.js';
+import { getProducerUsage } from './usage-repository.js';
 
 export interface ProducerRecord {
   id: number;
@@ -20,6 +22,8 @@ export interface AuthorDetail extends ProducerRecord {
   tags: ProducerTagAssignment[];
   looseEntries: AuthorWorkSummary[];
   directories: AuthorDirectoryRecord[];
+  ratings: RatingRowRecord[];
+  usage: { viewCount: number; lastViewedAt: string | null };
 }
 
 export interface CreateProducerInput {
@@ -49,6 +53,9 @@ interface AuthorWorkRow {
   title: string;
   type: string;
   cover_ref: string | null;
+  view_count: number;
+  like_count: number;
+  last_viewed_at: string | null;
 }
 
 function getProducer(database: T3Database, producerId: number): ProducerRecord | null {
@@ -70,9 +77,13 @@ export function getAuthorDetail(database: T3Database, producerId: number): Autho
   const producer = getProducer(database, producerId);
   if (!producer) return null;
   const looseEntries = database.prepare(`
-    SELECT entry.id, entry.title, entry.type, entry.cover_ref
+    SELECT entry.id, entry.title, entry.type, entry.cover_ref,
+      COALESCE(usage.view_count, 0) AS view_count,
+      COALESCE(usage.like_count, 0) AS like_count,
+      usage.last_viewed_at AS last_viewed_at
     FROM entry_producers AS relation
     JOIN entries AS entry ON entry.id = relation.entry_id
+    LEFT JOIN entry_usage AS usage ON usage.entry_id = entry.id
     LEFT JOIN author_directory_entries AS membership
       ON membership.producer_id = relation.producer_id
      AND membership.entry_id = relation.entry_id
@@ -89,8 +100,13 @@ export function getAuthorDetail(database: T3Database, producerId: number): Autho
       title: entry.title,
       type: entry.type,
       coverRef: entry.cover_ref,
+      viewCount: entry.view_count,
+      likeCount: entry.like_count,
+      lastViewedAt: entry.last_viewed_at,
     })),
     directories: listAuthorDirectories(database, producerId),
+    ratings: listProducerRatings(database, producerId),
+    usage: getProducerUsage(database, producerId),
   };
 }
 

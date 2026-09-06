@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createMigratedMemoryDatabase } from '../../src/database/testing.js';
 import { commitImportBatch } from '../../src/import/commit.js';
 import { getEntryDetail } from '../../src/repositories/entry-repository.js';
-import { createSection } from '../../src/repositories/layout-repository.js';
+import { createFacet, createSection } from '../../src/repositories/layout-repository.js';
 import { createProducer } from '../../src/repositories/producer-repository.js';
 import { upsertTaxonomyAlias } from '../../src/repositories/taxonomy-repository.js';
 
@@ -70,6 +70,60 @@ describe('commitImportBatch', () => {
       ],
     });
 
+    database.close();
+  });
+
+  it('auto-assigns Original under the Series facet when the meta has no series', () => {
+    const database = createMigratedMemoryDatabase();
+    const tagsSection = createSection(database, { entryType: 'comic', name: '分类' });
+    const seriesSection = createSection(database, { entryType: 'comic', name: '作品' });
+    const seriesFacet = createFacet(database, {
+      sectionId: seriesSection.id,
+      name: 'Series',
+    });
+
+    const result = commitImportBatch(database, {
+      source: 'example.test',
+      warnings: [],
+      entries: [
+        {
+          externalKey: 'example.test:1',
+          title: 'Has a series',
+          fields: { works: ['Some Series'] },
+          sources: [{ label: 'Original', url: 'https://example.test/items/1' }],
+        },
+        {
+          externalKey: 'example.test:2',
+          title: 'Original standalone',
+          sources: [{ label: 'Original', url: 'https://example.test/items/2' }],
+        },
+      ],
+    }, {
+      entryType: 'comic',
+      canonicalTagFacetId: tagsSection.defaultFacetId,
+      sourceContentType: 'source url',
+      externalKeyContentType: 'external key',
+      fieldMappings: {
+        works: { kind: 'tag', facetId: seriesFacet.id },
+      },
+      ignoredFields: [],
+    });
+
+    const withSeries = getEntryDetail(database, result.entries[0]!.entryId);
+    expect(withSeries?.sections.some((section) => section.facets.some((facet) =>
+      facet.tags.some((tag) => tag.name === 'Original'),
+    ))).toBe(false);
+    expect(withSeries?.sections.some((section) => section.facets.some((facet) =>
+      facet.tags.some((tag) => tag.name === 'Some Series'),
+    ))).toBe(true);
+
+    // No series in the meta → the Original tag fills the Series facet.
+    const standalone = getEntryDetail(database, result.entries[1]!.entryId);
+    const seriesTags = standalone?.sections
+      .flatMap((section) => section.facets)
+      .filter((facet) => facet.name === 'Series')
+      .flatMap((facet) => facet.tags.map((tag) => tag.name));
+    expect(seriesTags).toEqual(['Original']);
     database.close();
   });
 

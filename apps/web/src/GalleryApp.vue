@@ -1,18 +1,36 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
-import type { GalleryApi, GalleryEntrySummary } from './api/gallery.js';
-import type {
-  AuthorDetailResponse,
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import type { GalleryApi, GalleryAuthorSummary, GalleryEntrySummary } from './api/gallery.js';
+import {
+  type AuthorDetailResponse,
   CreateProducerRequest,
   EntryDetailResponse,
   FacetFilterOptions,
   GallerySummary,
+  RatingRow,
+  CollectionRecordDto,
+  SearchScope,
+  TagSearchHit,
 } from '@t3/shared';
 import AddAuthorPage from './AddAuthorPage.vue';
 import AddEntryPage, { type ManualEntryDraft } from './AddEntryPage.vue';
 import AdvancedEditingPage from './AdvancedEditingPage.vue';
 import AuthorPage from './AuthorPage.vue';
+import RecentViewPage from './RecentViewPage.vue';
+import ViewLaterPage from './ViewLaterPage.vue';
+import { flattenCollectionOptions, type CollectionMenuOption } from './collection-tree.js';
+import CollectionsPage from './CollectionsPage.vue';
+import HomePage from './HomePage.vue';
+import RandomPage from './RandomPage.vue';
+import { toggleViewLater, viewLaterIds } from './stores/preferences.js';
+import SearchPage from './SearchPage.vue';
+import { entryStackLayerStyle, entryStackLayers } from './entry-media-stack.js';
+import { accent, accentPresets, accentSwatchColors, rowsPerPage, rowsPerPageOptions, showNsfw } from './stores/preferences.js';
+import { useArmableAction } from './armable.js';
 import FacetFilterBar, { type GalleryFacetFilters } from './components/FacetFilterBar.vue';
+import AppIcon from './components/AppIcon.vue';
+import IconButton from './components/IconButton.vue';
+import PagedCardGrid from './components/PagedCardGrid.vue';
 import { supportedLocales, useI18n, type Locale } from './i18n.js';
 
 type Theme = 'light' | 'dark';
@@ -27,7 +45,9 @@ interface EntryTagResults {
   tagId: number;
   tagName: string;
   entries: GalleryEntrySummary[];
-  sourceEntry: { id: number; type: string; title: string };
+  sourceEntry: { id: number; type: string; title: string } | null;
+  sourceSearchQuery: string | null;
+  sourceSearchScope: SearchScope | null;
 }
 interface AuthorTagResults {
   kind: 'author';
@@ -37,7 +57,8 @@ interface AuthorTagResults {
   sourceAuthor: AuthorLocation;
 }
 type TagResults = EntryTagResults | AuthorTagResults;
-type EntryOrigin = AuthorLocation | { tagResults: EntryTagResults };
+type SearchOrigin = { searchQuery: string; searchScope: SearchScope };
+type EntryOrigin = AuthorLocation | { tagResults: EntryTagResults } | SearchOrigin;
 type CreationView = 'entry' | 'author';
 const props = defineProps<{ api: GalleryApi }>();
 const galleries = ref<GallerySummary[]>([]);
@@ -46,6 +67,10 @@ const authors = ref<Array<{
   name: string;
   covers: string[];
   galleryType: string | null;
+  viewCount: number;
+  likeCount: number;
+  lastViewedAt: string | null;
+  nsfw: boolean;
 }>>([]);
 const entries = ref<GalleryEntrySummary[]>([]);
 // Facet filter state: options are aggregated per gallery type on the server;
@@ -53,13 +78,56 @@ const entries = ref<GalleryEntrySummary[]>([]);
 // updates reload the visible entries. Tag rows AND inside and across rows;
 // the Author list ORs inside itself and ANDs with the tag rows.
 const facetFilterOptions = ref<FacetFilterOptions | null>(null);
-const facetFilters = ref<GalleryFacetFilters>({ conditions: [], authorIds: [] });
+const facetFilters = ref<GalleryFacetFilters>({
+  conditions: [],
+  authorIds: [],
+  ratingConditions: [],
+  ratingSort: null,
+  usageConditions: [],
+  usageSort: null,
+});
 let galleryEntriesRequestSeq = 0;
 type GallerySort = 'date-desc' | 'date-asc' | 'title-asc' | 'title-desc';
 // Newest first by default: recent imports land at the top of the gallery.
 const gallerySort = ref<GallerySort>('date-desc');
+const showUsageOnCards = computed(() => (
+  facetFilters.value.usageConditions.length > 0 || facetFilters.value.usageSort !== null
+));
+
+const galleryFilterActive = computed(() => {
+  const { conditions, authorIds, ratingConditions, ratingSort, usageConditions, usageSort } = facetFilters.value;
+  return conditions.some((condition) => condition.tagIds.length > 0)
+    || authorIds.length > 0
+    || ratingConditions.length > 0
+    || ratingSort !== null
+    || usageConditions.length > 0
+    || usageSort !== null;
+});
+// The unfiltered size of the current Gallery, from the sidebar projection —
+// the heading shows "filtered / total" while a filter is active.
+const galleryTotalCount = computed(() => (
+  galleries.value.find((gallery) => gallery.type === activeType.value)?.entryCount
+  ?? entries.value.length
+));
+
+// Tag results page both kinds through one paged grid; the slot separates
+// them again by shape (entries carry `type`, author hits do not).
+const pagedTagItems = computed<Array<GalleryEntrySummary | { id: number; name: string }>>(() => {
+  const results = tagResults.value;
+  if (!results) return [];
+  if (results.kind === 'entry') {
+    return results.entries.filter((entry) => showNsfw.value || !entryNsfwTypes.value.has(entry.type));
+  }
+  return results.authors;
+});
+
 const sortedEntries = computed(() => {
   const list = [...entries.value];
+  // A rating sort is performed by the server (unrated sink to the bottom);
+  // the local re-order must not undo it.
+  if (facetFilters.value.ratingSort !== null || facetFilters.value.usageSort !== null) {
+    return list;
+  }
   const direction = gallerySort.value.endsWith('-desc') ? -1 : 1;
   const byTitle = (a: GalleryEntrySummary, b: GalleryEntrySummary): number => (
     a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
@@ -89,6 +157,8 @@ const editingTagName = ref('');
 const contentEditorOpen = ref(false);
 const contentType = ref('');
 const contentBody = ref('');
+const ratingEditorOpen = ref(false);
+const ratingName = ref('');
 const editingContentId = ref<number | null>(null);
 const editingContentType = ref('');
 const editingContentBody = ref('');
@@ -96,9 +166,46 @@ const loading = ref(true);
 const submitting = ref(false);
 const error = ref<string | null>(null);
 const theme = ref<Theme>('light');
+// Destructive/heavy actions arm in place on the first click (the button
+// switches to its confirm copy) and run on the second — no native dialogs.
+const { armedKey, arm, disarm } = useArmableAction();
 const settingsOpen = ref(false);
 const advancedView = ref(false);
 const authorView = ref(false);
+const recentView = ref(false);
+const viewLaterView = ref(false);
+const collectionsView = ref(false);
+const randomView = ref(false);
+
+// Add-to-collection menus on the detail pages.
+const entryCollectionOptions = ref<CollectionMenuOption[]>([]);
+const entryCollectionIds = ref<number[]>([]);
+const entryCollectionMenuOpen = ref(false);
+const searchView = ref(false);
+const searchQuery = ref('');
+const searchScope = ref<SearchScope>('entries');
+const sidebarSearchQuery = ref('');
+const authorSearchOrigin = ref<SearchOrigin | null>(null);
+
+// Whole-gallery partitions are stored server-side; the show-NSFW switch is a
+// local display preference. Everything NSFW hides while it is off.
+const entryNsfwTypes = computed(() => (
+  new Set(galleries.value.filter((gallery) => gallery.nsfw).map((gallery) => gallery.type))
+));
+
+const visibleGalleries = computed(() => (
+  galleries.value.filter((gallery) => showNsfw.value || !gallery.nsfw)
+));
+
+async function toggleGalleryPartition(gallery: { type: string; nsfw: boolean }): Promise<void> {
+  error.value = null;
+  try {
+    await props.api.setGalleryPartition(gallery.type, !gallery.nsfw);
+    await refreshGalleries();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.loadEntry');
+  }
+}
 const authorEditorOpen = ref(false);
 const newAuthorName = ref('');
 const authorLinkEditorOpen = ref(false);
@@ -108,9 +215,29 @@ const entryOrigin = ref<EntryOrigin | null>(null);
 const tagResults = ref<TagResults | null>(null);
 const authorTagOrigin = ref<AuthorTagResults | null>(null);
 const nextTheme = computed<Theme>(() => (theme.value === 'light' ? 'dark' : 'light'));
+// Home is the fallback view: nothing else active and no Gallery/Entry open.
+const isHomeView = computed(() => (
+  !searchView.value
+  && !advancedView.value
+  && creationView.value === null
+  && tagResults.value === null
+  && !recentView.value
+  && !viewLaterView.value
+  && !collectionsView.value
+  && !randomView.value
+  && batchReview.value === null
+  && !authorView.value
+  && activeEntry.value === null
+  && activeType.value === null
+));
+
+function showHome(): void {
+  leaveAllViews();
+}
 const entryBackTarget = computed(() => {
-  if (!entryOrigin.value) return activeType.value ?? '';
+  if (!entryOrigin.value) return activeType.value ?? t('home.nav');
   if ('tagResults' in entryOrigin.value) return entryOrigin.value.tagResults.tagName;
+  if ('searchQuery' in entryOrigin.value) return t('search.title');
   return entryOrigin.value.directoryName ?? entryOrigin.value.authorName;
 });
 const availableAuthors = computed(() => {
@@ -134,24 +261,208 @@ function toggleSettings(): void {
   settingsOpen.value = !settingsOpen.value;
 }
 
-function openAdvanced(): void {
-  settingsOpen.value = false;
+// Every sidebar entry is top priority: switching views always tears down the
+// current one first. returnView remembers where an Entry detail was opened
+// from so the detail's back button returns to the right place.
+type ReturnTarget = 'recent' | 'viewLater' | 'collections' | 'batch' | 'random';
+
+const returnView = ref<ReturnTarget | null>(null);
+const pendingBatchReview = ref<{ entryType: string; entryIds: number[] } | null>(null);
+
+function leaveAllViews(keepEntry = false): void {
   creationView.value = null;
   tagResults.value = null;
   authorTagOrigin.value = null;
+  authorSearchOrigin.value = null;
   entryOrigin.value = null;
+  searchView.value = false;
+  recentView.value = false;
+  viewLaterView.value = false;
+  collectionsView.value = false;
+  randomView.value = false;
+  randomTagReturn = false;
+  batchReview.value = null;
   authorView.value = false;
-  advancedView.value = true;
-  activeEntry.value = null;
+  advancedView.value = false;
+  activeType.value = null;
+  if (!keepEntry) activeEntry.value = null;
   editingEntry.value = false;
+  authorTarget.value = null;
+  returnView.value = null;
+  resetLayoutEditors();
+}
+
+function openAdvanced(): void {
+  settingsOpen.value = false;
+  leaveAllViews();
+  advancedView.value = true;
 }
 
 function closeAdvanced(): void {
   advancedView.value = false;
 }
 
+function openSearch(): void {
+  searchQuery.value = sidebarSearchQuery.value.trim();
+  searchScope.value = 'entries';
+  leaveAllViews();
+  searchView.value = true;
+}
+
+function closeSearch(): void {
+  searchView.value = false;
+}
+
+function preserveSearchContext(query: string, scope: SearchScope): SearchOrigin {
+  const context = { searchQuery: query, searchScope: scope };
+  searchQuery.value = query;
+  searchScope.value = scope;
+  sidebarSearchQuery.value = query;
+  return context;
+}
+
+async function openEntryFromSearch(
+  entry: GalleryEntrySummary,
+  query: string,
+  scope: SearchScope,
+): Promise<void> {
+  const origin = preserveSearchContext(query, scope);
+  searchView.value = false;
+  creationView.value = null;
+  tagResults.value = null;
+  recentView.value = false;
+  authorView.value = false;
+  advancedView.value = false;
+  activeType.value = entry.type;
+  await viewEntry(entry.id, origin);
+}
+
+function openAuthorFromSearch(
+  author: GalleryAuthorSummary,
+  query: string,
+  scope: SearchScope,
+): void {
+  authorSearchOrigin.value = preserveSearchContext(query, scope);
+  searchView.value = false;
+  creationView.value = null;
+  tagResults.value = null;
+  recentView.value = false;
+  advancedView.value = false;
+  activeEntry.value = null;
+  activeType.value = null;
+  authorTarget.value = {
+    authorId: author.id,
+    authorName: author.name,
+    directoryId: null,
+    directoryName: null,
+  };
+  authorView.value = true;
+}
+
+async function openTagFromSearch(
+  tag: TagSearchHit,
+  query: string,
+  scope: SearchScope,
+): Promise<void> {
+  error.value = null;
+  const origin = preserveSearchContext(query, scope);
+  try {
+    tagResults.value = {
+      kind: 'entry',
+      tagId: tag.tagId,
+      tagName: tag.name,
+      entries: await props.api.findEntriesByTag(tag.tagId),
+      sourceEntry: null,
+      sourceSearchQuery: origin.searchQuery,
+      sourceSearchScope: origin.searchScope,
+    };
+    searchView.value = false;
+    activeEntry.value = null;
+    activeType.value = null;
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
+  }
+}
+
 function isHttpUrl(value: string): boolean {
   return /^https?:\/\//u.test(value);
+}
+
+function formatDate(isoTimestamp: string): string {
+  const date = new Date(isoTimestamp);
+  return Number.isNaN(date.getTime()) ? isoTimestamp.slice(0, 10) : date.toISOString().slice(0, 10);
+}
+
+/**
+ * A view is counted only when the user actually opens the source URL —
+ * clicking the card itself never counts. Record first, then navigate.
+ */
+async function openSourceUrl(event: MouseEvent, url: string): Promise<void> {
+  event.preventDefault();
+  if (!activeEntry.value) return;
+  try {
+    applyUsage(await props.api.recordEntryView(activeEntry.value.id));
+  } catch {
+    // Recording is best-effort: never block the navigation.
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+async function likeActiveEntry(): Promise<void> {
+  if (!activeEntry.value) return;
+  error.value = null;
+  try {
+    applyUsage(await props.api.likeEntry(activeEntry.value.id));
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.setRating');
+  }
+}
+
+// Like is a repeatable action, not a toggle: bumping the key re-mounts the
+// icon span so every click replays the short feedback animation.
+const likeAnimationKey = ref(0);
+
+function onLikeClick(): void {
+  likeAnimationKey.value += 1;
+  void likeActiveEntry();
+}
+
+const activeEntryInViewLater = computed(() => (
+  activeEntry.value !== null && viewLaterIds.value.includes(activeEntry.value.id)
+));
+
+async function toggleEntryCollectionMenu(): Promise<void> {
+  entryCollectionMenuOpen.value = !entryCollectionMenuOpen.value;
+  if (entryCollectionMenuOpen.value && activeEntry.value) {
+    try {
+      const [collectionTree, memberIds] = await Promise.all([
+        props.api.listCollections('entry'),
+        props.api.listCollectionsForEntry(activeEntry.value.id),
+      ]);
+      entryCollectionOptions.value = flattenCollectionOptions(collectionTree);
+      entryCollectionIds.value = memberIds;
+    } catch {
+      // Keep whatever options are cached; the menu still renders.
+    }
+  }
+}
+
+async function addEntryToCollection(collectionId: number): Promise<void> {
+  if (!activeEntry.value) return;
+  entryCollectionMenuOpen.value = false;
+  error.value = null;
+  try {
+    await props.api.addCollectionEntry(collectionId, activeEntry.value.id);
+    entryCollectionIds.value = [...entryCollectionIds.value, collectionId];
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.createEntry');
+  }
+}
+
+function applyUsage(usage: { viewCount: number; likeCount: number; lastViewedAt: string | null }): void {
+  const entry = activeEntry.value;
+  if (!entry) return;
+  entry.usage = usage;
 }
 
 const mediaIndex = ref(0);
@@ -168,25 +479,6 @@ function mediaPrevious(): void {
 function mediaNext(): void {
   if (mediaIndex.value < mediaSlides.value.length - 1) mediaIndex.value += 1;
 }
-function stackLayers(entry: { coverRef: string | null; previewRefs: string[] }): string[] {
-  const layers: string[] = [];
-  if (entry.coverRef) layers.push(entry.coverRef);
-  layers.push(...(entry.previewRefs ?? []));
-  return layers;
-}
-function stackStyle(index: number, count: number): Record<string, string> {
-  const previewCount = Math.max(0, count - 1);
-  const step = previewCount > 0 ? Math.min(12, 34 / previewCount) : 0;
-  const left = 28 - (index * step);
-  const top = 3 + Math.min(index * 0.7, 3);
-  const rotation = -Math.min(index * 2.2, 8);
-  return {
-    left: `${left}%`,
-    top: `${top}%`,
-    transform: `rotate(${rotation}deg)`,
-    zIndex: String(count + 1 - index),
-  };
-}
 function isBasicSection(section: { name: string }): boolean {
   const name = section.name.trim();
   return /^basic\s*information$/i.test(name) || /^basic$/i.test(name);
@@ -194,7 +486,8 @@ function isBasicSection(section: { name: string }): boolean {
 
 async function deleteActiveEntry(): Promise<void> {
   if (!activeEntry.value) return;
-  if (!window.confirm(t('entry.deleteConfirm', { title: activeEntry.value.title }))) return;
+  if (!arm('delete-entry')) return;
+  disarm('delete-entry');
   error.value = null;
   try {
     await props.api.deleteEntry(activeEntry.value.id);
@@ -208,10 +501,6 @@ async function deleteActiveEntry(): Promise<void> {
     error.value = cause instanceof Error ? cause.message : t('error.deleteEntry');
   }
 }
-watch(activeEntry, () => {
-  mediaIndex.value = 0;
-});
-
 // Layout template: rebuild this type's shared Section/Facet structure from
 // the open Entry and re-map every Entry's tags onto it (see
 // applyLayoutTemplate on the server). `showEmptyFacets` reveals empty named
@@ -219,13 +508,37 @@ watch(activeEntry, () => {
 const showEmptyFacets = ref(false);
 const templateBusy = ref(false);
 const templateNotice = ref<string | null>(null);
+let templateNoticeTimer: number | null = null;
 const tagLayoutBusy = ref(false);
 const tagLayoutNotice = ref<string | null>(null);
+
+function clearTemplateNotice(): void {
+  if (templateNoticeTimer !== null) window.clearTimeout(templateNoticeTimer);
+  templateNoticeTimer = null;
+  templateNotice.value = null;
+}
+
+function showTemplateNotice(message: string): void {
+  clearTemplateNotice();
+  templateNotice.value = message;
+  templateNoticeTimer = window.setTimeout(() => {
+    templateNotice.value = null;
+    templateNoticeTimer = null;
+  }, 4_000);
+}
+
+watch(activeEntry, () => {
+  mediaIndex.value = 0;
+  clearTemplateNotice();
+  tagLayoutNotice.value = null;
+}, { flush: 'sync' });
+onUnmounted(clearTemplateNotice);
 
 async function saveLayoutTemplate(): Promise<void> {
   if (!activeEntry.value) return;
   const type = activeEntry.value.type;
-  if (!window.confirm(t('template.applyConfirm', { type }))) return;
+  if (!arm('save-template')) return;
+  disarm('save-template');
   templateBusy.value = true;
   templateNotice.value = null;
   error.value = null;
@@ -234,11 +547,11 @@ async function saveLayoutTemplate(): Promise<void> {
     // Facet ids all changed: reload the detail so tag rows point at the
     // rebuilt Facets and empty ones become visible via the toggle.
     activeEntry.value = await props.api.getEntry(activeEntry.value.id);
-    templateNotice.value = t('template.applied', {
+    showTemplateNotice(t('template.applied', {
       type,
       entries: result.entriesAffected,
       relinked: result.tagsRelinked,
-    });
+    }));
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('template.applyError');
   } finally {
@@ -253,7 +566,8 @@ async function saveLayoutTemplate(): Promise<void> {
 async function applyActiveEntryTagLayout(): Promise<void> {
   if (!activeEntry.value) return;
   const type = activeEntry.value.type;
-  if (!window.confirm(t('tagLayout.applyConfirm', { type }))) return;
+  if (!arm('apply-tag-layout')) return;
+  disarm('apply-tag-layout');
   tagLayoutBusy.value = true;
   tagLayoutNotice.value = null;
   error.value = null;
@@ -283,17 +597,10 @@ async function refreshAuthors(): Promise<void> {
   authors.value = await props.api.listAuthors();
 }
 
-async function selectGallery(entryType: string): Promise<void> {
-  creationView.value = null;
-  tagResults.value = null;
-  authorTagOrigin.value = null;
-  authorView.value = false;
-  advancedView.value = false;
+async function selectGallery(entryType: string, keepEntry = false): Promise<void> {
+  leaveAllViews(keepEntry);
   activeType.value = entryType;
-  activeEntry.value = null;
-  editingEntry.value = false;
-  resetLayoutEditors();
-  facetFilters.value = { conditions: [], authorIds: [] };
+  facetFilters.value = { conditions: [], authorIds: [], ratingConditions: [], ratingSort: null, usageConditions: [], usageSort: null };
   const [summaries, filterOptions] = await Promise.all([
     props.api.listEntries(entryType),
     props.api.listFacetFilterOptions(entryType),
@@ -305,12 +612,19 @@ async function selectGallery(entryType: string): Promise<void> {
 async function loadGalleryEntries(): Promise<void> {
   if (!activeType.value) return;
   const seq = ++galleryEntriesRequestSeq;
-  const { conditions, authorIds } = facetFilters.value;
+  const { conditions, authorIds, ratingConditions, ratingSort, usageConditions, usageSort } = facetFilters.value;
   const activeConditions = conditions.filter((condition) => condition.tagIds.length > 0);
-  const hasFilters = activeConditions.length > 0 || authorIds.length > 0;
+  const hasFilters = activeConditions.length > 0 || authorIds.length > 0
+    || ratingConditions.length > 0 || ratingSort !== null
+    || usageConditions.length > 0 || usageSort !== null;
   const summaries = !hasFilters
     ? await props.api.listEntries(activeType.value)
-    : await props.api.filterEntriesByFacets(activeType.value, activeConditions, authorIds);
+    : await props.api.filterEntriesByFacets(activeType.value, activeConditions, authorIds, {
+      ratingConditions,
+      ratingSort,
+      usageConditions,
+      usageSort,
+    });
   if (seq !== galleryEntriesRequestSeq) return; // superseded by a newer request
   entries.value = summaries;
 }
@@ -324,18 +638,103 @@ async function onFacetFiltersChange(filters: GalleryFacetFilters): Promise<void>
   }
 }
 
-function showAuthors(): void {
-  creationView.value = null;
-  tagResults.value = null;
-  authorTagOrigin.value = null;
-  authorTarget.value = null;
+function showCollections(): void {
+  leaveAllViews();
+  collectionsView.value = true;
+}
+
+function showRandom(): void {
+  leaveAllViews();
+  randomView.value = true;
+}
+
+function openEntryFromRandom(entryId: number): void {
+  leaveAllViews();
+  returnView.value = 'random';
+  void viewEntry(entryId);
+}
+
+function openAuthorFromRandom(authorId: number): void {
+  collectionsView.value = false;
+  randomView.value = false;
+  authorTarget.value = { authorId, authorName: '', directoryId: null, directoryName: null };
   entryOrigin.value = null;
-  authorView.value = true;
-  advancedView.value = false;
-  activeType.value = null;
   activeEntry.value = null;
-  editingEntry.value = false;
-  resetLayoutEditors();
+  activeType.value = null;
+  authorView.value = true;
+}
+
+// Random tag hits remember they came from the random page so closing the
+// result returns there instead of the search page.
+let randomTagReturn = false;
+
+function openTagFromRandom(tag: { id: number; name: string }): void {
+  error.value = null;
+  randomTagReturn = true;
+  void props.api.findEntriesByTag(tag.id).then((entries) => {
+    tagResults.value = {
+      kind: 'entry',
+      tagId: tag.id,
+      tagName: tag.name,
+      entries,
+      sourceEntry: null,
+      sourceSearchQuery: null,
+      sourceSearchScope: null,
+    };
+    randomView.value = false;
+  }).catch((cause: unknown) => {
+    randomTagReturn = false;
+    error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
+  });
+}
+
+function openEntryFromCollections(entryId: number): void {
+  leaveAllViews();
+  returnView.value = 'collections';
+  void viewEntry(entryId);
+}
+
+function openAuthorFromCollections(authorId: number): void {
+  collectionsView.value = false;
+  authorTarget.value = { authorId, authorName: '', directoryId: null, directoryName: null };
+  entryOrigin.value = null;
+  activeEntry.value = null;
+  activeType.value = null;
+  authorView.value = true;
+}
+
+function openEntryFromViewLater(entryId: number): void {
+  leaveAllViews();
+  returnView.value = 'viewLater';
+  void viewEntry(entryId);
+}
+
+// Home-opened entries fall back to Home when closed: no return view needed,
+// the template's home branch catches it (homepage design guide §10).
+function openEntryFromHome(entryId: number): void {
+  leaveAllViews();
+  void viewEntry(entryId);
+}
+
+function showViewLater(): void {
+  leaveAllViews();
+  viewLaterView.value = true;
+}
+
+function openEntryFromRecent(entryId: number): void {
+  leaveAllViews();
+  returnView.value = 'recent';
+  void viewEntry(entryId);
+}
+
+function showRecentView(): void {
+  leaveAllViews();
+  recentView.value = true;
+}
+
+function showAuthors(): void {
+  leaveAllViews();
+  authorView.value = true;
 }
 
 async function openEntryFromAuthor(payload: {
@@ -345,19 +744,36 @@ async function openEntryFromAuthor(payload: {
   directoryId: number | null;
   directoryName: string | null;
 }): Promise<void> {
-  await selectGallery(payload.work.type);
-  await viewEntry(payload.work.id, {
+  // Load the detail BEFORE switching views: clearing the author view first
+  // rendered the gallery grid for as long as the fetches took. If the load
+  // fails, the author page stays up with the error banner.
+  await openEntry(payload.work.id);
+  if (!activeEntry.value) return;
+  try {
+    await selectGallery(payload.work.type, true);
+  } catch {
+    // The entry is already on screen; a stale backing gallery is harmless —
+    // picking a gallery in the sidebar refetches it anyway.
+  }
+  entryOrigin.value = {
     authorId: payload.authorId,
     authorName: payload.authorName,
     directoryId: payload.directoryId,
     directoryName: payload.directoryName,
-  });
+  };
 }
 
 async function openEntry(entryId: number): Promise<void> {
   error.value = null;
   try {
-    activeEntry.value = await props.api.getEntry(entryId);
+    const [detail, collectionOptions, memberIds] = await Promise.all([
+      props.api.getEntry(entryId),
+      props.api.listCollections('entry'),
+      props.api.listCollectionsForEntry(entryId),
+    ]);
+    entryCollectionOptions.value = flattenCollectionOptions(collectionOptions);
+    entryCollectionIds.value = memberIds;
+    activeEntry.value = detail;
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.loadEntry');
   }
@@ -386,6 +802,18 @@ function closeEntry(): void {
       resetLayoutEditors();
       return;
     }
+    if ('searchQuery' in entryOrigin.value) {
+      searchQuery.value = entryOrigin.value.searchQuery;
+      searchScope.value = entryOrigin.value.searchScope;
+      sidebarSearchQuery.value = entryOrigin.value.searchQuery;
+      entryOrigin.value = null;
+      activeEntry.value = null;
+      activeType.value = null;
+      searchView.value = true;
+      editingEntry.value = false;
+      resetLayoutEditors();
+      return;
+    }
     authorTarget.value = entryOrigin.value;
     entryOrigin.value = null;
     activeEntry.value = null;
@@ -398,6 +826,20 @@ function closeEntry(): void {
   activeEntry.value = null;
   editingEntry.value = false;
   resetLayoutEditors();
+  restoreReturnView();
+}
+
+function restoreReturnView(): void {
+  const target = returnView.value;
+  returnView.value = null;
+  if (target === 'recent') showRecentView();
+  else if (target === 'viewLater') showViewLater();
+  else if (target === 'collections') showCollections();
+  else if (target === 'random') showRandom();
+  else if (target === 'batch' && pendingBatchReview.value) {
+    batchReview.value = pendingBatchReview.value;
+    pendingBatchReview.value = null;
+  }
 }
 
 async function openEntryTag(tag: { id: number; name: string }): Promise<void> {
@@ -415,6 +857,8 @@ async function openEntryTag(tag: { id: number; name: string }): Promise<void> {
       tagName: tag.name,
       entries: await props.api.findEntriesByTag(tag.id),
       sourceEntry,
+      sourceSearchQuery: null,
+      sourceSearchScope: null,
     };
     activeEntry.value = null;
     activeType.value = null;
@@ -472,11 +916,22 @@ function openTagAuthor(author: { id: number; name: string }): void {
 }
 
 function restoreAuthorTagResults(): void {
-  if (!authorTagOrigin.value) return;
-  tagResults.value = authorTagOrigin.value;
-  authorTagOrigin.value = null;
-  authorView.value = false;
-  authorTarget.value = null;
+  if (authorTagOrigin.value) {
+    tagResults.value = authorTagOrigin.value;
+    authorTagOrigin.value = null;
+    authorView.value = false;
+    authorTarget.value = null;
+    return;
+  }
+  if (authorSearchOrigin.value !== null) {
+    searchQuery.value = authorSearchOrigin.value.searchQuery;
+    searchScope.value = authorSearchOrigin.value.searchScope;
+    sidebarSearchQuery.value = authorSearchOrigin.value.searchQuery;
+    authorSearchOrigin.value = null;
+    authorView.value = false;
+    authorTarget.value = null;
+    searchView.value = true;
+  }
 }
 
 async function closeTagResults(): Promise<void> {
@@ -484,8 +939,18 @@ async function closeTagResults(): Promise<void> {
   if (!current) return;
   tagResults.value = null;
   if (current.kind === 'entry') {
-    activeType.value = current.sourceEntry.type;
-    await viewEntry(current.sourceEntry.id);
+    if (current.sourceEntry) {
+      activeType.value = current.sourceEntry.type;
+      await viewEntry(current.sourceEntry.id);
+    } else if (randomTagReturn) {
+      randomTagReturn = false;
+      showRandom();
+    } else {
+      searchQuery.value = current.sourceSearchQuery ?? '';
+      searchScope.value = current.sourceSearchScope ?? 'entries';
+      sidebarSearchQuery.value = searchQuery.value;
+      searchView.value = true;
+    }
     return;
   }
   authorTarget.value = current.sourceAuthor;
@@ -521,6 +986,7 @@ function resetLayoutEditors(): void {
   editingTagId.value = null;
   contentEditorOpen.value = false;
   editingContentId.value = null;
+  ratingEditorOpen.value = false;
   draggedTagId.value = null;
   sectionName.value = '';
   facetName.value = '';
@@ -677,6 +1143,67 @@ async function createSection(): Promise<void> {
   }
 }
 
+// Rating rows are updated in place (no full detail reload): picking stars must
+// stay instant while the shared slot set lives on the Gallery template.
+function applyRatingRow(row: RatingRow): void {
+  const entry = activeEntry.value;
+  if (!entry) return;
+  entry.ratings = entry.ratings.map((item) => (item.slotId === row.slotId ? row : item));
+}
+
+async function createRatingSlot(): Promise<void> {
+  if (!activeEntry.value) return;
+  const name = ratingName.value.trim();
+  if (name === '') return;
+  error.value = null;
+  try {
+    await props.api.createEntryRatingSlot(activeEntry.value.id, name);
+    ratingName.value = '';
+    ratingEditorOpen.value = false;
+    await openEntry(activeEntry.value.id);
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.createRatingSlot');
+  }
+}
+
+async function chooseEntryStars(slotId: number, stars: number): Promise<void> {
+  if (!activeEntry.value) return;
+  error.value = null;
+  try {
+    applyRatingRow(await props.api.setEntryRating(activeEntry.value.id, slotId, stars));
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.setRating');
+  }
+}
+
+async function clearEntryStars(slotId: number): Promise<void> {
+  if (!activeEntry.value) return;
+  error.value = null;
+  try {
+    applyRatingRow(await props.api.setEntryRating(activeEntry.value.id, slotId, null));
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.setRating');
+  }
+}
+
+async function moveRatingSlot(slotId: number, direction: -1 | 1): Promise<void> {
+  const entry = activeEntry.value;
+  if (!entry) return;
+  const orderedIds = entry.ratings.map((row) => row.slotId);
+  const index = orderedIds.indexOf(slotId);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= orderedIds.length) return;
+  [orderedIds[index], orderedIds[target]] = [orderedIds[target]!, orderedIds[index]!];
+  error.value = null;
+  try {
+    // Slot order is shared per Gallery: the reorder propagates to every card.
+    await props.api.reorderEntryRatingSlots(entry.id, orderedIds);
+    await openEntry(entry.id);
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.reorderRating');
+  }
+}
+
 async function addEntryTag(facetId: number | null): Promise<void> {
   if (!activeEntry.value || facetId === null) return;
   error.value = null;
@@ -754,7 +1281,8 @@ async function removeFacet(facetId: number): Promise<void> {
     .flatMap((section) => section.facets)
     .find((candidate) => candidate.id === facetId);
   if (!facet || facet.name === '') return;
-  if (!window.confirm(t('facet.deleteConfirm', { name: facet.name }))) return;
+  if (!arm(`delete-facet-${facetId}`)) return;
+  disarm(`delete-facet-${facetId}`);
   error.value = null;
   try {
     await props.api.deleteFacet(facetId);
@@ -834,11 +1362,9 @@ async function removeTag(tagId: number): Promise<void> {
 
 async function initialize(): Promise<void> {
   try {
+    // Home is the default view: nothing is selected until the user picks a
+    // Gallery (homepage design guide §10 — no first-gallery fallback).
     await Promise.all([refreshGalleries(), refreshAuthors()]);
-    const firstType = galleries.value[0]?.type;
-    if (firstType) {
-      await selectGallery(firstType);
-    }
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.loadGalleries');
   } finally {
@@ -850,6 +1376,12 @@ function openCreation(view: CreationView): void {
   creationView.value = view;
   tagResults.value = null;
   activeEntry.value = null;
+  recentView.value = false;
+  viewLaterView.value = false;
+  collectionsView.value = false;
+  randomView.value = false;
+  batchReview.value = null;
+  searchView.value = false;
   authorView.value = false;
   advancedView.value = false;
 }
@@ -866,8 +1398,16 @@ async function submitEntry(draft: ManualEntryDraft): Promise<void> {
     });
     if (draft.coverFile) await props.api.uploadEntryMedia(created.id, 'cover', draft.coverFile);
     if (draft.previewFile) await props.api.uploadEntryMedia(created.id, 'preview', draft.previewFile);
+    for (const rating of draft.ratings) {
+      if (rating.stars === null) continue;
+      await props.api.setEntryRating(created.id, rating.slotId, rating.stars);
+    }
+    if (draft.viewLater) toggleViewLater(created.id);
     await refreshGalleries();
-    await selectGallery(targetType);
+    // Jump straight into the freshly created Entry for a quick check.
+    creationView.value = null;
+    await refreshAuthors();
+    await viewEntry(created.id);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.createEntry');
   } finally {
@@ -895,23 +1435,89 @@ async function submitAuthor(draft: CreateProducerRequest): Promise<void> {
   }
 }
 
-async function finishImport(entryType: string): Promise<void> {
+async function finishImport(entryType: string, entryIds: number[] = [], viewLater = false): Promise<void> {
+  if (viewLater) {
+    for (const entryId of entryIds) {
+      if (!viewLaterIds.value.includes(entryId)) viewLaterIds.value.push(entryId);
+    }
+  }
+  creationView.value = null;
+  batchReview.value = null;
   await Promise.all([refreshGalleries(), refreshAuthors()]);
-  await selectGallery(entryType);
+  if (entryIds.length === 1) {
+    await viewEntry(entryIds[0]!);
+  } else if (entryIds.length > 1) {
+    batchReview.value = { entryType, entryIds };
+  } else {
+    await selectGallery(entryType);
+  }
 }
 
-async function finishBatchImport(): Promise<void> {
-  // Batch import commits many items and stays on the Add Entry page; refresh
-  // cached galleries/authors so other views see the new entries and producers
-  // without navigating away (unlike finishImport).
-  await Promise.all([refreshGalleries(), refreshAuthors()]);
+// Temporary batch review: after a batch import the just-committed cards are
+// shown as a throwaway gallery group. Everything is already persisted — this
+// view is purely for a quick check. Leaving it (explicit button or switching
+// to any other view) discards the group.
+const batchReview = ref<{ entryType: string; entryIds: number[] } | null>(null);
+
+function finishBatchImport(entryType: string, entryIds: number[] = [], viewLater = false): void {
+  // The batch "view later" checkbox applies to every committed item.
+  if (viewLater) {
+    for (const entryId of entryIds) {
+      if (!viewLaterIds.value.includes(entryId)) viewLaterIds.value.push(entryId);
+    }
+  }
+  if (entryIds.length > 0) {
+    creationView.value = null;
+    batchReview.value = { entryType, entryIds };
+    void refreshGalleries();
+    void refreshAuthors();
+  }
 }
+
+async function openBatchReviewEntries(): Promise<GalleryEntrySummary[]> {
+  if (!batchReview.value) return [];
+  const summaries = await props.api.listEntries(batchReview.value.entryType);
+  const wanted = new Set(batchReview.value.entryIds);
+  return summaries.filter((summary) => wanted.has(summary.id));
+}
+
+function completeBatchReview(): void {
+  batchReview.value = null;
+  pendingBatchReview.value = null;
+}
+
+function openEntryFromBatchReview(entryId: number): void {
+  pendingBatchReview.value = batchReview.value;
+  leaveAllViews();
+  returnView.value = 'batch';
+  void viewEntry(entryId);
+}
+
+const batchReviewEntries = ref<GalleryEntrySummary[]>([]);
+const batchReviewLoading = ref(false);
+
+watch(batchReview, async (review) => {
+  if (!review) {
+    batchReviewEntries.value = [];
+    return;
+  }
+  batchReviewLoading.value = true;
+  try {
+    const summaries = await props.api.listEntries(review.entryType);
+    const wanted = new Set(review.entryIds);
+    batchReviewEntries.value = summaries.filter((summary) => wanted.has(summary.id));
+  } catch {
+    batchReviewEntries.value = [];
+  } finally {
+    batchReviewLoading.value = false;
+  }
+});
 
 onMounted(initialize);
 </script>
 
 <template>
-  <div class="gallery-app" :data-theme="theme">
+  <div class="gallery-app" :data-theme="theme" :data-accent="accent">
     <header class="app-header">
       <div>
         <p class="eyebrow">{{ t('app.tagline') }}</p>
@@ -920,30 +1526,63 @@ onMounted(initialize);
       </div>
       <div class="header-controls">
         <button
-          class="theme-toggle"
+          class="icon-button"
           type="button"
+          data-testid="theme-toggle"
           :aria-label="t('theme.switch', { theme: t(`theme.${nextTheme}`) })"
           @click="theme = nextTheme"
         >
-          {{ t(`theme.${nextTheme}`) }}
+          <span :key="theme" class="theme-icon-swap">
+            <AppIcon :name="theme === 'light' ? 'moon' : 'sun'" :size="20" />
+          </span>
+          <span class="icon-tooltip" aria-hidden="true">{{ t('theme.switch', { theme: t(`theme.${nextTheme}`) }) }}</span>
         </button>
-        <button
+        <IconButton
+          icon="settings"
+          :label="t('settings.open')"
+          :active="settingsOpen"
           data-testid="settings-button"
-          class="theme-toggle"
-          type="button"
           :aria-expanded="settingsOpen"
           @click="toggleSettings"
-        >
-          {{ t('settings.open') }}
-        </button>
+        />
         <section v-if="settingsOpen" data-testid="settings-panel" class="settings-panel">
           <h2>{{ t('settings.title') }}</h2>
+          <label class="checkbox-label" data-testid="show-nsfw-toggle">
+            <input v-model="showNsfw" type="checkbox">
+            {{ t('settings.showNsfw') }}
+          </label>
           <label>
             {{ t('settings.language') }}
             <select data-testid="language-select" :value="locale" @change="selectLocale">
               <option value="en">{{ t('settings.english') }}</option>
               <option value="zh-CN">{{ t('settings.chinese') }}</option>
             </select>
+          </label>
+          <label>
+            {{ t('settings.rowsPerPage') }}
+            <select data-testid="rows-per-page-select" v-model.number="rowsPerPage">
+              <option v-for="option in rowsPerPageOptions" :key="option" :value="option">
+                {{ t('settings.rowsPerPageValue', { count: option }) }}
+              </option>
+            </select>
+          </label>
+          <label>
+            {{ t('settings.accent') }}
+            <span class="accent-row" role="radiogroup" :aria-label="t('settings.accent')">
+              <button
+                v-for="preset in accentPresets"
+                :key="preset"
+                type="button"
+                class="accent-swatch"
+                :class="{ 'accent-swatch-active': accent === preset }"
+                :data-testid="`accent-${preset}`"
+                :aria-pressed="accent === preset"
+                :aria-label="t(`settings.accent.${preset}`)"
+                :title="t(`settings.accent.${preset}`)"
+                :style="{ background: accentSwatchColors[preset] }"
+                @click="accent = preset"
+              />
+            </span>
           </label>
           <button
             data-testid="advanced-entry"
@@ -960,9 +1599,25 @@ onMounted(initialize);
 
     <main class="app-layout">
       <aside class="sidebar">
+        <form
+          class="sidebar-search"
+          data-testid="sidebar-search-form"
+          @submit.prevent="openSearch"
+        >
+          <AppIcon name="search" :size="16" />
+          <input
+            v-model="sidebarSearchQuery"
+            data-testid="sidebar-search-input"
+            type="search"
+            :placeholder="t('search.sidebarPlaceholder')"
+            :aria-label="t('search.title')"
+            @focus="openSearch"
+          >
+          <button type="submit" :aria-label="t('search.submit')">→</button>
+        </form>
         <div class="section-heading">
           <h2>{{ t('gallery.yours') }}</h2>
-          <span>{{ galleries.length }}</span>
+          <span>{{ visibleGalleries.length }}</span>
         </div>
         <p v-if="loading" class="muted">{{ t('gallery.loading') }}</p>
         <p v-else-if="galleries.length === 0 && authors.length === 0" class="empty-copy">
@@ -970,7 +1625,16 @@ onMounted(initialize);
         </p>
         <nav v-else class="gallery-list" :aria-label="t('gallery.navigation')">
           <button
-            v-for="gallery in galleries"
+            data-testid="home-navigation"
+            type="button"
+            class="gallery-link author-link"
+            :class="{ active: isHomeView }"
+            @click="showHome"
+          >
+            <span>{{ t('home.nav') }}</span>
+          </button>
+          <button
+            v-for="gallery in visibleGalleries"
             :key="gallery.type"
             type="button"
             class="gallery-link"
@@ -978,7 +1642,7 @@ onMounted(initialize);
             :data-gallery-type="gallery.type"
             @click="selectGallery(gallery.type)"
           >
-            <span>{{ gallery.type }}</span>
+            <span>{{ gallery.type }}{{ gallery.nsfw ? ' 🔞' : '' }}</span>
             <span class="count">{{ gallery.entryCount }}</span>
           </button>
           <button
@@ -991,6 +1655,44 @@ onMounted(initialize);
           >
             <span>{{ t('author.navigation') }}</span>
             <span class="count">{{ authors.length }}</span>
+          </button>
+          <button
+            data-testid="recent-view-navigation"
+            type="button"
+            class="gallery-link author-link"
+            :class="{ active: recentView }"
+            @click="showRecentView"
+          >
+            <span>{{ t('recent.title') }}</span>
+            <span class="count" v-if="viewLaterIds.length > 0" />
+          </button>
+          <button
+            data-testid="collections-navigation"
+            type="button"
+            class="gallery-link author-link"
+            :class="{ active: collectionsView }"
+            @click="showCollections"
+          >
+            <span>{{ t('collections.title') }}</span>
+          </button>
+          <button
+            data-testid="random-navigation"
+            type="button"
+            class="gallery-link author-link"
+            :class="{ active: randomView }"
+            @click="showRandom"
+          >
+            <span>{{ t('random.title') }}</span>
+          </button>
+          <button
+            data-testid="view-later-navigation"
+            type="button"
+            class="gallery-link author-link"
+            :class="{ active: viewLaterView }"
+            @click="showViewLater"
+          >
+            <span>{{ t('viewLater.title') }}</span>
+            <span class="count" v-if="viewLaterIds.length > 0">{{ viewLaterIds.length }}</span>
           </button>
         </nav>
 
@@ -1016,8 +1718,19 @@ onMounted(initialize);
 
       <section class="content-panel">
         <p v-if="error" class="error-message" role="alert">{{ error }}</p>
+        <SearchPage
+          v-if="searchView"
+          :api="api"
+          :initial-query="searchQuery"
+          :initial-scope="searchScope"
+          :nsfw-entry-types="[...entryNsfwTypes]"
+          @back="closeSearch"
+          @open-entry="openEntryFromSearch"
+          @open-author="openAuthorFromSearch"
+          @open-tag="openTagFromSearch"
+        />
         <AdvancedEditingPage
-          v-if="advancedView"
+          v-else-if="advancedView"
           :api="api"
           @back="closeAdvanced"
           @authors-changed="refreshAuthors"
@@ -1036,19 +1749,24 @@ onMounted(initialize);
         <AddAuthorPage
           v-else-if="creationView === 'author'"
           :submitting="submitting"
-          @back="creationView = null"
+          @back="showAuthors"
           @submit="submitAuthor"
         />
         <section v-else-if="tagResults" data-testid="tag-results" class="tag-results">
           <button type="button" class="back-button" @click="closeTagResults">
             {{ t('entry.back', {
               type: tagResults.kind === 'entry'
-                ? tagResults.sourceEntry.title
+                ? (tagResults.sourceEntry?.title ?? t('search.title'))
                 : tagResults.sourceAuthor.authorName,
             }) }}
           </button>
           <p class="eyebrow">{{ t(`tag.${tagResults.kind}Results`) }}</p>
           <h2>{{ tagResults.tagName }}</h2>
+          <p
+            v-if="tagResults.kind === 'entry'"
+            class="muted"
+            data-testid="tag-results-count"
+          >{{ t(tagResults.entries.length === 1 ? 'gallery.entryCountOne' : 'gallery.entryCount', { count: tagResults.entries.length }) }}</p>
           <p
             v-if="tagResults.kind === 'entry' && tagResults.entries.length === 0
               || tagResults.kind === 'author' && tagResults.authors.length === 0"
@@ -1056,9 +1774,9 @@ onMounted(initialize);
           >
             {{ t('tag.noResults') }}
           </p>
-          <div v-else class="entry-grid">
+          <PagedCardGrid :items="pagedTagItems" v-slot="{ items }">
             <article
-              v-for="entry in tagResults.kind === 'entry' ? tagResults.entries : []"
+              v-for="entry in items.filter((item): item is GalleryEntrySummary => 'type' in item)"
               :key="`entry-${entry.id}`"
               class="entry-card"
             >
@@ -1070,22 +1788,25 @@ onMounted(initialize);
               >
                 <div class="entry-stack">
                   <img
-                    v-for="(ref, stackIndex) in stackLayers(entry)"
+                    v-for="(ref, stackIndex) in entryStackLayers(entry)"
                     :key="`${ref}-${stackIndex}`"
                     class="entry-stack-image"
-                    :style="stackStyle(stackIndex, stackLayers(entry).length)"
+                    :style="entryStackLayerStyle(stackIndex, entryStackLayers(entry).length)"
                     :src="api.assetUrl(ref)"
                     :alt="entry.title"
                   >
-                  <span v-if="stackLayers(entry).length === 0" class="entry-placeholder" aria-hidden="true">
+                  <span v-if="entryStackLayers(entry).length === 0" class="entry-placeholder" aria-hidden="true">
                     {{ entry.title.slice(0, 1).toUpperCase() }}
+                  </span>
+                  <span v-if="entry.likeCount > 0" class="entry-like-badge" data-testid="entry-like-badge">
+                    👍 {{ entry.likeCount }}
                   </span>
                 </div>
                 <span class="entry-meta"><strong>{{ entry.title }}</strong><small>{{ entry.type }}</small></span>
               </button>
             </article>
             <article
-              v-for="author in tagResults.kind === 'author' ? tagResults.authors : []"
+              v-for="author in items.filter((item): item is { id: number; name: string } => !('type' in item))"
               :key="`author-${author.id}`"
               class="entry-card"
             >
@@ -1101,7 +1822,86 @@ onMounted(initialize);
                 <span class="entry-meta"><strong>{{ author.name }}</strong></span>
               </button>
             </article>
+          </PagedCardGrid>
+        </section>
+        <RecentViewPage
+          v-else-if="recentView"
+          :api="api"
+          @open-entry="openEntryFromRecent"
+        />
+        <ViewLaterPage
+          v-else-if="viewLaterView"
+          :api="api"
+          @open-entry="openEntryFromViewLater"
+        />
+        <CollectionsPage
+          v-else-if="collectionsView"
+          :api="api"
+          @open-entry="openEntryFromCollections"
+          @open-author="openAuthorFromCollections"
+        />
+        <RandomPage
+          v-else-if="randomView"
+          :api="api"
+          @open-entry="openEntryFromRandom"
+          @open-author="openAuthorFromRandom"
+          @open-tag="openTagFromRandom"
+        />
+        <section
+          v-else-if="batchReview"
+          data-testid="batch-review"
+          class="gallery-view"
+        >
+          <div class="content-heading">
+            <div>
+              <p class="eyebrow">{{ t('import.batchReviewEyebrow') }}</p>
+              <h2 data-testid="batch-review-title">{{ batchReview.entryType }}</h2>
+            </div>
+            <div class="content-heading-actions">
+              <button
+                data-testid="complete-batch-review"
+                class="primary-button"
+                type="button"
+                @click="completeBatchReview"
+              >
+                {{ t('import.batchReviewComplete') }}
+              </button>
+            </div>
           </div>
+          <p class="batch-review-notice" data-testid="batch-review-notice" role="status">
+            {{ t('import.batchReviewNotice') }}
+          </p>
+          <p v-if="batchReviewLoading" class="muted">{{ t('import.preparing') }}</p>
+          <PagedCardGrid v-else :items="batchReviewEntries" v-slot="{ items }">
+            <article
+              v-for="entry in items"
+              :key="entry.id"
+              class="entry-card"
+            >
+              <button
+                type="button"
+                class="entry-card-main"
+                :data-entry-id="entry.id"
+                @click="openEntryFromBatchReview(entry.id)"
+              >
+                <div class="entry-stack">
+                  <span v-if="(entry.coverRef || entry.previewRef) === null" class="entry-placeholder" aria-hidden="true">
+                    {{ entry.title.slice(0, 1).toUpperCase() }}
+                  </span>
+                  <img
+                    v-else
+                    class="entry-stack-image"
+                    :src="api.assetUrl(entry.coverRef ?? entry.previewRef ?? '')"
+                    :alt="entry.title"
+                  >
+                </div>
+                <span class="entry-meta">
+                  <strong>{{ entry.title }}</strong>
+                  <small>{{ entry.type }}</small>
+                </span>
+              </button>
+            </article>
+          </PagedCardGrid>
         </section>
         <AuthorPage
           v-else-if="authorView"
@@ -1109,7 +1909,9 @@ onMounted(initialize);
           :authors="authors"
           :initial-author-id="authorTarget?.authorId ?? null"
           :initial-directory-id="authorTarget?.directoryId ?? null"
-          :back-label="authorTagOrigin ? t('entry.back', { type: authorTagOrigin.tagName }) : null"
+          :back-label="authorTagOrigin
+            ? t('entry.back', { type: authorTagOrigin.tagName })
+            : authorSearchOrigin !== null ? t('entry.back', { type: t('search.title') }) : null"
           @open-entry="openEntryFromAuthor"
           @open-tag="openAuthorTag"
           @back="restoreAuthorTagResults"
@@ -1142,7 +1944,9 @@ onMounted(initialize);
                   :disabled="templateBusy"
                   @click="saveLayoutTemplate"
                 >
-                  {{ templateBusy ? t('template.applying') : t('template.save') }}
+                  {{ templateBusy
+                    ? t('template.applying')
+                    : armedKey === 'save-template' ? t('template.applyConfirmShort', { type: activeEntry?.type }) : t('template.save') }}
                 </button>
                 <button
                   data-testid="apply-tag-layout-button"
@@ -1151,8 +1955,11 @@ onMounted(initialize);
                   :disabled="tagLayoutBusy"
                   @click="applyActiveEntryTagLayout"
                 >
-                  {{ tagLayoutBusy ? t('tagLayout.applying') : t('tagLayout.save') }}
+                  {{ tagLayoutBusy
+                    ? t('tagLayout.applying')
+                    : armedKey === 'apply-tag-layout' ? t('tagLayout.applyConfirmShort', { type: activeEntry?.type }) : t('tagLayout.save') }}
                 </button>
+
                 <button
                   data-testid="toggle-empty-facets"
                   class="secondary-button"
@@ -1165,21 +1972,72 @@ onMounted(initialize);
                 <button
                   data-testid="delete-entry"
                   class="secondary-button danger-button"
+                  :class="{ 'armable-armed': armedKey === 'delete-entry' }"
                   type="button"
                   @click="deleteActiveEntry"
                 >
-                  {{ t('entry.delete') }}
+                  {{ armedKey === 'delete-entry' ? t('entry.deleteConfirmShort') : t('entry.delete') }}
                 </button>
               </template>
-              <button
+              <IconButton
                 v-else
+                icon="edit"
+                :label="t('entry.edit')"
                 data-testid="start-entry-editing"
-                class="secondary-button"
-                type="button"
                 @click="startEditing"
+              />
+              <button
+                data-testid="like-entry-button"
+                class="icon-button icon-button--thumb-up"
+                type="button"
+                :aria-label="t('a11y.likeEntry')"
+                @click="onLikeClick"
               >
-                {{ t('entry.edit') }}
+                <span :key="likeAnimationKey" class="like-icon-feedback">
+                  <AppIcon name="thumb-up" :size="20" />
+                </span>
+                <span class="icon-tooltip" aria-hidden="true">{{ t('a11y.likeEntry') }}</span>
               </button>
+              <div class="add-to-collection" data-testid="entry-add-to-collection">
+                <IconButton
+                  icon="folder-plus"
+                  :label="t('a11y.addToCollection')"
+                  :active="entryCollectionMenuOpen"
+                  aria-haspopup="menu"
+                  :aria-expanded="entryCollectionMenuOpen"
+                  :aria-controls="entryCollectionMenuOpen ? 'entry-collection-menu' : undefined"
+                  @click="toggleEntryCollectionMenu"
+                />
+                <div
+                  v-if="entryCollectionMenuOpen"
+                  id="entry-collection-menu"
+                  class="add-to-collection-menu"
+                  role="menu"
+                >
+                  <p v-if="entryCollectionOptions.length === 0" class="muted">
+                    {{ t('collections.empty') }}
+                  </p>
+                  <button
+                    v-for="collection in entryCollectionOptions"
+                    :key="collection.id"
+                    type="button"
+                    role="menuitem"
+                    class="add-to-collection-option"
+                    :disabled="entryCollectionIds.includes(collection.id)"
+                    @click="addEntryToCollection(collection.id)"
+                  >
+                    {{ entryCollectionIds.includes(collection.id) ? '✓ ' : '' }}{{ collection.title }}
+                  </button>
+                </div>
+              </div>
+              <IconButton
+                :icon="activeEntryInViewLater ? 'view-later-check' : 'view-later'"
+                :label="activeEntryInViewLater ? t('entry.viewLaterRemove') : t('entry.viewLater')"
+                :active="activeEntryInViewLater"
+                :aria-pressed="activeEntryInViewLater"
+                data-testid="view-later-button"
+                @click="activeEntry && toggleViewLater(activeEntry.id)"
+              />
             </div>
           </div>
           <p v-if="templateNotice" class="template-notice" data-testid="template-notice" role="status">
@@ -1189,7 +2047,24 @@ onMounted(initialize);
             {{ tagLayoutNotice }}
           </p>
           <p class="eyebrow">{{ activeEntry.type }}</p>
-          <h2>{{ activeEntry.title }}</h2>
+          <div class="detail-heading">
+            <h2>{{ activeEntry.title }}</h2>
+            <span
+              class="detail-usage-stats"
+              data-testid="entry-usage-stats"
+            >
+              <span class="detail-usage-count">{{ t('usage.viewCount', { count: activeEntry.usage.viewCount }) }}</span>
+              <span
+                v-if="activeEntry.usage.likeCount > 0"
+                class="detail-usage-count"
+                data-testid="entry-like-count"
+              >👍 {{ activeEntry.usage.likeCount }}</span>
+              <span
+                v-if="activeEntry.usage.lastViewedAt"
+                class="detail-usage-date"
+              >{{ t('usage.lastViewed', { date: formatDate(activeEntry.usage.lastViewedAt) }) }}</span>
+            </span>
+          </div>
 
           <div v-if="mediaSlides.length > 0" class="entry-media-viewer">
             <img
@@ -1365,11 +2240,13 @@ onMounted(initialize);
                       <button
                         :data-delete-facet-id="facet.id"
                         class="facet-delete"
+                        :class="{ 'armable-armed': armedKey === `delete-facet-${facet.id}` }"
                         type="button"
                         :aria-label="t('facet.delete', { name: facet.name })"
+                        :title="armedKey === `delete-facet-${facet.id}` ? t('facet.deleteConfirm', { name: facet.name }) : undefined"
                         @click.stop="removeFacet(facet.id)"
                       >
-                        ×
+                        {{ armedKey === `delete-facet-${facet.id}` ? t('common.confirm') : '×' }}
                       </button>
                     </div>
                   </div>
@@ -1558,6 +2435,106 @@ onMounted(initialize);
             </div>
           </div>
 
+          <section
+            v-if="activeEntry.ratings.length > 0 || editingEntry"
+            data-testid="entry-ratings"
+            class="detail-section rating-section"
+          >
+            <h3>{{ t('rating.title') }}</h3>
+            <div class="rating-rows">
+              <div
+                v-for="row in activeEntry.ratings"
+                :key="row.slotId"
+                class="rating-row"
+                :data-rating-slot-id="row.slotId"
+              >
+                <span class="rating-name">{{ row.name }}</span>
+                <span
+                  v-if="editingEntry && activeEntry.ratings.length > 1"
+                  class="rating-sort-controls"
+                >
+                  <button
+                    type="button"
+                    :data-move-rating-up-id="row.slotId"
+                    :disabled="row.slotId === activeEntry.ratings[0]?.slotId"
+                    :aria-label="t('rating.moveUp', { name: row.name })"
+                    @click="moveRatingSlot(row.slotId, -1)"
+                  >↑</button>
+                  <button
+                    type="button"
+                    :data-move-rating-down-id="row.slotId"
+                    :disabled="row.slotId === activeEntry.ratings[activeEntry.ratings.length - 1]?.slotId"
+                    :aria-label="t('rating.moveDown', { name: row.name })"
+                    @click="moveRatingSlot(row.slotId, 1)"
+                  >↓</button>
+                </span>
+                <template v-if="editingEntry">
+                  <span class="star-picker">
+                    <span class="star-display">
+                      <span class="star-display-base">★★★★★</span>
+                      <span
+                        class="star-display-fill"
+                        :style="{ width: row.stars === null ? '0%' : `${(row.stars / 5) * 100}%` }"
+                      >★★★★★</span>
+                      <span class="star-picker-zones">
+                        <button
+                          v-for="half in 10"
+                          :key="half"
+                          type="button"
+                          :data-set-stars="half / 2"
+                          :aria-label="t('rating.set', { name: row.name, stars: half / 2 })"
+                          @click="chooseEntryStars(row.slotId, half / 2)"
+                        />
+                      </span>
+                    </span>
+                    <button
+                      v-if="row.stars !== null"
+                      type="button"
+                      class="remove-tag-button"
+                      :data-clear-rating-slot-id="row.slotId"
+                      :aria-label="t('rating.clear', { name: row.name })"
+                      @click="clearEntryStars(row.slotId)"
+                    >×</button>
+                  </span>
+                </template>
+                <span v-else-if="row.stars !== null" class="star-display">
+                  <span class="star-display-base">★★★★★</span>
+                  <span
+                    class="star-display-fill"
+                    :style="{ width: `${(row.stars / 5) * 100}%` }"
+                  >★★★★★</span>
+                </span>
+                <span v-else class="rating-unrated">{{ t('rating.unrated') }}</span>
+              </div>
+            </div>
+            <div v-if="editingEntry" class="add-rating-control">
+              <button
+                v-if="!ratingEditorOpen"
+                data-testid="add-rating-button"
+                class="add-button"
+                type="button"
+                @click="ratingEditorOpen = true"
+              >
+                {{ t('rating.add') }}
+              </button>
+              <form
+                v-else
+                data-testid="create-rating-form"
+                class="compact-editor"
+                @submit.prevent="createRatingSlot"
+              >
+                <input
+                  v-model="ratingName"
+                  name="ratingName"
+                  :size="inlineInputSize(ratingName)"
+                  required
+                  autocomplete="off"
+                  :placeholder="t('rating.namePlaceholder')"
+                  @blur="ratingName.trim() && createRatingSlot()"
+                >
+              </form>
+            </div>
+          </section>
           <section v-if="activeEntry.contents.length || editingEntry" class="detail-section content-section">
             <h3>{{ t('content.title') }}</h3>
             <p v-if="activeEntry.contents.length === 0" class="content-empty">
@@ -1647,6 +2624,8 @@ onMounted(initialize);
                   :href="content.content"
                   target="_blank"
                   rel="noopener noreferrer"
+                  :data-source-url-content-id="content.id"
+                  @click="openSourceUrl($event, content.content)"
                 >{{ content.content }}</a>
                 <p v-else>{{ content.content }}</p>
               </template>
@@ -1692,6 +2671,7 @@ onMounted(initialize);
               </form>
             </div>
           </section>
+
         </article>
         <template v-else-if="activeType">
           <div class="content-heading">
@@ -1700,6 +2680,14 @@ onMounted(initialize);
               <h2 data-testid="active-gallery-title">{{ activeType }}</h2>
             </div>
             <div class="content-heading-actions">
+              <button
+                data-testid="gallery-partition-toggle"
+                class="secondary-button"
+                type="button"
+                @click="activeType && toggleGalleryPartition({ type: activeType, nsfw: galleries.find((g) => g.type === activeType)?.nsfw ?? false })"
+              >
+                {{ galleries.find((g) => g.type === activeType)?.nsfw ? t('gallery.sfwBadge') : t('gallery.nsfwBadge') }}
+              </button>
               <label class="sort-control">
                 <span>{{ t('gallery.sortLabel') }}</span>
                 <select v-model="gallerySort" data-testid="gallery-sort">
@@ -1709,10 +2697,12 @@ onMounted(initialize);
                   <option value="title-desc">{{ t('gallery.sortTitleZa') }}</option>
                 </select>
               </label>
-              <span>
-                {{ t(entries.length === 1 ? 'gallery.entryCountOne' : 'gallery.entryCount', {
-                  count: entries.length,
-                }) }}
+              <span data-testid="gallery-entry-count">
+                {{ galleryFilterActive
+                  ? t('gallery.filteredCount', { shown: entries.length, total: galleryTotalCount })
+                  : t(entries.length === 1 ? 'gallery.entryCountOne' : 'gallery.entryCount', {
+                    count: entries.length,
+                  }) }}
               </span>
             </div>
           </div>
@@ -1726,9 +2716,9 @@ onMounted(initialize);
               @update:model-value="onFacetFiltersChange"
             />
           </div>
-          <div data-testid="entry-list" class="entry-grid">
+          <PagedCardGrid :items="sortedEntries" grid-testid="entry-list" v-slot="{ items }">
             <article
-              v-for="entry in sortedEntries"
+              v-for="entry in items"
               :key="entry.id"
               class="entry-card"
             >
@@ -1740,30 +2730,49 @@ onMounted(initialize);
               >
                 <div class="entry-stack">
                   <img
-                    v-for="(ref, stackIndex) in stackLayers(entry)"
+                    v-for="(ref, stackIndex) in entryStackLayers(entry)"
                     :key="`${ref}-${stackIndex}`"
                     class="entry-stack-image"
-                    :style="stackStyle(stackIndex, stackLayers(entry).length)"
+                    :style="entryStackLayerStyle(stackIndex, entryStackLayers(entry).length)"
                     :src="api.assetUrl(ref)"
                     :alt="entry.title"
                   >
-                  <span v-if="stackLayers(entry).length === 0" class="entry-placeholder" aria-hidden="true">
+                  <span v-if="entryStackLayers(entry).length === 0" class="entry-placeholder" aria-hidden="true">
                     {{ entry.title.slice(0, 1).toUpperCase() }}
+                  </span>
+                  <span v-if="entry.likeCount > 0" class="entry-like-badge" data-testid="entry-like-badge">
+                    👍 {{ entry.likeCount }}
                   </span>
                 </div>
                 <span class="entry-meta">
                   <strong>{{ entry.title }}</strong>
                   <small>{{ entry.type }}</small>
+                  <small
+                    v-if="showUsageOnCards"
+                    class="entry-usage-note"
+                    data-testid="entry-usage-note"
+                  >
+                    {{ facetFilters.usageConditions.some((c) => c.field === 'lastViewed')
+                      || facetFilters.usageSort?.field === 'lastViewed'
+                      ? t('card.lastViewed', { date: entry.lastViewedAt ? formatDate(entry.lastViewedAt) : '—' })
+                      : facetFilters.usageConditions.some((c) => c.field === 'likes')
+                        || facetFilters.usageSort?.field === 'likes'
+                        ? t('card.likeCount', { count: entry.likeCount })
+                        : t('card.viewCount', { count: entry.viewCount }) }}
+                  </small>
                 </span>
               </button>
             </article>
-          </div>
+          </PagedCardGrid>
         </template>
-        <div v-else-if="!loading" class="welcome-state">
-          <p class="eyebrow">{{ t('welcome.eyebrow') }}</p>
-          <h2>{{ t('welcome.title') }}</h2>
-          <p>{{ t('welcome.body') }}</p>
-        </div>
+        <HomePage
+          v-else-if="!loading"
+          :api="api"
+          @open-entry="openEntryFromHome"
+          @open-gallery="selectGallery"
+          @create-entry="openCreation('entry')"
+          @create-author="openCreation('author')"
+        />
       </section>
     </main>
   </div>
@@ -1795,38 +2804,49 @@ onMounted(initialize);
 .content-heading-actions > span { color: var(--text-muted); }
 .gallery-filter-wrap { margin-bottom: 1rem; }
 .sort-control { display: flex; align-items: center; gap: 0.35rem; color: var(--text-muted); font-size: 0.85rem; }
-.sort-control select { font: inherit; }
+.sort-control select { min-height: var(--control-min-height); padding: 0.3rem 0.6rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface); font: inherit; }
 
 .app-header { margin-bottom: 1.5rem; }
 h1, h2, h3, p { margin-top: 0; }
-h1 { margin-bottom: 0.25rem; font-size: clamp(2rem, 5vw, 3.25rem); letter-spacing: -0.05em; }
+/* The app-level "Galleries" heading steps back; the current page title below
+   is the primary visual entry (icon brief §1.2 B). */
+h1 { margin-bottom: 0.25rem; font-size: var(--font-size-app-title); font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; }
 h2 { margin-bottom: 0; }
-.subtitle, .muted, .empty-copy, .form-hint, .entry-card p, .content-heading > span, .welcome-state p { color: var(--text-muted); }
-.subtitle { margin-bottom: 0; }
+.subtitle, .muted, .empty-copy, .form-hint, .entry-card p, .content-heading > span { color: var(--text-muted); }
+.subtitle { margin-bottom: 0; font-size: var(--font-size-secondary); line-height: 1.5; }
 .eyebrow { margin-bottom: 0.35rem; color: var(--accent); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
 
-.theme-toggle,
 .gallery-link,
 .primary-button {
   border: 1px solid var(--border-subtle);
   font: inherit;
   cursor: pointer;
 }
-.theme-toggle { padding: 0.55rem 0.8rem; border-radius: 0.7rem; color: var(--text-primary); background: var(--surface); }
 .header-controls { position: relative; display: flex; align-items: center; gap: 0.5rem; }
-.settings-panel { position: absolute; z-index: 10; top: calc(100% + 0.5rem); right: 0; width: min(36rem, calc(100vw - 2rem)); padding: 1rem; border: 1px solid var(--border-subtle); border-radius: 0.8rem; background: var(--surface); box-shadow: 0 0.75rem 2rem rgb(15 23 42 / 14%); }
+.settings-panel { position: absolute; z-index: 10; top: calc(100% + 0.5rem); right: 0; width: min(36rem, calc(100vw - 2rem)); padding: 1rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-overlay); }
 .settings-panel h2 { margin-bottom: 0.8rem; font-size: 1rem; }
 .settings-panel label { display: grid; gap: 0.4rem; color: var(--text-muted); font-size: 0.8rem; font-weight: 700; }
+.settings-panel .checkbox-label { display: flex; align-items: center; gap: 0.45rem; }
+.settings-panel .checkbox-label input { width: 1rem; height: 1rem; margin: 0; }
 .settings-panel select { width: 100%; padding: 0.55rem 0.65rem; border: 1px solid var(--border-subtle); border-radius: 0.55rem; color: var(--text-primary); background: var(--surface-muted); font: inherit; }
+.accent-row { display: flex; gap: 0.45rem; }
+.accent-swatch { box-sizing: border-box; width: 1.7rem; height: 1.7rem; padding: 0; border: 2px solid transparent; border-radius: 50%; cursor: pointer; }
+.accent-swatch-active { border-color: var(--text-primary); }
 .advanced-entry { display: grid; gap: 0.15rem; width: 100%; margin-top: 0.9rem; padding: 0.65rem 0.7rem; border: 1px solid var(--border-subtle); border-radius: 0.6rem; color: var(--text-primary); background: var(--surface-muted); font: inherit; text-align: left; cursor: pointer; }
 .advanced-entry small { color: var(--text-muted); font-weight: 400; font-size: 0.72rem; }
 .advanced-entry:hover, .advanced-entry:focus-visible { border-color: var(--accent); outline: none; }
 
 .app-layout { display: grid; grid-template-columns: 18rem minmax(0, 1fr); gap: 1rem; }
 .sidebar,
-.content-panel { border: 1px solid var(--border-subtle); border-radius: 1rem; background: var(--surface); box-shadow: 0 0.5rem 1.5rem rgb(15 23 42 / 6%); }
+.content-panel { border: 1px solid var(--border-subtle); border-radius: var(--radius-panel); background: var(--surface); box-shadow: var(--shadow-panel); }
 .sidebar { padding: 1rem; }
 .content-panel { min-height: 30rem; padding: clamp(1rem, 3vw, 1.75rem); }
+.sidebar-search { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.35rem; margin-bottom: 1rem; padding: 0.5rem 0.6rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--surface-muted); }
+.sidebar-search .app-icon { color: var(--icon-muted); transition: color var(--transition-duration) ease; }
+.sidebar-search:focus-within { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 18%, transparent); }
+.sidebar-search:focus-within .app-icon { color: var(--accent); }
+.sidebar-search input { min-width: 0; padding: 0; border: 0; outline: 0; color: var(--text-primary); background: transparent; font: inherit; }
+.sidebar-search button { padding: 0.1rem 0.25rem; border: 0; color: var(--accent); background: transparent; font: inherit; cursor: pointer; }
 .section-heading { margin-bottom: 0.8rem; }
 .section-heading h2 { font-size: 0.95rem; }
 .section-heading > span, .count { color: var(--text-muted); font-size: 0.78rem; }
@@ -1839,39 +2859,41 @@ h2 { margin-bottom: 0; }
 .create-form input { width: 100%; padding: 0.6rem 0.7rem; border: 1px solid var(--border-subtle); border-radius: 0.6rem; color: var(--text-primary); background: var(--surface-muted); }
 .create-form input:focus { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 20%, transparent); }
 .form-hint { margin: -0.2rem 0 0; font-size: 0.72rem; line-height: 1.45; }
-.primary-button { padding: 0.65rem 0.8rem; border-color: var(--accent); border-radius: 0.65rem; color: white; background: var(--accent); font-weight: 750; }
+.primary-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; min-height: var(--control-min-height); padding: 0.45rem 0.8rem; border-color: var(--accent); border-radius: var(--radius-control); color: white; background: var(--accent); font-weight: 750; transition: background-color var(--transition-duration) ease, border-color var(--transition-duration) ease; }
 .primary-button:hover { background: var(--accent-hover); }
+.primary-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .primary-button:disabled { cursor: wait; opacity: 0.65; }
 
 .content-heading { margin-bottom: 1.25rem; }
-.content-heading h2 { font-size: clamp(1.5rem, 4vw, 2.25rem); letter-spacing: -0.035em; }
-.entry-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.8rem; }
-.entry-card { position: relative; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 0.8rem; background: var(--surface-muted); }
+.content-heading h2 { font-size: var(--font-size-page-title); font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; }
+.entry-card { position: relative; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface-muted); }
 .entry-card:hover, .entry-card:focus-within { border-color: var(--accent); transform: translateY(-1px); }
 .entry-card-main { display: block; width: 100%; padding: 0; border: 0; color: var(--text-primary); background: transparent; font: inherit; text-align: left; cursor: pointer; }
 .entry-card-main:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .entry-placeholder { display: grid; min-height: 8rem; place-items: center; color: var(--tag-text); background: var(--tag-background); font-size: 2rem; font-weight: 850; }
-.entry-stack { position: relative; aspect-ratio: 4 / 3; overflow: hidden; isolation: isolate; background: var(--surface-muted); }
-.entry-stack-image { position: absolute; width: 70%; height: 94%; object-fit: contain; object-position: center; border: 1px solid color-mix(in srgb, var(--border-subtle) 75%, transparent); border-radius: 0.15rem; background: var(--surface); box-shadow: 0 0.18rem 0.45rem rgb(15 23 42 / 16%); transform-origin: 50% 100%; }
+.entry-stack { position: relative; aspect-ratio: 4 / 3; overflow: hidden; isolation: isolate; background: var(--surface-muted); perspective: 28rem; perspective-origin: 50% 50%; transform-style: preserve-3d; }
+.entry-stack-image { position: absolute; display: block; box-sizing: border-box; border: 1px solid color-mix(in srgb, var(--border-subtle) 75%, transparent); border-radius: 0.15rem; box-shadow: 0 0.18rem 0.45rem rgb(15 23 42 / 16%); transform-style: preserve-3d; }
 .entry-stack-image:first-child { box-shadow: 0 0.28rem 0.7rem rgb(15 23 42 / 22%); }
 .entry-stack .entry-placeholder { height: 100%; }
 .entry-media-viewer { position: relative; margin: 1rem 0 1.25rem; max-width: 24rem; }
-.entry-media-image { display: block; width: 100%; max-height: 24rem; object-fit: contain; border: 1px solid var(--border-subtle); border-radius: 0.8rem; background: var(--surface-muted); }
+.entry-media-image { display: block; width: 100%; max-height: 24rem; object-fit: contain; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface-muted); }
 .media-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 2rem; height: 2rem; border: 0; border-radius: 999px; color: var(--text-primary); background: rgb(0 0 0 / 45%); font-size: 1.25rem; line-height: 1; cursor: pointer; }
 .media-prev { left: 0.5rem; }
 .media-next { right: 0.5rem; }
 .media-count { position: absolute; bottom: 0.5rem; right: 0.5rem; padding: 0.15rem 0.5rem; border-radius: 999px; color: var(--text-primary); background: rgb(0 0 0 / 45%); font-size: 0.75rem; }
 .entry-meta { display: grid; gap: 0.25rem; padding: 0.85rem; }
 .entry-meta small { color: var(--text-muted); }
-.secondary-button { border: 1px solid var(--border-subtle); border-radius: 0.55rem; color: var(--text-primary); background: var(--surface); font: inherit; cursor: pointer; }
-.secondary-button:hover, .secondary-button:focus-visible { border-color: var(--accent); outline: none; }
+.secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; min-height: var(--control-min-height); padding: 0.45rem 0.7rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface); font: inherit; cursor: pointer; transition: color var(--transition-duration) ease, background-color var(--transition-duration) ease, border-color var(--transition-duration) ease; }
+.secondary-button:hover { border-color: var(--accent); }
+.secondary-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .entry-detail > h2 { margin-bottom: 1.5rem; font-size: clamp(1.7rem, 4vw, 2.5rem); }
 .detail-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
-.detail-toolbar-actions { display: grid; gap: 0.4rem; justify-items: stretch; }
-.detail-toolbar-actions .secondary-button { text-align: left; white-space: nowrap; }
+.detail-toolbar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem; }
+.detail-toolbar-actions .secondary-button { white-space: nowrap; }
 .toolbar-action-primary { color: white; border-color: var(--accent); background: var(--accent); }
 .toolbar-action-active { border-color: var(--accent); color: var(--accent); }
 .template-notice { margin: -0.75rem 0 0.75rem; padding: 0.5rem 0.7rem; border-radius: 0.55rem; color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); font-size: 0.8rem; }
+.batch-review-notice { margin: -0.4rem 0 1rem; padding: 0.7rem 0.85rem; border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border-subtle)); border-radius: var(--radius-control); color: var(--text-primary); background: var(--accent-soft); font-size: 0.86rem; line-height: 1.5; }
 .back-button { padding: 0; border: 0; color: var(--accent); background: transparent; font: inherit; cursor: pointer; }
 .secondary-button { padding: 0.45rem 0.7rem; }
 .detail-section { padding: 1rem 0; border-top: 1px solid var(--border-subtle); }
@@ -1920,11 +2942,32 @@ h2 { margin-bottom: 0; }
 .content-action-button:disabled { cursor: default; opacity: 0.3; }
 .danger-action { color: #a12626; }
 .danger-button { border-color: #a12626; color: #a12626; }
+.armable-armed { border-color: #a12626; color: #a12626; background: #fff0f0; }
 .content-editor-actions { display: flex; gap: 0.5rem; }
+.rating-rows { display: grid; gap: 0.35rem; }
+.rating-row { display: flex; align-items: center; gap: 0.85rem; min-height: 2rem; }
+.rating-name { min-width: 8rem; color: var(--text-muted); font-size: 0.8rem; }
+.rating-unrated { color: var(--text-muted); font-size: 0.82rem; }
+.star-display { position: relative; display: inline-block; line-height: 1; font-size: 1.05rem; letter-spacing: 0.08em; }
+.star-display-base { color: color-mix(in srgb, var(--text-muted) 45%, transparent); }
+.star-display-fill { position: absolute; top: 0; left: 0; height: 100%; overflow: hidden; white-space: nowrap; color: #e8a33d; pointer-events: none; }
+.star-picker { display: inline-flex; align-items: center; gap: 0.35rem; }
+.star-picker-zones { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(10, 1fr); }
+.star-picker-zones button { appearance: none; background: none; border: none; padding: 0; margin: 0; cursor: pointer; }
+.rating-sort-controls { display: inline-flex; gap: 0.2rem; }
+.rating-sort-controls button { border: none; background: none; cursor: pointer; color: var(--text-muted); padding: 0 0.2rem; }
+.rating-sort-controls button:disabled { opacity: 0.3; cursor: default; }
+.add-rating-control { display: flex; }
 .content-item p { margin: 0.35rem 0 0; white-space: pre-wrap; }
 .content-link { display: inline-block; margin: 0.35rem 0 0; color: var(--accent); overflow-wrap: anywhere; }
+.detail-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.detail-heading h2 { font-size: var(--font-size-page-title); font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; }
+.detail-usage-stats { display: inline-flex; align-items: baseline; gap: 0.8rem; flex-shrink: 0; color: var(--text-muted); font-size: 0.82rem; white-space: nowrap; }
+.detail-usage-count { font-weight: 700; color: var(--text-primary); }
+.entry-usage-note { color: var(--text-muted); }
+.entry-stack { position: relative; }
+.entry-like-badge { position: absolute; left: 0.4rem; bottom: 0.4rem; z-index: 1; padding: 0.1rem 0.45rem; border-radius: 999px; background: rgb(0 0 0 / 55%); color: #fff; font-size: 0.7rem; }
 .error-message { padding: 0.75rem; border-radius: 0.6rem; color: #a12626; background: #fff0f0; }
-.welcome-state { max-width: 30rem; margin: 8rem auto; text-align: center; }
 
 @media (max-width: 44rem) {
   .app-header { align-items: flex-start; }

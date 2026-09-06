@@ -1,6 +1,9 @@
 # T³ product plan
 
 > Current plan. This document supersedes the earlier collection-first and generic field/value design.
+>
+> 执行状态:本 plan 定义的产品能力已全部落地(2026-09-03)。此后新增的需求
+> (评分系统、导入 type 等)记录在 `docs/roadmap.md`。
 
 ## Product definition
 

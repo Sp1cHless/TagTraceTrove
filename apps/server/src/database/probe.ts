@@ -30,6 +30,31 @@ import {
   removeEntryFromAuthorDirectory,
 } from '../repositories/author-directory-repository.js';
 import { commitImportBatch } from '../import/commit.js';
+import {
+  createEntryRatingSlot,
+  createProducerRatingSlot,
+  listEntryRatings,
+  listProducerRatings,
+  setEntryRating,
+  setProducerRating,
+} from '../repositories/rating-repository.js';
+import {
+  getEntryUsage,
+  getProducerUsage,
+  likeEntry,
+  recordEntryView,
+} from '../repositories/usage-repository.js';
+import {
+  authorHasNsfwWorks,
+  listNsfwGalleryTypes,
+  setGalleryPartition,
+} from '../repositories/partition-repository.js';
+import {
+  addCollectionEntry,
+  addCollectionProducer,
+  createCollection,
+  getCollection,
+} from '../repositories/collection-repository.js';
 import { inspectDatabase } from './doctor.js';
 import { createMigratedMemoryDatabase } from './testing.js';
 
@@ -267,6 +292,107 @@ export function runDatabaseProbe(): DatabaseProbeResult {
         WHERE assignment.entry_id = 2 AND tag.normalized_name = 'character'
       `).pluck().get() === 1;
       return renamed.normalizedName === 'playable character' && secondEntryStillUsesOriginal;
+    });
+
+    check('share rating slots per Gallery and keep unrated null', () => {
+      // Entry side: one slot creation is immediately visible on every Entry
+      // of the same type; a missing value is null, not zero.
+      const entrySlot = createEntryRatingSlot(database, { entryId: 1, name: 'Quality' });
+      const otherEntryRatings = listEntryRatings(database, 2);
+      const beforeStars = otherEntryRatings.find((row) => row.slotId === entrySlot.id);
+      setEntryRating(database, { entryId: 1, slotId: entrySlot.id, stars: 3.5 });
+      setEntryRating(database, { entryId: 2, slotId: entrySlot.id, stars: null });
+      const detail = getEntryDetail(database, 1);
+      const detailRow = detail?.ratings.find((row) => row.slotId === entrySlot.id);
+      const secondEntryDetail = getEntryDetail(database, 2);
+      const secondRow = secondEntryDetail?.ratings.find((row) => row.slotId === entrySlot.id);
+      return entrySlot.name === 'Quality'
+        && beforeStars?.stars === null
+        && detailRow?.stars === 3.5
+        && secondRow?.stars === null
+        && secondRow?.name === 'Quality';
+    });
+
+    check('apply author rating slots across same-dominant-Gallery authors', () => {
+      // Author 1 (Example Creator) has one game work; the slot joins the
+      // 'game' producer partition and appears for Author 2 (Second Creator,
+      // also game) without any explicit apply step.
+      const authorSlot = createProducerRatingSlot(database, { producerId: 1, name: 'Taste' });
+      const firstRatings = listProducerRatings(database, 1);
+      const secondRatings = listProducerRatings(database, 2);
+      setProducerRating(database, { producerId: 1, slotId: authorSlot.id, stars: 4.5 });
+      setProducerRating(database, { producerId: 2, slotId: authorSlot.id, stars: null });
+      const firstDetail = getAuthorDetail(database, 1);
+      const secondDetail = getAuthorDetail(database, 2);
+      return firstRatings.some((row) => row.slotId === authorSlot.id)
+        && secondRatings.some((row) => row.slotId === authorSlot.id)
+        && firstDetail?.ratings.find((row) => row.slotId === authorSlot.id)?.stars === 4.5
+        && secondDetail?.ratings.find((row) => row.slotId === authorSlot.id)?.stars === null;
+    });
+
+    check('track entry views and derive author usage', () => {
+      // Entry 1 starts unviewed; each recorded view bumps the count and the
+      // timestamp. Author usage is derived from their works' rows.
+      const before = getEntryUsage(database, 1);
+      recordEntryView(database, 1);
+      recordEntryView(database, 1);
+      const after = getEntryUsage(database, 1);
+      const authorUsage = getProducerUsage(database, 1);
+      const idleUsage = getProducerUsage(database, 2);
+      return before.viewCount === 0 && before.lastViewedAt === null
+        && after.viewCount === 2
+        && typeof after.lastViewedAt === 'string' && after.lastViewedAt.length > 0
+        && authorUsage.viewCount === 2 && authorUsage.lastViewedAt === after.lastViewedAt
+        && idleUsage.viewCount === 0 && idleUsage.lastViewedAt === null;
+    });
+
+    check('like entries without a cap and derive author likes', () => {
+      // Likes are unlimited and re-clickable: every call adds one. The
+      // author-side number is the sum of their works' counters.
+      likeEntry(database, 1);
+      likeEntry(database, 1);
+      const usage = getEntryUsage(database, 1);
+      const authorUsage = getProducerUsage(database, 1);
+      return usage.likeCount === 2 && authorUsage.likeCount === 2;
+    });
+
+    check('partition whole galleries and derive the author partition', () => {
+      // Only whole Galleries are partitioned; an Author with any work in an
+      // NSFW Gallery is an NSFW Author, and flipping the Gallery flips them.
+      setGalleryPartition(database, 'game', true);
+      const nsfwTypes = listNsfwGalleryTypes(database);
+      const authorNsfw = authorHasNsfwWorks(database, 1, nsfwTypes);
+      setGalleryPartition(database, 'game', false);
+      return nsfwTypes.has('game')
+        && authorNsfw
+        && !listNsfwGalleryTypes(database).has('game')
+        && !authorHasNsfwWorks(database, 1, listNsfwGalleryTypes(database));
+    });
+
+    check('curate collections with members and one-level nesting', () => {
+      const parent = createCollection(database, { kind: 'entry', title: 'Read list' });
+      addCollectionEntry(database, parent.id, 1);
+      const child = createCollection(database, {
+        kind: 'entry',
+        title: 'Series X',
+        parentId: parent.id,
+      });
+      addCollectionEntry(database, child.id, 2);
+      // Exactly one level: a child folder can never host another child.
+      let rejected = false;
+      try {
+        createCollection(database, { kind: 'entry', title: 'Too deep', parentId: child.id });
+      } catch {
+        rejected = true;
+      }
+      const authorCollection = createCollection(database, { kind: 'producer', title: 'Favourite authors' });
+      addCollectionProducer(database, authorCollection.id, 1);
+      const reloaded = getCollection(database, parent.id);
+      return rejected
+        && reloaded?.entries.some((entry) => entry.id === 1) === true
+        && reloaded?.children.some((nested) => nested.id === child.id
+          && nested.entries.some((entry) => entry.id === 2)) === true
+        && getCollection(database, authorCollection.id)?.producers[0]?.id === 1;
     });
 
     check('database doctor clean', () => inspectDatabase(database).ok);

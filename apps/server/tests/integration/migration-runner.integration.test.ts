@@ -15,9 +15,9 @@ describe('migration runner', () => {
     const database = createMemoryDatabase();
 
     try {
-      expect(applyAllMigrations(database)).toEqual({ applied: [1, 2, 3, 4, 5], currentVersion: 5 });
-      expect(applyAllMigrations(database)).toEqual({ applied: [], currentVersion: 5 });
-      expect(database.prepare('SELECT COUNT(*) FROM schema_migrations').pluck().get()).toBe(5);
+      expect(applyAllMigrations(database)).toEqual({ applied: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], currentVersion: 10 });
+      expect(applyAllMigrations(database)).toEqual({ applied: [], currentVersion: 10 });
+      expect(database.prepare('SELECT COUNT(*) FROM schema_migrations').pluck().get()).toBe(10);
     } finally {
       database.close();
     }

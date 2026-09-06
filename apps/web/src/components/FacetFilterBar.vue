@@ -1,16 +1,28 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue';
-import type { FacetFilterCondition, FacetFilterOptions } from '@t3/shared';
+import type {
+  FacetFilterCondition,
+  FacetFilterOptions,
+  RatingFilterCondition,
+  RatingSort,
+  UsageFilterCondition,
+  UsageSort,
+} from '@t3/shared';
 import { useI18n } from '../i18n.js';
 
 /**
  * Gallery filter state owned by GalleryApp: tag rows (AND inside a row and
- * across rows) plus one optional Author row (OR inside the author list, AND
- * with every tag row).
+ * across rows), one optional Author row (OR inside the author list, AND with
+ * every tag row), rating rows (AND with everything) and an optional
+ * high-to-low rating sort whose unrated entries sink to the bottom.
  */
 export interface GalleryFacetFilters {
   conditions: FacetFilterCondition[];
   authorIds: number[];
+  ratingConditions: RatingFilterCondition[];
+  ratingSort: RatingSort | null;
+  usageConditions: UsageFilterCondition[];
+  usageSort: UsageSort | null;
 }
 
 type RowMode = 'tag' | 'author';
@@ -67,7 +79,17 @@ function freshRow(): FilterRow {
   };
 }
 
+interface RatingRow {
+  slotId: number | undefined;
+  operator: RatingFilterCondition['operator'];
+  stars: number;
+}
+
 const rows = ref<FilterRow[]>([]);
+const ratingRows = ref<RatingRow[]>([]);
+const usageSortField = ref<string>('');
+const sortSlotId = ref<number | undefined>(undefined);
+const starValues: number[] = Array.from({ length: 10 }, (_, index) => (index + 1) / 2);
 const itemInputs = ref<Array<HTMLInputElement | null>>([]);
 const filterError = ref<string | null>(null);
 let errorTimer: ReturnType<typeof setTimeout> | undefined;
@@ -76,19 +98,34 @@ let errorTimer: ReturnType<typeof setTimeout> | undefined;
 // the component's own state and are never overwritten from outside.
 watch(() => props.options.entryType, () => {
   rows.value = [freshRow()];
+  ratingRows.value = [];
+  usageSortField.value = '';
+  sortSlotId.value = undefined;
 }, { immediate: true });
 
 // An external reset (e.g. re-entering the same gallery after a delete) clears
 // the filters to empty — mirror that in the rows. Self-emitted clears already
 // left the rows empty, so they do not loop.
-watch(() => props.modelValue.conditions.length + props.modelValue.authorIds.length, (total) => {
-  if (total === 0 && rows.value.some((row) => (
-    row.facetId !== undefined || row.tagIds.length > 0 || row.authorIds.length > 0
-  ))) {
-    rows.value = [freshRow()];
-    closeAllDropdowns();
-  }
-});
+watch(
+  () => props.modelValue.conditions.length
+    + props.modelValue.authorIds.length
+    + props.modelValue.ratingConditions.length
+    + (props.modelValue.ratingSort === null ? 0 : 1)
+    + props.modelValue.usageConditions.length
+    + (props.modelValue.usageSort === null ? 0 : 1),
+  (total) => {
+    if (total === 0 && (rows.value.some((row) => (
+      row.facetId !== undefined || row.tagIds.length > 0 || row.authorIds.length > 0
+    )) || ratingRows.value.length > 0 || sortSlotId.value !== undefined
+      || usageSortField.value !== '')) {
+      rows.value = [freshRow()];
+      ratingRows.value = [];
+      usageSortField.value = '';
+      sortSlotId.value = undefined;
+      closeAllDropdowns();
+    }
+  },
+);
 
 function setItemInput(index: number, element: unknown): void {
   itemInputs.value[index] = element as HTMLInputElement | null;
@@ -143,13 +180,10 @@ function filteredItemOptions(row: FilterRow): ItemOption[] {
 function facetChoices(): ChoiceOption[] {
   const takenFacets = new Set<number>();
   let allTagsTaken = false;
-  let authorsTaken = false;
   for (const row of rows.value) {
-    if (row.mode === 'author') {
-      authorsTaken = true;
-    } else if (row.facetId === null) {
+    if (row.mode === 'tag' && row.facetId === null) {
       allTagsTaken = true;
-    } else if (row.facetId !== undefined) {
+    } else if (row.mode === 'tag' && typeof row.facetId === 'number') {
       takenFacets.add(row.facetId);
     }
   }
@@ -167,14 +201,6 @@ function facetChoices(): ChoiceOption[] {
     facetId: null,
     disabled: allTagsTaken,
   });
-  if (!props.hideAuthors) {
-    choices.push({
-      key: 'authors',
-      label: t('filter.authors'),
-      kind: 'author',
-      disabled: authorsTaken,
-    });
-  }
   return choices;
 }
 
@@ -194,7 +220,75 @@ function emitFilters(): void {
   const authorIds = rows.value
     .filter((row) => row.mode === 'author')
     .flatMap((row) => row.authorIds);
-  emit('update:modelValue', { conditions, authorIds });
+  emit('update:modelValue', { conditions, authorIds, ...ratingFilters(), ...usageFilters() });
+}
+
+function ratingFilters(): Pick<GalleryFacetFilters, 'ratingConditions' | 'ratingSort'> {
+  const ratingConditions: RatingFilterCondition[] = ratingRows.value
+    .filter((row): row is RatingRow & { slotId: number } => row.slotId !== undefined)
+    .map((row) => ({
+      slotId: row.slotId,
+      operator: row.operator,
+      stars: row.operator === 'unrated' ? null : row.stars,
+    }));
+  const ratingSort: RatingSort | null = sortSlotId.value === undefined
+    ? null
+    : { slotId: sortSlotId.value, direction: 'desc' };
+  return { ratingConditions, ratingSort };
+}
+
+// Rating rows and the rating sort emit on their own without rebuilding the
+// tag rows, whose dropdown state lives in this component.
+function emitRatingFilters(): void {
+  emit('update:modelValue', { ...props.modelValue, ...ratingFilters() });
+}
+
+function addRatingRow(): void {
+  ratingRows.value.push({ slotId: undefined, operator: 'eq', stars: 3 });
+  emitRatingFilters();
+}
+
+function removeRatingRow(index: number): void {
+  ratingRows.value.splice(index, 1);
+  emitRatingFilters();
+}
+
+function chooseRatingSlot(row: RatingRow, event: Event): void {
+  const value = (event.target as HTMLSelectElement).value;
+  row.slotId = value === '' ? undefined : Number(value);
+  emitRatingFilters();
+}
+
+function chooseRatingOperator(row: RatingRow, event: Event): void {
+  row.operator = (event.target as HTMLSelectElement).value as RatingRow['operator'];
+  emitRatingFilters();
+}
+
+function chooseRatingStars(row: RatingRow, event: Event): void {
+  row.stars = Number((event.target as HTMLSelectElement).value);
+  emitRatingFilters();
+}
+
+function onRatingSortChange(event: Event): void {
+  const value = (event.target as HTMLSelectElement).value;
+  sortSlotId.value = value === '' ? undefined : Number(value);
+  emitRatingFilters();
+}
+
+function onUsageSortChange(event: Event): void {
+  usageSortField.value = (event.target as HTMLSelectElement).value;
+  emitUsageFilters();
+}
+
+function usageFilters(): Pick<GalleryFacetFilters, 'usageConditions' | 'usageSort'> {
+  const usageSort: UsageSort | null = usageSortField.value === ''
+    ? null
+    : { field: usageSortField.value as UsageSort['field'], direction: 'desc' };
+  return { usageConditions: [], usageSort };
+}
+
+function emitUsageFilters(): void {
+  emit('update:modelValue', { ...props.modelValue, ...usageFilters() });
 }
 
 function closeAllDropdowns(): void {
@@ -206,6 +300,14 @@ function closeAllDropdowns(): void {
 
 function addRow(): void {
   rows.value.push(freshRow());
+}
+
+function addAuthorRow(): void {
+  if (!canAddAuthorRow()) return;
+  const row: FilterRow = { ...freshRow(), mode: 'author', itemOpen: true };
+  rows.value.push(row);
+  const rowIndex = rows.value.length - 1;
+  void nextTick(() => itemInputs.value[rowIndex]?.focus());
 }
 
 function removeRow(index: number): void {
@@ -285,17 +387,31 @@ function chipName(row: FilterRow, id: number): string {
 
 function clearAll(): void {
   rows.value = [freshRow()];
+  ratingRows.value = [];
+  usageSortField.value = '';
+  sortSlotId.value = undefined;
   closeAllDropdowns();
   filterError.value = null;
   emitFilters();
 }
 
 function hasActiveFilters(): boolean {
-  return props.modelValue.conditions.length > 0 || props.modelValue.authorIds.length > 0;
+  return props.modelValue.conditions.length > 0
+    || props.modelValue.authorIds.length > 0
+    || props.modelValue.ratingConditions.length > 0
+    || props.modelValue.ratingSort !== null
+    || props.modelValue.usageConditions.length > 0
+    || props.modelValue.usageSort !== null;
 }
 
 function canAddRow(): boolean {
   return facetChoices().some((choice) => !choice.disabled);
+}
+
+function canAddAuthorRow(): boolean {
+  return !props.hideAuthors
+    && props.options.authors.length > 0
+    && !rows.value.some((row) => row.mode === 'author');
 }
 
 function onBarPointerDown(event: PointerEvent): void {
@@ -445,17 +561,112 @@ function onBarPointerDown(event: PointerEvent): void {
       </button>
     </div>
 
-    <div class="facet-filter-bar__actions">
-      <button
-        class="filter-action"
-        type="button"
-        data-testid="add-facet-filter"
-        :disabled="!canAddRow()"
-        @click="addRow"
+    <div v-for="(ratingRow, ratingIndex) in ratingRows" :key="`rating-${ratingIndex}`" class="filter-row">
+      <select
+        class="filter-select"
+        data-testid="rating-slot-select"
+        :value="ratingRow.slotId ?? ''"
+        @change="chooseRatingSlot(ratingRow, $event)"
       >
-        + {{ t('filter.addFacet') }}
+        <option value="" disabled>{{ t('filter.ratingSlotPlaceholder') }}</option>
+        <option v-for="slot in props.options.ratingSlots" :key="slot.id" :value="slot.id">
+          {{ slot.name }}
+        </option>
+      </select>
+      <select
+        class="filter-select"
+        data-testid="rating-operator-select"
+        :value="ratingRow.operator"
+        @change="chooseRatingOperator(ratingRow, $event)"
+      >
+        <option value="eq">{{ t('filter.ratingEquals') }}</option>
+        <option value="gt">{{ t('filter.ratingGreaterThan') }}</option>
+        <option value="lt">{{ t('filter.ratingLessThan') }}</option>
+        <option value="unrated">{{ t('filter.ratingUnrated') }}</option>
+      </select>
+      <select
+        v-if="ratingRow.operator !== 'unrated'"
+        class="filter-select"
+        data-testid="rating-stars-select"
+        :value="ratingRow.stars"
+        @change="chooseRatingStars(ratingRow, $event)"
+      >
+        <option v-for="value in starValues" :key="value" :value="value">
+          {{ t('filter.ratingStars', { stars: value }) }}
+        </option>
+      </select>
+      <button
+        class="filter-row__remove"
+        type="button"
+        :aria-label="t('filter.removeRow')"
+        data-testid="remove-rating-row"
+        @click="removeRatingRow(ratingIndex)"
+      >
+        ×
       </button>
-      <p class="filter-note">{{ t('filter.andNote') }}</p>
+    </div>
+
+    <div class="facet-filter-bar__actions">
+      <div class="filter-add-actions">
+        <button
+          class="filter-action"
+          type="button"
+          data-testid="add-facet-filter"
+          :disabled="!canAddRow()"
+          @click="addRow"
+        >
+          + {{ t('filter.addFacet') }}
+        </button>
+        <button
+          v-if="!props.hideAuthors"
+          class="filter-action"
+          type="button"
+          data-testid="add-author-filter"
+          :disabled="!canAddAuthorRow()"
+          @click="addAuthorRow"
+        >
+          + {{ t('filter.authors') }}
+        </button>
+        <button
+          v-if="props.options.ratingSlots.length > 0"
+          class="filter-action"
+          type="button"
+          data-testid="add-rating-filter"
+          @click="addRatingRow"
+        >
+          + {{ t('filter.addRating') }}
+        </button>
+      </div>
+      <div class="filter-sort-actions">
+        <label class="rating-sort-control">
+          <span class="filter-note">{{ t('filter.sortByUsage') }}</span>
+          <select
+            class="filter-select"
+            data-testid="usage-sort-select"
+            :value="usageSortField"
+            @change="onUsageSortChange"
+          >
+            <option value="">{{ t('filter.sortNone') }}</option>
+            <option value="views">{{ t('filter.usageViews') }} ↓</option>
+            <option value="lastViewed">{{ t('filter.usageLastViewed') }} ↓</option>
+            <option value="likes">{{ t('filter.usageLikes') }} ↓</option>
+          </select>
+        </label>
+        <label v-if="props.options.ratingSlots.length > 0" class="rating-sort-control">
+          <span class="filter-note">{{ t('filter.sortByRating') }}</span>
+          <select
+            class="filter-select"
+            data-testid="rating-sort-select"
+            :value="sortSlotId ?? ''"
+            @change="onRatingSortChange"
+          >
+            <option value="">{{ t('filter.sortNone') }}</option>
+            <option v-for="slot in props.options.ratingSlots" :key="slot.id" :value="slot.id">
+              {{ slot.name }} ↓
+            </option>
+          </select>
+        </label>
+      </div>
     </div>
   </div>
 </template>
@@ -466,7 +677,7 @@ function onBarPointerDown(event: PointerEvent): void {
   gap: 0.5rem;
   padding: 0.7rem 0.75rem;
   border: 1px solid var(--border-subtle);
-  border-radius: 0.9rem;
+  border-radius: var(--radius-card);
   background: var(--surface);
 }
 
@@ -486,9 +697,22 @@ function onBarPointerDown(event: PointerEvent): void {
 }
 
 .facet-filter-bar__actions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: 0.75rem 1rem;
+}
+
+.filter-add-actions,
+.filter-sort-actions {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: end;
   gap: 0.5rem;
+}
+
+.filter-sort-actions {
+  justify-content: flex-end;
 }
 
 .filter-note {
@@ -530,9 +754,9 @@ function onBarPointerDown(event: PointerEvent): void {
   overflow-y: auto;
   padding: 0.3rem;
   border: 1px solid var(--border-subtle);
-  border-radius: 0.6rem;
+  border-radius: var(--radius-control);
   background: var(--surface);
-  box-shadow: 0 0.75rem 2rem rgb(15 23 42 / 14%);
+  box-shadow: var(--shadow-overlay);
 }
 
 .filter-dropdown__search {
@@ -566,8 +790,13 @@ function onBarPointerDown(event: PointerEvent): void {
 
 .filter-option:hover,
 .filter-option:focus-visible {
-  background: var(--surface-muted);
+  background: var(--surface-hover);
   outline: none;
+}
+
+.filter-option:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
 }
 
 .filter-option--disabled {
@@ -586,25 +815,31 @@ function onBarPointerDown(event: PointerEvent): void {
 
 .facet-select-button {
   display: inline-flex;
-  min-height: 2rem;
+  min-height: var(--control-min-height);
   align-items: center;
   gap: 0.4rem;
   padding: 0.35rem 0.7rem;
   border: 1px solid var(--border-subtle);
-  border-radius: 0.65rem;
+  border-radius: var(--radius-control);
   color: var(--text-muted);
   background: var(--surface-muted);
   font: inherit;
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
+  transition: color var(--transition-duration) ease, background-color var(--transition-duration) ease, border-color var(--transition-duration) ease;
 }
 
 .facet-select-button:hover,
 .facet-select-button:focus-visible {
-  border-color: var(--border-strong, var(--border-subtle));
+  border-color: var(--border-strong);
   color: var(--text-primary);
   outline: none;
+}
+
+.facet-select-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .facet-select-button--chosen {
@@ -618,9 +853,10 @@ function onBarPointerDown(event: PointerEvent): void {
 }
 
 .filter-input {
+  min-height: var(--control-min-height);
   padding: 0.4rem 0.6rem;
   border: 1px solid var(--border-subtle);
-  border-radius: 0.55rem;
+  border-radius: var(--radius-control);
   color: var(--text-primary);
   background: var(--surface-muted);
   font: inherit;
@@ -631,9 +867,32 @@ function onBarPointerDown(event: PointerEvent): void {
   color: var(--text-muted);
 }
 
-.filter-input:focus {
+.filter-select {
+  min-height: var(--control-min-height);
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  background: var(--surface-muted);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.filter-input:focus,
+.filter-select:focus-visible {
   outline: none;
   border-color: var(--accent);
+}
+
+.filter-select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.rating-sort-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .filter-tag-chip {
@@ -710,5 +969,15 @@ function onBarPointerDown(event: PointerEvent): void {
 .filter-action:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+@media (max-width: 64rem) {
+  .facet-filter-bar__actions {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-sort-actions {
+    justify-content: flex-start;
+  }
 }
 </style>

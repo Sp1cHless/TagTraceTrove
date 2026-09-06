@@ -1,0 +1,46 @@
+import { describe, expect, it } from 'vitest';
+import { entryStackLayerStyle, entryStackLayers } from '../src/entry-media-stack.js';
+
+describe('Entry media stack', () => {
+  it('keeps natural-aspect pages narrow and fans previews in 3D', () => {
+    const layers = entryStackLayers({
+      coverRef: '/cover.webp',
+      previewRefs: [
+        '/preview.webp',
+        '/preview-2.webp',
+        '/preview-3.webp',
+        '/preview-4.webp',
+        '/preview.webp',
+      ],
+    });
+
+    expect(layers).toEqual([
+      '/cover.webp',
+      '/preview.webp',
+      '/preview-2.webp',
+      '/preview-3.webp',
+    ]);
+
+    const front = entryStackLayerStyle(0, layers.length);
+    const next = entryStackLayerStyle(1, layers.length);
+    const back = entryStackLayerStyle(3, layers.length);
+
+    expect(front).toMatchObject({
+      width: 'auto',
+      height: '94%',
+      maxWidth: '82%',
+      objectFit: 'contain',
+      background: 'transparent',
+      transform: 'rotateY(30deg)',
+    });
+    const percent = (style: Record<string, string>, property: string): number => {
+      const value = style[property];
+      if (!value) throw new Error(`Missing ${property}`);
+      return Number.parseFloat(value);
+    };
+    expect(percent(next, 'left')).toBeLessThan(percent(front, 'left'));
+    expect(percent(next, 'height')).toBeLessThan(percent(front, 'height'));
+    expect(percent(back, 'left')).toBeLessThan(percent(next, 'left'));
+    expect(back.zIndex).toBe('1');
+  });
+});
