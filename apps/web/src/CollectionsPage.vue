@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import type { CollectionKind, CollectionRecordDto } from '@t3/shared';
 import type { GalleryApi } from './api/gallery.js';
 import { showNsfw } from './stores/preferences.js';
@@ -7,6 +7,7 @@ import EntryCard from './components/EntryCard.vue';
 import IconButton from './components/IconButton.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
 import { useI18n } from './i18n.js';
+import { useNavigationMemory } from './navigation-memory.js';
 
 const props = defineProps<{
   api: GalleryApi;
@@ -19,16 +20,51 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const navigationMemory = useNavigationMemory();
+const savedState = navigationMemory.states.get('collections') as {
+  kind?: CollectionKind;
+  activeCollectionId?: number | null;
+  returnScrollPositions?: number[];
+} | undefined;
 
-const kind = ref<CollectionKind>('entry');
+const kind = ref<CollectionKind>(savedState?.kind ?? 'entry');
 const collections = ref<CollectionRecordDto[]>([]);
-const activeCollectionId = ref<number | null>(null);
+const activeCollectionId = ref<number | null>(savedState?.activeCollectionId ?? null);
 const editing = ref(false);
 const loading = ref(true);
 const error = ref<string | null>(null);
 const newTitle = ref('');
 const hiddenEntryTypes = ref<Set<string>>(new Set());
 const hiddenProducerIds = ref<Set<number>>(new Set());
+const returnScrollPositions: number[] = [...(savedState?.returnScrollPositions ?? [])];
+
+function rememberCollectionNavigationState(): void {
+  navigationMemory.states.set('collections', {
+    kind: kind.value,
+    activeCollectionId: activeCollectionId.value,
+    returnScrollPositions: [...returnScrollPositions],
+  });
+}
+
+watch([kind, activeCollectionId], ([currentKind, collectionId]) => {
+  navigationMemory.states.set('collections', {
+    kind: currentKind,
+    activeCollectionId: collectionId,
+    returnScrollPositions: [...returnScrollPositions],
+  });
+});
+
+async function scrollCurrentViewToTop(): Promise<void> {
+  await nextTick();
+  window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+}
+
+async function restorePreviousScroll(): Promise<void> {
+  const top = returnScrollPositions.pop() ?? 0;
+  rememberCollectionNavigationState();
+  await nextTick();
+  window.scrollTo({ top, left: 0, behavior: 'auto' });
+}
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -61,6 +97,7 @@ function switchKind(next: CollectionKind): void {
   kind.value = next;
   activeCollectionId.value = null;
   editing.value = false;
+  clearDrag();
   void load();
 }
 
@@ -93,11 +130,20 @@ const activeCollection = computed(() => (
 ));
 
 // Back from a child folder returns to its parent folder, not the list.
-function closeCollection(): void {
+async function closeCollection(): Promise<void> {
   const parent = parentOf(collections.value, activeCollectionId.value ?? 0);
   activeCollectionId.value = parent?.id ?? null;
   editing.value = false;
+  clearDrag();
+  await restorePreviousScroll();
 }
+
+async function goBack(): Promise<void> {
+  if (activeCollection.value) await closeCollection();
+  else emit('back');
+}
+
+defineExpose({ goBack });
 
 function coversOf(record: CollectionRecordDto): string[] {
   const covers: string[] = [];
@@ -211,6 +257,31 @@ function clearDrag(): void {
   parentDropActive.value = false;
 }
 
+function beginEditing(): void {
+  clearDrag();
+  editing.value = true;
+  beginCollectionEdit();
+}
+
+function finishEditing(): void {
+  editing.value = false;
+  clearDrag();
+}
+
+function toggleEntrySelection(entryId: number): void {
+  if (!editing.value) return;
+  draggedEntryId.value = draggedEntryId.value === entryId ? null : entryId;
+}
+
+function openOrSelectEntry(entryId: number): void {
+  if (editing.value) {
+    toggleEntrySelection(entryId);
+    return;
+  }
+  rememberCollectionNavigationState();
+  emit('open-entry', entryId);
+}
+
 async function moveEntryToCollection(targetId: number): Promise<void> {
   const entryId = draggedEntryId.value;
   const active = activeCollection.value;
@@ -220,6 +291,19 @@ async function moveEntryToCollection(targetId: number): Promise<void> {
   try {
     await props.api.removeCollectionEntry(active.id, entryId);
     await props.api.addCollectionEntry(targetId, entryId);
+    await load();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.createEntry');
+  }
+}
+
+async function removeEntryFromActiveCollection(entryId: number): Promise<void> {
+  const active = activeCollection.value;
+  if (active === null) return;
+  if (draggedEntryId.value === entryId) clearDrag();
+  error.value = null;
+  try {
+    await props.api.removeCollectionEntry(active.id, entryId);
     await load();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.createEntry');
@@ -242,7 +326,7 @@ const draggedId = ref<number | null>(null);
 const dropTargetId = ref<number | null>(null);
 
 function onDragStart(record: CollectionRecordDto): void {
-  draggedId.value = record.id;
+  if (editing.value) draggedId.value = record.id;
 }
 
 function onDragOver(record: CollectionRecordDto): void {
@@ -254,7 +338,7 @@ async function onDrop(record: CollectionRecordDto): Promise<void> {
   draggedId.value = null;
   dropTargetId.value = null;
   if (!dragged || dragged === record.id) return;
-  const current = visibleCollections.value.map((item) => item.id);
+  const current = collections.value.map((item) => item.id);
   const from = current.indexOf(dragged);
   const to = current.indexOf(record.id);
   if (from < 0 || to < 0) return;
@@ -267,10 +351,37 @@ async function onDrop(record: CollectionRecordDto): Promise<void> {
   }
 }
 
-function openRecord(record: CollectionRecordDto): void {
+function canMoveCollection(recordId: number, direction: -1 | 1): boolean {
+  const index = visibleCollections.value.findIndex((record) => record.id === recordId);
+  return index >= 0 && index + direction >= 0 && index + direction < visibleCollections.value.length;
+}
+
+async function moveCollection(recordId: number, direction: -1 | 1): Promise<void> {
+  const visibleIndex = visibleCollections.value.findIndex((record) => record.id === recordId);
+  const target = visibleCollections.value[visibleIndex + direction];
+  if (visibleIndex < 0 || !target) return;
+
+  const orderedIds = collections.value.map((record) => record.id);
+  const from = orderedIds.indexOf(recordId);
+  const to = orderedIds.indexOf(target.id);
+  if (from < 0 || to < 0) return;
+  orderedIds.splice(to, 0, ...orderedIds.splice(from, 1));
+  try {
+    await props.api.reorderCollections(kind.value, orderedIds);
+    await load();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.createEntry');
+  }
+}
+
+async function openRecord(record: CollectionRecordDto): Promise<void> {
+  returnScrollPositions.push(Math.max(0, window.scrollY));
   activeCollectionId.value = record.id;
+  rememberCollectionNavigationState();
   editing.value = false;
+  clearDrag();
   syncEditFields();
+  await scrollCurrentViewToTop();
 }
 
 function syncEditFields(): void {
@@ -335,14 +446,14 @@ onMounted(load);
         data-testid="collections-edit-toggle"
         icon="edit"
         :label="t('entry.edit')"
-        @click="editing = true"
+        @click="beginEditing"
       />
       <button
         v-else
         data-testid="collections-edit-toggle"
         class="secondary-button"
         type="button"
-        @click="editing = false"
+        @click="finishEditing"
       >
         {{ t('entry.done') }}
       </button>
@@ -405,16 +516,26 @@ onMounted(load);
           </p>
         </template>
 
+        <p
+          v-if="editing && activeCollection.kind === 'entry' && (isChildCollection || visibleChildren.length > 0)"
+          class="collection-organize-hint"
+          data-testid="collection-organize-hint"
+        >
+          {{ t('collections.organizeHint') }}
+        </p>
+
         <button
-          v-if="editing && isChildCollection"
+          v-if="editing && isChildCollection && draggedEntryId !== null"
           type="button"
           class="move-to-parent-target"
+          data-testid="move-entry-to-parent"
           :class="{ 'drop-active': parentDropActive }"
           @dragover.prevent="draggedEntryId !== null && (parentDropActive = true)"
           @dragleave="parentDropActive = false"
           @drop.prevent="moveEntryToCollection(parentOf(collections, activeCollectionId ?? 0)!.id)"
+          @click="moveEntryToCollection(parentOf(collections, activeCollectionId ?? 0)!.id)"
         >
-          {{ t('collections.moveToParent') }}
+          {{ t('collections.moveOut') }}
         </button>
 
         <div v-if="editing && activeCollection.kind === 'entry' && !isChildCollection" class="collection-create-row">
@@ -432,6 +553,7 @@ onMounted(load);
         <PagedCardGrid
           v-if="visibleChildren.length > 0"
           :items="visibleChildren"
+          :page-key="`collections:${kind}:${activeCollectionId}:children`"
           grid-class="recent-grid"
           grid-testid="collection-children"
           v-slot="{ items }"
@@ -448,7 +570,7 @@ onMounted(load);
             <button type="button" class="entry-card-main" :data-collection-id="child.id" @click="openRecord(child)">
               <span class="directory-cover">
                 <template v-for="coverRef in coversOf(child).slice(0, 3)" :key="coverRef">
-                  <img :src="api.assetUrl(coverRef)" :alt="child.title">
+                  <img :src="api.assetUrl(coverRef)" :alt="child.title" loading="lazy" decoding="async">
                 </template>
                 <span
                   v-for="slot in Math.max(0, 3 - coversOf(child).length)"
@@ -465,6 +587,15 @@ onMounted(load);
               </span>
             </button>
             <button
+              v-if="editing && draggedEntryId !== null"
+              type="button"
+              class="collection-move-target"
+              :data-move-to-collection-id="child.id"
+              @click.stop="moveEntryToCollection(child.id)"
+            >
+              {{ t('collections.moveHere') }}
+            </button>
+            <button
               v-if="editing"
               type="button"
               class="view-later-remove"
@@ -478,6 +609,7 @@ onMounted(load);
         <PagedCardGrid
           v-if="visibleEntriesOf(activeCollection).length > 0"
           :items="visibleEntriesOf(activeCollection)"
+          :page-key="`collections:${kind}:${activeCollectionId}:entries`"
           grid-class="recent-grid recent-grid-compact"
           v-slot="{ items }"
         >
@@ -487,8 +619,11 @@ onMounted(load);
             :api="api"
             :entry="entry"
             :draggable="editing ? 'true' : undefined"
+            :class="{ 'collection-entry-selected': editing && draggedEntryId === entry.id }"
+            :data-collection-entry-id="entry.id"
+            :aria-pressed="editing ? draggedEntryId === entry.id : undefined"
             data-testid="collection-entry-card"
-            @open="emit('open-entry', entry.id)"
+            @open="openOrSelectEntry(entry.id)"
             @dragstart="beginEntryDrag(entry.id)"
             @dragend="clearDrag"
           >
@@ -499,7 +634,7 @@ onMounted(load);
                 class="view-later-remove"
                 :data-remove-collection-entry-id="entry.id"
                 :aria-label="t('collections.removeMember')"
-                @click.stop="props.api.removeCollectionEntry(activeCollection!.id, entry.id).then(load)"
+                @click.stop="removeEntryFromActiveCollection(entry.id)"
               >×</button>
             </template>
           </EntryCard>
@@ -514,7 +649,7 @@ onMounted(load);
             @click="emit('open-author', producer.id)"
           >
             <span v-if="producer.covers.length" class="author-list-cover">
-              <img v-for="coverRef in producer.covers" :key="coverRef" :src="api.assetUrl(coverRef)" :alt="producer.name">
+              <img v-for="coverRef in producer.covers" :key="coverRef" :src="api.assetUrl(coverRef)" :alt="producer.name" loading="lazy" decoding="async">
             </span>
             <span v-else class="author-list-badge">{{ producer.name.slice(0, 1).toUpperCase() }}</span>
             <strong>{{ producer.name }}</strong>
@@ -537,13 +672,13 @@ onMounted(load);
         </button>
       </div>
       <p v-if="visibleCollections.length === 0" class="muted">{{ t('collections.empty') }}</p>
-      <PagedCardGrid v-else :items="visibleCollections" grid-class="recent-grid" v-slot="{ items }">
+      <PagedCardGrid v-else :items="visibleCollections" :page-key="`collections:${kind}:root`" grid-class="recent-grid" v-slot="{ items }">
         <article
           v-for="record in items"
           :key="record.id"
           class="entry-card collection-card"
           :class="{ 'recent-tab-drop': dropTargetId === record.id }"
-          draggable="true"
+          :draggable="editing ? 'true' : undefined"
           @dragstart="onDragStart(record)"
           @dragover.prevent="onDragOver(record)"
           @drop.prevent="onDrop(record)"
@@ -552,7 +687,7 @@ onMounted(load);
           <button type="button" class="entry-card-main" :data-collection-id="record.id" @click="openRecord(record)">
             <span class="directory-cover">
               <template v-for="coverRef in coversOf(record).slice(0, 3)" :key="coverRef">
-                <img :src="api.assetUrl(coverRef)" :alt="record.title">
+                <img :src="api.assetUrl(coverRef)" :alt="record.title" loading="lazy" decoding="async">
               </template>
               <span
                 v-for="slot in Math.max(0, 3 - coversOf(record).length)"
@@ -570,6 +705,24 @@ onMounted(load);
               </small>
             </span>
           </button>
+          <div v-if="editing" class="collection-order-controls">
+            <button
+              type="button"
+              class="collection-order-button"
+              :data-testid="'move-collection-up-' + record.id"
+              :aria-label="t('collections.moveUp', { name: record.title })"
+              :disabled="!canMoveCollection(record.id, -1)"
+              @click.stop="moveCollection(record.id, -1)"
+            >↑</button>
+            <button
+              type="button"
+              class="collection-order-button"
+              :data-testid="'move-collection-down-' + record.id"
+              :aria-label="t('collections.moveDown', { name: record.title })"
+              :disabled="!canMoveCollection(record.id, 1)"
+              @click.stop="moveCollection(record.id, 1)"
+            >↓</button>
+          </div>
           <button
             v-if="editing"
             type="button"
@@ -599,7 +752,15 @@ onMounted(load);
 .recent-toolbar h2 { margin: 0; flex: 1; }
 .recent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.8rem; }
 .entry-card { position: relative; }
-.view-later-remove { position: absolute; top: 0.35rem; right: 0.35rem; z-index: 2; width: 1.4rem; height: 1.4rem; border: 0; border-radius: 50%; background: rgb(0 0 0 / 55%); color: #fff; font: inherit; line-height: 1; cursor: pointer; }
+.collection-entry-selected { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent); }
+.collection-organize-hint { margin: 0; padding: 0.6rem 0.75rem; border-radius: var(--radius-control); color: var(--text-muted); background: var(--accent-soft); font-size: 0.78rem; line-height: 1.45; }
+.collection-move-target { display: flex; align-items: center; justify-content: center; width: calc(100% - 0.8rem); min-height: 44px; margin: 0.4rem; padding: 0.35rem 0.6rem; border: 1px dashed var(--accent); border-radius: var(--radius-control); color: var(--accent); background: var(--accent-soft); font: inherit; font-weight: 650; cursor: pointer; touch-action: manipulation; }
+.collection-order-controls { position: absolute; z-index: 3; top: 0.05rem; right: 0.05rem; display: grid; }
+.collection-order-button { display: grid; width: 44px; height: 44px; padding: 0; place-items: center; border: 0; border-radius: 50%; color: #fff; background: radial-gradient(circle, rgb(0 0 0 / 58%) 0 0.78rem, transparent 0.82rem); font: inherit; font-weight: 800; cursor: pointer; touch-action: manipulation; }
+.collection-order-button:hover:not(:disabled), .collection-order-button:focus-visible:not(:disabled) { background: radial-gradient(circle, rgb(0 0 0 / 78%) 0 0.78rem, transparent 0.82rem); outline: none; }
+.collection-order-button:disabled { opacity: 0.32; cursor: default; }
+.view-later-remove { position: absolute; top: 0.05rem; left: 0.05rem; z-index: 2; display: grid; width: 44px; height: 44px; padding: 0; place-items: center; border: 0; border-radius: 50%; background: radial-gradient(circle, rgb(0 0 0 / 58%) 0 0.68rem, transparent 0.72rem); color: #fff; font: inherit; font-size: 0.9rem; line-height: 1; cursor: pointer; touch-action: manipulation; }
+.view-later-remove:hover { background: radial-gradient(circle, rgb(0 0 0 / 78%) 0 0.68rem, transparent 0.72rem); }
 .collection-detail { display: grid; gap: 0.8rem; }
 .collection-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .collection-detail h3 { margin: 0; }
@@ -623,8 +784,16 @@ onMounted(load);
 .collection-edit-row textarea:focus,
 .collection-create-row input:focus { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 18%, transparent); }
 .entry-usage-note { color: var(--text-muted); }
-.move-to-parent-target { justify-self: start; padding: 0.35rem 0.6rem; border: 1px dashed var(--border-subtle); border-radius: 0.5rem; color: var(--text-muted); background: transparent; font: inherit; cursor: pointer; transition: transform 140ms ease, background 140ms ease; }
+.move-to-parent-target { justify-self: start; min-height: 44px; padding: 0.35rem 0.6rem; border: 1px dashed var(--accent); border-radius: 0.5rem; color: var(--accent); background: var(--accent-soft); font: inherit; font-weight: 650; cursor: pointer; touch-action: manipulation; transition: transform 140ms ease, background 140ms ease; }
 .move-to-parent-target.drop-active { transform: scale(1.04); border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .entry-card[draggable='true'] { cursor: grab; }
 .recent-tab-drop { border-style: dashed; border-color: var(--accent); }
+@media (max-width: 44rem) {
+  .recent-toolbar,
+  .collection-detail-head { align-items: flex-start; flex-wrap: wrap; }
+  .collection-create-row { flex-wrap: wrap; }
+  .collection-create-row input { flex-basis: 100%; min-width: 0; min-height: 44px; }
+  .collection-create-row button,
+  .collection-detail-head button { min-height: 44px; }
+}
 </style>

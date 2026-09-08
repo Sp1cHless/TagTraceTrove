@@ -53,5 +53,14 @@ function submit(): void {
 .author-fields { display: grid; align-content: start; gap: 1rem; }
 .author-fields label { display: grid; gap: .4rem; }
 .author-fields textarea { font: inherit; resize: vertical; }
-@media (max-width: 760px) { .author-card-editor { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  .add-page-toolbar { align-items: flex-start; flex-wrap: wrap; }
+  .add-page-toolbar h2 { flex-basis: 100%; }
+  .author-card-editor { grid-template-columns: 1fr; padding: 0.8rem; gap: 1rem; }
+  .author-artwork-placeholder { min-height: 9rem; }
+  .author-fields input,
+  .author-fields textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; }
+  .author-fields textarea { min-height: 7rem; }
+  .author-fields .primary-button { width: 100%; min-height: 44px; }
+}
 </style>

@@ -70,6 +70,19 @@ POST   /api/entries/:entryId/likes
 
 `POST .../views` increments the Entry's `entry_usage` row (created lazily; a missing row means never viewed) and returns the updated record. The client records a view only when the user actually opens the Entry's `source url` (recorded before `window.open`); opening the detail card itself never counts. `POST .../likes` adds 1 to `like_count` on the same row — likes are unlimited and re-clickable. Author-side view/like/last-viewed numbers are derived by aggregating their works (`SUM`/`MAX`), never stored. Entry summaries, Entry details, Author summaries, and Author details all embed `viewCount` / `likeCount` / `lastViewedAt`. The UI offers usage as sorting only (view count / last viewed / likes); there are no numeric or date condition rows.
 
+### Shared View later
+
+```text
+GET    /api/view-later
+POST   /api/view-later/merge
+PUT    /api/view-later/:entryId
+DELETE /api/view-later/:entryId
+PUT    /api/view-later/producers/:producerId
+DELETE /api/view-later/producers/:producerId
+```
+
+Two independent SQLite-backed lists (Entries and Producers/Authors) are authoritative for every desktop/mobile browser connected to the library. GET and every mutation return `{ entryIds: number[], producerIds: number[] }` in insertion order. PUT adds one existing subject idempotently; DELETE removes membership without deleting the subject; deleting an Entry or Author cascades its membership. Merge accepts `{ entryIds }`, appends surviving missing legacy Entry memberships without replacing server state, and ignores stale ids from deleted Entries. The web client merges `t3.view-later` once, removes that localStorage key only after success, then refreshes both lists on startup, View later entry, and window focus. No WebSocket/SSE is required: clients may be briefly stale but converge on the next pull.
+
 ### Collections
 
 ```text

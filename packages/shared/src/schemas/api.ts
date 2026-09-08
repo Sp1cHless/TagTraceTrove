@@ -358,6 +358,19 @@ export const reorderCollectionsRequestSchema = z.strictObject({
   orderedCollectionIds: uniqueIdArraySchema,
 });
 
+/** Two library-wide View later lists shared by every connected browser. */
+export const viewLaterStateSchema = z.strictObject({
+  entryIds: uniqueIdArraySchema,
+  producerIds: uniqueIdArraySchema,
+});
+
+/** Idempotently append local/imported memberships without replacing server state. */
+export const mergeViewLaterRequestSchema = z.strictObject({
+  entryIds: uniqueIdArraySchema,
+});
+
+export type ViewLaterState = z.infer<typeof viewLaterStateSchema>;
+
 export const searchScopeSchema = z.enum(['entries', 'tags', 'producers']);
 
 export const searchQuerySchema = z.strictObject({

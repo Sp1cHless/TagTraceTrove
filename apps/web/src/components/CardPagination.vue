@@ -176,4 +176,25 @@ function jumpToPage(event: Event): void {
   appearance: none;
   margin: 0;
 }
+
+@media (max-width: 44rem) {
+  .card-pagination {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .card-pagination-page,
+  .card-pagination-arrow {
+    min-width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+  }
+
+  .card-pagination-gap { flex: 0 0 auto; }
+  .card-pagination-jump { width: 44px; height: 44px; flex: 0 0 44px; }
+}
 </style>

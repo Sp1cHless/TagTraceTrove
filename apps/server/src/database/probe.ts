@@ -55,6 +55,14 @@ import {
   createCollection,
   getCollection,
 } from '../repositories/collection-repository.js';
+import {
+  addViewLaterEntry,
+  addViewLaterProducer,
+  listViewLaterEntryIds,
+  listViewLaterProducerIds,
+  removeViewLaterEntry,
+  removeViewLaterProducer,
+} from '../repositories/view-later-repository.js';
 import { inspectDatabase } from './doctor.js';
 import { createMigratedMemoryDatabase } from './testing.js';
 
@@ -393,6 +401,18 @@ export function runDatabaseProbe(): DatabaseProbeResult {
         && reloaded?.children.some((nested) => nested.id === child.id
           && nested.entries.some((entry) => entry.id === 2)) === true
         && getCollection(database, authorCollection.id)?.producers[0]?.id === 1;
+    });
+
+    check('persist shared View later', () => {
+      addViewLaterEntry(database, 1);
+      addViewLaterEntry(database, 2);
+      addViewLaterEntry(database, 1);
+      addViewLaterProducer(database, 1);
+      addViewLaterProducer(database, 1);
+      removeViewLaterEntry(database, 1);
+      removeViewLaterProducer(database, 1);
+      return listViewLaterEntryIds(database).join(',') === '2'
+        && listViewLaterProducerIds(database).length === 0;
     });
 
     check('database doctor clean', () => inspectDatabase(database).ok);

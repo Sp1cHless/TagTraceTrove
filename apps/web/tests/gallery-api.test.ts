@@ -12,6 +12,29 @@ describe('default GalleryApi origin', () => {
 });
 
 describe('GalleryApi Entry Content', () => {
+  it('reads and mutates the shared Entry and Author View later lists', async () => {
+    const state = { entryIds: [2, 1], producerIds: [8] };
+    const request = vi.fn(async () => state);
+    const api = createGalleryApi({ request } as unknown as ApiClient);
+
+    await expect(api.getViewLaterState()).resolves.toEqual(state);
+    await expect(api.addViewLaterEntry(3)).resolves.toEqual(state);
+    await expect(api.removeViewLaterEntry(2)).resolves.toEqual(state);
+    await expect(api.mergeViewLaterEntries([1, 3])).resolves.toEqual(state);
+    await expect(api.addViewLaterAuthor(9)).resolves.toEqual(state);
+    await expect(api.removeViewLaterAuthor(8)).resolves.toEqual(state);
+
+    expect(request).toHaveBeenNthCalledWith(1, 'view-later');
+    expect(request).toHaveBeenNthCalledWith(2, 'view-later/3', { method: 'PUT' });
+    expect(request).toHaveBeenNthCalledWith(3, 'view-later/2', { method: 'DELETE' });
+    expect(request).toHaveBeenNthCalledWith(4, 'view-later/merge', {
+      method: 'POST',
+      body: { entryIds: [1, 3] },
+    });
+    expect(request).toHaveBeenNthCalledWith(5, 'view-later/producers/9', { method: 'PUT' });
+    expect(request).toHaveBeenNthCalledWith(6, 'view-later/producers/8', { method: 'DELETE' });
+  });
+
   it('previews a selected export folder and commits its reviewed mapping', async () => {
     const batch = {
       source: 'hitomi.la',

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import type { GalleryApi, GalleryAuthorSummary, GalleryEntrySummary } from './api/gallery.js';
 import {
   type AuthorDetailResponse,
@@ -22,7 +22,14 @@ import { flattenCollectionOptions, type CollectionMenuOption } from './collectio
 import CollectionsPage from './CollectionsPage.vue';
 import HomePage from './HomePage.vue';
 import RandomPage from './RandomPage.vue';
-import { toggleViewLater, viewLaterIds } from './stores/preferences.js';
+import {
+  addEntriesToViewLater,
+  initializeViewLater,
+  refreshViewLater,
+  toggleViewLater,
+  viewLaterAuthorIds,
+  viewLaterIds,
+} from './stores/preferences.js';
 import SearchPage from './SearchPage.vue';
 import { entryStackLayerStyle, entryStackLayers } from './entry-media-stack.js';
 import { accent, accentPresets, accentSwatchColors, rowsPerPage, rowsPerPageOptions, showNsfw } from './stores/preferences.js';
@@ -30,8 +37,11 @@ import { useArmableAction } from './armable.js';
 import FacetFilterBar, { type GalleryFacetFilters } from './components/FacetFilterBar.vue';
 import AppIcon from './components/AppIcon.vue';
 import IconButton from './components/IconButton.vue';
+import LazyCardImage from './components/LazyCardImage.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
 import { supportedLocales, useI18n, type Locale } from './i18n.js';
+import { shuffledCopy } from './random-sort.js';
+import { createNavigationMemory, navigationMemoryKey } from './navigation-memory.js';
 
 type Theme = 'light' | 'dark';
 interface AuthorLocation {
@@ -61,6 +71,7 @@ type SearchOrigin = { searchQuery: string; searchScope: SearchScope };
 type EntryOrigin = AuthorLocation | { tagResults: EntryTagResults } | SearchOrigin;
 type CreationView = 'entry' | 'author';
 const props = defineProps<{ api: GalleryApi }>();
+provide(navigationMemoryKey, createNavigationMemory());
 const galleries = ref<GallerySummary[]>([]);
 const authors = ref<Array<{
   id: number;
@@ -87,7 +98,7 @@ const facetFilters = ref<GalleryFacetFilters>({
   usageSort: null,
 });
 let galleryEntriesRequestSeq = 0;
-type GallerySort = 'date-desc' | 'date-asc' | 'title-asc' | 'title-desc';
+type GallerySort = 'date-desc' | 'date-asc' | 'title-asc' | 'title-desc' | 'random';
 // Newest first by default: recent imports land at the top of the gallery.
 const gallerySort = ref<GallerySort>('date-desc');
 const showUsageOnCards = computed(() => (
@@ -128,6 +139,7 @@ const sortedEntries = computed(() => {
   if (facetFilters.value.ratingSort !== null || facetFilters.value.usageSort !== null) {
     return list;
   }
+  if (gallerySort.value === 'random') return shuffledCopy(list);
   const direction = gallerySort.value.endsWith('-desc') ? -1 : 1;
   const byTitle = (a: GalleryEntrySummary, b: GalleryEntrySummary): number => (
     a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
@@ -149,6 +161,8 @@ const sectionName = ref('');
 const facetName = ref('');
 const tagName = ref('');
 const draggedTagId = ref<number | null>(null);
+const selectedTagId = ref<number | null>(null);
+const selectedTagFacetId = ref<number | null>(null);
 const sectionEditorOpen = ref(false);
 const facetEditorSectionId = ref<number | null>(null);
 const tagEditorFacetId = ref<number | null>(null);
@@ -170,12 +184,62 @@ const theme = ref<Theme>('light');
 // switches to its confirm copy) and run on the second — no native dialogs.
 const { armedKey, arm, disarm } = useArmableAction();
 const settingsOpen = ref(false);
+const mobileNavigationOpen = ref(false);
+const MOBILE_NAVIGATION_HISTORY_KEY = 't3MobileNavigation';
+let mobileNavigationHistoryArmed = false;
 const advancedView = ref(false);
 const authorView = ref(false);
 const recentView = ref(false);
+const recentViewTab = ref('');
 const viewLaterView = ref(false);
+const viewLaterKind = ref<'entry' | 'author'>('entry');
+const viewLaterTab = ref('');
 const collectionsView = ref(false);
 const randomView = ref(false);
+const authorPageRef = ref<{ goBack: () => void | Promise<void> } | null>(null);
+const collectionsPageRef = ref<{ goBack: () => void | Promise<void> } | null>(null);
+const returnScrollPositions: number[] = [];
+let scrollRestoreGeneration = 0;
+
+function rememberReturnScroll(): void {
+  returnScrollPositions.push(Math.max(0, window.scrollY));
+}
+
+function discardReturnScroll(): void {
+  returnScrollPositions.pop();
+}
+
+async function scrollCurrentViewToTop(): Promise<void> {
+  scrollRestoreGeneration += 1;
+  await nextTick();
+  window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+}
+
+function scrollToTop(): void {
+  window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+}
+
+async function restorePreviousScroll(): Promise<void> {
+  const top = returnScrollPositions.pop() ?? 0;
+  const generation = ++scrollRestoreGeneration;
+  await nextTick();
+  let attempts = 0;
+  const apply = (): void => {
+    if (generation !== scrollRestoreGeneration) return;
+    window.scrollTo({ top, left: 0, behavior: 'auto' });
+    const pageHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+    const hasLayout = document.documentElement.getBoundingClientRect().height > 0;
+    const maxScroll = Math.max(0, pageHeight - window.innerHeight);
+    // Async list pages briefly render a short loading state. Retry until their
+    // cards are back so the browser cannot clamp the requested position to 0.
+    // Non-layout DOMs such as jsdom report a zero document rectangle.
+    if (hasLayout && pageHeight > 0 && maxScroll + 1 < top && attempts < 60) {
+      attempts += 1;
+      window.requestAnimationFrame(apply);
+    }
+  };
+  apply();
+}
 
 // Add-to-collection menus on the detail pages.
 const entryCollectionOptions = ref<CollectionMenuOption[]>([]);
@@ -211,10 +275,21 @@ const newAuthorName = ref('');
 const authorLinkEditorOpen = ref(false);
 const authorSearchQuery = ref('');
 const authorTarget = ref<AuthorLocation | null>(null);
+const authorReturnScrollPositions = ref<number[]>([]);
+const authorRestoreInitialScroll = ref(false);
 const entryOrigin = ref<EntryOrigin | null>(null);
 const tagResults = ref<TagResults | null>(null);
 const authorTagOrigin = ref<AuthorTagResults | null>(null);
 const nextTheme = computed<Theme>(() => (theme.value === 'light' ? 'dark' : 'light'));
+
+function syncBrowserCanvasTheme(): void {
+  document.documentElement.dataset.theme = theme.value;
+  document.documentElement.dataset.accent = accent.value;
+  document.documentElement.style.backgroundColor = 'var(--page-background)';
+  document.body.style.backgroundColor = 'var(--page-background)';
+}
+
+watch([theme, accent], syncBrowserCanvasTheme, { immediate: true });
 // Home is the fallback view: nothing else active and no Gallery/Entry open.
 const isHomeView = computed(() => (
   !searchView.value
@@ -230,12 +305,64 @@ const isHomeView = computed(() => (
   && activeEntry.value === null
   && activeType.value === null
 ));
+const topBarBackEnabled = computed(() => !isHomeView.value || settingsOpen.value || mobileNavigationOpen.value);
 
 function showHome(): void {
   leaveAllViews();
 }
+
+function navigateBackFromTopBar(): void {
+  if (settingsOpen.value) {
+    settingsOpen.value = false;
+    return;
+  }
+  if (mobileNavigationOpen.value) {
+    closeMobileNavigation();
+    return;
+  }
+  if (activeEntry.value) {
+    void closeEntry();
+    return;
+  }
+  if (tagResults.value) {
+    void closeTagResults();
+    return;
+  }
+  if (authorView.value) {
+    void authorPageRef.value?.goBack();
+    return;
+  }
+  if (collectionsView.value) {
+    void collectionsPageRef.value?.goBack();
+    return;
+  }
+  if (searchView.value) {
+    closeSearch();
+    return;
+  }
+  if (advancedView.value) {
+    closeAdvanced();
+    return;
+  }
+  if (creationView.value === 'author') {
+    showAuthors();
+    return;
+  }
+  if (batchReview.value) {
+    completeBatchReview();
+    return;
+  }
+  if (!isHomeView.value) showHome();
+}
 const entryBackTarget = computed(() => {
-  if (!entryOrigin.value) return activeType.value ?? t('home.nav');
+  if (!entryOrigin.value) {
+    if (returnView.value === 'recent') return t('recent.title');
+    if (returnView.value === 'viewLater') return t('viewLater.title');
+    if (returnView.value === 'random') return t('random.title');
+    if (returnView.value === 'collections') return t('collections.title');
+    if (returnView.value === 'batch') return t('import.batchReviewEyebrow');
+    return activeType.value ?? t('home.nav');
+  }
   if ('tagResults' in entryOrigin.value) return entryOrigin.value.tagResults.tagName;
   if ('searchQuery' in entryOrigin.value) return t('search.title');
   return entryOrigin.value.directoryName ?? entryOrigin.value.authorName;
@@ -261,6 +388,40 @@ function toggleSettings(): void {
   settingsOpen.value = !settingsOpen.value;
 }
 
+function openMobileNavigation(): void {
+  if (mobileNavigationOpen.value) return;
+  settingsOpen.value = false;
+  mobileNavigationOpen.value = true;
+  const currentState = window.history.state;
+  const nextState = currentState && typeof currentState === 'object' ? { ...currentState } : {};
+  window.history.pushState({ ...nextState, [MOBILE_NAVIGATION_HISTORY_KEY]: true }, '');
+  mobileNavigationHistoryArmed = true;
+}
+
+function closeMobileNavigation(rewindHistory = true): void {
+  if (!mobileNavigationOpen.value) return;
+  mobileNavigationOpen.value = false;
+  const ownsCurrentHistoryEntry = window.history.state?.[MOBILE_NAVIGATION_HISTORY_KEY] === true;
+  if (rewindHistory && mobileNavigationHistoryArmed && ownsCurrentHistoryEntry) {
+    mobileNavigationHistoryArmed = false;
+    window.history.back();
+    return;
+  }
+  mobileNavigationHistoryArmed = false;
+}
+
+function handlePopState(): void {
+  if (mobileNavigationOpen.value) closeMobileNavigation(false);
+}
+
+function handleGlobalKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && mobileNavigationOpen.value) closeMobileNavigation();
+}
+
+watch(mobileNavigationOpen, (open) => {
+  document.body.classList.toggle('t3-mobile-navigation-open', open);
+});
+
 // Every sidebar entry is top priority: switching views always tears down the
 // current one first. returnView remembers where an Entry detail was opened
 // from so the detail's back button returns to the right place.
@@ -269,7 +430,14 @@ type ReturnTarget = 'recent' | 'viewLater' | 'collections' | 'batch' | 'random';
 const returnView = ref<ReturnTarget | null>(null);
 const pendingBatchReview = ref<{ entryType: string; entryIds: number[] } | null>(null);
 
-function leaveAllViews(keepEntry = false): void {
+function leaveAllViews(keepEntry = false, preserveScrollHistory = false): void {
+  if (!preserveScrollHistory) {
+    returnScrollPositions.length = 0;
+    scrollRestoreGeneration += 1;
+    authorReturnScrollPositions.value = [];
+    authorRestoreInitialScroll.value = false;
+  }
+  closeMobileNavigation();
   creationView.value = null;
   tagResults.value = null;
   authorTagOrigin.value = null;
@@ -326,6 +494,7 @@ async function openEntryFromSearch(
   query: string,
   scope: SearchScope,
 ): Promise<void> {
+  rememberReturnScroll();
   const origin = preserveSearchContext(query, scope);
   searchView.value = false;
   creationView.value = null;
@@ -335,6 +504,7 @@ async function openEntryFromSearch(
   advancedView.value = false;
   activeType.value = entry.type;
   await viewEntry(entry.id, origin);
+  if (activeEntry.value?.id !== entry.id) discardReturnScroll();
 }
 
 function openAuthorFromSearch(
@@ -342,6 +512,8 @@ function openAuthorFromSearch(
   query: string,
   scope: SearchScope,
 ): void {
+  rememberReturnScroll();
+  authorRestoreInitialScroll.value = false;
   authorSearchOrigin.value = preserveSearchContext(query, scope);
   searchView.value = false;
   creationView.value = null;
@@ -357,6 +529,7 @@ function openAuthorFromSearch(
     directoryName: null,
   };
   authorView.value = true;
+  void scrollCurrentViewToTop();
 }
 
 async function openTagFromSearch(
@@ -364,6 +537,7 @@ async function openTagFromSearch(
   query: string,
   scope: SearchScope,
 ): Promise<void> {
+  rememberReturnScroll();
   error.value = null;
   const origin = preserveSearchContext(query, scope);
   try {
@@ -379,7 +553,9 @@ async function openTagFromSearch(
     searchView.value = false;
     activeEntry.value = null;
     activeType.value = null;
+    await scrollCurrentViewToTop();
   } catch (cause) {
+    discardReturnScroll();
     error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
   }
 }
@@ -597,8 +773,12 @@ async function refreshAuthors(): Promise<void> {
   authors.value = await props.api.listAuthors();
 }
 
-async function selectGallery(entryType: string, keepEntry = false): Promise<void> {
-  leaveAllViews(keepEntry);
+async function selectGallery(
+  entryType: string,
+  keepEntry = false,
+  preserveScrollHistory = false,
+): Promise<void> {
+  leaveAllViews(keepEntry, preserveScrollHistory);
   activeType.value = entryType;
   facetFilters.value = { conditions: [], authorIds: [], ratingConditions: [], ratingSort: null, usageConditions: [], usageSort: null };
   const [summaries, filterOptions] = await Promise.all([
@@ -638,30 +818,37 @@ async function onFacetFiltersChange(filters: GalleryFacetFilters): Promise<void>
   }
 }
 
-function showCollections(): void {
-  leaveAllViews();
+function showCollections(preserveScrollHistory: boolean | Event = false): void {
+  leaveAllViews(false, preserveScrollHistory === true);
   collectionsView.value = true;
 }
 
-function showRandom(): void {
-  leaveAllViews();
+function showRandom(preserveScrollHistory: boolean | Event = false): void {
+  leaveAllViews(false, preserveScrollHistory === true);
   randomView.value = true;
 }
 
 function openEntryFromRandom(entryId: number): void {
-  leaveAllViews();
+  rememberReturnScroll();
+  leaveAllViews(false, true);
   returnView.value = 'random';
-  void viewEntry(entryId);
+  void viewEntry(entryId).then(() => {
+    if (activeEntry.value?.id !== entryId) discardReturnScroll();
+  });
 }
 
 function openAuthorFromRandom(authorId: number): void {
+  rememberReturnScroll();
+  authorRestoreInitialScroll.value = false;
   collectionsView.value = false;
   randomView.value = false;
+  returnView.value = 'random';
   authorTarget.value = { authorId, authorName: '', directoryId: null, directoryName: null };
   entryOrigin.value = null;
   activeEntry.value = null;
   activeType.value = null;
   authorView.value = true;
+  void scrollCurrentViewToTop();
 }
 
 // Random tag hits remember they came from the random page so closing the
@@ -669,6 +856,7 @@ function openAuthorFromRandom(authorId: number): void {
 let randomTagReturn = false;
 
 function openTagFromRandom(tag: { id: number; name: string }): void {
+  rememberReturnScroll();
   error.value = null;
   randomTagReturn = true;
   void props.api.findEntriesByTag(tag.id).then((entries) => {
@@ -682,53 +870,103 @@ function openTagFromRandom(tag: { id: number; name: string }): void {
       sourceSearchScope: null,
     };
     randomView.value = false;
+    void scrollCurrentViewToTop();
   }).catch((cause: unknown) => {
+    discardReturnScroll();
     randomTagReturn = false;
     error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
   });
 }
 
 function openEntryFromCollections(entryId: number): void {
-  leaveAllViews();
+  rememberReturnScroll();
+  leaveAllViews(false, true);
   returnView.value = 'collections';
-  void viewEntry(entryId);
+  void viewEntry(entryId).then(() => {
+    if (activeEntry.value?.id !== entryId) discardReturnScroll();
+  });
 }
 
 function openAuthorFromCollections(authorId: number): void {
+  rememberReturnScroll();
+  authorRestoreInitialScroll.value = false;
   collectionsView.value = false;
+  returnView.value = 'collections';
   authorTarget.value = { authorId, authorName: '', directoryId: null, directoryName: null };
   entryOrigin.value = null;
   activeEntry.value = null;
   activeType.value = null;
   authorView.value = true;
+  void scrollCurrentViewToTop();
 }
 
 function openEntryFromViewLater(entryId: number): void {
-  leaveAllViews();
+  rememberReturnScroll();
+  leaveAllViews(false, true);
+  viewLaterKind.value = 'entry';
   returnView.value = 'viewLater';
-  void viewEntry(entryId);
+  void viewEntry(entryId).then(() => {
+    if (activeEntry.value?.id !== entryId) discardReturnScroll();
+  });
+}
+
+function openAuthorFromViewLater(authorId: number): void {
+  rememberReturnScroll();
+  authorRestoreInitialScroll.value = false;
+  viewLaterView.value = false;
+  viewLaterKind.value = 'author';
+  returnView.value = 'viewLater';
+  authorTarget.value = { authorId, authorName: '', directoryId: null, directoryName: null };
+  entryOrigin.value = null;
+  activeEntry.value = null;
+  activeType.value = null;
+  authorView.value = true;
+  void scrollCurrentViewToTop();
 }
 
 // Home-opened entries fall back to Home when closed: no return view needed,
 // the template's home branch catches it (homepage design guide §10).
 function openEntryFromHome(entryId: number): void {
-  leaveAllViews();
-  void viewEntry(entryId);
+  rememberReturnScroll();
+  leaveAllViews(false, true);
+  void viewEntry(entryId).then(() => {
+    if (activeEntry.value?.id !== entryId) discardReturnScroll();
+  });
 }
 
-function showViewLater(): void {
-  leaveAllViews();
+function openEntryFromGallery(entryId: number): void {
+  rememberReturnScroll();
+  void viewEntry(entryId).then(() => {
+    if (activeEntry.value?.id !== entryId) discardReturnScroll();
+  });
+}
+
+async function synchronizeViewLater(): Promise<void> {
+  try {
+    await refreshViewLater(props.api);
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
+  }
+}
+
+function showViewLater(kind: 'entry' | 'author' | Event = 'entry', preserveScrollHistory = false): void {
+  leaveAllViews(false, preserveScrollHistory);
+  viewLaterKind.value = kind === 'author' ? 'author' : 'entry';
   viewLaterView.value = true;
+  void synchronizeViewLater();
 }
 
 function openEntryFromRecent(entryId: number): void {
-  leaveAllViews();
+  rememberReturnScroll();
+  leaveAllViews(false, true);
   returnView.value = 'recent';
-  void viewEntry(entryId);
+  void viewEntry(entryId).then(() => {
+    if (activeEntry.value?.id !== entryId) discardReturnScroll();
+  });
 }
 
-function showRecentView(): void {
-  leaveAllViews();
+function showRecentView(preserveScrollHistory: boolean | Event = false): void {
+  leaveAllViews(false, preserveScrollHistory === true);
   recentView.value = true;
 }
 
@@ -743,14 +981,20 @@ async function openEntryFromAuthor(payload: {
   authorName: string;
   directoryId: number | null;
   directoryName: string | null;
+  returnScrollPositions: number[];
 }): Promise<void> {
+  authorReturnScrollPositions.value = [...payload.returnScrollPositions];
+  rememberReturnScroll();
   // Load the detail BEFORE switching views: clearing the author view first
   // rendered the gallery grid for as long as the fetches took. If the load
   // fails, the author page stays up with the error banner.
   await openEntry(payload.work.id);
-  if (!activeEntry.value) return;
+  if (!activeEntry.value) {
+    discardReturnScroll();
+    return;
+  }
   try {
-    await selectGallery(payload.work.type, true);
+    await selectGallery(payload.work.type, true, true);
   } catch {
     // The entry is already on screen; a stale backing gallery is harmless —
     // picking a gallery in the sidebar refetches it anyway.
@@ -761,6 +1005,7 @@ async function openEntryFromAuthor(payload: {
     directoryId: payload.directoryId,
     directoryName: payload.directoryName,
   };
+  await scrollCurrentViewToTop();
 }
 
 async function openEntry(entryId: number): Promise<void> {
@@ -779,11 +1024,16 @@ async function openEntry(entryId: number): Promise<void> {
   }
 }
 
-async function viewEntry(entryId: number, origin: EntryOrigin | null = null): Promise<void> {
+async function viewEntry(
+  entryId: number,
+  origin: EntryOrigin | null = null,
+  scrollToTop = true,
+): Promise<void> {
   entryOrigin.value = origin;
   editingEntry.value = false;
   resetLayoutEditors();
   await openEntry(entryId);
+  if (scrollToTop && activeEntry.value?.id === entryId) await scrollCurrentViewToTop();
 }
 
 function startEditing(): void {
@@ -791,7 +1041,7 @@ function startEditing(): void {
   resetLayoutEditors();
 }
 
-function closeEntry(): void {
+async function closeEntry(): Promise<void> {
   if (entryOrigin.value) {
     if ('tagResults' in entryOrigin.value) {
       tagResults.value = entryOrigin.value.tagResults;
@@ -800,6 +1050,7 @@ function closeEntry(): void {
       activeType.value = null;
       editingEntry.value = false;
       resetLayoutEditors();
+      await restorePreviousScroll();
       return;
     }
     if ('searchQuery' in entryOrigin.value) {
@@ -812,8 +1063,10 @@ function closeEntry(): void {
       searchView.value = true;
       editingEntry.value = false;
       resetLayoutEditors();
+      await restorePreviousScroll();
       return;
     }
+    authorRestoreInitialScroll.value = true;
     authorTarget.value = entryOrigin.value;
     entryOrigin.value = null;
     activeEntry.value = null;
@@ -821,21 +1074,23 @@ function closeEntry(): void {
     authorView.value = true;
     editingEntry.value = false;
     resetLayoutEditors();
+    await restorePreviousScroll();
     return;
   }
   activeEntry.value = null;
   editingEntry.value = false;
   resetLayoutEditors();
   restoreReturnView();
+  await restorePreviousScroll();
 }
 
 function restoreReturnView(): void {
   const target = returnView.value;
   returnView.value = null;
-  if (target === 'recent') showRecentView();
-  else if (target === 'viewLater') showViewLater();
-  else if (target === 'collections') showCollections();
-  else if (target === 'random') showRandom();
+  if (target === 'recent') showRecentView(true);
+  else if (target === 'viewLater') showViewLater(viewLaterKind.value, true);
+  else if (target === 'collections') showCollections(true);
+  else if (target === 'random') showRandom(true);
   else if (target === 'batch' && pendingBatchReview.value) {
     batchReview.value = pendingBatchReview.value;
     pendingBatchReview.value = null;
@@ -844,6 +1099,7 @@ function restoreReturnView(): void {
 
 async function openEntryTag(tag: { id: number; name: string }): Promise<void> {
   if (editingEntry.value || !activeEntry.value) return;
+  rememberReturnScroll();
   const sourceEntry = {
     id: activeEntry.value.id,
     type: activeEntry.value.type,
@@ -862,7 +1118,9 @@ async function openEntryTag(tag: { id: number; name: string }): Promise<void> {
     };
     activeEntry.value = null;
     activeType.value = null;
+    await scrollCurrentViewToTop();
   } catch (cause) {
+    discardReturnScroll();
     error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
   }
 }
@@ -872,7 +1130,10 @@ async function openAuthorTag(payload: {
   tagName: string;
   authorId: number;
   authorName: string;
+  returnScrollPositions: number[];
 }): Promise<void> {
+  authorReturnScrollPositions.value = [...payload.returnScrollPositions];
+  rememberReturnScroll();
   error.value = null;
   try {
     tagResults.value = {
@@ -889,21 +1150,27 @@ async function openAuthorTag(payload: {
     };
     authorView.value = false;
     authorTarget.value = null;
+    await scrollCurrentViewToTop();
   } catch (cause) {
+    discardReturnScroll();
     error.value = cause instanceof Error ? cause.message : t('error.loadAuthors');
   }
 }
 
 async function openTagEntry(entry: GalleryEntrySummary): Promise<void> {
   if (tagResults.value?.kind !== 'entry') return;
+  rememberReturnScroll();
   const origin = tagResults.value;
   tagResults.value = null;
   activeType.value = entry.type;
   await viewEntry(entry.id, { tagResults: origin });
+  if (activeEntry.value?.id !== entry.id) discardReturnScroll();
 }
 
 function openTagAuthor(author: { id: number; name: string }): void {
   if (tagResults.value?.kind !== 'author') return;
+  rememberReturnScroll();
+  authorRestoreInitialScroll.value = false;
   authorTagOrigin.value = tagResults.value;
   tagResults.value = null;
   authorTarget.value = {
@@ -913,14 +1180,16 @@ function openTagAuthor(author: { id: number; name: string }): void {
     directoryName: null,
   };
   authorView.value = true;
+  void scrollCurrentViewToTop();
 }
 
-function restoreAuthorTagResults(): void {
+async function restoreAuthorTagResults(): Promise<void> {
   if (authorTagOrigin.value) {
     tagResults.value = authorTagOrigin.value;
     authorTagOrigin.value = null;
     authorView.value = false;
     authorTarget.value = null;
+    await restorePreviousScroll();
     return;
   }
   if (authorSearchOrigin.value !== null) {
@@ -931,7 +1200,16 @@ function restoreAuthorTagResults(): void {
     authorView.value = false;
     authorTarget.value = null;
     searchView.value = true;
+    await restorePreviousScroll();
+    return;
   }
+  if (returnView.value !== null) {
+    restoreReturnView();
+    await restorePreviousScroll();
+    return;
+  }
+  authorTarget.value = null;
+  await restorePreviousScroll();
 }
 
 async function closeTagResults(): Promise<void> {
@@ -941,20 +1219,23 @@ async function closeTagResults(): Promise<void> {
   if (current.kind === 'entry') {
     if (current.sourceEntry) {
       activeType.value = current.sourceEntry.type;
-      await viewEntry(current.sourceEntry.id);
+      await viewEntry(current.sourceEntry.id, null, false);
     } else if (randomTagReturn) {
       randomTagReturn = false;
-      showRandom();
+      showRandom(true);
     } else {
       searchQuery.value = current.sourceSearchQuery ?? '';
       searchScope.value = current.sourceSearchScope ?? 'entries';
       sidebarSearchQuery.value = searchQuery.value;
       searchView.value = true;
     }
+    await restorePreviousScroll();
     return;
   }
+  authorRestoreInitialScroll.value = true;
   authorTarget.value = current.sourceAuthor;
   authorView.value = true;
+  await restorePreviousScroll();
 }
 
 function openAuthorFromEntry(authorId: number): void {
@@ -988,6 +1269,8 @@ function resetLayoutEditors(): void {
   editingContentId.value = null;
   ratingEditorOpen.value = false;
   draggedTagId.value = null;
+  selectedTagId.value = null;
+  selectedTagFacetId.value = null;
   sectionName.value = '';
   facetName.value = '';
   tagName.value = '';
@@ -1314,8 +1597,21 @@ function beginTagDrag(tagId: number): void {
   draggedTagId.value = tagId;
 }
 
+function toggleTagMoveSelection(tagId: number, facetId: number): void {
+  if (!editingEntry.value) return;
+  if (selectedTagId.value === tagId) {
+    selectedTagId.value = null;
+    selectedTagFacetId.value = null;
+    return;
+  }
+  selectedTagId.value = tagId;
+  selectedTagFacetId.value = facetId;
+}
+
 function beginTagRename(tag: EntryDetailResponse['sections'][number]['facets'][number]['tags'][number]): void {
   if (!editingEntry.value) return;
+  selectedTagId.value = null;
+  selectedTagFacetId.value = null;
   editingTagId.value = tag.id;
   editingTagName.value = tag.name;
 }
@@ -1336,12 +1632,24 @@ async function saveTagRename(tagId: number): Promise<void> {
 
 async function moveDraggedTag(targetFacetId: number): Promise<void> {
   if (!editingEntry.value || !activeEntry.value || draggedTagId.value === null) return;
-  const entryId = activeEntry.value.id;
   const tagId = draggedTagId.value;
   draggedTagId.value = null;
+  await moveTagToFacet(tagId, targetFacetId);
+}
+
+async function moveSelectedTag(targetFacetId: number): Promise<void> {
+  if (selectedTagId.value === null || selectedTagFacetId.value === targetFacetId) return;
+  await moveTagToFacet(selectedTagId.value, targetFacetId);
+}
+
+async function moveTagToFacet(tagId: number, targetFacetId: number): Promise<void> {
+  if (!editingEntry.value || !activeEntry.value) return;
+  const entryId = activeEntry.value.id;
   error.value = null;
   try {
     await props.api.moveEntryTag(entryId, tagId, targetFacetId);
+    selectedTagId.value = null;
+    selectedTagFacetId.value = null;
     await openEntry(entryId);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.moveTag');
@@ -1364,7 +1672,7 @@ async function initialize(): Promise<void> {
   try {
     // Home is the default view: nothing is selected until the user picks a
     // Gallery (homepage design guide §10 — no first-gallery fallback).
-    await Promise.all([refreshGalleries(), refreshAuthors()]);
+    await Promise.all([refreshGalleries(), refreshAuthors(), initializeViewLater(props.api)]);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.loadGalleries');
   } finally {
@@ -1373,6 +1681,7 @@ async function initialize(): Promise<void> {
 }
 
 function openCreation(view: CreationView): void {
+  closeMobileNavigation();
   creationView.value = view;
   tagResults.value = null;
   activeEntry.value = null;
@@ -1402,7 +1711,7 @@ async function submitEntry(draft: ManualEntryDraft): Promise<void> {
       if (rating.stars === null) continue;
       await props.api.setEntryRating(created.id, rating.slotId, rating.stars);
     }
-    if (draft.viewLater) toggleViewLater(created.id);
+    if (draft.viewLater) await addEntriesToViewLater(props.api, [created.id]);
     await refreshGalleries();
     // Jump straight into the freshly created Entry for a quick check.
     creationView.value = null;
@@ -1436,11 +1745,7 @@ async function submitAuthor(draft: CreateProducerRequest): Promise<void> {
 }
 
 async function finishImport(entryType: string, entryIds: number[] = [], viewLater = false): Promise<void> {
-  if (viewLater) {
-    for (const entryId of entryIds) {
-      if (!viewLaterIds.value.includes(entryId)) viewLaterIds.value.push(entryId);
-    }
-  }
+  if (viewLater) await addEntriesToViewLater(props.api, entryIds);
   creationView.value = null;
   batchReview.value = null;
   await Promise.all([refreshGalleries(), refreshAuthors()]);
@@ -1459,13 +1764,9 @@ async function finishImport(entryType: string, entryIds: number[] = [], viewLate
 // to any other view) discards the group.
 const batchReview = ref<{ entryType: string; entryIds: number[] } | null>(null);
 
-function finishBatchImport(entryType: string, entryIds: number[] = [], viewLater = false): void {
+async function finishBatchImport(entryType: string, entryIds: number[] = [], viewLater = false): Promise<void> {
   // The batch "view later" checkbox applies to every committed item.
-  if (viewLater) {
-    for (const entryId of entryIds) {
-      if (!viewLaterIds.value.includes(entryId)) viewLaterIds.value.push(entryId);
-    }
-  }
+  if (viewLater) await addEntriesToViewLater(props.api, entryIds);
   if (entryIds.length > 0) {
     creationView.value = null;
     batchReview.value = { entryType, entryIds };
@@ -1487,10 +1788,13 @@ function completeBatchReview(): void {
 }
 
 function openEntryFromBatchReview(entryId: number): void {
+  rememberReturnScroll();
   pendingBatchReview.value = batchReview.value;
-  leaveAllViews();
+  leaveAllViews(false, true);
   returnView.value = 'batch';
-  void viewEntry(entryId);
+  void viewEntry(entryId).then(() => {
+    if (activeEntry.value?.id !== entryId) discardReturnScroll();
+  });
 }
 
 const batchReviewEntries = ref<GalleryEntrySummary[]>([]);
@@ -1513,18 +1817,66 @@ watch(batchReview, async (review) => {
   }
 });
 
-onMounted(initialize);
+async function toggleActiveEntryViewLater(): Promise<void> {
+  if (!activeEntry.value) return;
+  error.value = null;
+  try {
+    await toggleViewLater(props.api, activeEntry.value.id);
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
+  }
+}
+
+function handleWindowFocus(): void {
+  void synchronizeViewLater();
+}
+
+onMounted(() => {
+  window.addEventListener('focus', handleWindowFocus);
+  window.addEventListener('popstate', handlePopState);
+  window.addEventListener('keydown', handleGlobalKeydown);
+  void initialize();
+});
+onUnmounted(() => {
+  window.removeEventListener('focus', handleWindowFocus);
+  window.removeEventListener('popstate', handlePopState);
+  window.removeEventListener('keydown', handleGlobalKeydown);
+  document.body.classList.remove('t3-mobile-navigation-open');
+  delete document.documentElement.dataset.theme;
+  delete document.documentElement.dataset.accent;
+  document.documentElement.style.removeProperty('background-color');
+  document.body.style.removeProperty('background-color');
+});
 </script>
 
 <template>
   <div class="gallery-app" :data-theme="theme" :data-accent="accent">
     <header class="app-header">
-      <div>
-        <p class="eyebrow">{{ t('app.tagline') }}</p>
-        <h1>{{ t('gallery.title') }}</h1>
-        <p class="subtitle">{{ t('gallery.subtitle') }}</p>
+      <div class="header-brand">
+        <IconButton
+          class="mobile-navigation-toggle"
+          icon="menu"
+          :label="t('navigation.open')"
+          data-testid="mobile-navigation-toggle"
+          :active="mobileNavigationOpen"
+          :aria-expanded="mobileNavigationOpen"
+          aria-controls="app-navigation"
+          @click="openMobileNavigation"
+        />
+        <div class="app-title-copy">
+          <p class="eyebrow">{{ t('app.tagline') }}</p>
+          <h1>{{ t('gallery.title') }}</h1>
+          <p class="subtitle">{{ t('gallery.subtitle') }}</p>
+        </div>
       </div>
       <div class="header-controls">
+        <IconButton
+          icon="back"
+          :label="t('navigation.back')"
+          :disabled="!topBarBackEnabled"
+          data-testid="top-bar-back"
+          @click="navigateBackFromTopBar"
+        />
         <button
           class="icon-button"
           type="button"
@@ -1598,7 +1950,29 @@ onMounted(initialize);
     </header>
 
     <main class="app-layout">
-      <aside class="sidebar">
+      <button
+        v-if="mobileNavigationOpen"
+        type="button"
+        class="mobile-navigation-backdrop"
+        data-testid="mobile-navigation-backdrop"
+        :aria-label="t('navigation.close')"
+        @click="closeMobileNavigation()"
+      />
+      <aside
+        id="app-navigation"
+        class="sidebar"
+        :class="{ 'sidebar-open': mobileNavigationOpen }"
+        data-testid="app-sidebar"
+      >
+        <div class="sidebar-mobile-header">
+          <strong>{{ t('navigation.title') }}</strong>
+          <IconButton
+            icon="close"
+            :label="t('navigation.close')"
+            data-testid="mobile-navigation-close"
+            @click="closeMobileNavigation()"
+          />
+        </div>
         <form
           class="sidebar-search"
           data-testid="sidebar-search-form"
@@ -1692,7 +2066,7 @@ onMounted(initialize);
             @click="showViewLater"
           >
             <span>{{ t('viewLater.title') }}</span>
-            <span class="count" v-if="viewLaterIds.length > 0">{{ viewLaterIds.length }}</span>
+            <span class="count" v-if="viewLaterIds.length + viewLaterAuthorIds.length > 0">{{ viewLaterIds.length + viewLaterAuthorIds.length }}</span>
           </button>
         </nav>
 
@@ -1774,7 +2148,7 @@ onMounted(initialize);
           >
             {{ t('tag.noResults') }}
           </p>
-          <PagedCardGrid :items="pagedTagItems" v-slot="{ items }">
+          <PagedCardGrid :items="pagedTagItems" :page-key="`tag:${tagResults.kind}:${tagResults.tagId}`" v-slot="{ items }">
             <article
               v-for="entry in items.filter((item): item is GalleryEntrySummary => 'type' in item)"
               :key="`entry-${entry.id}`"
@@ -1787,14 +2161,16 @@ onMounted(initialize);
                 @click="openTagEntry(entry)"
               >
                 <div class="entry-stack">
-                  <img
+                  <LazyCardImage
                     v-for="(ref, stackIndex) in entryStackLayers(entry)"
                     :key="`${ref}-${stackIndex}`"
                     class="entry-stack-image"
                     :style="entryStackLayerStyle(stackIndex, entryStackLayers(entry).length)"
                     :src="api.assetUrl(ref)"
                     :alt="entry.title"
-                  >
+                    loading="lazy"
+                    decoding="async"
+                  />
                   <span v-if="entryStackLayers(entry).length === 0" class="entry-placeholder" aria-hidden="true">
                     {{ entry.title.slice(0, 1).toUpperCase() }}
                   </span>
@@ -1827,16 +2203,24 @@ onMounted(initialize);
         <RecentViewPage
           v-else-if="recentView"
           :api="api"
+          :initial-tab="recentViewTab"
+          @active-tab-change="recentViewTab = $event"
           @open-entry="openEntryFromRecent"
         />
         <ViewLaterPage
           v-else-if="viewLaterView"
           :api="api"
+          :initial-kind="viewLaterKind"
+          :initial-tab="viewLaterTab"
+          @active-tab-change="viewLaterTab = $event"
           @open-entry="openEntryFromViewLater"
+          @open-author="openAuthorFromViewLater"
         />
         <CollectionsPage
           v-else-if="collectionsView"
+          ref="collectionsPageRef"
           :api="api"
+          @back="showHome"
           @open-entry="openEntryFromCollections"
           @open-author="openAuthorFromCollections"
         />
@@ -1872,7 +2256,7 @@ onMounted(initialize);
             {{ t('import.batchReviewNotice') }}
           </p>
           <p v-if="batchReviewLoading" class="muted">{{ t('import.preparing') }}</p>
-          <PagedCardGrid v-else :items="batchReviewEntries" v-slot="{ items }">
+          <PagedCardGrid v-else :items="batchReviewEntries" :page-key="`batch:${batchReview.entryType}`" v-slot="{ items }">
             <article
               v-for="entry in items"
               :key="entry.id"
@@ -1888,12 +2272,14 @@ onMounted(initialize);
                   <span v-if="(entry.coverRef || entry.previewRef) === null" class="entry-placeholder" aria-hidden="true">
                     {{ entry.title.slice(0, 1).toUpperCase() }}
                   </span>
-                  <img
+                  <LazyCardImage
                     v-else
                     class="entry-stack-image"
                     :src="api.assetUrl(entry.coverRef ?? entry.previewRef ?? '')"
                     :alt="entry.title"
-                  >
+                    loading="lazy"
+                    decoding="async"
+                  />
                 </div>
                 <span class="entry-meta">
                   <strong>{{ entry.title }}</strong>
@@ -1905,13 +2291,20 @@ onMounted(initialize);
         </section>
         <AuthorPage
           v-else-if="authorView"
+          ref="authorPageRef"
           :api="api"
           :authors="authors"
           :initial-author-id="authorTarget?.authorId ?? null"
           :initial-directory-id="authorTarget?.directoryId ?? null"
+          :initial-return-scroll-positions="authorReturnScrollPositions"
+          :restore-initial-scroll="authorRestoreInitialScroll"
           :back-label="authorTagOrigin
             ? t('entry.back', { type: authorTagOrigin.tagName })
-            : authorSearchOrigin !== null ? t('entry.back', { type: t('search.title') }) : null"
+            : authorSearchOrigin !== null
+              ? t('entry.back', { type: t('search.title') })
+              : returnView === 'viewLater'
+                ? t('entry.back', { type: t('viewLater.title') })
+                : null"
           @open-entry="openEntryFromAuthor"
           @open-tag="openAuthorTag"
           @back="restoreAuthorTagResults"
@@ -2036,7 +2429,7 @@ onMounted(initialize);
                 :active="activeEntryInViewLater"
                 :aria-pressed="activeEntryInViewLater"
                 data-testid="view-later-button"
-                @click="activeEntry && toggleViewLater(activeEntry.id)"
+                @click="toggleActiveEntryViewLater"
               />
             </div>
           </div>
@@ -2094,23 +2487,31 @@ onMounted(initialize);
           <section v-if="activeEntry.producers.length || editingEntry" class="detail-section">
             <h3>{{ t('entry.producers') }}</h3>
             <div class="chip-row">
-              <span
-                v-for="producer in activeEntry.producers"
-                :key="producer.id"
-                class="detail-chip"
-                :data-entry-author-id="producer.id"
-                @dblclick="!editingEntry && openAuthorFromEntry(producer.id)"
-              >
-                {{ producer.name }}
+              <template v-for="producer in activeEntry.producers" :key="producer.id">
                 <button
-                  v-if="editingEntry"
+                  v-if="!editingEntry"
                   type="button"
-                  class="remove-tag-button"
-                  :data-unlink-author-id="producer.id"
-                  :aria-label="t('author.unlink', { name: producer.name })"
-                  @click="unlinkAuthor(producer.id)"
-                >×</button>
-              </span>
+                  class="detail-chip detail-chip-link"
+                  :data-entry-author-id="producer.id"
+                  @click="openAuthorFromEntry(producer.id)"
+                >
+                  {{ producer.name }}
+                </button>
+                <span
+                  v-else
+                  class="detail-chip"
+                  :data-entry-author-id="producer.id"
+                >
+                  {{ producer.name }}
+                  <button
+                    type="button"
+                    class="remove-tag-button"
+                    :data-unlink-author-id="producer.id"
+                    :aria-label="t('author.unlink', { name: producer.name })"
+                    @click="unlinkAuthor(producer.id)"
+                  >×</button>
+                </span>
+              </template>
               <button
                 v-if="editingEntry && !authorEditorOpen"
                 data-testid="add-entry-author"
@@ -2179,6 +2580,9 @@ onMounted(initialize);
           </section>
 
           <div data-testid="entry-information-board" class="information-board">
+            <p v-if="editingEntry" data-testid="tag-move-hint" class="tag-move-hint">
+              {{ t('tag.moveHint') }}
+            </p>
             <p v-if="activeEntry.sections.length === 0" class="information-empty">
               {{ t('information.empty') }}
             </p>
@@ -2252,41 +2656,60 @@ onMounted(initialize);
                   </div>
                   <div class="facet-tag-column" data-tag-column>
                     <div class="chip-row">
-                      <span
-                        v-for="tag in facet.tags"
-                        :key="tag.id"
-                        class="detail-chip draggable-chip"
-                        :draggable="editingEntry && editingTagId !== tag.id"
-                        :data-detail-tag-id="tag.id"
-                        @dragstart="beginTagDrag(tag.id)"
-                        @dragend="draggedTagId = null"
-                        @dblclick="editingEntry ? beginTagRename(tag) : openEntryTag(tag)"
-                      >
-                        <input
-                          v-if="editingTagId === tag.id"
-                          v-model="editingTagName"
-                          :data-rename-entry-tag-id="tag.id"
-                          :size="inlineInputSize(editingTagName)"
-                          required
-                          autocomplete="off"
-                          :aria-label="t('tag.rename')"
-                          @click.stop
-                          @dblclick.stop
-                          @keydown.enter.prevent="saveTagRename(tag.id)"
-                          @blur="saveTagRename(tag.id)"
-                        >
-                        <span v-else>{{ tag.name }}</span>
+                      <template v-for="tag in facet.tags" :key="tag.id">
                         <button
-                          v-if="editingEntry"
+                          v-if="!editingEntry"
                           type="button"
-                          class="remove-tag-button"
-                          :data-remove-entry-tag-id="tag.id"
-                          :aria-label="t('tag.remove', { name: tag.name })"
-                          @click.stop="removeTag(tag.id)"
+                          class="detail-chip detail-chip-link"
+                          :data-detail-tag-id="tag.id"
+                          @click="openEntryTag(tag)"
                         >
-                          ×
+                          {{ tag.name }}
                         </button>
-                      </span>
+                        <span
+                          v-else
+                          class="detail-chip draggable-chip"
+                          :class="{ 'tag-move-selected': selectedTagId === tag.id }"
+                          :draggable="editingTagId !== tag.id"
+                          :data-detail-tag-id="tag.id"
+                          role="button"
+                          :tabindex="editingTagId === tag.id ? -1 : 0"
+                          :aria-pressed="selectedTagId === tag.id"
+                          :aria-label="selectedTagId === tag.id
+                            ? t('tag.removeSelection')
+                            : t('tag.selectToMove', { name: tag.name })"
+                          @click="toggleTagMoveSelection(tag.id, facet.id)"
+                          @keydown.enter.prevent="toggleTagMoveSelection(tag.id, facet.id)"
+                          @keydown.space.prevent="toggleTagMoveSelection(tag.id, facet.id)"
+                          @dragstart="beginTagDrag(tag.id)"
+                          @dragend="draggedTagId = null"
+                          @dblclick="beginTagRename(tag)"
+                        >
+                          <input
+                            v-if="editingTagId === tag.id"
+                            v-model="editingTagName"
+                            :data-rename-entry-tag-id="tag.id"
+                            :size="inlineInputSize(editingTagName)"
+                            required
+                            autocomplete="off"
+                            :aria-label="t('tag.rename')"
+                            @click.stop
+                            @dblclick.stop
+                            @keydown.enter.prevent="saveTagRename(tag.id)"
+                            @blur="saveTagRename(tag.id)"
+                          >
+                          <span v-else>{{ tag.name }}</span>
+                          <button
+                            type="button"
+                            class="remove-tag-button"
+                            :data-remove-entry-tag-id="tag.id"
+                            :aria-label="t('tag.remove', { name: tag.name })"
+                            @click.stop="removeTag(tag.id)"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      </template>
                       <button
                         v-if="editingEntry && tagEditorFacetId !== facet.id"
                         class="add-button add-tag-button"
@@ -2313,6 +2736,17 @@ onMounted(initialize);
                         >
                       </form>
                     </div>
+                    <button
+                      v-if="editingEntry
+                        && selectedTagId !== null
+                        && selectedTagFacetId !== facet.id"
+                      type="button"
+                      class="add-button tag-move-target"
+                      :data-move-selected-tag-to-facet-id="facet.id"
+                      @click="moveSelectedTag(facet.id)"
+                    >
+                      {{ t('tag.moveHere') }}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2672,6 +3106,13 @@ onMounted(initialize);
             </div>
           </section>
 
+          <IconButton
+            class="scroll-top-fab"
+            icon="arrow-up"
+            :label="t('navigation.scrollTop')"
+            data-testid="entry-scroll-top"
+            @click="scrollToTop"
+          />
         </article>
         <template v-else-if="activeType">
           <div class="content-heading">
@@ -2695,6 +3136,7 @@ onMounted(initialize);
                   <option value="date-asc">{{ t('gallery.sortDateOldest') }}</option>
                   <option value="title-asc">{{ t('gallery.sortTitleAz') }}</option>
                   <option value="title-desc">{{ t('gallery.sortTitleZa') }}</option>
+                  <option value="random">{{ t('sort.random') }}</option>
                 </select>
               </label>
               <span data-testid="gallery-entry-count">
@@ -2716,7 +3158,12 @@ onMounted(initialize);
               @update:model-value="onFacetFiltersChange"
             />
           </div>
-          <PagedCardGrid :items="sortedEntries" grid-testid="entry-list" v-slot="{ items }">
+          <PagedCardGrid
+            :items="sortedEntries"
+            :page-key="`gallery:${activeType}`"
+            grid-testid="entry-list"
+            v-slot="{ items }"
+          >
             <article
               v-for="entry in items"
               :key="entry.id"
@@ -2726,17 +3173,19 @@ onMounted(initialize);
                 type="button"
                 class="entry-card-main"
                 :data-entry-id="entry.id"
-                @click="viewEntry(entry.id)"
+                @click="openEntryFromGallery(entry.id)"
               >
                 <div class="entry-stack">
-                  <img
+                  <LazyCardImage
                     v-for="(ref, stackIndex) in entryStackLayers(entry)"
                     :key="`${ref}-${stackIndex}`"
                     class="entry-stack-image"
                     :style="entryStackLayerStyle(stackIndex, entryStackLayers(entry).length)"
                     :src="api.assetUrl(ref)"
                     :alt="entry.title"
-                  >
+                    loading="lazy"
+                    decoding="async"
+                  />
                   <span v-if="entryStackLayers(entry).length === 0" class="entry-placeholder" aria-hidden="true">
                     {{ entry.title.slice(0, 1).toUpperCase() }}
                   </span>
@@ -2807,6 +3256,11 @@ onMounted(initialize);
 .sort-control select { min-height: var(--control-min-height); padding: 0.3rem 0.6rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface); font: inherit; }
 
 .app-header { margin-bottom: 1.5rem; }
+.header-brand { display: flex; min-width: 0; align-items: center; gap: 0.75rem; }
+.app-title-copy { min-width: 0; }
+.mobile-navigation-toggle,
+.sidebar-mobile-header,
+.mobile-navigation-backdrop { display: none; }
 h1, h2, h3, p { margin-top: 0; }
 /* The app-level "Galleries" heading steps back; the current page title below
    is the primary visual entry (icon brief §1.2 B). */
@@ -2823,7 +3277,7 @@ h2 { margin-bottom: 0; }
   cursor: pointer;
 }
 .header-controls { position: relative; display: flex; align-items: center; gap: 0.5rem; }
-.settings-panel { position: absolute; z-index: 10; top: calc(100% + 0.5rem); right: 0; width: min(36rem, calc(100vw - 2rem)); padding: 1rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-overlay); }
+.settings-panel { position: absolute; z-index: 10; top: calc(100% + 0.5rem); right: 0; box-sizing: border-box; width: min(36rem, calc(100vw - 2rem)); padding: 1rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-overlay); }
 .settings-panel h2 { margin-bottom: 0.8rem; font-size: 1rem; }
 .settings-panel label { display: grid; gap: 0.4rem; color: var(--text-muted); font-size: 0.8rem; font-weight: 700; }
 .settings-panel .checkbox-label { display: flex; align-items: center; gap: 0.45rem; }
@@ -2887,6 +3341,15 @@ h2 { margin-bottom: 0; }
 .secondary-button:hover { border-color: var(--accent); }
 .secondary-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .entry-detail > h2 { margin-bottom: 1.5rem; font-size: clamp(1.7rem, 4vw, 2.5rem); }
+.scroll-top-fab {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 30;
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: var(--shadow-overlay);
+}
 .detail-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
 .detail-toolbar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem; }
 .detail-toolbar-actions .secondary-button { white-space: nowrap; }
@@ -2912,10 +3375,22 @@ h2 { margin-bottom: 0; }
 .facet-label-column { min-width: 0; padding: 0.65rem 0.9rem 0.65rem 0; border-right: 1px dashed color-mix(in srgb, var(--border-subtle) 58%, transparent); color: var(--text-muted); font-size: 0.76rem; line-height: 1.4; }
 .facet-tag-column { min-width: 0; padding: 0.55rem 0 0.55rem 1rem; }
 .facet-name { display: block; overflow-wrap: anywhere; }
+.facet-sort-controls { display: inline-flex; align-items: center; gap: 0.15rem; margin-top: 0.3rem; }
+.facet-sort-controls button { display: inline-grid; width: 1.75rem; height: 1.75rem; padding: 0; place-items: center; border: 1px solid var(--border-subtle); border-radius: 999px; color: var(--text-muted); background: transparent; font: inherit; cursor: pointer; }
+.facet-sort-controls button:hover, .facet-sort-controls button:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; background: var(--surface-muted); }
+.facet-sort-controls button:disabled { cursor: default; opacity: 0.3; }
+.tag-move-hint { margin: 0.75rem 0 0; padding: 0.6rem 0.75rem; border-radius: 0.55rem; color: var(--text-muted); background: var(--accent-soft); font-size: 0.78rem; line-height: 1.45; }
 .chip-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .detail-chip { display: inline-flex; align-items: center; padding: 0.35rem 0.6rem; border: 1px solid var(--tag-border); border-radius: 999px; color: var(--tag-text); background: var(--tag-background); font-size: 0.78rem; }
+.detail-chip-link { font-family: inherit; cursor: pointer; }
 .draggable-chip[draggable='true'] { cursor: grab; }
 .draggable-chip[draggable='true']:active { cursor: grabbing; }
+.tag-move-selected {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.tag-move-target { display: block; margin-top: 0.45rem; border-color: var(--accent); color: var(--accent); font-weight: 650; background: var(--accent-soft); }
 .remove-tag-button { margin-left: 0.35rem; padding: 0; border: 0; color: inherit; background: transparent; font: inherit; line-height: 1; cursor: pointer; opacity: 0.55; }
 .remove-tag-button:hover, .remove-tag-button:focus-visible { opacity: 1; }
 .add-facet-control { padding-top: 0.55rem; }
@@ -2970,12 +3445,188 @@ h2 { margin-bottom: 0; }
 .error-message { padding: 0.75rem; border-radius: 0.6rem; color: #a12626; background: #fff0f0; }
 
 @media (max-width: 44rem) {
-  .app-header { align-items: flex-start; }
-  .header-controls { flex-wrap: wrap; justify-content: flex-end; }
+  :global(body.t3-mobile-navigation-open) { overflow: hidden; }
+  .gallery-app {
+    min-height: 100dvh;
+    overflow-x: clip;
+    padding:
+      max(0.75rem, env(safe-area-inset-top))
+      max(0.75rem, env(safe-area-inset-right))
+      max(0.75rem, env(safe-area-inset-bottom))
+      max(0.75rem, env(safe-area-inset-left));
+  }
+  .app-header {
+    position: sticky;
+    z-index: 30;
+    top: 0;
+    align-items: center;
+    margin: -0.25rem -0.25rem 0.75rem;
+    padding: 0.25rem;
+    background: color-mix(in srgb, var(--page-background) 92%, transparent);
+    backdrop-filter: blur(0.6rem);
+  }
+  .mobile-navigation-toggle { display: inline-grid; flex: 0 0 auto; }
+  .app-title-copy .eyebrow,
+  .app-title-copy .subtitle { display: none; }
+  .app-title-copy h1 { margin: 0; font-size: 1.15rem; }
+  .header-controls { flex: 0 0 auto; flex-wrap: nowrap; justify-content: flex-end; gap: 0.25rem; }
+  .settings-panel {
+    position: fixed;
+    top: calc(max(0.75rem, env(safe-area-inset-top)) + var(--icon-button-size) + 0.5rem);
+    right: max(0.75rem, env(safe-area-inset-right));
+    left: max(0.75rem, env(safe-area-inset-left));
+    width: auto;
+    max-height: calc(100dvh - 5rem - env(safe-area-inset-bottom));
+    overflow-y: auto;
+  }
+  .settings-panel select,
+  .settings-panel .advanced-entry,
+  .settings-panel .checkbox-label { min-height: 44px; }
+  .accent-swatch { width: 44px; height: 44px; }
   .app-layout { grid-template-columns: 1fr; }
-  .content-panel { min-height: 20rem; }
+  .mobile-navigation-backdrop {
+    position: fixed;
+    z-index: 50;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: rgb(15 23 42 / 48%);
+  }
+  .sidebar {
+    position: fixed;
+    z-index: 60;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(20rem, calc(100vw - 3rem));
+    max-width: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding:
+      max(0.75rem, env(safe-area-inset-top))
+      1rem
+      max(1rem, env(safe-area-inset-bottom))
+      max(1rem, env(safe-area-inset-left));
+    border-radius: 0 var(--radius-panel) var(--radius-panel) 0;
+    visibility: hidden;
+    transform: translateX(-105%);
+    transition: transform var(--transition-duration) ease, visibility 0s linear var(--transition-duration);
+  }
+  .sidebar.sidebar-open {
+    visibility: visible;
+    transform: translateX(0);
+    transition-delay: 0s;
+  }
+  .sidebar-mobile-header {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+  .sidebar-search { min-height: 44px; }
+  .sidebar-search button { min-width: 44px; min-height: 44px; margin: -0.5rem -0.6rem -0.5rem 0; }
+  .gallery-link { min-height: 44px; align-items: center; }
+  .create-actions { display: grid; gap: 0.5rem; margin-top: 1rem; }
+  .create-actions > button { min-height: 44px; }
+  .content-panel { min-width: 0; min-height: 20rem; max-width: 100%; padding: 0.9rem; overflow-x: clip; }
+  .content-panel > * { min-width: 0; max-width: 100%; }
+  .content-heading,
+  .detail-toolbar,
+  .detail-heading { align-items: flex-start; flex-wrap: wrap; }
+  .content-heading-actions,
+  .detail-toolbar-actions { min-width: 0; flex-wrap: wrap; justify-content: flex-start; }
+  .detail-toolbar-actions .secondary-button,
+  .entry-detail[data-edit-mode='true'] .add-button,
+  .entry-detail[data-edit-mode='true'] .compact-editor input,
+  .entry-detail[data-edit-mode='true'] .compact-submit,
+  .entry-detail[data-edit-mode='true'] .content-action-button { min-height: 44px; }
+  .entry-detail[data-edit-mode='true'] .detail-chip { min-height: 44px; padding-block: 0; }
+  .entry-detail[data-edit-mode='true'] .remove-tag-button {
+    display: inline-grid;
+    min-width: 32px;
+    min-height: 42px;
+    place-items: center;
+  }
+  .entry-detail[data-edit-mode='true'] .facet-sort-controls,
+  .entry-detail[data-edit-mode='true'] .content-item-actions { flex-wrap: wrap; }
+  .entry-detail[data-edit-mode='true'] .facet-sort-controls button,
+  .entry-detail[data-edit-mode='true'] .rating-sort-controls button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .entry-detail[data-edit-mode='true'] .facet-label-column:has(.facet-sort-controls) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .entry-detail[data-edit-mode='true'] .facet-name {
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 650;
+    line-height: 1.3;
+  }
+  .entry-detail[data-edit-mode='true'] .facet-sort-controls {
+    flex: 0 0 auto;
+    gap: 0;
+    margin-top: 0;
+  }
+  .entry-detail[data-edit-mode='true'] .facet-sort-controls button {
+    border: 0;
+    color: var(--text-muted);
+    background: transparent;
+    font-size: 0.82rem;
+  }
+  .entry-detail[data-edit-mode='true'] .facet-sort-controls button:hover,
+  .entry-detail[data-edit-mode='true'] .facet-sort-controls button:focus-visible {
+    color: var(--accent);
+    background: var(--surface-muted);
+  }
+  .entry-detail[data-edit-mode='true'] .facet-sort-controls .armable-armed { color: #a12626; background: #fff0f0; }
+  .rating-row {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    width: 100%;
+    min-width: 0;
+    justify-content: start;
+    gap: 0.4rem 0.65rem;
+  }
+  .rating-name {
+    min-width: 0;
+    max-width: min(9rem, 40vw);
+    overflow-wrap: anywhere;
+  }
+  .rating-row > .star-picker,
+  .rating-row > .star-display,
+  .rating-row > .rating-unrated {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .rating-row > .rating-sort-controls {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .entry-toolbar .icon-button,
+  .author-toolbar .icon-button,
+  .detail-toolbar-actions .icon-button,
+  .media-nav { width: 44px; height: 44px; }
+  .detail-chip-link { min-height: 44px; }
+  .sort-control { max-width: 100%; flex-wrap: wrap; }
+  .sort-control select { max-width: 100%; }
+  .back-button { display: inline-flex; min-height: 44px; align-items: center; }
   .facet-row { grid-template-columns: minmax(4.75rem, 6rem) minmax(0, 1fr); }
   .facet-label-column { padding-right: 0.6rem; }
   .facet-tag-column { padding-left: 0.7rem; }
+}
+
+@media (max-width: 30rem) {
+  .content-panel { padding: 0.75rem; border-radius: var(--radius-card); }
+  .facet-row { grid-template-columns: 1fr; }
+  .facet-label-column { padding: 0.65rem 0 0.25rem; border-right: 0; }
+  .facet-tag-column { padding: 0.25rem 0 0.65rem; }
 }
 </style>

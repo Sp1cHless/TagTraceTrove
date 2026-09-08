@@ -1,4 +1,6 @@
 import { ref, watch } from 'vue';
+import type { ViewLaterState } from '@t3/shared';
+import type { GalleryApi } from '../api/gallery.js';
 
 const STORAGE_KEY = 't3.showNsfw';
 
@@ -27,30 +29,116 @@ watch(showNsfw, (value) => {
 
 const VIEW_LATER_KEY = 't3.view-later';
 
-function restoreViewLater(): number[] {
+type ViewLaterApi = Pick<GalleryApi,
+  | 'getViewLaterState'
+  | 'addViewLaterEntry'
+  | 'removeViewLaterEntry'
+  | 'mergeViewLaterEntries'
+  | 'addViewLaterAuthor'
+  | 'removeViewLaterAuthor'>;
+
+function normalizeViewLaterIds(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((id): id is number => (
+    typeof id === 'number' && Number.isInteger(id) && id > 0
+  )))];
+}
+
+function restoreLegacyViewLater(): number[] {
   try {
     const raw = window.localStorage.getItem(VIEW_LATER_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((id): id is number => typeof id === 'number') : [];
+    return normalizeViewLaterIds(raw ? JSON.parse(raw) : []);
   } catch {
     return [];
   }
 }
 
-/**
- * "View later" is a pure UI-layer classification (never in the database, so
- * it cannot conflict with any domain logic): an Entry id list in local
- * storage, shown under its own sidebar gallery like Recently viewed.
- */
-export const viewLaterIds = ref<number[]>(restoreViewLater());
-
-watch(viewLaterIds, (value) => {
+function forgetLegacyViewLater(): void {
   try {
-    window.localStorage.setItem(VIEW_LATER_KEY, JSON.stringify(value));
+    window.localStorage.removeItem(VIEW_LATER_KEY);
   } catch {
-    // Storage unavailable — the list just won't survive a reload.
+    // Storage unavailable — server state is still authoritative.
   }
-}, { deep: true });
+}
+
+/**
+ * Shared library data. The initial browser-local Entry list is merged once so
+ * an upgrade cannot silently discard saved items; afterwards both Entry and
+ * Author lists use the SQLite-backed server state as their authority.
+ */
+export const viewLaterIds = ref<number[]>(restoreLegacyViewLater());
+export const viewLaterAuthorIds = ref<number[]>([]);
+
+let viewLaterQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueViewLater(operation: () => Promise<void>): Promise<void> {
+  const result = viewLaterQueue.then(operation, operation);
+  viewLaterQueue = result.then(() => undefined, () => undefined);
+  return result;
+}
+
+function applyViewLaterState(state: ViewLaterState): void {
+  viewLaterIds.value = normalizeViewLaterIds(state.entryIds);
+  viewLaterAuthorIds.value = normalizeViewLaterIds(state.producerIds);
+}
+
+export function initializeViewLater(api: ViewLaterApi): Promise<void> {
+  return enqueueViewLater(async () => {
+    const legacyIds = restoreLegacyViewLater();
+    applyViewLaterState(
+      legacyIds.length > 0
+        ? await api.mergeViewLaterEntries(legacyIds)
+        : await api.getViewLaterState(),
+    );
+    forgetLegacyViewLater();
+  });
+}
+
+export function refreshViewLater(api: ViewLaterApi): Promise<void> {
+  return enqueueViewLater(async () => {
+    applyViewLaterState(await api.getViewLaterState());
+  });
+}
+
+export function toggleViewLater(api: ViewLaterApi, entryId: number): Promise<void> {
+  return enqueueViewLater(async () => {
+    applyViewLaterState(
+      viewLaterIds.value.includes(entryId)
+        ? await api.removeViewLaterEntry(entryId)
+        : await api.addViewLaterEntry(entryId),
+    );
+  });
+}
+
+export function toggleAuthorViewLater(api: ViewLaterApi, authorId: number): Promise<void> {
+  return enqueueViewLater(async () => {
+    applyViewLaterState(
+      viewLaterAuthorIds.value.includes(authorId)
+        ? await api.removeViewLaterAuthor(authorId)
+        : await api.addViewLaterAuthor(authorId),
+    );
+  });
+}
+
+export function addEntriesToViewLater(api: ViewLaterApi, entryIds: number[]): Promise<void> {
+  const ids = normalizeViewLaterIds(entryIds);
+  if (ids.length === 0) return Promise.resolve();
+  return enqueueViewLater(async () => {
+    applyViewLaterState(await api.mergeViewLaterEntries(ids));
+  });
+}
+
+export function removeEntryFromViewLater(api: ViewLaterApi, entryId: number): Promise<void> {
+  return enqueueViewLater(async () => {
+    applyViewLaterState(await api.removeViewLaterEntry(entryId));
+  });
+}
+
+export function removeAuthorFromViewLater(api: ViewLaterApi, authorId: number): Promise<void> {
+  return enqueueViewLater(async () => {
+    applyViewLaterState(await api.removeViewLaterAuthor(authorId));
+  });
+}
 
 const ROWS_KEY = 't3.rows-per-page';
 export const rowsPerPageOptions = [3, 5, 8] as const;
@@ -78,12 +166,6 @@ watch(rowsPerPage, (value) => {
     // Storage unavailable — the preference just won't survive a reload.
   }
 });
-
-export function toggleViewLater(entryId: number): void {
-  viewLaterIds.value = viewLaterIds.value.includes(entryId)
-    ? viewLaterIds.value.filter((id) => id !== entryId)
-    : [...viewLaterIds.value, entryId];
-}
 
 // ---------------------------------------------------------------------------
 // Accent color. The unified theming interface: every component reads the

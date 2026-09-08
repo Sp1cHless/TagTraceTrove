@@ -14,10 +14,17 @@ if errorlevel 1 (
 
 rem Copy to the repo root next to T3.bat (launcher resolves paths from its own dir).
 copy /y "%PUB%\T3Launcher.exe" "..\..\T3.exe" >nul
-copy /y "%PUB%\T3Launcher.runtimeconfig.json" "..\..\T3.runtimeconfig.json" >nul
 if errorlevel 1 (
   echo Copy failed.
   exit /b 1
+)
+rem Newer single-file SDKs embed runtimeconfig; copy it only when emitted.
+if exist "%PUB%\T3Launcher.runtimeconfig.json" (
+  copy /y "%PUB%\T3Launcher.runtimeconfig.json" "..\..\T3.runtimeconfig.json" >nul
+  if errorlevel 1 (
+    echo Runtimeconfig copy failed.
+    exit /b 1
+  )
 )
 
 echo.

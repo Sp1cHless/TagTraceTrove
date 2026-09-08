@@ -6,7 +6,7 @@
 > 已完成并验收的条目在同步进正式文档后即从本文件删除;原始需求对话不留档。
 > 两份根目录 plan 文档(产品定义 / 执行架构)的全部执行项已落地。
 
-## 状态快照 (2026-09-05)
+## 状态快照 (2026-09-08)
 
 - 桌面端收尾完成:probe 新增点赞/分区/合集三个证明项,doctor 新增评分槽
   subject-kind、合集嵌套深度、成员 kind 三类不变量检查;6 处原生 confirm
@@ -15,7 +15,7 @@
 - 此前全部批次(评分系统、使用记录跟踪、点赞、SFW/NSFW 分区、全局搜索、
   合集、稍后再看、正式模板文件、作者筛选等)均已落地、验收并同步进正式文档。
 - 运行入口:`T3.exe`(托盘启动器)/ `T3.bat`,单进程 8765。
-- 桌面端无已知未完成事项;下一步为手机端。UI 升级交接文件见
+- 桌面端与手机端基础功能均已完成;下一步边界为万级数据规模/数据库架构升级，当前未启动。UI 升级交接文件见
   `docs/ui-overview.md`(文件清单/约束/外部 AI 计划格式)。手机端规划简报见
   `docs/mobile-prep-brief.md`(给做计划的 agent:现状导览 + 触屏/响应式/LAN/
   缩略图工作清单 + 约定陷阱;核心结论 = 不需要任何新功能,全部是前端与
@@ -100,3 +100,26 @@
 2. **✅ 已完成（2026-09-06）— SFW/NSFW 全局可见性补齐。** Recently viewed 隐藏 NSFW Gallery tab 与作品；Collections 在 SFW 模式下过滤 NSFW Gallery 的成员作品、NSFW 作者及相应封面和计数；Random works/authors/tags 只从当前可见 Gallery/Author vocabulary 抽取，并在关闭 Show NSFW 时清除已抽出的结果。
 3. **✅ 已完成（2026-09-06）— Random 单 Tag 展示升级。** 单个随机 Tag 改为居中的大尺寸 reveal card，使用现有 theme/tag/accent token、柔和渐变、圆角、阴影、focus/hover/pressed 状态，并支持 reduced-motion；点击后进入该 Tag 结果页的语义不变。
 4. **⏸ 延期，不在当前范围。** 数据保存/分享（`save-share`）：未来可在 Entry、Author 和 Collection 提供与 import 结构一致的归档导出入口；目前仅记录想法，不实施。
+
+
+## 新任务 9-07
+1，**✅ 已完成（2026-09-07）— 所有通用排序增加 Random。** Gallery、Author 作品、Author 列表、Recently viewed 与 View later 均保留原排序并增加稳定随机排序；使用一次 Fisher–Yates 副本洗牌，不修改源数组，也不会因无关响应式渲染持续跳序。
+2，**✅ 已完成（2026-09-07）— Author 共享 View later。** Author 详情页右上角使用与 Entry 相同的时钟/勾选按钮；View later 增加独立 Entries/Authors 分页。两类列表均以 SQLite/server 为权威，手机与桌面共享、按插入顺序保存、幂等增删，Author 删除时由外键级联清理。
+
+## 手机端阶段 1（2026-09-07）
+
+1. **✅ 已完成并实机验收 — LAN 启动形态。** T3.exe 默认 localhost-only；托盘可经可信网络确认显式开启/关闭 LAN，列出并复制全部私有 IPv4 手机地址，不自动修改防火墙。server host guard、launcher 契约、隔离数据库 UI/API/assets 与真实手机 Chrome 均已验证；Tray Exit 后手机连接立即失效。
+
+## 手机端阶段 2（2026-09-07）
+
+1. **✅ 已完成并实机验收 — 响应式 shell 与浏览主路径。** 44rem 以下 sidebar 改为可关闭 drawer，destination、遮罩、Escape 与 Browser Back 均可关闭；Home、Gallery、Entry、Author、Search、Recent、View later、Random、Collections 已完成窄屏布局。Facet filter 使用移动端折叠 surface；Settings、tabs、分页和工具栏适配窄屏与 safe-area；关键触控目标为 44px，Entry 的 Author/Tag chip 改为单击可达。实机反馈后补充了 Entry Tag 跳转置顶、Collections/View later 左上角小型移除视觉，以及移动端使用 Settings rows 两倍数量分页。View later Author 详情返回时会恢复 View later 的 Authors tab，不再落到 Author gallery。
+
+## 万级数据规模阶段（手机端基础功能完成后）
+
+> **边界：尚未启动。** 当前工作停在服务端分页/筛选/排序及任何数据库架构升级之前。
+
+目标：在大批量网站数据导入前，让 Gallery、筛选、搜索与图片卡片稳定支持至少 10,000 条 Entry；保持 SQLite + 文件系统的单用户本地架构，不引入不必要的外部数据库或对象存储。
+
+1. **⏳ 第一优先级 — 服务端分页、排序与筛选。** 当前 `/api/entries`、Facet 筛选和搜索返回全部匹配摘要，前端收到完整数组后才分页。改为由 SQL 执行排序/筛选并返回 `{ items, total, page, pageSize }`（必要时再升级为 cursor），Gallery、Tag 结果、Search、Author works、Recent、View later、Collections 等长列表只请求当前页；Random 使用服务端抽样或独立稳定种子语义。以 10,000 条和 100,000 条合成数据做响应时间、响应体、内存和查询计划基准。
+2. **⏳ 第二优先级 — 卡片专用缩略图。** 导入时为 cover/preview 生成约 400–600px 的 WebP 卡片版本，卡片只使用 thumbnail，Entry 详情继续使用原图；为现有 assets 提供可恢复、可中断的后台补建流程。缩略图 URL 必须版本化或内容寻址，避免同路径替换的旧缓存问题，并在基准中记录首屏请求数、传输量和解码时间。
+3. **后续扩展门槛。** 图片库达到约 10–20GB 后再实施内容 hash 去重、预计算 ETag/流式响应和 assets 增量备份；搜索达到数万条后评估 SQLite FTS5。SQLite 本身继续保留，除非产品边界变成多用户或公网服务。

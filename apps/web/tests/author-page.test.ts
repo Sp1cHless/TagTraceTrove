@@ -6,6 +6,8 @@ import AuthorPage from '../src/AuthorPage.vue';
 import type { GalleryApi } from '../src/api/gallery.js';
 import { setLocale } from '../src/i18n.js';
 
+vi.stubGlobal('scrollTo', vi.fn());
+
 function createAuthorApi() {
   const works = Array.from({ length: 34 }, (_, index) => ({
     id: index + 1,
@@ -156,6 +158,54 @@ describe('AuthorPage', () => {
     expect(heart.classes()).toContain('recent-mode-active');
   });
 
+  it('scrolls an Author detail to the top when opened from a scrolled Author gallery', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    const scrollY = vi.spyOn(window, 'scrollY', 'get').mockReturnValue(680);
+    const { api } = createAuthorApi();
+    const wrapper = mount(AuthorPage, {
+      props: { api, authors: [{ id: 3, name: 'Example Author', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }] },
+    });
+
+    await wrapper.get('[data-author-id="3"]').trigger('click');
+    await flushPromises();
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' });
+    scrollTo.mockClear();
+    scrollY.mockReturnValue(0);
+    await wrapper.get('[data-testid="author-information-board"] .author-toolbar .text-button').trigger('click');
+    await flushPromises();
+    expect(scrollTo).toHaveBeenCalledWith({ top: 680, left: 0, behavior: 'auto' });
+    scrollY.mockRestore();
+    scrollTo.mockRestore();
+  });
+
+  it('shows a fixed scroll-to-top control on an Author detail', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    const { api } = createAuthorApi();
+    const wrapper = await openAuthor(api);
+
+    await wrapper.get('[data-testid="author-scroll-top"]').trigger('click');
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 0, left: 0, behavior: 'smooth' });
+    scrollTo.mockRestore();
+  });
+
+  it('offers random sorting in both the Author list and Author works controls', async () => {
+    const { api } = createAuthorApi();
+    const wrapper = mount(AuthorPage, {
+      props: { api, authors: [{ id: 3, name: 'Example Author', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }] },
+    });
+
+    const listRandom = wrapper.get('[data-testid="author-mode-random"]');
+    expect(listRandom.attributes('aria-label')).toBe('Random');
+    await listRandom.trigger('click');
+    expect(listRandom.classes()).toContain('recent-mode-active');
+
+    await wrapper.get('[data-author-id="3"]').trigger('click');
+    await flushPromises();
+    const option = wrapper.get('[data-testid="author-sort"] option[value="random"]');
+    expect(option.text()).toBe('Random');
+  });
+
   it('filters the Author list with separate Author Tags and Works contain Tags controls', async () => {
     const { api } = createAuthorApi();
     api.listAuthorFilterOptions = vi.fn(async () => ({
@@ -266,6 +316,58 @@ describe('AuthorPage', () => {
     await wrapper.get('[data-testid="add-author-directory"]').trigger('click');
     await flushPromises();
     expect(createAuthorDirectory).toHaveBeenLastCalledWith(3, { title: 'New Directory' });
+  });
+
+  it('organizes loose works through touch selection targets while keeping drag support', async () => {
+    const { api, createAuthorDirectory, moveEntryToAuthorDirectory } = createAuthorApi();
+    const wrapper = await openAuthor(api);
+    await wrapper.get('[data-testid="author-sort"]').setValue('date-asc');
+    await wrapper.get('[data-testid="start-author-editing"]').trigger('click');
+
+    expect(wrapper.get('[data-testid="author-work-move-hint"]').text()).toContain('Tap a work');
+    const source = wrapper.get('[data-author-work-id="5"]');
+    await source.get('.author-card-main').trigger('click');
+    expect(source.get('.author-card-main').attributes('aria-pressed')).toBe('true');
+    expect(source.classes()).toContain('selected-work');
+
+    await wrapper.get('[data-group-with-work-id="6"]').trigger('click');
+    await flushPromises();
+    expect(createAuthorDirectory).toHaveBeenCalledWith(3, {
+      title: 'New Directory',
+      entryIds: [5, 6],
+    });
+
+    await wrapper.get('[data-author-work-id="7"] .author-card-main').trigger('click');
+    await wrapper.get('[data-move-work-to-directory-id="5"]').trigger('click');
+    await flushPromises();
+    expect(moveEntryToAuthorDirectory).toHaveBeenCalledWith(3, 5, 7);
+
+    await wrapper.get('[data-author-work-id="8"] .author-card-main').trigger('click');
+    await wrapper.get('[data-testid="finish-author-editing"]').trigger('click');
+    await wrapper.get('[data-testid="start-author-editing"]').trigger('click');
+    expect(wrapper.find('[data-move-work-to-directory-id]').exists()).toBe(false);
+    expect(wrapper.get('[data-author-work-id="8"] .author-card-main').attributes('aria-pressed')).toBe('false');
+  });
+
+  it('moves a Directory member back to loose works through touch selection', async () => {
+    const { api, removeEntryFromAuthorDirectory } = createAuthorApi();
+    const wrapper = await openAuthor(api);
+    await wrapper.get('[data-author-directory-id="5"] [data-directory-open]').trigger('click');
+    await wrapper.get('[data-testid="start-directory-editing"]').trigger('click');
+
+    expect(wrapper.get('[data-testid="directory-work-move-hint"]').text()).toContain('Tap a work');
+    const removeTarget = wrapper.get('[data-testid="directory-remove-target"]');
+    expect(removeTarget.attributes('disabled')).toBeDefined();
+
+    const source = wrapper.get('[data-directory-work-id="1"]');
+    await source.get('.author-card-main').trigger('click');
+    expect(source.get('.author-card-main').attributes('aria-pressed')).toBe('true');
+    expect(source.classes()).toContain('selected-work');
+    expect(removeTarget.attributes('disabled')).toBeUndefined();
+
+    await removeTarget.trigger('click');
+    await flushPromises();
+    expect(removeEntryFromAuthorDirectory).toHaveBeenCalledWith(3, 5, 1);
   });
 
   it('uses Done to save Directory metadata and removes a dropped work without a Save button', async () => {

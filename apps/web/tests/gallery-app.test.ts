@@ -3,6 +3,8 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import GalleryApp from '../src/GalleryApp.vue';
+
+vi.stubGlobal('scrollTo', vi.fn());
 import type { GalleryApi } from '../src/api/gallery.js';
 import { setLocale } from '../src/i18n.js';
 
@@ -83,6 +85,8 @@ function createMemoryApi(options: {
   const ratingSlots: Array<{ id: number; name: string; sortOrder: number; entryId: number }> = [];
   const entryUsages: Array<{ entryId: number; viewCount: number; likeCount: number; lastViewedAt: string | null }> = [];
   const collectionStore: Array<{ id: number; kind: 'entry' | 'producer'; title: string; description: string; nsfw: boolean; sortOrder: number; children: never[]; entries: never[]; producers: never[] }> = [];
+  let viewLaterStore: number[] = [];
+  let viewLaterAuthorStore: number[] = [];
   const entryRatings: Array<{ entryId: number; slotId: number; name: string; stars: number | null }> = [
     { entryId: 1, slotId: 40, name: 'Quality', stars: 5 },
     { entryId: 2, slotId: 40, name: 'Quality', stars: 3 },
@@ -104,6 +108,29 @@ function createMemoryApi(options: {
   return {
     assetUrl(path) {
       return path;
+    },
+    async getViewLaterState() {
+      return { entryIds: [...viewLaterStore], producerIds: [...viewLaterAuthorStore] };
+    },
+    async addViewLaterEntry(entryId: number) {
+      if (!viewLaterStore.includes(entryId)) viewLaterStore.push(entryId);
+      return { entryIds: [...viewLaterStore], producerIds: [...viewLaterAuthorStore] };
+    },
+    async removeViewLaterEntry(entryId: number) {
+      viewLaterStore = viewLaterStore.filter((id) => id !== entryId);
+      return { entryIds: [...viewLaterStore], producerIds: [...viewLaterAuthorStore] };
+    },
+    async mergeViewLaterEntries(entryIds: number[]) {
+      viewLaterStore = [...new Set([...viewLaterStore, ...entryIds])];
+      return { entryIds: [...viewLaterStore], producerIds: [...viewLaterAuthorStore] };
+    },
+    async addViewLaterAuthor(authorId: number) {
+      if (!viewLaterAuthorStore.includes(authorId)) viewLaterAuthorStore.push(authorId);
+      return { entryIds: [...viewLaterStore], producerIds: [...viewLaterAuthorStore] };
+    },
+    async removeViewLaterAuthor(authorId: number) {
+      viewLaterAuthorStore = viewLaterAuthorStore.filter((id) => id !== authorId);
+      return { entryIds: [...viewLaterStore], producerIds: [...viewLaterAuthorStore] };
     },
     async deleteEntry(entryId) {
       const index = entries.findIndex((item) => item.id === entryId);
@@ -208,6 +235,7 @@ function createMemoryApi(options: {
     async deleteAuthor(authorId) {
       const index = authors.findIndex((item) => item.id === authorId);
       if (index >= 0) authors.splice(index, 1);
+      viewLaterAuthorStore = viewLaterAuthorStore.filter((id) => id !== authorId);
     },
     async listGalleries() {
       const counts = new Map<string, number>();
@@ -1086,6 +1114,69 @@ describe('GalleryApp', () => {
     expect(wrapper.get('[data-testid="tag-results"]').text()).toContain(chosenTagName);
   });
 
+  it('returns from an Author work to the same Author pagination state', async () => {
+    const api = createMemoryApi();
+    const getAuthor = api.getAuthor.bind(api);
+    const getEntry = api.getEntry.bind(api);
+    const works = Array.from({ length: 30 }, (_, index) => ({
+      id: 500 + index,
+      title: `Author work ${index + 1}`,
+      type: 'game',
+      coverRef: null,
+      previewRef: null,
+      previewRefs: [],
+      uploadDate: null,
+      pageCount: null,
+      viewCount: 0,
+      likeCount: 0,
+      lastViewedAt: null,
+    }));
+    api.getAuthor = vi.fn(async (authorId: number) => ({
+      ...(await getAuthor(authorId)),
+      looseEntries: works,
+    }));
+    api.getEntry = vi.fn(async (entryId: number) => {
+      const work = works.find((candidate) => candidate.id === entryId);
+      return work ? { ...(await getEntry(1)), ...work, producers: [] } : getEntry(entryId);
+    });
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="author-navigation"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-author-id="9"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="author-next-page"]').trigger('click');
+    const secondPageWork = wrapper.get('[data-author-work-id] .author-card-main');
+    await secondPageWork.trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="entry-back"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="author-information-board"]').text()).toContain('Hypergryph');
+    expect(wrapper.get('.pagination').text()).toContain('Page 2 of 2');
+  });
+
+  it('returns from a random Entry to the same dealt result set', async () => {
+    const api = createMemoryApi();
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="random-navigation"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="random-deal-button"]').trigger('click');
+    await flushPromises();
+    const dealtCards = wrapper.findAll('[data-testid="random-entry-card"]')
+      .map((card) => card.text());
+    await wrapper.get('[data-testid="random-entry-card"] .entry-card-main').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="entry-back"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.findAll('[data-testid="random-entry-card"]')
+      .map((card) => card.text())).toEqual(dealtCards);
+  });
+
   it('opens global Entry search from the sidebar and navigates from a result card', async () => {
     const api = createMemoryApi();
     api.searchEntries = vi.fn(async (query) => query === 'end'
@@ -1174,6 +1265,7 @@ describe('GalleryApp', () => {
     expect(wrapper.find('[data-testid="entry-cover-dropzone"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="entry-preview-dropzone"]').exists()).toBe(false);
     expect(wrapper.find('input[webkitdirectory]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="desktop-entry-import"]').classes()).toContain('desktop-entry-import');
 
     await wrapper.get('[data-testid="add-entry-back"]').trigger('click');
     await wrapper.get('[data-testid="add-author-navigation"]').trigger('click');
@@ -1764,6 +1856,28 @@ describe('GalleryApp', () => {
     expect(wrapper.get('[data-testid="author-page"]').text()).toContain('Hypergryph');
   });
 
+  it('requires two explicit taps before deleting an Author from edit mode', async () => {
+    const api = createMemoryApi();
+    const deleteAuthor = vi.spyOn(api, 'deleteAuthor');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="author-navigation"]').trigger('click');
+    await wrapper.get('[data-author-id="9"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="start-author-editing"]').trigger('click');
+
+    const button = wrapper.get('[data-testid="delete-author"]');
+    await button.trigger('click');
+    expect(deleteAuthor).not.toHaveBeenCalled();
+    expect(button.classes()).toContain('armable-armed');
+    expect(button.text()).toContain('Delete Hypergryph?');
+
+    await button.trigger('click');
+    await flushPromises();
+    expect(deleteAuthor).toHaveBeenCalledOnce();
+    expect(deleteAuthor).toHaveBeenCalledWith(9);
+  });
+
   it('reveals the Author page after creating and linking the first Author from an Entry', async () => {
     const wrapper = mount(GalleryApp, {
       props: { api: createMemoryApi({ withAuthors: false }) },
@@ -1815,12 +1929,16 @@ describe('GalleryApp', () => {
   });
 
   it('returns an Entry opened from an Author to that Author detail', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    const scrollY = vi.spyOn(window, 'scrollY', 'get').mockReturnValue(600);
     const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
     await flushPromises();
     await wrapper.get('[data-testid="author-navigation"]').trigger('click');
     await wrapper.get('[data-author-id="9"]').trigger('click');
     await flushPromises();
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 0, left: 0, behavior: 'auto' });
 
+    scrollY.mockReturnValue(300);
     await wrapper.get('[data-author-work-id="1"] .author-card-main').trigger('click');
     await flushPromises();
     expect(wrapper.get('[data-testid="entry-back"]').text()).toBe('← Back to Hypergryph');
@@ -1828,6 +1946,14 @@ describe('GalleryApp', () => {
     await flushPromises();
 
     expect(wrapper.get('[data-testid="author-information-board"]').text()).toContain('Hypergryph');
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 300, left: 0, behavior: 'auto' });
+
+    await wrapper.get('[data-testid="author-information-board"] .author-toolbar .text-button').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-author-id="9"]').text()).toContain('Hypergryph');
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 600, left: 0, behavior: 'auto' });
+    scrollY.mockRestore();
+    scrollTo.mockRestore();
   });
 
   it('returns an Entry opened from a Directory to that Directory detail', async () => {
@@ -1848,37 +1974,40 @@ describe('GalleryApp', () => {
     expect(wrapper.get('.directory-heading').text()).toContain('Selected works');
   });
 
-  it('opens an Author detail by double-clicking its chip in Entry read mode', async () => {
+  it('opens an Author detail by tapping its chip in Entry read mode', async () => {
     const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
     await flushPromises();
     await wrapper.get('[data-entry-id="1"]').trigger('click');
     await flushPromises();
 
-    await wrapper.get('[data-entry-author-id="9"]').trigger('dblclick');
+    await wrapper.get('[data-entry-author-id="9"]').trigger('click');
     await flushPromises();
 
     expect(wrapper.get('[data-testid="author-information-board"]').text()).toContain('Hypergryph');
   });
 
-  it('opens all matching Entries by double-clicking an Entry Tag in read mode', async () => {
+  it('opens all matching Entries by tapping an Entry Tag in read mode', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
     const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
     await flushPromises();
     await wrapper.get('[data-entry-id="1"]').trigger('click');
     await flushPromises();
 
-    await wrapper.get('[data-detail-tag-id="12"]').trigger('dblclick');
+    await wrapper.get('[data-detail-tag-id="12"]').trigger('click');
     await flushPromises();
 
     const results = wrapper.get('[data-testid="tag-results"]');
     expect(results.text()).toContain('ARPG');
     expect(results.text()).toContain('Endfield');
     expect(results.text()).toContain('Hades II');
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' });
 
     await wrapper.get('[data-tag-entry-id="2"]').trigger('click');
     await flushPromises();
     expect(wrapper.get('[data-testid="entry-back"]').text()).toBe('← Back to ARPG');
     await wrapper.get('[data-testid="entry-back"]').trigger('click');
     expect(wrapper.get('[data-testid="tag-results"]').text()).toContain('ARPG');
+    scrollTo.mockRestore();
   });
 
   it('opens all matching Authors by clicking an Author Tag in read mode', async () => {
@@ -1929,6 +2058,26 @@ describe('GalleryApp', () => {
     expect(detail.text()).toContain('A saved note');
   });
 
+  it('opens a Gallery card at the top and restores the Gallery scroll position on Back', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    const scrollY = vi.spyOn(window, 'scrollY', 'get').mockReturnValue(640);
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    await flushPromises();
+    await wrapper.get('[data-gallery-type="game"]').trigger('click');
+    await flushPromises();
+
+    await wrapper.get('[data-entry-id="1"]').trigger('click');
+    await flushPromises();
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 0, left: 0, behavior: 'auto' });
+
+    scrollY.mockReturnValue(0);
+    await wrapper.get('[data-testid="entry-back"]').trigger('click');
+    await flushPromises();
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 640, left: 0, behavior: 'auto' });
+    scrollY.mockRestore();
+    scrollTo.mockRestore();
+  });
+
   it('enters edit mode from the Entry detail toolbar instead of the Gallery card', async () => {
     const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
     await flushPromises();
@@ -1948,6 +2097,25 @@ describe('GalleryApp', () => {
     expect(detail.find('[data-testid="add-section-button"]').exists()).toBe(false);
   });
 
+  it('requires two explicit taps before deleting an Entry from edit mode', async () => {
+    const api = createMemoryApi();
+    const deleteEntry = vi.spyOn(api, 'deleteEntry');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    const button = wrapper.get('[data-testid="delete-entry"]');
+    await button.trigger('click');
+    expect(deleteEntry).not.toHaveBeenCalled();
+    expect(button.classes()).toContain('armable-armed');
+    expect(button.text()).toContain('Confirm');
+
+    await button.trigger('click');
+    await flushPromises();
+    expect(deleteEntry).toHaveBeenCalledOnce();
+    expect(deleteEntry).toHaveBeenCalledWith(1);
+  });
+
   it('keeps Tag mutation and dragging controls out of read mode', async () => {
     const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
     await flushPromises();
@@ -1960,7 +2128,7 @@ describe('GalleryApp', () => {
     expect(wrapper.find('[data-add-facet-section-id="10"]').exists()).toBe(false);
     expect(wrapper.find('[data-add-tag-facet-id="11"]').exists()).toBe(false);
     expect(wrapper.find('[data-remove-entry-tag-id="12"]').exists()).toBe(false);
-    expect(wrapper.get('[data-detail-tag-id="12"]').attributes('draggable')).toBe('false');
+    expect(wrapper.get('[data-detail-tag-id="12"]').attributes('draggable')).toBeUndefined();
   });
 
   it('renders direct Section Tags without showing empty Facet rows', async () => {
@@ -2227,6 +2395,36 @@ describe('GalleryApp', () => {
     expect(wrapper.find('[data-facet-id="11"]').exists()).toBe(false);
     expect(wrapper.get('[data-facet-id="16"]').text()).toContain('ARPG');
     expect(wrapper.find('[data-add-direct-tag-section-id="10"]').exists()).toBe(false);
+  });
+
+  it('moves an Entry Tag by tapping it and then choosing a target Facet', async () => {
+    const api = createMemoryApi();
+    const moveEntryTag = vi.spyOn(api, 'moveEntryTag');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    await wrapper.get('[data-add-facet-section-id="10"]').trigger('click');
+    const form = wrapper.get('[data-create-facet-section-id="10"]');
+    await form.get('[name="facetName"]').setValue('Genre');
+    await form.trigger('submit');
+    await flushPromises();
+
+    const source = wrapper.get('[data-detail-tag-id="12"]');
+    expect(wrapper.get('[data-testid="tag-move-hint"]').text()).toContain('Tap a Tag');
+    expect(source.attributes('aria-pressed')).toBe('false');
+    expect(wrapper.find('[data-move-selected-tag-to-facet-id="16"]').exists()).toBe(false);
+
+    await source.trigger('click');
+
+    expect(wrapper.get('[data-detail-tag-id="12"]').attributes('aria-pressed')).toBe('true');
+    const target = wrapper.get('[data-move-selected-tag-to-facet-id="16"]');
+    await target.trigger('click');
+    await flushPromises();
+
+    expect(moveEntryTag).toHaveBeenCalledWith(1, 12, 16);
+    expect(wrapper.get('[data-detail-tag-id="12"]').attributes('aria-pressed')).toBe('false');
+    expect(wrapper.find('[data-move-selected-tag-to-facet-id="11"]').exists()).toBe(false);
   });
 
   it('renames an Entry Tag by double-clicking it in edit mode', async () => {
@@ -2877,6 +3075,127 @@ describe('Facet filter bar', () => {
     expect(wrapper.find('[data-testid="recent-view-page"]').exists()).toBe(false);
   });
 
+  it('returns from an Entry detail to the same active Recently viewed Gallery tab', async () => {
+    const api = createMemoryApi();
+    const listEntries = api.listEntries.bind(api);
+    api.listEntries = vi.fn(async (type: string) => {
+      const listed = await listEntries(type);
+      return type === 'manga'
+        ? listed.map((entry) => ({ ...entry, lastViewedAt: '2026-09-06T01:00:00Z' }))
+        : listed;
+    });
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="recent-view-navigation"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-recent-tab="manga"]').trigger('click');
+    await wrapper.get('[data-testid="recent-entry-card"] .entry-card-main').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="entry-back"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[data-recent-tab="manga"]').attributes('aria-selected')).toBe('true');
+    expect(wrapper.get('[data-testid="recent-entry-grid"]').text()).toContain('Witch Hat Atelier');
+  });
+
+  it('toggles View later from the Author toolbar and lists Authors on their own page', async () => {
+    const api = createMemoryApi();
+    await api.addViewLaterEntry(1);
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="author-navigation"]').trigger('click');
+    await wrapper.get('[data-author-id="9"]').trigger('click');
+    await flushPromises();
+
+    const toggle = wrapper.get('[data-testid="author-view-later-button"]');
+    expect(toggle.attributes('aria-pressed')).toBe('false');
+    await toggle.trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="author-view-later-button"]').attributes('aria-pressed')).toBe('true');
+    // Saving an Author is an independent membership: it must not bulk-add the
+    // Author's other works to the Entry list.
+    expect(await api.getViewLaterState()).toEqual({ entryIds: [1], producerIds: [9] });
+
+    await wrapper.get('[data-testid="view-later-navigation"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="view-later-kind-entry"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="view-later-kind-author"]').trigger('click');
+    expect(wrapper.get('[data-view-later-author-id="9"]').text()).toContain('Hypergryph');
+
+    await wrapper.get('[data-remove-view-later-author-id="9"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-view-later-author-id="9"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="view-later-author-empty"]').exists()).toBe(true);
+  });
+
+  it('returns from a View later Author detail to the View later Authors tab', async () => {
+    const api = createMemoryApi();
+    await api.addViewLaterAuthor(9);
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="view-later-navigation"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="view-later-kind-author"]').trigger('click');
+    await wrapper.get('[data-view-later-author-id="9"] .author-card-main').trigger('click');
+    await flushPromises();
+
+    await wrapper.get('[data-testid="author-information-board"] .author-toolbar .text-button').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="view-later-page"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="view-later-kind-author"]').attributes('aria-selected')).toBe('true');
+    expect(wrapper.get('[data-view-later-author-id="9"]').text()).toContain('Hypergryph');
+  });
+
+  it('returns from an Entry detail to the same active View later Gallery tab', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    const scrollY = vi.spyOn(window, 'scrollY', 'get').mockReturnValue(720);
+    const api = createMemoryApi();
+    await api.addViewLaterEntry(1);
+    await api.addViewLaterEntry(3);
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="view-later-navigation"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-view-later-tab="manga"]').trigger('click');
+    await wrapper.get('[data-testid="view-later-entry-card"] .entry-card-main').trigger('click');
+    await flushPromises();
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 0, left: 0, behavior: 'auto' });
+    expect(wrapper.get('[data-testid="entry-back"]').text()).toContain('View later');
+    scrollY.mockReturnValue(0);
+    await wrapper.get('[data-testid="entry-back"]').trigger('click');
+    await flushPromises();
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 720, left: 0, behavior: 'auto' });
+    expect(wrapper.get('[data-view-later-tab="manga"]').attributes('aria-selected')).toBe('true');
+    expect(wrapper.get('[data-testid="view-later-panel"]').text()).toContain('Witch Hat Atelier');
+    scrollY.mockRestore();
+    scrollTo.mockRestore();
+  });
+
+  it('offers random sorting in Gallery, Recently viewed, and View later controls', async () => {
+    const api = createMemoryApi();
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await openGameGallery(wrapper);
+    expect(wrapper.get('[data-testid="gallery-sort"] option[value="random"]').text()).toBe('Random');
+
+    await wrapper.get('[data-testid="recent-view-navigation"]').trigger('click');
+    await flushPromises();
+    const recentRandom = wrapper.get('[data-testid="recent-mode-random"]');
+    await recentRandom.trigger('click');
+    expect(recentRandom.classes()).toContain('recent-mode-active');
+
+    await wrapper.get('[data-testid="view-later-navigation"]').trigger('click');
+    await flushPromises();
+    const viewLaterRandom = wrapper.get('[data-testid="view-later-mode-random"]');
+    await viewLaterRandom.trigger('click');
+    expect(viewLaterRandom.classes()).toContain('recent-mode-active');
+  });
+
   it('keeps the repeatable Like action visible below Edit in read mode and shows the card badge', async () => {
     const api = createMemoryApi();
     const wrapper = mount(GalleryApp, { props: { api } });
@@ -2929,6 +3248,23 @@ describe('Facet filter bar', () => {
     expect(page.text()).toContain('Nothing saved for later');
   });
 
+  it('converges to server View later state on focus and whenever the page is opened', async () => {
+    const api = createMemoryApi();
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await api.addViewLaterEntry(2);
+    window.dispatchEvent(new Event('focus'));
+    await flushPromises();
+    expect(wrapper.get('[data-testid="view-later-navigation"]').text()).toContain('1');
+
+    await api.removeViewLaterEntry(2);
+    await wrapper.get('[data-testid="view-later-navigation"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="view-later-navigation"]').text()).not.toContain('1');
+    expect(wrapper.text()).toContain('Nothing saved for later');
+  }, 10_000);
+
   it('creates a collection in edit mode and opens its detail', async () => {
     const api = createMemoryApi();
     const wrapper = mount(GalleryApp, { props: { api } });
@@ -2950,6 +3286,40 @@ describe('Facet filter bar', () => {
       .toBe('Read list');
     expect(wrapper.get('[data-testid="collection-nsfw-toggle"]').text()).toBe('SFW');
   });
+  it('returns from a Collection Entry to the exact collection and walks the top-bar Back hierarchy', async () => {
+    const api = createMemoryApi();
+    api.listCollections = vi.fn(async (kind: 'entry' | 'producer') => (kind === 'entry' ? [{
+      id: 71,
+      kind: 'entry' as const,
+      title: 'Current shelf',
+      description: '',
+      nsfw: false,
+      sortOrder: 0,
+      children: [],
+      entries: [{ id: 1, title: 'Endfield', type: 'game', coverRef: null, previewRefs: [] }],
+      producers: [],
+    }] : []));
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="collections-navigation"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-collection-id="71"]').trigger('click');
+    await wrapper.get('[data-testid="collection-entry-card"] .entry-card-main').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="entry-back"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="collection-detail"]').text()).toContain('Current shelf');
+    await wrapper.get('[data-testid="top-bar-back"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="collection-detail"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="collections-page"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="top-bar-back"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="home-page"]').exists()).toBe(true);
+  });
+
   it('opens the freshly imported Entry after a single folder import', async () => {
     const api = createMemoryApi();
     api.listLayout = vi.fn(async () => [
@@ -3167,6 +3537,35 @@ describe('Home page', () => {
     expect(wrapper.find('[data-testid="home-page"]').exists()).toBe(true);
   });
 
+  it('uses the global top-bar Back control for the current parent level and does nothing on Home', async () => {
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    await flushPromises();
+
+    const back = wrapper.get('[data-testid="top-bar-back"]');
+    expect(back.attributes('disabled')).toBeDefined();
+
+    await wrapper.get('[data-gallery-type="game"]').trigger('click');
+    expect(wrapper.get('[data-testid="top-bar-back"]').attributes('disabled')).toBeUndefined();
+    await wrapper.get('[data-testid="top-bar-back"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="home-page"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="top-bar-back"]').attributes('disabled')).toBeDefined();
+  });
+
+  it('shows a fixed scroll-to-top control on Entry detail pages', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    await flushPromises();
+    await wrapper.get('[data-gallery-type="game"]').trigger('click');
+    await wrapper.get('[data-entry-id="1"]').trigger('click');
+    await flushPromises();
+
+    await wrapper.get('[data-testid="entry-scroll-top"]').trigger('click');
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 0, left: 0, behavior: 'smooth' });
+    scrollTo.mockRestore();
+  });
+
   it('shows the recently viewed entry and opens it from Home', async () => {
     const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
     await flushPromises();
@@ -3222,6 +3621,86 @@ describe('Home page', () => {
   });
 });
 
+describe('Mobile navigation shell', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.history.replaceState(null, '', '/');
+    setLocale('en');
+  });
+
+  it('applies the active theme to the browser canvas for mobile edge overscroll', async () => {
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    await flushPromises();
+
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(document.documentElement.style.backgroundColor).toBe('var(--page-background)');
+    expect(document.body.style.backgroundColor).toBe('var(--page-background)');
+
+    await wrapper.get('[data-testid="theme-toggle"]').trigger('click');
+    expect(document.documentElement.dataset.theme).toBe('dark');
+
+    wrapper.unmount();
+    expect(document.documentElement.dataset.theme).toBeUndefined();
+    expect(document.documentElement.style.backgroundColor).toBe('');
+    expect(document.body.style.backgroundColor).toBe('');
+  });
+
+  it('opens an accessible navigation drawer and closes it after choosing a destination', async () => {
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    await flushPromises();
+
+    const trigger = wrapper.get('[data-testid="mobile-navigation-toggle"]');
+    expect(trigger.attributes('aria-expanded')).toBe('false');
+    expect(wrapper.get('[data-testid="app-sidebar"]').classes()).not.toContain('sidebar-open');
+
+    await trigger.trigger('click');
+    expect(trigger.attributes('aria-expanded')).toBe('true');
+    expect(wrapper.get('[data-testid="app-sidebar"]').classes()).toContain('sidebar-open');
+    expect(wrapper.find('[data-testid="mobile-navigation-backdrop"]').exists()).toBe(true);
+
+    await wrapper.get('[data-gallery-type="game"]').trigger('click');
+    await flushPromises();
+    expect(trigger.attributes('aria-expanded')).toBe('false');
+    expect(wrapper.get('[data-testid="app-sidebar"]').classes()).not.toContain('sidebar-open');
+    expect(wrapper.get('[data-testid="active-gallery-title"]').text()).toBe('game');
+  });
+
+  it('offers a collapsible filter surface without changing its filter model', async () => {
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    await flushPromises();
+    await wrapper.get('[data-gallery-type="game"]').trigger('click');
+    await flushPromises();
+
+    const toggle = wrapper.get('[data-testid="mobile-filter-toggle"]');
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+    expect(wrapper.get('[data-testid="mobile-filter-surface"]').classes()).not.toContain('facet-filter-bar__body--open');
+
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-expanded')).toBe('true');
+    expect(wrapper.get('[data-testid="mobile-filter-surface"]').classes()).toContain('facet-filter-bar__body--open');
+  });
+
+  it('closes the drawer through backdrop, Escape, and Browser Back', async () => {
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    await flushPromises();
+    const trigger = wrapper.get('[data-testid="mobile-navigation-toggle"]');
+
+    await trigger.trigger('click');
+    await wrapper.get('[data-testid="mobile-navigation-backdrop"]').trigger('click');
+    expect(trigger.attributes('aria-expanded')).toBe('false');
+
+    await trigger.trigger('click');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await wrapper.vm.$nextTick();
+    expect(trigger.attributes('aria-expanded')).toBe('false');
+
+    await trigger.trigger('click');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await wrapper.vm.$nextTick();
+    expect(trigger.attributes('aria-expanded')).toBe('false');
+  });
+});
+
 describe('Card grid pagination', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -3235,9 +3714,9 @@ describe('Card grid pagination', () => {
       id: 100 + index,
       title: `Generated ${index + 1}`,
       type: 'game',
-      coverRef: null,
-      previewRef: null,
-      previewRefs: [] as string[],
+      coverRef: `/api/assets/entries/${100 + index}/cover.webp`,
+      previewRef: `/api/assets/entries/${100 + index}/preview.webp`,
+      previewRefs: [`/api/assets/entries/${100 + index}/preview.webp`],
       uploadDate: null,
       pageCount: null,
       viewCount: 0,
@@ -3245,8 +3724,53 @@ describe('Card grid pagination', () => {
       lastViewedAt: null,
     }));
     api.listEntries = async (type: string) => (type === 'game' ? generated : original(type));
+    const getEntry = api.getEntry.bind(api);
+    api.getEntry = async (entryId: number) => {
+      if (entryId < 100 || entryId >= 100 + entryCount) return getEntry(entryId);
+      return {
+        ...(await getEntry(1)),
+        id: entryId,
+        title: `Generated ${entryId - 99}`,
+        type: 'game',
+      };
+    };
     return api;
   }
+
+  it('requests viewport-approved card images eagerly and decodes them asynchronously', async () => {
+    const wrapper = mount(GalleryApp, { props: { api: createLargeApi(4) } });
+    await flushPromises();
+
+    await wrapper.get('[data-gallery-type="game"]').trigger('click');
+    await flushPromises();
+
+    const galleryImages = wrapper.findAll('[data-testid="entry-list"] img');
+    expect(galleryImages.length).toBeGreaterThan(0);
+    expect(galleryImages.every((image) => image.attributes('loading') === 'eager')).toBe(true);
+    expect(galleryImages.every((image) => image.attributes('decoding') === 'async')).toBe(true);
+  });
+
+  it('uses twice the configured row count on a phone-width card grid', async () => {
+    const originalWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+    const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 260 });
+    let wrapper: ReturnType<typeof mount> | undefined;
+    try {
+      wrapper = mount(GalleryApp, { props: { api: createLargeApi(50) } });
+      await flushPromises();
+      await wrapper.get('[data-gallery-type="game"]').trigger('click');
+      await flushPromises();
+
+      // 5 configured rows × 2 mobile multiplier × 2 actual columns.
+      expect(wrapper.findAll('[data-testid="entry-list"] [data-entry-id]').length).toBe(20);
+    } finally {
+      wrapper?.unmount();
+      if (originalWidth) Object.defineProperty(window, 'innerWidth', originalWidth);
+      if (originalClientWidth) Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth);
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth');
+    }
+  });
 
   it('pages the gallery grid by rows x columns and shows the bar above and below', async () => {
     // jsdom has no layout: the grid falls back to the 6-column default,
@@ -3263,6 +3787,25 @@ describe('Card grid pagination', () => {
     await flushPromises();
     expect(wrapper.findAll('[data-testid="entry-list"] [data-entry-id]').length).toBe(10);
     expect(wrapper.get('[aria-current="page"]').text()).toBe('2');
+  });
+
+  it('returns from an Entry detail to the same Gallery page', async () => {
+    const wrapper = mount(GalleryApp, { props: { api: createLargeApi(40) } });
+    await flushPromises();
+    await wrapper.get('[data-gallery-type="game"]').trigger('click');
+    await flushPromises();
+
+    await wrapper.findAll('.card-pagination-page').find((button) => button.text() === '2')!.trigger('click');
+    await flushPromises();
+    const sourceCard = wrapper.findAll('[data-testid="entry-list"] [data-entry-id]')[0]!;
+    const sourceId = sourceCard.attributes('data-entry-id');
+    await sourceCard.trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="entry-back"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[aria-current="page"]').text()).toBe('2');
+    expect(wrapper.find(`[data-testid="entry-list"] [data-entry-id="${sourceId}"]`).exists()).toBe(true);
   });
 
   it('jumps to a typed page number from the pagination input', async () => {

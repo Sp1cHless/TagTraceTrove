@@ -92,11 +92,13 @@ const sortSlotId = ref<number | undefined>(undefined);
 const starValues: number[] = Array.from({ length: 10 }, (_, index) => (index + 1) / 2);
 const itemInputs = ref<Array<HTMLInputElement | null>>([]);
 const filterError = ref<string | null>(null);
+const filterSurfaceOpen = ref(false);
 let errorTimer: ReturnType<typeof setTimeout> | undefined;
 
 // Switching the active gallery resets the whole bar; edits inside the bar are
 // the component's own state and are never overwritten from outside.
 watch(() => props.options.entryType, () => {
+  filterSurfaceOpen.value = false;
   rows.value = [freshRow()];
   ratingRows.value = [];
   usageSortField.value = '';
@@ -429,18 +431,36 @@ function onBarPointerDown(event: PointerEvent): void {
   >
     <div class="facet-filter-bar__head">
       <span class="facet-filter-bar__label">{{ t('filter.label') }}</span>
-      <button
-        v-if="hasActiveFilters()"
-        class="filter-action"
-        type="button"
-        data-testid="clear-facet-filters"
-        @click="clearAll"
-      >
-        {{ t('filter.clearAll') }}
-      </button>
+      <div class="facet-filter-bar__head-actions">
+        <button
+          class="filter-action mobile-filter-toggle"
+          type="button"
+          data-testid="mobile-filter-toggle"
+          :aria-expanded="filterSurfaceOpen"
+          aria-controls="mobile-filter-surface"
+          @click="filterSurfaceOpen = !filterSurfaceOpen"
+        >
+          {{ t(filterSurfaceOpen ? 'filter.hide' : 'filter.show') }}
+        </button>
+        <button
+          v-if="hasActiveFilters()"
+          class="filter-action"
+          type="button"
+          data-testid="clear-facet-filters"
+          @click="clearAll"
+        >
+          {{ t('filter.clearAll') }}
+        </button>
+      </div>
     </div>
 
-    <p v-if="filterError" class="filter-error" data-testid="filter-error" role="alert">
+    <div
+      id="mobile-filter-surface"
+      class="facet-filter-bar__body"
+      :class="{ 'facet-filter-bar__body--open': filterSurfaceOpen }"
+      data-testid="mobile-filter-surface"
+    >
+      <p v-if="filterError" class="filter-error" data-testid="filter-error" role="alert">
       {{ filterError }}
     </p>
 
@@ -668,6 +688,7 @@ function onBarPointerDown(event: PointerEvent): void {
         </label>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
@@ -685,6 +706,19 @@ function onBarPointerDown(event: PointerEvent): void {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.facet-filter-bar__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.mobile-filter-toggle { display: none; }
+
+.facet-filter-bar__body {
+  display: grid;
   gap: 0.5rem;
 }
 
@@ -979,5 +1013,29 @@ function onBarPointerDown(event: PointerEvent): void {
   .filter-sort-actions {
     justify-content: flex-start;
   }
+}
+
+@media (max-width: 44rem) {
+  .facet-filter-bar { min-width: 0; padding: 0.65rem; overflow-x: clip; }
+  .facet-filter-bar__head { align-items: flex-start; flex-wrap: wrap; }
+  .facet-filter-bar__head-actions { flex: 1 1 auto; justify-content: flex-end; flex-wrap: wrap; }
+  .mobile-filter-toggle { display: inline-flex; align-items: center; min-height: 44px; }
+  .facet-filter-bar__body { display: none; }
+  .facet-filter-bar__body--open { display: grid; }
+  .filter-row { align-items: stretch; }
+  .filter-combobox { min-width: 0; flex: 1 1 100%; }
+  .filter-combobox__input,
+  .filter-input,
+  .filter-select { width: 100%; min-width: 0; min-height: 44px; }
+  .filter-dropdown { width: min(22rem, calc(100vw - 3.2rem)); min-width: 0; max-width: 100%; }
+  .facet-select-button,
+  .filter-action { min-height: 44px; }
+  .filter-row__remove { width: 44px; height: 44px; flex: 0 0 44px; }
+  .filter-tag-chip__remove { width: 28px; height: 28px; }
+  .filter-add-actions,
+  .filter-sort-actions,
+  .rating-sort-control { min-width: 0; width: 100%; }
+  .filter-action { flex: 1 1 auto; }
+  .rating-sort-control { align-items: stretch; flex-direction: column; }
 }
 </style>

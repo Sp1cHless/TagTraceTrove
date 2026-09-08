@@ -61,6 +61,18 @@ body {
 .recent-tab-drop { border-style: dashed; border-color: var(--accent); }
 .recent-tab-panel { min-height: 16rem; padding: 1rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface); }
 
+@media (max-width: 44rem) {
+  .recent-tabs {
+    flex-wrap: nowrap;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+  .recent-tab { min-height: 44px; flex: 0 0 auto; }
+  .recent-tab-panel { min-width: 0; padding: 0.75rem; overflow-x: clip; }
+}
+
 button,
 input {
   font: inherit;
@@ -291,6 +303,10 @@ input[type='checkbox'] {
   transition-delay: 0ms;
 }
 
+@media (hover: none) {
+  .icon-tooltip { display: none; }
+}
+
 /* Per-function hover micro-motions (icon brief §8/§11). */
 .app-icon { transition: transform 150ms ease; }
 .icon-button--edit:hover:not(:disabled) .app-icon { transform: rotate(-5deg); transition-duration: 130ms; }
@@ -506,3 +522,10 @@ input {
   --surface: #1a2920;
   --surface-muted: #15221a;
   --border-subtle: #34493d;}
+
+@media (max-width: 44rem) {
+  .primary-button,
+  .secondary-button,
+  .back-button { min-height: 44px; }
+  .back-button { display: inline-flex; align-items: center; }
+}

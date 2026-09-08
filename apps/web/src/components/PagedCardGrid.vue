@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import CardPagination from './CardPagination.vue';
 import { rowsPerPage } from '../stores/preferences.js';
+import { useNavigationMemory } from '../navigation-memory.js';
 
 /**
  * THE shared paged card grid: every view that can show a large number of
@@ -16,13 +17,18 @@ const props = withDefaults(defineProps<{
   /** Extra marker classes the pages/tests expect on the grid element. */
   gridClass?: string;
   gridTestid?: string | undefined;
+  pageKey?: string;
 }>(), {
   gridClass: '',
   gridTestid: undefined,
+  pageKey: '',
 });
+
+const navigationMemory = useNavigationMemory();
 
 const gridElement = ref<HTMLElement | null>(null);
 const columns = ref(6);
+const rowMultiplier = ref(1);
 let observer: ResizeObserver | undefined;
 
 // auto-fill minmax(7.5rem, 1fr) + 0.8rem gap → columns from the real width.
@@ -30,6 +36,9 @@ const MIN_CARD_PX = 120;
 const GAP_PX = 12.8;
 
 function measure(): void {
+  rowMultiplier.value = typeof window.matchMedia === 'function'
+    ? (window.matchMedia('(max-width: 44rem)').matches ? 2 : 1)
+    : (window.innerWidth <= 704 ? 2 : 1);
   const width = gridElement.value?.clientWidth ?? 0;
   if (width > 0) {
     columns.value = Math.max(1, Math.floor((width + GAP_PX) / (MIN_CARD_PX + GAP_PX)));
@@ -38,20 +47,34 @@ function measure(): void {
 
 onMounted(() => {
   measure();
+  window.addEventListener('resize', measure);
   if (typeof ResizeObserver === 'function') {
     observer = new ResizeObserver(measure);
     if (gridElement.value) observer.observe(gridElement.value);
   }
 });
 
-onBeforeUnmount(() => observer?.disconnect());
+onBeforeUnmount(() => {
+  observer?.disconnect();
+  window.removeEventListener('resize', measure);
+});
 
-const pageSize = computed(() => Math.max(1, columns.value * rowsPerPage.value));
+const pageSize = computed(() => Math.max(
+  1,
+  columns.value * rowsPerPage.value * rowMultiplier.value,
+));
 const pageCount = computed(() => Math.max(1, Math.ceil(props.items.length / pageSize.value)));
-const page = ref(1);
+const page = ref(props.pageKey ? (navigationMemory.pages.get(props.pageKey) ?? 1) : 1);
+
+watch(() => props.pageKey, (nextKey) => {
+  page.value = nextKey ? (navigationMemory.pages.get(nextKey) ?? 1) : 1;
+});
 
 watch([pageSize, () => props.items.length], () => {
-  if (page.value > pageCount.value) page.value = pageCount.value;
+  if (page.value > pageCount.value) {
+    page.value = pageCount.value;
+    if (props.pageKey) navigationMemory.pages.set(props.pageKey, page.value);
+  }
 });
 
 const visibleItems = computed(() => {
@@ -61,6 +84,7 @@ const visibleItems = computed(() => {
 
 function setPage(next: number): void {
   page.value = Math.min(Math.max(1, Math.floor(next)), pageCount.value);
+  if (props.pageKey) navigationMemory.pages.set(props.pageKey, page.value);
 }
 </script>
 

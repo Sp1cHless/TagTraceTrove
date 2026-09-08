@@ -29,6 +29,7 @@ import {
   importTaxonomyAliasesRequestSchema,
   layoutResponseSchema,
   layoutTemplateApplyResponseSchema,
+  mergeViewLaterRequestSchema,
   moveEntryTagRequestSchema,
   producerRecordSchema,
   producerMergePlanResponseSchema,
@@ -61,6 +62,7 @@ import {
   updateEntryContentRequestSchema,
   updateAuthorDirectoryRequestSchema,
   updateProducerRequestSchema,
+  viewLaterStateSchema,
   type AuthorDetailResponse,
   type AuthorDirectoryDto,
   type AuthorFilterOptions,
@@ -110,6 +112,7 @@ import {
   type UpdateAuthorDirectoryRequest,
   type UpdateProducerRequest,
   type UpdateEntryContentRequest,
+  type ViewLaterState,
 } from '@t3/shared';
 import { createApiClient, type ApiClient } from './client.js';
 
@@ -145,6 +148,12 @@ export interface EntryListFilters {
 
 export interface GalleryApi {
   assetUrl(path: string): string;
+  getViewLaterState(): Promise<ViewLaterState>;
+  addViewLaterEntry(entryId: number): Promise<ViewLaterState>;
+  removeViewLaterEntry(entryId: number): Promise<ViewLaterState>;
+  mergeViewLaterEntries(entryIds: number[]): Promise<ViewLaterState>;
+  addViewLaterAuthor(authorId: number): Promise<ViewLaterState>;
+  removeViewLaterAuthor(authorId: number): Promise<ViewLaterState>;
   listGalleries(): Promise<GallerySummary[]>;
   listEntries(type: string, filters?: EntryListFilters): Promise<GalleryEntrySummary[]>;
   searchEntries(query: string, entryType?: string): Promise<GalleryEntrySummary[]>;
@@ -275,6 +284,35 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
   return {
     assetUrl(path) {
       return /^https?:\/\//u.test(path) ? path : `${assetBase}${path.replace(/^\/+/, '')}`;
+    },
+    async getViewLaterState() {
+      return viewLaterStateSchema.parse(await client.request('view-later'));
+    },
+    async addViewLaterEntry(entryId) {
+      return viewLaterStateSchema.parse(await client.request(`view-later/${entryId}`, {
+        method: 'PUT',
+      }));
+    },
+    async removeViewLaterEntry(entryId) {
+      return viewLaterStateSchema.parse(await client.request(`view-later/${entryId}`, {
+        method: 'DELETE',
+      }));
+    },
+    async mergeViewLaterEntries(entryIds) {
+      return viewLaterStateSchema.parse(await client.request('view-later/merge', {
+        method: 'POST',
+        body: mergeViewLaterRequestSchema.parse({ entryIds }),
+      }));
+    },
+    async addViewLaterAuthor(authorId) {
+      return viewLaterStateSchema.parse(await client.request(`view-later/producers/${authorId}`, {
+        method: 'PUT',
+      }));
+    },
+    async removeViewLaterAuthor(authorId) {
+      return viewLaterStateSchema.parse(await client.request(`view-later/producers/${authorId}`, {
+        method: 'DELETE',
+      }));
     },
     async listGalleries() {
       return gallerySummarySchema.array().parse(await client.request('galleries'));

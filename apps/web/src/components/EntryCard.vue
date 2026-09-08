@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { entryStackLayerStyle, entryStackLayers } from '../entry-media-stack.js';
 import { useI18n } from '../i18n.js';
+import LazyCardImage from './LazyCardImage.vue';
 
 /**
  * THE shared work-card, used identically by the Gallery grid, Recently
@@ -35,14 +36,16 @@ interface GalleryApiLike {
   <article class="entry-card" data-testid="shared-entry-card">
     <button type="button" class="entry-card-main" :data-entry-id="entry.id" @click="emit('open')">
       <div class="entry-stack">
-        <img
+        <LazyCardImage
           v-for="(ref, index) in entryStackLayers(entry)"
           :key="ref"
           class="entry-stack-image"
           :src="props.api.assetUrl(ref)"
           :alt="entry.title"
           :style="entryStackLayerStyle(index, entryStackLayers(entry).length)"
-        >
+          loading="lazy"
+          decoding="async"
+        />
         <span v-if="entryStackLayers(entry).length === 0" class="entry-placeholder" aria-hidden="true">
           {{ entry.title.slice(0, 1).toUpperCase() }}
         </span>

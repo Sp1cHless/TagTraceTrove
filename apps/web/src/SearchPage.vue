@@ -132,7 +132,7 @@ onMounted(() => {
       {{ t('search.count', { count: resultCount }) }}
     </p>
 
-    <PagedCardGrid v-if="scope === 'entries' && visibleEntries.length" :items="visibleEntries" v-slot="{ items }">
+    <PagedCardGrid v-if="scope === 'entries' && visibleEntries.length" :items="visibleEntries" :page-key="`search:entries:${query.trim()}`" v-slot="{ items }">
       <article v-for="entry in items" :key="entry.id" class="search-card">
         <button
           type="button"
@@ -148,6 +148,8 @@ onMounted(() => {
               :src="api.assetUrl(mediaRef)"
               :style="entryStackLayerStyle(index, entryStackLayers(entry).length)"
               :alt="entry.title"
+              loading="lazy"
+              decoding="async"
             >
             <span v-if="entryStackLayers(entry).length === 0" class="search-placeholder">{{ entry.title.slice(0, 1).toUpperCase() }}</span>
             <span v-if="entry.likeCount > 0" class="search-like">👍 {{ entry.likeCount }}</span>
@@ -157,7 +159,7 @@ onMounted(() => {
       </article>
     </PagedCardGrid>
 
-    <PagedCardGrid v-else-if="scope === 'producers' && visibleAuthors.length" :items="visibleAuthors" v-slot="{ items }">
+    <PagedCardGrid v-else-if="scope === 'producers' && visibleAuthors.length" :items="visibleAuthors" :page-key="`search:authors:${query.trim()}`" v-slot="{ items }">
       <article v-for="author in items" :key="author.id" class="search-card">
         <button
           type="button"
@@ -167,7 +169,7 @@ onMounted(() => {
         >
           <span v-if="author.covers.length === 0" class="search-placeholder">{{ author.name.slice(0, 1).toUpperCase() }}</span>
           <span v-else class="search-author-covers">
-            <img v-for="cover in author.covers.slice(0, 4)" :key="cover" :src="api.assetUrl(cover)" :alt="author.name">
+            <img v-for="cover in author.covers.slice(0, 4)" :key="cover" :src="api.assetUrl(cover)" :alt="author.name" loading="lazy" decoding="async">
           </span>
           <span class="search-meta"><strong>{{ author.name }}</strong><small v-if="author.galleryType">{{ author.galleryType }}</small></span>
         </button>

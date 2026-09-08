@@ -80,7 +80,29 @@ describe('Entry HTTP routes', () => {
     const assetResponse = await app.request(updated.coverRef);
     expect(assetResponse.status).toBe(200);
     expect(assetResponse.headers.get('content-type')).toContain('image/png');
+    expect(assetResponse.headers.get('cache-control')).toBe('private, max-age=0, must-revalidate');
+    const etag = assetResponse.headers.get('etag');
+    expect(etag).toMatch(/^"[A-Za-z0-9_-]+"$/);
     expect(new Uint8Array(await assetResponse.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+
+    const revalidatedResponse = await app.request(updated.coverRef, {
+      headers: { 'If-None-Match': etag! },
+    });
+    expect(revalidatedResponse.status).toBe(304);
+    expect(await revalidatedResponse.text()).toBe('');
+
+    const replacementBody = new FormData();
+    replacementBody.set('file', new File([new Uint8Array([4, 5, 6])], 'cover.png', { type: 'image/png' }));
+    await app.request(`/api/entries/${entry.id}/media/cover`, {
+      method: 'PUT',
+      body: replacementBody,
+    });
+    const changedResponse = await app.request(updated.coverRef, {
+      headers: { 'If-None-Match': etag! },
+    });
+    expect(changedResponse.status).toBe(200);
+    expect(changedResponse.headers.get('etag')).not.toBe(etag);
+    expect(new Uint8Array(await changedResponse.arrayBuffer())).toEqual(new Uint8Array([4, 5, 6]));
   });
 
   it('previews a site export folder and commits its reviewed canonical mapping', async () => {

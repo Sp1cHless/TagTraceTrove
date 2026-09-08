@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveServerBinding } from './server-launch-config.js';
 import { startApiServer } from './server.js';
 
 function parsePort(value: string | undefined): number {
@@ -12,11 +13,7 @@ function parsePort(value: string | undefined): number {
   return port;
 }
 
-const hostname = process.env.T3_HOST ?? '127.0.0.1';
-const enableLan = process.env.T3_ENABLE_LAN === 'true';
-if (hostname !== '127.0.0.1' && hostname !== 'localhost' && hostname !== '::1' && !enableLan) {
-  throw new Error('Set T3_ENABLE_LAN=true before binding the API outside localhost');
-}
+const { hostname } = resolveServerBinding(process.env);
 
 const databasePath = resolve(
   process.env.T3_DATA_DIR ?? '.data',

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
@@ -50,6 +51,7 @@ import {
   importTaxonomyAliasesRequestSchema,
   layoutResponseSchema,
   layoutTemplateApplyResponseSchema,
+  mergeViewLaterRequestSchema,
   moveEntryTagRequestSchema,
   mutationSuccessResponseSchema,
   authorAliasGroupsResponseSchema,
@@ -89,6 +91,7 @@ import {
   updateEntryRequestSchema,
   updateProducerRequestSchema,
   usageInfoSchema,
+  viewLaterStateSchema,
 } from '@t3/shared';
 import { normalizeTag } from '@t3/shared';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -202,6 +205,15 @@ import {
   setCollectionNsfw,
   updateCollection,
 } from '../repositories/collection-repository.js';
+import {
+  addViewLaterEntry,
+  addViewLaterProducer,
+  listViewLaterEntryIds,
+  listViewLaterProducerIds,
+  mergeViewLaterEntries,
+  removeViewLaterEntry,
+  removeViewLaterProducer,
+} from '../repositories/view-later-repository.js';
 import { searchProducersByName } from '../repositories/producer-tag-repository.js';
 import {
   deleteTaxonomyAlias,
@@ -313,14 +325,20 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
     const media = await readEntryMedia(options.assetRoot, entryId, context.req.param('fileName'));
     if (!media) return context.notFound();
+    const etag = `"${createHash('sha256').update(media.bytes).digest('base64url')}"`;
+    const responseHeaders = {
+      'Content-Type': media.mimeType,
+      'Cache-Control': 'private, max-age=0, must-revalidate',
+      ETag: etag,
+    };
+    if (context.req.header('if-none-match') === etag) {
+      return new Response(null, { status: 304, headers: responseHeaders });
+    }
     const body = media.bytes.buffer.slice(
       media.bytes.byteOffset,
       media.bytes.byteOffset + media.bytes.byteLength,
     ) as ArrayBuffer;
-    return context.body(body, 200, {
-      'Content-Type': media.mimeType,
-      'Cache-Control': 'no-store',
-    });
+    return context.body(body, 200, responseHeaders);
   });
 
   app.post('/api/imports/site-probe/preview', async (context) => {
@@ -370,6 +388,51 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
         ? listEntryTagsGlobally(database)
         : listEntryTagsForType(database, entryType),
     ));
+  });
+
+  app.get('/api/view-later', (context) => context.json(viewLaterStateSchema.parse({
+    entryIds: listViewLaterEntryIds(database),
+    producerIds: listViewLaterProducerIds(database),
+  })));
+
+  app.post('/api/view-later/merge', async (context) => {
+    const { entryIds } = await parseJson(context.req.raw, mergeViewLaterRequestSchema);
+    return context.json(viewLaterStateSchema.parse({
+      entryIds: mergeViewLaterEntries(database, entryIds),
+      producerIds: listViewLaterProducerIds(database),
+    }));
+  });
+
+  app.put('/api/view-later/producers/:producerId', (context) => {
+    const { producerId } = producerIdParamsSchema.parse({ producerId: context.req.param('producerId') });
+    return context.json(viewLaterStateSchema.parse({
+      entryIds: listViewLaterEntryIds(database),
+      producerIds: addViewLaterProducer(database, producerId),
+    }));
+  });
+
+  app.delete('/api/view-later/producers/:producerId', (context) => {
+    const { producerId } = producerIdParamsSchema.parse({ producerId: context.req.param('producerId') });
+    return context.json(viewLaterStateSchema.parse({
+      entryIds: listViewLaterEntryIds(database),
+      producerIds: removeViewLaterProducer(database, producerId),
+    }));
+  });
+
+  app.put('/api/view-later/:entryId', (context) => {
+    const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+    return context.json(viewLaterStateSchema.parse({
+      entryIds: addViewLaterEntry(database, entryId),
+      producerIds: listViewLaterProducerIds(database),
+    }));
+  });
+
+  app.delete('/api/view-later/:entryId', (context) => {
+    const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+    return context.json(viewLaterStateSchema.parse({
+      entryIds: removeViewLaterEntry(database, entryId),
+      producerIds: listViewLaterProducerIds(database),
+    }));
   });
 
   app.get('/api/collections', (context) => {

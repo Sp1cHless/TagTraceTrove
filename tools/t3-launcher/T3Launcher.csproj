@@ -13,4 +13,8 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Remove="T3Launcher.ContractTests\**\*.cs" />
+  </ItemGroup>
+
 </Project>

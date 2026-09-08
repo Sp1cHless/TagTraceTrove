@@ -7,29 +7,36 @@ import AppIcon from './components/AppIcon.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
 import { showNsfw } from './stores/preferences.js';
 import { useI18n } from './i18n.js';
+import { shuffledCopy } from './random-sort.js';
+import { useNavigationMemory } from './navigation-memory.js';
 
 const props = defineProps<{
   api: GalleryApi;
+  initialTab?: string;
 }>();
 
 const emit = defineEmits<{
   'open-entry': [entryId: number];
+  'active-tab-change': [type: string];
 }>();
 
 const { t } = useI18n();
+const navigationMemory = useNavigationMemory();
+const savedState = navigationMemory.states.get('recent-view') as { tab?: string; mode?: RecentMode } | undefined;
 
-type RecentMode = 'lastViewed' | 'mostViewed' | 'mostLiked';
+type RecentMode = 'lastViewed' | 'mostViewed' | 'mostLiked' | 'random';
 
 const galleries = ref<GallerySummary[]>([]);
 const entriesByType = ref<Map<string, GalleryEntrySummary[]>>(new Map());
-const activeTab = ref<string>('');
-const mode = ref<RecentMode>('lastViewed');
+const activeTab = ref<string>(props.initialTab || savedState?.tab || '');
+const mode = ref<RecentMode>(savedState?.mode ?? 'lastViewed');
 const loading = ref(true);
 const error = ref<string | null>(null);
 
 const TAB_ORDER_KEY = 't3.recent-tabs.order';
 const draggedTab = ref<string | null>(null);
 const dropTargetTab = ref<string | null>(null);
+const organizingTabs = ref(false);
 
 onMounted(load);
 async function load(): Promise<void> {
@@ -86,10 +93,40 @@ const tabs = computed(() => {
   }));
 });
 
+function fullTabOrder(): string[] {
+  const known = galleries.value.map((gallery) => gallery.type);
+  const saved = tabOrder.value.filter((type) => known.includes(type));
+  return [...saved, ...known.filter((type) => !saved.includes(type))];
+}
+
+function placeTab(sourceType: string, targetType: string): void {
+  if (sourceType === targetType) return;
+  const current = fullTabOrder();
+  const from = current.indexOf(sourceType);
+  const to = current.indexOf(targetType);
+  if (from < 0 || to < 0) return;
+  current.splice(to, 0, ...current.splice(from, 1));
+  tabOrder.value = current;
+  saveTabOrder();
+}
+
+const activeTabPosition = computed(() => tabs.value.findIndex((tab) => tab.type === activeTab.value));
+
+function moveActiveTab(direction: -1 | 1): void {
+  const target = tabs.value[activeTabPosition.value + direction];
+  if (target) placeTab(activeTab.value, target.type);
+}
+
 watch(showNsfw, () => {
   if (!tabs.value.some((tab) => tab.type === activeTab.value)) {
     activeTab.value = tabs.value[0]?.type ?? '';
   }
+  if (tabs.value.length < 2) organizingTabs.value = false;
+});
+
+watch(activeTab, (type) => emit('active-tab-change', type));
+watch([activeTab, mode], ([tab, currentMode]) => {
+  navigationMemory.states.set('recent-view', { tab, mode: currentMode });
 });
 
 function onTabDragStart(type: string): void {
@@ -105,13 +142,7 @@ function onTabDrop(type: string): void {
   draggedTab.value = null;
   dropTargetTab.value = null;
   if (!dragged || dragged === type) return;
-  const current = tabs.value.map((tab) => tab.type);
-  const from = current.indexOf(dragged);
-  const to = current.indexOf(type);
-  if (from < 0 || to < 0) return;
-  current.splice(to, 0, ...current.splice(from, 1));
-  tabOrder.value = current;
-  saveTabOrder();
+  placeTab(dragged, type);
 }
 
 // The page exists to surface RECENT viewing: entries without any view data
@@ -122,6 +153,7 @@ const RECENT_MAX_CARDS = 72;
 const activeEntries = computed(() => {
   const list = (entriesByType.value.get(activeTab.value) ?? [])
     .filter((entry) => entry.lastViewedAt !== null);
+  if (mode.value === 'random') return shuffledCopy(list).slice(0, RECENT_MAX_CARDS);
   const sorted = [...list];
   if (mode.value === 'mostViewed') {
     sorted.sort((left, right) => right.viewCount - left.viewCount || left.id - right.id);
@@ -189,6 +221,42 @@ function openEntry(entryId: number): void {
           :title="t('recent.mostLiked')"
           @click="mode = 'mostLiked'"
         ><AppIcon name="thumb-up" :size="16" /></button>
+        <button
+          type="button"
+          class="recent-mode-button"
+          :class="{ 'recent-mode-active': mode === 'random' }"
+          data-testid="recent-mode-random"
+          :aria-label="t('sort.random')"
+          :title="t('sort.random')"
+          @click="mode = 'random'"
+        ><AppIcon name="shuffle" :size="16" /></button>
+        <button
+          v-if="tabs.length > 1 && !organizingTabs"
+          type="button"
+          class="recent-mode-button"
+          data-testid="recent-tab-order-toggle"
+          :aria-label="t('tabs.reorder')"
+          :title="t('tabs.reorder')"
+          @click="organizingTabs = true"
+        ><AppIcon name="reorder" :size="16" /></button>
+        <template v-else-if="tabs.length > 1">
+          <button
+            type="button"
+            class="recent-mode-button tab-order-button"
+            data-testid="recent-tab-move-earlier"
+            :disabled="activeTabPosition <= 0"
+            :aria-label="t('tabs.moveEarlier', { name: activeTab })"
+            @click="moveActiveTab(-1)"
+          >←</button>
+          <button
+            type="button"
+            class="recent-mode-button tab-order-button"
+            data-testid="recent-tab-move-later"
+            :disabled="activeTabPosition < 0 || activeTabPosition >= tabs.length - 1"
+            :aria-label="t('tabs.moveLater', { name: activeTab })"
+            @click="moveActiveTab(1)"
+          >→</button>
+        </template>
       </div>
     </header>
 
@@ -204,7 +272,7 @@ function openEntry(entryId: number): void {
           role="tab"
           :aria-selected="tab.type === activeTab"
           :data-recent-tab="tab.type"
-          @click="activeTab = tab.type"
+          @click="activeTab = tab.type; organizingTabs = false"
           @dragstart="onTabDragStart(tab.type)"
           @dragover.prevent="onTabDragOver(tab.type)"
           @drop.prevent="onTabDrop(tab.type)"
@@ -222,6 +290,7 @@ function openEntry(entryId: number): void {
         <PagedCardGrid
           v-else
           :items="activeEntries"
+          :page-key="`recent:${activeTab}:${mode}`"
           grid-class="recent-grid recent-grid-compact"
           grid-testid="recent-entry-grid"
           v-slot="{ items }"
@@ -250,6 +319,8 @@ function openEntry(entryId: number): void {
 .recent-mode-button { display: inline-grid; place-items: center; width: var(--icon-button-size); height: var(--icon-button-size); padding: 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); color: var(--icon-muted); background: transparent; line-height: 1; cursor: pointer; transition: color var(--transition-duration) ease, background-color var(--transition-duration) ease, border-color var(--transition-duration) ease; }
 .recent-mode-button:hover { color: var(--accent); background: var(--surface-hover); border-color: var(--border-strong); }
 .recent-mode-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.tab-order-button { color: var(--accent); font-size: 1.1rem; }
+.tab-order-button:disabled { opacity: 0.35; cursor: default; }
 .recent-mode-active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .recent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.8rem; }
 .entry-card { position: relative; min-width: 0; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface-muted); }
@@ -269,5 +340,9 @@ function openEntry(entryId: number): void {
 
 @media (max-width: 30rem) {
   .recent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 44rem) {
+  .recent-toolbar { align-items: flex-start; flex-wrap: wrap; }
+  .recent-toolbar h2 { flex-basis: 100%; }
 }
 </style>

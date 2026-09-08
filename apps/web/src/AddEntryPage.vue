@@ -761,6 +761,7 @@ onBeforeUnmount(() => {
       </div>
     </form>
 
+    <div data-testid="desktop-entry-import" class="desktop-entry-import">
     <label
       class="folder-dropzone"
       @dragover.prevent
@@ -1017,6 +1018,7 @@ onBeforeUnmount(() => {
         <p v-if="importResult" class="success-message">{{ importResult }}</p>
       </template>
     </section>
+    </div>
   </section>
 </template>
 
@@ -1035,6 +1037,7 @@ onBeforeUnmount(() => {
 .media-dropzone input, .folder-dropzone input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .entry-fields { display: grid; align-content: start; gap: 1rem; }
 .entry-fields label { display: grid; gap: .4rem; }
+.desktop-entry-import { display: grid; gap: 1.5rem; }
 .folder-dropzone { min-height: 180px; padding: 1.5rem; text-align: center; }
 .batch-import { display: grid; gap: 1rem; padding: 1.25rem; border: 1px solid var(--border-subtle); border-radius: 16px; background: var(--surface); }
 .batch-import h3 { margin: 0; }
@@ -1072,5 +1075,18 @@ onBeforeUnmount(() => {
 .rating-select-title { font-size: .8rem; color: var(--text-muted); }
 .rating-select-row { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(8rem, 1fr); align-items: center; gap: .6rem; }
 .success-message { color: var(--accent); }
-@media (max-width: 760px) { .entry-composer { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  .add-page-toolbar { align-items: flex-start; flex-wrap: wrap; }
+  .add-page-toolbar h2 { flex-basis: 100%; }
+  .entry-composer { grid-template-columns: 1fr; padding: 0.8rem; gap: 1rem; min-width: 0; }
+  .media-composer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); min-height: 0; }
+  .media-dropzone { min-height: 13rem; }
+  .cover-dropzone:only-child { grid-column: 1 / -1; }
+  .entry-fields input:not([type='checkbox']),
+  .entry-fields select,
+  .entry-fields textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; }
+  .entry-fields .primary-button { width: 100%; min-height: 44px; }
+  .checkbox-label { min-height: 44px; align-items: center; }
+  .desktop-entry-import { display: none; }
+}
 </style>

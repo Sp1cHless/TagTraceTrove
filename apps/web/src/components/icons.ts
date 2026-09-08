@@ -19,9 +19,15 @@ export type IconName =
   | 'history'
   | 'view-later'
   | 'view-later-check'
+  | 'shuffle'
+  | 'reorder'
+  | 'back'
+  | 'arrow-up'
   | 'folder'
   | 'folder-plus'
   | 'search'
+  | 'menu'
+  | 'close'
   | 'edit'
   | 'settings'
   | 'sun'
@@ -38,12 +44,24 @@ export const iconMarkup: Record<IconName, string> = {
     '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
   'view-later-check':
     '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="m8.6 12.1 2.4 2.4 4.6-5"/>',
+  'shuffle':
+    '<path d="M16 3h5v5"/><path d="m4 20 17-17"/><path d="M21 16v5h-5"/><path d="m15 15 6 6"/><path d="M4 4l5 5"/>',
+  'reorder':
+    '<path d="M9 7h12"/><path d="m9 3-4 4 4 4"/><path d="M15 17H3"/><path d="m15 13 4 4-4 4"/>',
+  'back':
+    '<path d="M20 12H5"/><path d="m11 18-6-6 6-6"/>',
+  'arrow-up':
+    '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
   'folder':
     '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2Z"/>',
   'folder-plus':
     '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2Z"/><path d="M12 10.5v6"/><path d="M9 13.5h6"/>',
   'search':
     '<circle cx="11" cy="11" r="7.5"/><path d="m20.5 20.5-4-4"/>',
+  'menu':
+    '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  'close':
+    '<path d="m6 6 12 12M18 6 6 18"/>',
   'edit':
     '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   'settings':

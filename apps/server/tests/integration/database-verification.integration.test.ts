@@ -96,5 +96,6 @@ describe('database verification', () => {
 
     expect(result.ok).toBe(true);
     expect(result.checks.every((check) => check.passed)).toBe(true);
+    expect(result.checks.map((check) => check.name)).toContain('persist shared View later');
   });
 });

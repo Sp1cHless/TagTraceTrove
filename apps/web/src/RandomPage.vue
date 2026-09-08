@@ -6,6 +6,7 @@ import EntryCard from './components/EntryCard.vue';
 import FacetFilterBar, { type GalleryFacetFilters } from './components/FacetFilterBar.vue';
 import { showNsfw } from './stores/preferences.js';
 import { useI18n } from './i18n.js';
+import { useNavigationMemory } from './navigation-memory.js';
 
 /**
  * Random recommendation: a clean filter-style page. Works can be drawn with
@@ -26,15 +27,24 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const navigationMemory = useNavigationMemory();
+const savedState = navigationMemory.states.get('random') as {
+  mode?: RandomMode;
+  selectedType?: string;
+  filters?: GalleryFacetFilters;
+  works?: GalleryEntrySummary[] | null;
+  authors?: GalleryAuthorSummary[];
+  tags?: EntryTagUsage[] | null;
+} | undefined;
 
-const mode = ref<RandomMode>('works');
+const mode = ref<RandomMode>(savedState?.mode ?? 'works');
 const error = ref<string | null>(null);
 const dealing = ref(false);
 let dealRequestSequence = 0;
 
 const galleries = ref<GallerySummary[]>([]);
-const selectedType = ref<string>(''); // '' = all galleries
-const filters = ref<GalleryFacetFilters>({
+const selectedType = ref<string>(savedState?.selectedType ?? ''); // '' = all galleries
+const filters = ref<GalleryFacetFilters>(savedState?.filters ?? {
   conditions: [],
   authorIds: [],
   ratingConditions: [],
@@ -44,9 +54,20 @@ const filters = ref<GalleryFacetFilters>({
 });
 const filterOptions = ref<FacetFilterOptions | null>(null);
 
-const works = ref<GalleryEntrySummary[] | null>(null);
-const authors = ref<GalleryAuthorSummary[]>([]);
-const tags = ref<EntryTagUsage[] | null>(null);
+const works = ref<GalleryEntrySummary[] | null>(savedState?.works ?? null);
+const authors = ref<GalleryAuthorSummary[]>(savedState?.authors ?? []);
+const tags = ref<EntryTagUsage[] | null>(savedState?.tags ?? null);
+
+watch([mode, selectedType, filters, works, authors, tags], () => {
+  navigationMemory.states.set('random', {
+    mode: mode.value,
+    selectedType: selectedType.value,
+    filters: JSON.parse(JSON.stringify(filters.value)) as GalleryFacetFilters,
+    works: works.value,
+    authors: authors.value,
+    tags: tags.value,
+  });
+}, { deep: true });
 
 const visibleGalleries = computed(() => (
   galleries.value.filter((gallery) => showNsfw.value || !gallery.nsfw)
@@ -203,7 +224,12 @@ function switchMode(next: RandomMode): void {
 onMounted(async () => {
   try {
     galleries.value = await props.api.listGalleries();
-    if (visibleGalleries.value.length > 0) selectedType.value = visibleGalleries.value[0]!.type;
+    if (!savedState && visibleGalleries.value.length > 0) {
+      selectedType.value = visibleGalleries.value[0]!.type;
+    } else if (selectedType.value !== ''
+      && !visibleGalleries.value.some((gallery) => gallery.type === selectedType.value)) {
+      selectedType.value = visibleGalleries.value[0]?.type ?? '';
+    }
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('random.error');
   }
@@ -398,4 +424,9 @@ onMounted(async () => {
 .primary-button { padding: 0.45rem 0.9rem; border: 1px solid var(--accent); border-radius: 0.55rem; color: white; background: var(--accent); font: inherit; cursor: pointer; }
 .primary-button:disabled { opacity: 0.55; cursor: default; }
 .muted { color: var(--text-muted); }
+@media (max-width: 44rem) {
+  .recent-toolbar { align-items: flex-start; flex-wrap: wrap; }
+  .recent-toolbar h2 { flex-basis: 100%; }
+  .random-tag-cloud { min-height: 12rem; padding: 1rem 0; }
+}
 </style>

@@ -34,6 +34,8 @@ The current tables and invariants are documented in `current-architecture.md`. `
 - `008_entry_likes.sql` — adds `like_count` to `entry_usage` (unlimited, re-clickable).
 - `009_gallery_partitions.sql` — `gallery_settings` (per Entry type SFW/NSFW flag, default SFW).
 - `010_collections.sql` — `collections` (entry/producer kinds, one-level nesting for entry folders, title/description/nsfw/sort order) plus `collection_entries` / `collection_producers` member tables.
+- `011_view_later.sql` — one library-wide ordered `view_later_entries` membership list; Entry FK uses `ON DELETE CASCADE`, add/remove are idempotent, and position is preserved across desktop/mobile clients.
+- `012_view_later_producers.sql` — an independent ordered `view_later_producers` list for Authors, with unique membership and `ON DELETE CASCADE` cleanup when its Producer is deleted.
 
 ## Backup and restore
 
