@@ -1,5 +1,8 @@
 import {
   normalizeTag,
+  type EntryListSort,
+  type EntryPageQueryRequest,
+  type EntryPageResponse,
   type RatingFilterCondition,
   type RatingSort,
   type UsageFilterCondition,
@@ -525,8 +528,127 @@ export function findEntriesByFacetFilters(
   database: T3Database,
   input: FacetFilterEntriesInput,
 ): EntrySummary[] {
-  const clauses: string[] = ['entry.type = ?'];
-  const parameters: Array<string | number> = [input.entryType.trim()];
+  const query = buildFacetFilterQuery(database, input, 'title-asc');
+  return mapEntrySummaryRows(database.prepare(`
+    ${entrySummarySelect}
+    ${query.ratingSortJoin}
+    WHERE ${query.whereSql}
+    ${query.orderSql}
+  `).all(...query.itemParameters));
+}
+
+interface BuiltFacetFilterQuery {
+  whereSql: string;
+  whereParameters: Array<string | number>;
+  ratingSortJoin: string;
+  itemParameters: Array<string | number>;
+  orderSql: string;
+}
+
+function entryListOrderSql(sort: EntryListSort): string {
+  switch (sort) {
+    case 'date-desc':
+      return 'ORDER BY entry.upload_date DESC, entry.id DESC';
+    case 'date-asc':
+      return 'ORDER BY entry.upload_date ASC, entry.id ASC';
+    case 'title-desc':
+      return 'ORDER BY entry.title COLLATE NOCASE DESC, entry.id ASC';
+    case 'title-asc':
+      return 'ORDER BY entry.title COLLATE NOCASE ASC, entry.id ASC';
+    case 'type':
+      return 'ORDER BY entry.type COLLATE NOCASE ASC, entry.title COLLATE NOCASE ASC, entry.id ASC';
+    case 'source-order':
+      return 'ORDER BY entry.id ASC';
+    case 'random':
+      return 'ORDER BY random()';
+  }
+}
+
+type FacetQueryInput = Omit<FacetFilterEntriesInput, 'entryType'> & {
+  entryType?: string | undefined;
+  entryIds?: number[] | undefined;
+  includeTagIds?: number[] | undefined;
+  excludeEntryTypes?: string[] | undefined;
+  searchQuery?: string | undefined;
+  recentOnly?: boolean | undefined;
+  producerDirectoryId?: number | undefined;
+  looseForProducerId?: number | undefined;
+  collectionId?: number | undefined;
+  includeNsfw?: boolean | undefined;
+  randomSeed?: number | undefined;
+};
+
+function buildFacetFilterQuery(
+  database: T3Database,
+  input: FacetQueryInput,
+  sort: EntryListSort,
+): BuiltFacetFilterQuery {
+  const clauses: string[] = [];
+  const parameters: Array<string | number> = [];
+  const entryType = input.entryType?.trim();
+  if (entryType) {
+    clauses.push('entry.type = ?');
+    parameters.push(entryType);
+  }
+
+  const entryIds = [...new Set(input.entryIds ?? [])];
+  const entryIdsJson = JSON.stringify(entryIds);
+  if (entryIds.length > 0) {
+    clauses.push('entry.id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))');
+    parameters.push(entryIdsJson);
+  }
+
+  const includeTagIds = [...new Set(input.includeTagIds ?? [])];
+  if (includeTagIds.length > 0) {
+    clauses.push(`(
+      SELECT COUNT(DISTINCT assignment.tag_id)
+      FROM entry_tags AS assignment
+      WHERE assignment.entry_id = entry.id
+        AND assignment.tag_id IN (${includeTagIds.map(() => '?').join(', ')})
+    ) = ${includeTagIds.length}`);
+    parameters.push(...includeTagIds);
+  }
+
+  const excludedTypes = [...new Set(input.excludeEntryTypes ?? [])];
+  if (excludedTypes.length > 0) {
+    clauses.push('entry.type NOT IN (SELECT value FROM json_each(?))');
+    parameters.push(JSON.stringify(excludedTypes));
+  }
+
+  if (input.recentOnly) clauses.push('entry_usage.last_viewed_at IS NOT NULL');
+
+  if (input.producerDirectoryId !== undefined) {
+    clauses.push(`EXISTS (
+      SELECT 1 FROM author_directory_entries AS directory_member
+      WHERE directory_member.directory_id = ? AND directory_member.entry_id = entry.id
+    )`);
+    parameters.push(input.producerDirectoryId);
+  }
+  if (input.looseForProducerId !== undefined) {
+    clauses.push(`EXISTS (
+      SELECT 1 FROM entry_producers AS loose_relation
+      WHERE loose_relation.producer_id = ? AND loose_relation.entry_id = entry.id
+    )`);
+    parameters.push(input.looseForProducerId);
+    clauses.push(`NOT EXISTS (
+      SELECT 1 FROM author_directory_entries AS grouped_member
+      WHERE grouped_member.producer_id = ? AND grouped_member.entry_id = entry.id
+    )`);
+    parameters.push(input.looseForProducerId);
+  }
+  if (input.collectionId !== undefined) {
+    clauses.push(`EXISTS (
+      SELECT 1 FROM collection_entries AS collection_member
+      WHERE collection_member.collection_id = ? AND collection_member.entry_id = entry.id
+    )`);
+    parameters.push(input.collectionId);
+  }
+  if (input.includeNsfw === false) {
+    clauses.push(`NOT EXISTS (
+      SELECT 1 FROM gallery_settings AS partition
+      WHERE partition.entry_type = entry.type AND partition.nsfw = 1
+    )`);
+  }
 
   for (const condition of input.conditions) {
     const uniqueTagIds = [...new Set(condition.tagIds)];
@@ -562,7 +684,8 @@ export function findEntriesByFacetFilters(
   // the given stars (an unrated NULL never satisfies a comparison), unrated
   // matches entries whose slot has no value yet.
   for (const condition of input.ratingConditions ?? []) {
-    requireRatingSlot(database, condition.slotId, input.entryType.trim());
+    if (!entryType) throw new Error('entryType is required for rating filters');
+    requireRatingSlot(database, condition.slotId, entryType);
     if (condition.operator === 'unrated') {
       clauses.push(`NOT EXISTS (
         SELECT 1 FROM entry_rating_values AS rating
@@ -587,9 +710,10 @@ export function findEntriesByFacetFilters(
   // Rating sort: high to low with unrated sinking below every rated entry.
   const ratingSort = input.ratingSort ?? null;
   let ratingSortJoin = '';
-  let orderClause = 'ORDER BY entry.title COLLATE NOCASE, entry.id';
+  let orderClause = entryListOrderSql(sort);
   if (ratingSort) {
-    requireRatingSlot(database, ratingSort.slotId, input.entryType.trim());
+    if (!entryType) throw new Error('entryType is required for rating sort');
+    requireRatingSlot(database, ratingSort.slotId, entryType);
     ratingSortJoin = 'LEFT JOIN entry_rating_values AS rating_sort\n      ON rating_sort.entry_id = entry.id AND rating_sort.slot_id = ?';
     orderClause = 'ORDER BY (rating_sort.stars IS NULL) ASC, rating_sort.stars DESC, entry.title COLLATE NOCASE, entry.id';
   }
@@ -605,15 +729,68 @@ export function findEntriesByFacetFilters(
     parameters.push(...usageClauses.parameters);
   }
   if (input.usageSort) {
-    orderClause = usageClauses.orderSql;
+    orderClause = `${usageClauses.orderSql}, entry.id ASC`;
+  } else if (!ratingSort && sort === 'source-order') {
+    orderClause = `ORDER BY (
+      SELECT CAST(key AS INTEGER) FROM json_each(?)
+      WHERE CAST(value AS INTEGER) = entry.id
+    ), entry.id`;
+  } else if (!ratingSort && sort === 'random') {
+    orderClause = 'ORDER BY ((entry.id * 1103515245 + ? * 12345) & 2147483647), entry.id';
   }
 
-  return mapEntrySummaryRows(database.prepare(`
+  const orderParameters = !input.usageSort && !ratingSort && sort === 'source-order'
+    ? [entryIdsJson]
+    : !input.usageSort && !ratingSort && sort === 'random'
+      ? [input.randomSeed ?? 0]
+      : [];
+
+  return {
+    whereSql: clauses.length > 0 ? clauses.join('\n      AND ') : '1 = 1',
+    whereParameters: parameters,
+    ratingSortJoin,
+    itemParameters: [
+      ...(ratingSort ? [ratingSort.slotId] : []),
+      ...parameters,
+      ...orderParameters,
+    ],
+    orderSql: orderClause,
+  };
+}
+
+/** Executes filtering, deterministic sorting, counting and paging in SQLite. */
+export function queryEntryPage(
+  database: T3Database,
+  input: EntryPageQueryRequest,
+): EntryPageResponse {
+  if (input.searchQuery) {
+    const excludedTypes = new Set(input.excludeEntryTypes ?? []);
+    const ranked = searchEntriesByTitle(database, input.searchQuery, input.entryType ?? null)
+      .filter((entry) => !excludedTypes.has(entry.type));
+    const offset = (input.page - 1) * input.pageSize;
+    return {
+      items: ranked.slice(offset, offset + input.pageSize),
+      total: ranked.length,
+      page: input.page,
+      pageSize: input.pageSize,
+    };
+  }
+  const query = buildFacetFilterQuery(database, input, input.sort);
+  const total = database.prepare(`
+    SELECT COUNT(*)
+    FROM entries AS entry
+    LEFT JOIN entry_usage AS entry_usage ON entry_usage.entry_id = entry.id
+    WHERE ${query.whereSql}
+  `).pluck().get(...query.whereParameters) as number;
+  const offset = (input.page - 1) * input.pageSize;
+  const items = mapEntrySummaryRows(database.prepare(`
     ${entrySummarySelect}
-    ${ratingSortJoin}
-    WHERE ${clauses.join('\n      AND ')}
-    ${orderClause}
-  `).all(...(ratingSort ? [ratingSort.slotId, ...parameters] : parameters)));
+    ${query.ratingSortJoin}
+    WHERE ${query.whereSql}
+    ${query.orderSql}
+    LIMIT ? OFFSET ?
+  `).all(...query.itemParameters, input.pageSize, offset));
+  return { items, total, page: input.page, pageSize: input.pageSize };
 }
 
 /**

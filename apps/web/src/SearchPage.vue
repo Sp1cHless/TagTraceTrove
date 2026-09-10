@@ -6,10 +6,11 @@ import type {
   GalleryAuthorSummary,
   GalleryEntrySummary,
 } from './api/gallery.js';
-import { entryStackLayerStyle, entryStackLayers } from './entry-media-stack.js';
+import { entryCardMediaRef, entryStackLayerStyle, entryStackLayers } from './entry-media-stack.js';
 import PagedCardGrid from './components/PagedCardGrid.vue';
 import { showNsfw } from './stores/preferences.js';
 import { useI18n } from './i18n.js';
+import { useNavigationMemory } from './navigation-memory.js';
 
 const props = defineProps<{
   api: GalleryApi;
@@ -24,12 +25,19 @@ const emit = defineEmits<{
   'open-tag': [tag: TagSearchHit, query: string, scope: SearchScope];
 }>();
 const { t } = useI18n();
+const navigationMemory = useNavigationMemory();
 
 const query = ref(props.initialQuery);
 const scope = ref<SearchScope>(props.initialScope);
 const entries = ref<GalleryEntrySummary[]>([]);
+const entryTotal = ref(0);
+const entryPage = ref(navigationMemory.pages.get(`search:entries:${props.initialQuery.trim()}`) ?? 1);
+const entryPageSize = ref(30);
 const tags = ref<TagSearchHit[]>([]);
 const authors = ref<GalleryAuthorSummary[]>([]);
+const authorTotal = ref(0);
+const authorPage = ref(navigationMemory.pages.get(`search:authors:${props.initialQuery.trim()}`) ?? 1);
+const authorPageSize = ref(30);
 const loading = ref(false);
 const searched = ref(false);
 const error = ref<string | null>(null);
@@ -41,12 +49,12 @@ const visibleEntries = computed(() => entries.value.filter((entry) => (
 )));
 const visibleAuthors = computed(() => authors.value.filter((author) => showNsfw.value || !author.nsfw));
 const resultCount = computed(() => {
-  if (scope.value === 'entries') return visibleEntries.value.length;
+  if (scope.value === 'entries') return entryTotal.value;
   if (scope.value === 'tags') return tags.value.length;
-  return visibleAuthors.value.length;
+  return authorTotal.value;
 });
 
-async function runSearch(): Promise<void> {
+async function runSearch(resetPage = true): Promise<void> {
   const nextQuery = query.value.trim();
   const sequence = ++requestSequence;
   error.value = null;
@@ -54,14 +62,47 @@ async function runSearch(): Promise<void> {
     entries.value = [];
     tags.value = [];
     authors.value = [];
+    entryTotal.value = 0;
+    authorTotal.value = 0;
     searched.value = false;
     return;
   }
+  if (resetPage) {
+    entryPage.value = 1;
+    authorPage.value = 1;
+  }
   loading.value = true;
   try {
-    if (scope.value === 'entries') entries.value = await props.api.searchEntries(nextQuery);
-    else if (scope.value === 'tags') tags.value = await props.api.searchTags(nextQuery, showNsfw.value);
-    else authors.value = await props.api.searchAuthors(nextQuery);
+    if (scope.value === 'entries') {
+      const result = await props.api.queryEntryPage({
+        conditions: [],
+        authorIds: [],
+        ratingConditions: [],
+        ratingSort: null,
+        usageConditions: [],
+        usageSort: null,
+        searchQuery: nextQuery,
+        excludeEntryTypes: showNsfw.value ? [] : props.nsfwEntryTypes,
+        sort: 'title-asc',
+        page: entryPage.value,
+        pageSize: entryPageSize.value,
+      });
+      entries.value = result.items;
+      entryTotal.value = result.total;
+    } else if (scope.value === 'tags') tags.value = await props.api.searchTags(nextQuery, showNsfw.value);
+    else {
+      const result = await props.api.queryProducerPage({
+        searchQuery: nextQuery,
+        ownTagIds: [],
+        relatedEntryTagIds: [],
+        includeNsfw: showNsfw.value,
+        sort: 'relevance',
+        page: authorPage.value,
+        pageSize: authorPageSize.value,
+      });
+      authors.value = result.items;
+      authorTotal.value = result.total;
+    }
     if (sequence === requestSequence) searched.value = true;
   } catch (cause) {
     if (sequence === requestSequence) {
@@ -70,6 +111,30 @@ async function runSearch(): Promise<void> {
   } finally {
     if (sequence === requestSequence) loading.value = false;
   }
+}
+
+function changeEntryPage(page: number): void {
+  entryPage.value = page;
+  void runSearch(false);
+}
+
+function changeEntryPageSize(pageSize: number): void {
+  if (entryPageSize.value === pageSize) return;
+  entryPageSize.value = pageSize;
+  entryPage.value = 1;
+  void runSearch(false);
+}
+
+function changeAuthorPage(page: number): void {
+  authorPage.value = page;
+  void runSearch(false);
+}
+
+function changeAuthorPageSize(pageSize: number): void {
+  if (authorPageSize.value === pageSize) return;
+  authorPageSize.value = pageSize;
+  authorPage.value = 1;
+  void runSearch(false);
 }
 
 function selectScope(nextScope: SearchScope): void {
@@ -81,10 +146,10 @@ watch(scope, () => {
   if (query.value.trim()) void runSearch();
 });
 watch(showNsfw, () => {
-  if (scope.value === 'tags' && query.value.trim()) void runSearch();
+  if (query.value.trim()) void runSearch();
 });
 onMounted(() => {
-  if (query.value.trim()) void runSearch();
+  if (query.value.trim()) void runSearch(false);
 });
 </script>
 
@@ -99,7 +164,7 @@ onMounted(() => {
       <p class="muted">{{ t('search.hint') }}</p>
     </header>
 
-    <form class="search-main-form" data-testid="search-main-form" @submit.prevent="runSearch">
+    <form class="search-main-form" data-testid="search-main-form" @submit.prevent="runSearch()">
       <input
         v-model="query"
         data-testid="search-main-input"
@@ -132,7 +197,16 @@ onMounted(() => {
       {{ t('search.count', { count: resultCount }) }}
     </p>
 
-    <PagedCardGrid v-if="scope === 'entries' && visibleEntries.length" :items="visibleEntries" :page-key="`search:entries:${query.trim()}`" v-slot="{ items }">
+    <PagedCardGrid
+      v-if="scope === 'entries' && visibleEntries.length"
+      :items="visibleEntries"
+      :page-key="`search:entries:${query.trim()}`"
+      :total-items="entryTotal"
+      :external-page="entryPage"
+      @update:page="changeEntryPage"
+      @update:page-size="changeEntryPageSize"
+      v-slot="{ items }"
+    >
       <article v-for="entry in items" :key="entry.id" class="search-card">
         <button
           type="button"
@@ -145,7 +219,7 @@ onMounted(() => {
               v-for="(mediaRef, index) in entryStackLayers(entry)"
               :key="`${mediaRef}-${index}`"
               class="search-entry-image"
-              :src="api.assetUrl(mediaRef)"
+              :src="api.assetUrl(entryCardMediaRef(mediaRef))"
               :style="entryStackLayerStyle(index, entryStackLayers(entry).length)"
               :alt="entry.title"
               loading="lazy"
@@ -159,7 +233,16 @@ onMounted(() => {
       </article>
     </PagedCardGrid>
 
-    <PagedCardGrid v-else-if="scope === 'producers' && visibleAuthors.length" :items="visibleAuthors" :page-key="`search:authors:${query.trim()}`" v-slot="{ items }">
+    <PagedCardGrid
+      v-else-if="scope === 'producers' && visibleAuthors.length"
+      :items="visibleAuthors"
+      :page-key="`search:authors:${query.trim()}`"
+      :total-items="authorTotal"
+      :external-page="authorPage"
+      @update:page="changeAuthorPage"
+      @update:page-size="changeAuthorPageSize"
+      v-slot="{ items }"
+    >
       <article v-for="author in items" :key="author.id" class="search-card">
         <button
           type="button"
@@ -169,7 +252,7 @@ onMounted(() => {
         >
           <span v-if="author.covers.length === 0" class="search-placeholder">{{ author.name.slice(0, 1).toUpperCase() }}</span>
           <span v-else class="search-author-covers">
-            <img v-for="cover in author.covers.slice(0, 4)" :key="cover" :src="api.assetUrl(cover)" :alt="author.name" loading="lazy" decoding="async">
+            <img v-for="cover in author.covers.slice(0, 4)" :key="cover" :src="api.assetUrl(entryCardMediaRef(cover))" :alt="author.name" loading="lazy" decoding="async">
           </span>
           <span class="search-meta"><strong>{{ author.name }}</strong><small v-if="author.galleryType">{{ author.galleryType }}</small></span>
         </button>

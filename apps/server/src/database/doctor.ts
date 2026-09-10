@@ -143,5 +143,13 @@ export function inspectDatabase(database: T3Database): DatabaseDoctorResult {
     issues.push(`invalid collection producer member: ${member}`);
   }
 
+  const requiredIndexes = ['idx_entries_page_date', 'idx_entries_page_title'];
+  const presentIndexes = new Set(database.prepare(`
+    SELECT name FROM sqlite_master WHERE type = 'index'
+  `).pluck().all() as string[]);
+  for (const index of requiredIndexes) {
+    if (!presentIndexes.has(index)) issues.push(`missing required index: ${index}`);
+  }
+
   return { ok: issues.length === 0, issues };
 }

@@ -8,6 +8,7 @@ import IconButton from './components/IconButton.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
 import { useI18n } from './i18n.js';
 import { useNavigationMemory } from './navigation-memory.js';
+import { entryCardMediaRef } from './entry-media-stack.js';
 
 const props = defineProps<{
   api: GalleryApi;
@@ -25,6 +26,8 @@ const savedState = navigationMemory.states.get('collections') as {
   kind?: CollectionKind;
   activeCollectionId?: number | null;
   returnScrollPositions?: number[];
+  memberPage?: number;
+  memberPageSize?: number;
 } | undefined;
 
 const kind = ref<CollectionKind>(savedState?.kind ?? 'entry');
@@ -34,15 +37,21 @@ const editing = ref(false);
 const loading = ref(true);
 const error = ref<string | null>(null);
 const newTitle = ref('');
-const hiddenEntryTypes = ref<Set<string>>(new Set());
-const hiddenProducerIds = ref<Set<number>>(new Set());
 const returnScrollPositions: number[] = [...(savedState?.returnScrollPositions ?? [])];
+const memberEntries = ref<CollectionRecordDto['entries']>([]);
+const memberProducers = ref<CollectionRecordDto['producers']>([]);
+const memberTotal = ref(0);
+const memberPage = ref(savedState?.memberPage ?? 1);
+const memberPageSize = ref(savedState?.memberPageSize ?? 30);
+const memberRequestId = ref(0);
 
 function rememberCollectionNavigationState(): void {
   navigationMemory.states.set('collections', {
     kind: kind.value,
     activeCollectionId: activeCollectionId.value,
     returnScrollPositions: [...returnScrollPositions],
+    memberPage: memberPage.value,
+    memberPageSize: memberPageSize.value,
   });
 }
 
@@ -51,6 +60,8 @@ watch([kind, activeCollectionId], ([currentKind, collectionId]) => {
     kind: currentKind,
     activeCollectionId: collectionId,
     returnScrollPositions: [...returnScrollPositions],
+    memberPage: memberPage.value,
+    memberPageSize: memberPageSize.value,
   });
 });
 
@@ -66,25 +77,74 @@ async function restorePreviousScroll(): Promise<void> {
   window.scrollTo({ top, left: 0, behavior: 'auto' });
 }
 
+async function loadMembers(resetPage = false): Promise<void> {
+  const collectionId = activeCollectionId.value;
+  if (collectionId === null) {
+    memberEntries.value = [];
+    memberProducers.value = [];
+    memberTotal.value = 0;
+    return;
+  }
+  if (resetPage) memberPage.value = 1;
+  const requestId = ++memberRequestId.value;
+  if (kind.value === 'entry') {
+    const result = await props.api.queryEntryPage({
+      collectionId,
+      conditions: [],
+      authorIds: [],
+      ratingConditions: [],
+      ratingSort: null,
+      usageConditions: [],
+      usageSort: null,
+      includeNsfw: showNsfw.value,
+      sort: 'date-desc',
+      page: memberPage.value,
+      pageSize: memberPageSize.value,
+    });
+    if (requestId !== memberRequestId.value) return;
+    const maxPage = Math.max(1, Math.ceil(result.total / memberPageSize.value));
+    if (memberPage.value > maxPage) {
+      memberPage.value = maxPage;
+      await loadMembers(false);
+      return;
+    }
+    memberEntries.value = result.items;
+    memberProducers.value = [];
+    memberTotal.value = result.total;
+  } else {
+    const result = await props.api.queryProducerPage({
+      collectionId,
+      ownTagIds: [],
+      relatedEntryTagIds: [],
+      includeNsfw: showNsfw.value,
+      sort: 'name-asc',
+      page: memberPage.value,
+      pageSize: memberPageSize.value,
+    });
+    if (requestId !== memberRequestId.value) return;
+    const maxPage = Math.max(1, Math.ceil(result.total / memberPageSize.value));
+    if (memberPage.value > maxPage) {
+      memberPage.value = maxPage;
+      await loadMembers(false);
+      return;
+    }
+    memberEntries.value = [];
+    memberProducers.value = result.items;
+    memberTotal.value = result.total;
+  }
+  rememberCollectionNavigationState();
+}
+
 async function load(): Promise<void> {
   loading.value = true;
   error.value = null;
   try {
-    const [records, galleries, authors] = await Promise.all([
-      props.api.listCollections(kind.value),
-      props.api.listGalleries(),
-      kind.value === 'producer' ? props.api.listAuthors() : Promise.resolve([]),
-    ]);
+    const records = await props.api.listCollections(kind.value, showNsfw.value);
     collections.value = records;
-    hiddenEntryTypes.value = new Set(
-      galleries.filter((gallery) => gallery.nsfw).map((gallery) => gallery.type),
-    );
-    hiddenProducerIds.value = new Set(
-      authors.filter((author) => author.nsfw).map((author) => author.id),
-    );
     if (!findCollection(collections.value, activeCollectionId.value ?? 0)) {
       activeCollectionId.value = null;
     }
+    await loadMembers(false);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.loadEntry');
   } finally {
@@ -96,6 +156,7 @@ function switchKind(next: CollectionKind): void {
   if (kind.value === next) return;
   kind.value = next;
   activeCollectionId.value = null;
+  memberPage.value = 1;
   editing.value = false;
   clearDrag();
   void load();
@@ -133,8 +194,10 @@ const activeCollection = computed(() => (
 async function closeCollection(): Promise<void> {
   const parent = parentOf(collections.value, activeCollectionId.value ?? 0);
   activeCollectionId.value = parent?.id ?? null;
+  memberPage.value = 1;
   editing.value = false;
   clearDrag();
+  await loadMembers(false);
   await restorePreviousScroll();
 }
 
@@ -182,16 +245,17 @@ watch([showNsfw, collections], () => {
   }
 });
 
+watch(showNsfw, () => {
+  memberPage.value = 1;
+  void load();
+});
+
 function visibleEntriesOf(record: CollectionRecordDto): CollectionRecordDto['entries'] {
-  return record.entries.filter((entry) => (
-    showNsfw.value || !hiddenEntryTypes.value.has(entry.type)
-  ));
+  return record.entries;
 }
 
 function visibleProducersOf(record: CollectionRecordDto): CollectionRecordDto['producers'] {
-  return record.producers.filter((producer) => (
-    showNsfw.value || !hiddenProducerIds.value.has(producer.id)
-  ));
+  return record.producers;
 }
 
 async function createCollection(): Promise<void> {
@@ -377,11 +441,24 @@ async function moveCollection(recordId: number, direction: -1 | 1): Promise<void
 async function openRecord(record: CollectionRecordDto): Promise<void> {
   returnScrollPositions.push(Math.max(0, window.scrollY));
   activeCollectionId.value = record.id;
+  memberPage.value = 1;
   rememberCollectionNavigationState();
   editing.value = false;
   clearDrag();
   syncEditFields();
+  await loadMembers(false);
   await scrollCurrentViewToTop();
+}
+
+async function onMemberPageChange(nextPage: number): Promise<void> {
+  memberPage.value = nextPage;
+  await loadMembers(false);
+}
+
+async function onMemberPageSizeChange(nextPageSize: number): Promise<void> {
+  if (memberPageSize.value === nextPageSize) return;
+  memberPageSize.value = nextPageSize;
+  await loadMembers(true);
 }
 
 function syncEditFields(): void {
@@ -570,7 +647,7 @@ onMounted(load);
             <button type="button" class="entry-card-main" :data-collection-id="child.id" @click="openRecord(child)">
               <span class="directory-cover">
                 <template v-for="coverRef in coversOf(child).slice(0, 3)" :key="coverRef">
-                  <img :src="api.assetUrl(coverRef)" :alt="child.title" loading="lazy" decoding="async">
+                  <img :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="child.title" loading="lazy" decoding="async">
                 </template>
                 <span
                   v-for="slot in Math.max(0, 3 - coversOf(child).length)"
@@ -582,7 +659,7 @@ onMounted(load);
               <span class="entry-meta">
                 <strong>{{ child.title }}<span v-if="child.nsfw" class="collection-nsfw-mark"> 🔞</span></strong>
                 <small class="entry-usage-note">
-                  {{ t('collections.entryCount', { count: visibleEntriesOf(child).length }) }}
+                  {{ t('collections.entryCount', { count: child.entryCount ?? child.entries.length }) }}
                 </small>
               </span>
             </button>
@@ -607,10 +684,14 @@ onMounted(load);
         </PagedCardGrid>
 
         <PagedCardGrid
-          v-if="visibleEntriesOf(activeCollection).length > 0"
-          :items="visibleEntriesOf(activeCollection)"
+          v-if="activeCollection.kind === 'entry' && memberTotal > 0"
+          :items="memberEntries"
           :page-key="`collections:${kind}:${activeCollectionId}:entries`"
           grid-class="recent-grid recent-grid-compact"
+          :total-items="memberTotal"
+          :external-page="memberPage"
+          @update:page="onMemberPageChange"
+          @update:page-size="onMemberPageSizeChange"
           v-slot="{ items }"
         >
           <EntryCard
@@ -639,9 +720,19 @@ onMounted(load);
             </template>
           </EntryCard>
         </PagedCardGrid>
-        <div v-if="visibleProducersOf(activeCollection).length > 0" class="author-list">
+        <PagedCardGrid
+          v-if="activeCollection.kind === 'producer' && memberTotal > 0"
+          :items="memberProducers"
+          :page-key="`collections:${kind}:${activeCollectionId}:producers`"
+          grid-class="author-list"
+          :total-items="memberTotal"
+          :external-page="memberPage"
+          @update:page="onMemberPageChange"
+          @update:page-size="onMemberPageSizeChange"
+          v-slot="{ items }"
+        >
           <button
-            v-for="producer in visibleProducersOf(activeCollection)"
+            v-for="producer in items"
             :key="producer.id"
             type="button"
             class="author-list-card"
@@ -649,12 +740,12 @@ onMounted(load);
             @click="emit('open-author', producer.id)"
           >
             <span v-if="producer.covers.length" class="author-list-cover">
-              <img v-for="coverRef in producer.covers" :key="coverRef" :src="api.assetUrl(coverRef)" :alt="producer.name" loading="lazy" decoding="async">
+              <img v-for="coverRef in producer.covers" :key="coverRef" :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="producer.name" loading="lazy" decoding="async">
             </span>
             <span v-else class="author-list-badge">{{ producer.name.slice(0, 1).toUpperCase() }}</span>
             <strong>{{ producer.name }}</strong>
           </button>
-        </div>
+        </PagedCardGrid>
       </div>
     </template>
 
@@ -687,7 +778,7 @@ onMounted(load);
           <button type="button" class="entry-card-main" :data-collection-id="record.id" @click="openRecord(record)">
             <span class="directory-cover">
               <template v-for="coverRef in coversOf(record).slice(0, 3)" :key="coverRef">
-                <img :src="api.assetUrl(coverRef)" :alt="record.title" loading="lazy" decoding="async">
+                <img :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="record.title" loading="lazy" decoding="async">
               </template>
               <span
                 v-for="slot in Math.max(0, 3 - coversOf(record).length)"
@@ -700,8 +791,8 @@ onMounted(load);
               <strong>{{ record.title }}<span v-if="record.nsfw" class="collection-nsfw-mark"> 🔞</span></strong>
               <small class="entry-usage-note">
                 {{ record.kind === 'entry'
-                  ? t('collections.entryCount', { count: visibleEntriesOf(record).length })
-                  : t('collections.authorCount', { count: visibleProducersOf(record).length }) }}
+                  ? t('collections.entryCount', { count: record.entryCount ?? record.entries.length })
+                  : t('collections.authorCount', { count: record.producerCount ?? record.producers.length }) }}
               </small>
             </span>
           </button>

@@ -14,6 +14,7 @@ import FacetFilterBar, { type GalleryFacetFilters } from './components/FacetFilt
 import AppIcon from './components/AppIcon.vue';
 import IconButton from './components/IconButton.vue';
 import TagCombobox from './components/TagCombobox.vue';
+import PagedCardGrid from './components/PagedCardGrid.vue';
 import { showNsfw } from './stores/preferences.js';
 import { flattenCollectionOptions, type CollectionMenuOption } from './collection-tree.js';
 import type { CollectionRecordDto } from '@t3/shared';
@@ -22,6 +23,7 @@ import { useArmableAction } from './armable.js';
 import { shuffledCopy } from './random-sort.js';
 import { toggleAuthorViewLater, viewLaterAuthorIds } from './stores/preferences.js';
 import { useNavigationMemory } from './navigation-memory.js';
+import { entryCardMediaRef } from './entry-media-stack.js';
 
 interface AuthorSummary {
   id: number;
@@ -90,6 +92,10 @@ const activeAuthorInViewLater = computed(() => (
 ));
 const activeDirectoryId = ref<number | null>(null);
 const returnScrollPositions: number[] = [...(props.initialReturnScrollPositions ?? [])];
+let resolveInitialRender!: () => void;
+const initialRenderReady = new Promise<void>((resolve) => {
+  resolveInitialRender = resolve;
+});
 
 function rememberReturnScroll(): void {
   returnScrollPositions.push(Math.max(0, window.scrollY));
@@ -172,7 +178,11 @@ const authorSort = ref<AuthorSort>((initialDetailState?.sort as AuthorSort | und
 // One page of loose works; Directories always render above them (they are
 // drop targets, so they must never be pushed onto a later page).
 const pageSize = 26;
-const serverWorkSortRanks = ref<Map<number, number> | null>(null);
+const workPageItems = ref<AuthorWork[]>([]);
+const workTotal = ref(0);
+const workRequestId = ref(0);
+const workRandomSeed = ref(Math.floor(Math.random() * 2_147_483_648));
+const directoryReturnPage = ref(1);
 
 function directoryDate(directory: AuthorDirectoryDto): number {
   return Math.max(0, ...directory.entries.map((entry) => entry.id));
@@ -183,11 +193,6 @@ function byTitle(left: string, right: string): number {
 }
 
 function compareAuthorCards(left: AuthorCard, right: AuthorCard): number {
-  if (serverWorkSortRanks.value && left.kind === 'work' && right.kind === 'work') {
-    const leftRank = serverWorkSortRanks.value.get(left.work.id) ?? Number.MAX_SAFE_INTEGER;
-    const rightRank = serverWorkSortRanks.value.get(right.work.id) ?? Number.MAX_SAFE_INTEGER;
-    if (leftRank !== rightRank) return leftRank - rightRank;
-  }
   const direction = authorSort.value.endsWith('-desc') ? -1 : 1;
   const sortKey = authorSort.value === 'type' ? 'date-desc' : authorSort.value;
   const leftTitle = left.kind === 'directory' ? left.directory.title : left.work.title;
@@ -204,18 +209,13 @@ function compareAuthorCards(left: AuthorCard, right: AuthorCard): number {
 const directoryCards = computed<DirectoryCard[]>(() => {
   if (!activeAuthor.value) return [];
   const cards = activeAuthor.value.directories
-    // A Directory stays visible while at least one of its works matches.
-    .filter((directory) => directory.entries.some((work) => workMatches(work.id)))
+    .filter((directory) => (directory.entryCount ?? directory.entries.length) > 0)
     .map((directory) => ({ kind: 'directory' as const, directory }));
   return authorSort.value === 'random' ? shuffledCopy(cards) : cards.sort(compareAuthorCards);
 });
 
 const workCards = computed<WorkCard[]>(() => {
-  if (!activeAuthor.value) return [];
-  const cards = activeAuthor.value.looseEntries
-    .filter((work) => workMatches(work.id))
-    .map((work) => ({ kind: 'work' as const, work }));
-  return authorSort.value === 'random' ? shuffledCopy(cards) : cards.sort(compareAuthorCards);
+  return workPageItems.value.map((work) => ({ kind: 'work' as const, work }));
 });
 
 // When the facet filter is active, Directories are unfolded: every matching
@@ -236,15 +236,18 @@ const authorFilters = ref<GalleryFacetFilters>(initialDetailState?.filters ?? {
   usageConditions: [],
   usageSort: null,
 });
-const matchedWorkIds = ref<Set<number> | null>(null);
 // Author list usage controls: filter by the dominant Gallery type and toggle
 // between Last viewed (★) and Most viewed (♥). null = no usage note shown.
 const authorTypeFilter = ref(initialListState?.typeFilter ?? '');
 const authorUsageMode = ref<'lastViewed' | 'mostViewed' | 'mostLiked' | 'random' | null>(initialListState?.usageMode ?? null);
+const authorRandomSeed = ref(Math.floor(Math.random() * 2_147_483_648));
 const authorListFilterOptions = ref<AuthorFilterOptions>({ authorTags: [], workTags: [] });
 const authorTagFilters = ref<Array<number | null>>(initialListState?.authorTagFilters ?? []);
 const workTagFilters = ref<Array<number | null>>(initialListState?.workTagFilters ?? []);
-const tagFilteredAuthors = ref<AuthorSummary[] | null>(null);
+const authorPageItems = ref<AuthorSummary[]>([]);
+const authorListTotal = ref(0);
+const authorListPage = ref(initialListState?.page ?? 1);
+const authorListPageSize = ref(30);
 let authorListFilterRequest = 0;
 
 function rememberAuthorNavigationState(): void {
@@ -257,7 +260,7 @@ function rememberAuthorNavigationState(): void {
     return;
   }
   navigationMemory.states.set('author-list', {
-    page: page.value,
+    page: authorListPage.value,
     typeFilter: authorTypeFilter.value,
     usageMode: authorUsageMode.value,
     authorTagFilters: [...authorTagFilters.value],
@@ -269,27 +272,7 @@ const authorGalleryTypes = computed<string[]>(() => (
   [...new Set(props.authors.map((author) => author.galleryType).filter((type): type is string => type !== null))]
 ));
 
-const visibleAuthors = computed(() => {
-  let list = (tagFilteredAuthors.value ?? props.authors)
-    .filter((author) => showNsfw.value || !author.nsfw);
-  if (authorTypeFilter.value !== '') {
-    list = list.filter((author) => author.galleryType === authorTypeFilter.value);
-  }
-  if (authorUsageMode.value === 'random') {
-    list = shuffledCopy(list);
-  } else if (authorUsageMode.value === 'mostViewed') {
-    list = [...list].sort((left, right) => right.viewCount - left.viewCount || left.id - right.id);
-  } else if (authorUsageMode.value === 'mostLiked') {
-    list = [...list].sort((left, right) => right.likeCount - left.likeCount || left.id - right.id);
-  } else if (authorUsageMode.value === 'lastViewed') {
-    list = [...list].sort((left, right) => {
-      const leftTime = left.lastViewedAt ?? '';
-      const rightTime = right.lastViewedAt ?? '';
-      return rightTime.localeCompare(leftTime) || left.id - right.id;
-    });
-  }
-  return list;
-});
+const visibleAuthors = computed(() => authorPageItems.value);
 
 function selectedTagIds(rows: Array<number | null>): number[] {
   return [...new Set(rows.filter((tagId): tagId is number => tagId !== null))];
@@ -303,24 +286,54 @@ async function loadAuthorListFilterOptions(): Promise<void> {
   }
 }
 
-async function applyAuthorListFilters(): Promise<void> {
+async function applyAuthorListFilters(resetPage = true): Promise<void> {
   const ownTagIds = selectedTagIds(authorTagFilters.value);
   const relatedEntryTagIds = selectedTagIds(workTagFilters.value);
-  if (ownTagIds.length === 0 && relatedEntryTagIds.length === 0) {
-    authorListFilterRequest += 1;
-    tagFilteredAuthors.value = null;
-    return;
-  }
+  if (resetPage) authorListPage.value = 1;
   const request = ++authorListFilterRequest;
   error.value = null;
+  const sort = authorUsageMode.value === 'random'
+    ? 'random' as const
+    : authorUsageMode.value === 'mostViewed'
+      ? 'views-desc' as const
+      : authorUsageMode.value === 'mostLiked'
+        ? 'likes-desc' as const
+        : authorUsageMode.value === 'lastViewed'
+          ? 'last-viewed-desc' as const
+          : 'name-asc' as const;
   try {
-    const authors = await props.api.filterAuthors(ownTagIds, relatedEntryTagIds);
-    if (request === authorListFilterRequest) tagFilteredAuthors.value = authors;
+    const result = await props.api.queryProducerPage({
+      ...(authorTypeFilter.value ? { entryType: authorTypeFilter.value } : {}),
+      ownTagIds,
+      relatedEntryTagIds,
+      includeNsfw: showNsfw.value,
+      sort,
+      ...(sort === 'random' ? { randomSeed: authorRandomSeed.value } : {}),
+      page: authorListPage.value,
+      pageSize: authorListPageSize.value,
+    });
+    if (request === authorListFilterRequest) {
+      authorPageItems.value = result.items;
+      authorListTotal.value = result.total;
+    }
   } catch (cause) {
     if (request !== authorListFilterRequest) return;
     error.value = cause instanceof Error ? cause.message : t('author.listFilterError');
-    tagFilteredAuthors.value = null;
+    authorPageItems.value = [];
+    authorListTotal.value = 0;
   }
+}
+
+function changeAuthorListPage(nextPage: number): void {
+  authorListPage.value = nextPage;
+  void applyAuthorListFilters(false);
+}
+
+function changeAuthorListPageSize(nextPageSize: number): void {
+  if (authorListPageSize.value === nextPageSize) return;
+  authorListPageSize.value = nextPageSize;
+  authorListPage.value = 1;
+  void applyAuthorListFilters(false);
 }
 
 function addAuthorTagFilter(): void {
@@ -358,6 +371,13 @@ watch(showNsfw, async () => {
   await applyAuthorListFilters();
 });
 
+watch([authorTypeFilter, authorUsageMode], ([_nextType, nextMode], [_previousType, previousMode]) => {
+  if (nextMode === 'random' && previousMode !== 'random') {
+    authorRandomSeed.value = Math.floor(Math.random() * 2_147_483_648);
+  }
+  void applyAuthorListFilters();
+});
+
 function formatDate(isoTimestamp: string): string {
   const date = new Date(isoTimestamp);
   return Number.isNaN(date.getTime()) ? isoTimestamp.slice(0, 10) : date.toISOString().slice(0, 10);
@@ -374,18 +394,14 @@ function authorWorkUsageNote(work: AuthorWork): string | null {
   return null;
 }
 
-const authorWorksList = computed<Array<{ id: number; type: string }>>(() => {
-  if (!activeAuthor.value) return [];
-  return [
-    ...activeAuthor.value.looseEntries.map((work) => ({ id: work.id, type: work.type })),
-    ...activeAuthor.value.directories.flatMap((directory) =>
-      directory.entries.map((entry) => ({ id: entry.id, type: entry.type }))),
-  ];
-});
-// Cross-type Authors keep the plain list for now (single-type assumption).
 const authorFilterType = computed<string | null>(() => {
-  const types = new Set(authorWorksList.value.map((work) => work.type));
-  return types.size === 1 ? [...types][0]! : null;
+  const types = activeAuthor.value?.workTypes
+    ?? [
+      ...(activeAuthor.value?.looseEntries ?? []).map((work) => work.type),
+      ...(activeAuthor.value?.directories ?? []).flatMap((directory) => directory.entries.map((entry) => entry.type)),
+    ];
+  const uniqueTypes = new Set(types);
+  return uniqueTypes.size === 1 ? [...uniqueTypes][0]! : null;
 });
 const filterActive = computed<boolean>(() => (
   authorFilters.value.conditions.some((condition) => condition.tagIds.length > 0)
@@ -394,103 +410,101 @@ const filterActive = computed<boolean>(() => (
   || authorFilters.value.usageConditions.length > 0
   || authorFilters.value.usageSort !== null
 ));
-function workMatches(workId: number): boolean {
-  return matchedWorkIds.value === null || matchedWorkIds.value.has(workId);
+const authorHasWorks = computed(() => {
+  if (!activeAuthor.value) return false;
+  const looseCount = activeAuthor.value.looseEntryCount ?? activeAuthor.value.looseEntries.length;
+  return looseCount > 0 || activeAuthor.value.directories.some(
+    (directory) => (directory.entryCount ?? directory.entries.length) > 0,
+  );
+});
+
+async function loadAuthorWorks(resetPage = false): Promise<void> {
+  const author = activeAuthor.value;
+  if (!author) {
+    workPageItems.value = [];
+    workTotal.value = 0;
+    return;
+  }
+  if (resetPage) page.value = 1;
+  const requestId = ++workRequestId.value;
+  const useFilters = filterActive.value && activeDirectoryId.value === null && authorFilterType.value !== null;
+  const result = await props.api.queryEntryPage({
+    ...(useFilters && authorFilterType.value ? { entryType: authorFilterType.value } : {}),
+    ...(activeDirectoryId.value !== null
+      ? { producerDirectoryId: activeDirectoryId.value }
+      : useFilters
+        ? {}
+        : { looseForProducerId: author.id }),
+    authorIds: useFilters ? [author.id] : [],
+    conditions: useFilters ? authorFilters.value.conditions.filter((condition) => condition.tagIds.length > 0) : [],
+    ratingConditions: useFilters ? authorFilters.value.ratingConditions : [],
+    ratingSort: useFilters ? authorFilters.value.ratingSort : null,
+    usageConditions: useFilters ? authorFilters.value.usageConditions : [],
+    usageSort: useFilters ? authorFilters.value.usageSort : null,
+    sort: authorSort.value,
+    ...(authorSort.value === 'random' ? { randomSeed: workRandomSeed.value } : {}),
+    page: page.value,
+    pageSize,
+  });
+  if (requestId !== workRequestId.value) return;
+  const maxPage = Math.max(1, Math.ceil(result.total / pageSize));
+  if (page.value > maxPage) {
+    page.value = maxPage;
+    await loadAuthorWorks(false);
+    return;
+  }
+  workPageItems.value = result.items;
+  workTotal.value = result.total;
 }
+
+async function setWorkPage(nextPage: number): Promise<void> {
+  page.value = Math.min(Math.max(1, nextPage), pageCount.value);
+  await loadAuthorWorks(false);
+  await scrollCurrentViewToTop();
+}
+
+watch(authorSort, (nextSort, previousSort) => {
+  if (nextSort === 'random' && previousSort !== 'random') {
+    workRandomSeed.value = Math.floor(Math.random() * 2_147_483_648);
+  }
+  void loadAuthorWorks(true);
+});
 
 async function resetAuthorFilters(): Promise<void> {
   authorFilters.value = { conditions: [], authorIds: [], ratingConditions: [], ratingSort: null, usageConditions: [], usageSort: null };
-  matchedWorkIds.value = null;
-  serverWorkSortRanks.value = null;
   authorFilterOptions.value = null;
   const type = authorFilterType.value;
-  if (!activeAuthor.value || !type) return;
-  try {
-    authorFilterOptions.value = await props.api.listFacetFilterOptions(type, activeAuthor.value.id);
-  } catch {
-    authorFilterOptions.value = null;
+  if (activeAuthor.value && type) {
+    try {
+      authorFilterOptions.value = await props.api.listFacetFilterOptions(type, activeAuthor.value.id);
+    } catch {
+      authorFilterOptions.value = null;
+    }
   }
+  await loadAuthorWorks(true);
 }
 
 async function onAuthorFiltersChange(filters: GalleryFacetFilters): Promise<void> {
   authorFilters.value = filters;
-  page.value = 1;
-  const activeConditions = filters.conditions.filter((condition) => condition.tagIds.length > 0);
-  const type = authorFilterType.value;
-  const authorId = activeAuthor.value?.id;
-  const hasFilterOrSort = activeConditions.length > 0
-    || filters.ratingConditions.length > 0
-    || filters.ratingSort !== null
-    || filters.usageConditions.length > 0
-    || filters.usageSort !== null;
-  if (!hasFilterOrSort || type === null || authorId === undefined) {
-    matchedWorkIds.value = null;
-    serverWorkSortRanks.value = null;
-    return;
-  }
   try {
-    const summaries = await props.api.filterEntriesByFacets(type, activeConditions, [authorId], {
-      ratingConditions: filters.ratingConditions,
-      ratingSort: filters.ratingSort,
-      usageConditions: filters.usageConditions,
-      usageSort: filters.usageSort,
-    });
-    matchedWorkIds.value = new Set(summaries.map((summary) => summary.id));
-    serverWorkSortRanks.value = filters.ratingSort !== null || filters.usageSort !== null
-      ? new Map(summaries.map((summary, index) => [summary.id, index]))
-      : null;
+    await loadAuthorWorks(true);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('author.filterError');
-    matchedWorkIds.value = null;
-    serverWorkSortRanks.value = null;
   }
 }
 
-watch(() => activeAuthor.value?.id, (id) => {
-  if (id === undefined) {
-    authorFilters.value = { conditions: [], authorIds: [], ratingConditions: [], ratingSort: null, usageConditions: [], usageSort: null };
-    matchedWorkIds.value = null;
-    serverWorkSortRanks.value = null;
-    authorFilterOptions.value = null;
-    return;
-  }
-  void resetAuthorFilters();
-});
-
-// Filtered view = one flat work list (loose works + Directory members,
-// deduped by id); Directory rows are browsing structure only and dissolve
-// while a filter is active.
-const filterFlat = computed<boolean>(() => matchedWorkIds.value !== null);
-const flatMatchedWorkCards = computed<WorkCard[]>(() => {
-  if (!activeAuthor.value || matchedWorkIds.value === null) return [];
-  const seen = new Set<number>();
-  const works: WorkCard[] = [];
-  for (const work of activeAuthor.value.looseEntries) {
-    if (!workMatches(work.id) || seen.has(work.id)) continue;
-    seen.add(work.id);
-    works.push({ kind: 'work' as const, work });
-  }
-  for (const directory of activeAuthor.value.directories) {
-    for (const work of directory.entries) {
-      if (!workMatches(work.id) || seen.has(work.id)) continue;
-      seen.add(work.id);
-      works.push({ kind: 'work' as const, work });
-    }
-  }
-  return authorSort.value === 'random' ? shuffledCopy(works) : works.sort(compareAuthorCards);
-});
-const displayCards = computed<WorkCard[]>(() => (
-  filterFlat.value ? flatMatchedWorkCards.value : workCards.value
-));
+// Filtered view unfolds Directories and displays one bounded server page of
+// matching works. The regular view keeps Directories pinned above loose works.
+const filterFlat = computed<boolean>(() => filterActive.value);
+const displayCards = computed<WorkCard[]>(() => workCards.value);
 const hasAnyCards = computed(() => (
-  displayCards.value.length > 0 || (!filterFlat.value && directoryCards.value.length > 0)
+  workTotal.value > 0 || (!filterFlat.value && directoryCards.value.length > 0)
 ));
-const pageCount = computed(() => Math.max(1, Math.ceil(displayCards.value.length / pageSize)));
-const visibleWorkCards = computed<WorkCard[]>(() => (
-  displayCards.value.slice((page.value - 1) * pageSize, page.value * pageSize)
-));
+const pageCount = computed(() => Math.max(1, Math.ceil(workTotal.value / pageSize)));
+const visibleWorkCards = computed<WorkCard[]>(() => displayCards.value);
 const authorCoverCovers = computed<string[]>(() => {
   if (!activeAuthor.value) return [];
+  if (activeAuthor.value.workCoverRefs) return activeAuthor.value.workCoverRefs;
   const works: Array<{ coverRef: string | null; id: number }> = [
     ...activeAuthor.value.looseEntries.map((work) => ({ coverRef: work.coverRef, id: work.id })),
     ...activeAuthor.value.directories.flatMap((directory) => directory.entries.map((entry) => ({
@@ -543,7 +557,11 @@ async function refreshAuthor(): Promise<void> {
   authorCollectionOptions.value = flattenCollectionOptions(collectionOptions);
   authorCollectionIds.value = memberIds;
   activeAuthor.value = detail;
-  if (page.value > pageCount.value) page.value = pageCount.value;
+  await loadAuthorWorks(false);
+  if (page.value > pageCount.value) {
+    page.value = pageCount.value;
+    await loadAuthorWorks(false);
+  }
 }
 
 async function openAuthor(
@@ -561,6 +579,7 @@ async function openAuthor(
     activeDirectoryId.value = null;
     editingAuthor.value = false;
     page.value = 1;
+    await resetAuthorFilters();
     if (scrollToTop) await scrollCurrentViewToTop();
   } catch (cause) {
     if (rememberListScroll) returnScrollPositions.pop();
@@ -594,17 +613,26 @@ function openAuthorTag(tagId: number, tagName: string): void {
 }
 
 onMounted(async () => {
-  await Promise.all([loadAuthorAlternates(), loadAuthorListFilterOptions()]);
-  if (props.initialAuthorId) {
-    await openAuthor(props.initialAuthorId, false, !props.restoreInitialScroll);
-    if (initialDetailState?.filters) {
-      await onAuthorFiltersChange(initialDetailState.filters);
-      page.value = Math.min(initialDetailState.page ?? 1, pageCount.value);
+  try {
+    await Promise.all([loadAuthorAlternates(), loadAuthorListFilterOptions(), applyAuthorListFilters(false)]);
+    if (props.initialAuthorId) {
+      await openAuthor(props.initialAuthorId, false, !props.restoreInitialScroll);
+      if (initialDetailState?.filters) {
+        await onAuthorFiltersChange(initialDetailState.filters);
+      }
+      if (!props.initialDirectoryId) {
+        page.value = Math.min(initialDetailState?.page ?? 1, pageCount.value);
+        await loadAuthorWorks(false);
+      }
+      if (props.initialDirectoryId) {
+        activeDirectoryId.value = props.initialDirectoryId;
+        page.value = initialDetailState?.page ?? 1;
+        await loadAuthorWorks(false);
+      }
     }
-    if (props.initialDirectoryId) activeDirectoryId.value = props.initialDirectoryId;
-  } else if ((initialListState?.authorTagFilters?.length ?? 0) > 0
-    || (initialListState?.workTagFilters?.length ?? 0) > 0) {
-    await applyAuthorListFilters();
+  } finally {
+    await nextTick();
+    resolveInitialRender();
   }
 });
 
@@ -861,15 +889,20 @@ async function moveToDirectory(directoryId: number): Promise<void> {
 
 async function openDirectory(directory: AuthorDirectoryDto): Promise<void> {
   rememberReturnScroll();
+  directoryReturnPage.value = page.value;
   activeDirectoryId.value = directory.id;
+  page.value = 1;
   editingDirectory.value = false;
+  await loadAuthorWorks(false);
   await scrollCurrentViewToTop();
 }
 
 async function closeDirectory(): Promise<void> {
   activeDirectoryId.value = null;
+  page.value = directoryReturnPage.value;
   editingDirectory.value = false;
   clearDragState();
+  await loadAuthorWorks(false);
   await restorePreviousScroll();
 }
 
@@ -878,7 +911,12 @@ async function goBack(): Promise<void> {
   else await closeAuthor();
 }
 
-defineExpose({ goBack });
+async function waitUntilReady(): Promise<void> {
+  await initialRenderReady;
+  await nextTick();
+}
+
+defineExpose({ goBack, waitUntilReady });
 
 function beginDirectoryEdit(): void {
   if (!activeDirectory.value) return;
@@ -984,10 +1022,10 @@ async function removeFromDirectory(): Promise<void> {
         data-testid="directory-work-move-hint"
         class="work-move-hint"
       >{{ t('directory.removeHint') }}</p>
-      <p v-if="activeDirectory.entries.length === 0" class="muted">{{ t('directory.empty') }}</p>
+      <p v-if="workTotal === 0" class="muted">{{ t('directory.empty') }}</p>
       <div v-else class="author-card-grid">
         <article
-          v-for="work in activeDirectory.entries"
+          v-for="work in workPageItems"
           :key="work.id"
           class="author-card"
           :class="{ 'selected-work': draggedWorkId === work.id }"
@@ -1002,12 +1040,17 @@ async function removeFromDirectory(): Promise<void> {
             :aria-pressed="editingDirectory ? draggedWorkId === work.id : undefined"
             @click="openOrSelectDirectoryWork(work)"
           >
-            <img v-if="work.coverRef" :src="api.assetUrl(work.coverRef)" :alt="work.title" loading="lazy" decoding="async">
+            <img v-if="work.coverRef" :src="api.assetUrl(entryCardMediaRef(work.coverRef))" :alt="work.title" loading="lazy" decoding="async">
             <span v-else class="cover-placeholder">{{ work.title.slice(0, 1).toUpperCase() }}</span>
             <span class="author-card-meta"><strong>{{ work.title }}</strong><small>{{ work.type }}</small></span>
           </button>
         </article>
       </div>
+      <nav v-if="pageCount > 1" class="pagination">
+        <button type="button" :disabled="page === 1" @click="setWorkPage(page - 1)">{{ t('author.previousPage') }}</button>
+        <span>{{ t('author.page', { page, pages: pageCount }) }}</span>
+        <button type="button" :disabled="page === pageCount" @click="setWorkPage(page + 1)">{{ t('author.nextPage') }}</button>
+      </nav>
     </template>
 
     <template v-else-if="activeAuthor">
@@ -1096,7 +1139,7 @@ async function removeFromDirectory(): Promise<void> {
             <img :src="api.assetUrl(activeAuthor.artworkRef)" :alt="activeAuthor.name" class="author-artwork">
           </template>
           <div v-else-if="authorCoverCovers.length" class="author-artwork author-cover-grid" :aria-label="activeAuthor.name">
-            <img v-for="coverRef in authorCoverCovers" :key="coverRef" :src="api.assetUrl(coverRef)" :alt="activeAuthor.name">
+            <img v-for="coverRef in authorCoverCovers" :key="coverRef" :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="activeAuthor.name">
           </div>
           <div v-else class="author-artwork author-cover-placeholder">{{ activeAuthor.name.slice(0, 1).toUpperCase() }}</div>
           <div>
@@ -1301,7 +1344,7 @@ async function removeFromDirectory(): Promise<void> {
           />
         </div>
         <p v-if="!hasAnyCards" class="muted">
-          {{ filterActive && authorWorksList.length > 0
+          {{ filterActive && authorHasWorks
             ? t('author.noFilteredWorks')
             : t('author.emptyWorks') }}
         </p>
@@ -1335,11 +1378,11 @@ async function removeFromDirectory(): Promise<void> {
               >
                 <span class="directory-cover">
                   <template v-for="work in card.directory.entries.slice(0, 3)" :key="work.id">
-                    <img v-if="work.coverRef" :src="api.assetUrl(work.coverRef)" :alt="work.title" loading="lazy" decoding="async">
+                    <img v-if="work.coverRef" :src="api.assetUrl(entryCardMediaRef(work.coverRef))" :alt="work.title" loading="lazy" decoding="async">
                     <span v-else class="mini-placeholder">{{ work.title.slice(0, 1) }}</span>
                   </template>
                 </span>
-                <span class="author-card-meta"><strong>{{ card.directory.title }}</strong><small>{{ card.directory.entries.length }} {{ t('author.works') }}</small></span>
+                <span class="author-card-meta"><strong>{{ card.directory.title }}</strong><small>{{ card.directory.entryCount ?? card.directory.entries.length }} {{ t('author.works') }}</small></span>
               </button>
               <button
                 v-if="editingAuthor && draggedWorkId !== null"
@@ -1375,7 +1418,7 @@ async function removeFromDirectory(): Promise<void> {
                 :aria-pressed="editingAuthor && !filterFlat ? draggedWorkId === card.work.id : undefined"
                 @click="openOrSelectLooseWork(card.work)"
               >
-                <img v-if="card.work.coverRef" :src="api.assetUrl(card.work.coverRef)" :alt="card.work.title" loading="lazy" decoding="async">
+                <img v-if="card.work.coverRef" :src="api.assetUrl(entryCardMediaRef(card.work.coverRef))" :alt="card.work.title" loading="lazy" decoding="async">
                 <span v-else class="cover-placeholder">{{ card.work.title.slice(0, 1).toUpperCase() }}</span>
                 <span class="author-card-meta">
                   <strong>{{ card.work.title }}</strong>
@@ -1398,9 +1441,9 @@ async function removeFromDirectory(): Promise<void> {
           </div>
         </template>
         <nav v-if="pageCount > 1" class="pagination">
-          <button type="button" :disabled="page === 1" @click="page -= 1">{{ t('author.previousPage') }}</button>
+          <button type="button" :disabled="page === 1" @click="setWorkPage(page - 1)">{{ t('author.previousPage') }}</button>
           <span>{{ t('author.page', { page, pages: pageCount }) }}</span>
-          <button data-testid="author-next-page" type="button" :disabled="page === pageCount" @click="page += 1">{{ t('author.nextPage') }}</button>
+          <button data-testid="author-next-page" type="button" :disabled="page === pageCount" @click="setWorkPage(page + 1)">{{ t('author.nextPage') }}</button>
         </nav>
       </section>
     </template>
@@ -1408,7 +1451,7 @@ async function removeFromDirectory(): Promise<void> {
     <template v-else>
       <header class="author-list-heading">
         <p class="eyebrow">{{ t('author.navigation') }}</p>
-        <h2>{{ t('author.title') }} <span class="muted" data-testid="author-list-count">{{ t('author.count', { count: visibleAuthors.length }) }}</span></h2>
+        <h2>{{ t('author.title') }} <span class="muted" data-testid="author-list-count">{{ t('author.count', { count: authorListTotal }) }}</span></h2>
         <p>{{ t('author.subtitle') }}</p>
       </header>
       <div class="author-list-controls">
@@ -1534,11 +1577,21 @@ async function removeFromDirectory(): Promise<void> {
           >×</button>
         </div>
       </div>
-      <p v-if="visibleAuthors.length === 0" class="muted">{{ t('author.noFilteredAuthors') }}</p>
-      <div v-else class="author-list">
-        <button v-for="author in visibleAuthors" :key="author.id" type="button" class="author-list-card" :data-author-id="author.id" @click="openAuthor(author.id)">
+      <p v-if="authorListTotal === 0" class="muted">{{ t('author.noFilteredAuthors') }}</p>
+      <PagedCardGrid
+        v-else
+        :items="visibleAuthors"
+        grid-class="author-list"
+        page-key="author-list"
+        :total-items="authorListTotal"
+        :external-page="authorListPage"
+        @update:page="changeAuthorListPage"
+        @update:page-size="changeAuthorListPageSize"
+        v-slot="{ items }"
+      >
+        <button v-for="author in items" :key="author.id" type="button" class="author-list-card" :data-author-id="author.id" @click="openAuthor(author.id)">
           <span v-if="author.covers.length" class="author-list-cover">
-            <img v-for="coverRef in author.covers" :key="coverRef" :src="api.assetUrl(coverRef)" :alt="author.name" loading="lazy" decoding="async">
+            <img v-for="coverRef in author.covers" :key="coverRef" :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="author.name" loading="lazy" decoding="async">
           </span>
           <span v-else class="author-list-badge">{{ author.name.slice(0, 1).toUpperCase() }}</span>
           <strong>{{ author.name }}</strong>
@@ -1556,7 +1609,7 @@ async function removeFromDirectory(): Promise<void> {
                 : t('author.lastViewed', { date: author.lastViewedAt ? formatDate(author.lastViewedAt) : '—' }) }}
           </small>
         </button>
-      </div>
+      </PagedCardGrid>
     </template>
     <IconButton
       v-if="activeAuthor"

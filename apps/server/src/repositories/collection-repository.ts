@@ -27,6 +27,8 @@ export interface CollectionRecord {
   children: CollectionRecord[];
   entries: CollectionMemberEntry[];
   producers: CollectionMemberProducer[];
+  entryCount?: number;
+  producerCount?: number;
 }
 
 interface CollectionRow {
@@ -54,6 +56,7 @@ function rowToRecord(
   children: CollectionRecord[],
   entries: CollectionMemberEntry[],
   producers: CollectionMemberProducer[],
+  counts?: { entryCount: number; producerCount: number },
 ): CollectionRecord {
   return {
     id: row.id,
@@ -65,6 +68,7 @@ function rowToRecord(
     children,
     entries,
     producers,
+    ...counts,
   };
 }
 
@@ -80,22 +84,38 @@ function listRows(database: T3Database, kind: CollectionKind): CollectionRow[] {
 export function listCollections(
   database: T3Database,
   kind: CollectionKind,
+  options: { compact?: boolean; includeNsfw?: boolean } = {},
 ): CollectionRecord[] {
   const rows = listRows(database, kind);
+  const compact = options.compact === true;
+  const includeNsfw = options.includeNsfw !== false;
   const entryStatement = database.prepare(`
     SELECT entry.id, entry.title, entry.type, entry.cover_ref AS coverRef,
       entry.preview_refs AS previewRefs
     FROM collection_entries AS link
     JOIN entries AS entry ON entry.id = link.entry_id
     WHERE link.collection_id = ?
+      AND (? = 1 OR NOT EXISTS (
+        SELECT 1 FROM gallery_settings AS partition
+        WHERE partition.entry_type = entry.type AND partition.nsfw = 1
+      ))
     ORDER BY link.created_at, entry.id
+    ${compact ? 'LIMIT 3' : ''}
   `);
   const producerStatement = database.prepare(`
     SELECT producer.id, producer.name
     FROM collection_producers AS link
     JOIN producers AS producer ON producer.id = link.producer_id
     WHERE link.collection_id = ?
+      AND (? = 1 OR NOT EXISTS (
+        SELECT 1
+        FROM entry_producers AS relation
+        JOIN entries AS work ON work.id = relation.entry_id
+        JOIN gallery_settings AS partition ON partition.entry_type = work.type AND partition.nsfw = 1
+        WHERE relation.producer_id = producer.id
+      ))
     ORDER BY link.created_at, producer.id
+    ${compact ? 'LIMIT 3' : ''}
   `);
   const producerCoverStatement = database.prepare(`
     SELECT entry.cover_ref
@@ -105,6 +125,33 @@ export function listCollections(
     ORDER BY entry.id ASC
     LIMIT 4
   `);
+  const entryCountStatement = compact
+    ? database.prepare(`
+        SELECT COUNT(*)
+        FROM collection_entries AS link
+        JOIN entries AS entry ON entry.id = link.entry_id
+        WHERE link.collection_id = ?
+          AND (? = 1 OR NOT EXISTS (
+            SELECT 1 FROM gallery_settings AS partition
+            WHERE partition.entry_type = entry.type AND partition.nsfw = 1
+          ))
+      `).pluck()
+    : null;
+  const producerCountStatement = compact
+    ? database.prepare(`
+        SELECT COUNT(*)
+        FROM collection_producers AS link
+        JOIN producers AS producer ON producer.id = link.producer_id
+        WHERE link.collection_id = ?
+          AND (? = 1 OR NOT EXISTS (
+            SELECT 1
+            FROM entry_producers AS relation
+            JOIN entries AS work ON work.id = relation.entry_id
+            JOIN gallery_settings AS partition ON partition.entry_type = work.type AND partition.nsfw = 1
+            WHERE relation.producer_id = producer.id
+          ))
+      `).pluck()
+    : null;
   const childrenOf = new Map<number, CollectionRow[]>();
   for (const row of rows) {
     if (row.parent_id !== null) {
@@ -116,7 +163,7 @@ export function listCollections(
   const build = (row: CollectionRow): CollectionRecord => rowToRecord(
     row,
     (childrenOf.get(row.id) ?? []).map(build),
-    (entryStatement.all(row.id) as Array<{
+    (entryStatement.all(row.id, includeNsfw ? 1 : 0) as Array<{
       id: number;
       title: string;
       type: string;
@@ -129,11 +176,15 @@ export function listCollections(
       coverRef: entry.coverRef,
       previewRefs: parsePreviewRefs(entry.previewRefs),
     })),
-    (producerStatement.all(row.id) as CollectionMemberProducer[]).map((producer) => ({
+    (producerStatement.all(row.id, includeNsfw ? 1 : 0) as CollectionMemberProducer[]).map((producer) => ({
       ...producer,
       covers: (producerCoverStatement.all(producer.id) as Array<{ cover_ref: string }>)
         .map((entry) => entry.cover_ref),
     })),
+    compact ? {
+      entryCount: Number(entryCountStatement!.get(row.id, includeNsfw ? 1 : 0)),
+      producerCount: Number(producerCountStatement!.get(row.id, includeNsfw ? 1 : 0)),
+    } : undefined,
   );
   return rows.filter((row) => row.parent_id === null).map(build);
 }
@@ -183,18 +234,19 @@ export function createCollection(
     INSERT INTO collections (kind, title, description, parent_id, sort_order)
     VALUES (?, ?, ?, ?, ?)
   `).run(input.kind, title, input.description?.trim() ?? '', parentId, maxOrder + 1);
-  return getCollection(database, Number(result.lastInsertRowid))!;
+  return getCollection(database, Number(result.lastInsertRowid), { compact: true })!;
 }
 
 export function getCollection(
   database: T3Database,
   collectionId: number,
+  options: { compact?: boolean; includeNsfw?: boolean } = {},
 ): CollectionRecord | null {
   const kind = database.prepare(
     'SELECT kind FROM collections WHERE id = ?',
   ).pluck().get(collectionId) as CollectionKind | undefined;
   if (kind === undefined) return null;
-  const topLevel = listCollections(database, kind);
+  const topLevel = listCollections(database, kind, options);
   const direct = topLevel.find((record) => record.id === collectionId);
   if (direct) return direct;
   for (const parent of topLevel) {
@@ -220,7 +272,7 @@ export function updateCollection(
   database.prepare(
     'UPDATE collections SET title = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
   ).run(title, description, collectionId);
-  return getCollection(database, collectionId)!;
+  return getCollection(database, collectionId, { compact: true })!;
 }
 
 export function deleteCollection(database: T3Database, collectionId: number): void {

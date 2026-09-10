@@ -90,19 +90,36 @@ describe('global search', () => {
     createProducer(database, { name: 'Hypergryph' });
     const app = createApiApp(database);
 
+    const postJson = (path: string, body: unknown) => app.request(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
     const [entries, tags, producers, invalid] = await Promise.all([
-      app.request('/api/search/entries?q=endfeld'),
+      postJson('/api/entries/query', { conditions: [], searchQuery: 'endfeld' }),
       app.request('/api/search/tags?q=cyberpnk'),
-      app.request('/api/search/producers?q=hypergrph'),
-      app.request('/api/search/entries?q='),
+      postJson('/api/producers/query', {
+        ownTagIds: [],
+        relatedEntryTagIds: [],
+        includeNsfw: true,
+        sort: 'relevance',
+        searchQuery: 'hypergrph',
+      }),
+      postJson('/api/entries/query', { conditions: [], searchQuery: '' }),
     ]);
 
     expect(entries.status).toBe(200);
     expect(tags.status).toBe(200);
     expect(producers.status).toBe(200);
     expect(invalid.status).toBe(400);
-    await expect(entries.json()).resolves.toEqual([expect.objectContaining({ title: 'Arknights: Endfield' })]);
+    await expect(entries.json()).resolves.toMatchObject({
+      items: [expect.objectContaining({ title: 'Arknights: Endfield' })],
+      total: 1,
+    });
     await expect(tags.json()).resolves.toEqual([expect.objectContaining({ name: 'Cyberpunk', entryCount: 1 })]);
-    await expect(producers.json()).resolves.toEqual([expect.objectContaining({ name: 'Hypergryph' })]);
+    await expect(producers.json()).resolves.toMatchObject({
+      items: [expect.objectContaining({ name: 'Hypergryph' })],
+      total: 1,
+    });
   });
 });

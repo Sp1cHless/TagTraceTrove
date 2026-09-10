@@ -36,6 +36,11 @@ The current tables and invariants are documented in `current-architecture.md`. `
 - `010_collections.sql` — `collections` (entry/producer kinds, one-level nesting for entry folders, title/description/nsfw/sort order) plus `collection_entries` / `collection_producers` member tables.
 - `011_view_later.sql` — one library-wide ordered `view_later_entries` membership list; Entry FK uses `ON DELETE CASCADE`, add/remove are idempotent, and position is preserved across desktop/mobile clients.
 - `012_view_later_producers.sql` — an independent ordered `view_later_producers` list for Authors, with unique membership and `ON DELETE CASCADE` cleanup when its Producer is deleted.
+- `013_entry_page_indexes.sql` — covering `(type, upload_date, id)` and
+  `(type, title COLLATE NOCASE, id)` indexes for deterministic Gallery pages.
+  `db:doctor` treats both as required schema objects. Migration tests cover a
+  populated temporary-file 12→13 upgrade and prove data/integrity preservation.
+
 
 ## Backup and restore
 

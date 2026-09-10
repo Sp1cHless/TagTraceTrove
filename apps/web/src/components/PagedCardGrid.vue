@@ -18,17 +18,25 @@ const props = withDefaults(defineProps<{
   gridClass?: string;
   gridTestid?: string | undefined;
   pageKey?: string;
+  /** When supplied with externalPage, items is already one server page. */
+  totalItems?: number | undefined;
+  externalPage?: number | undefined;
 }>(), {
   gridClass: '',
   gridTestid: undefined,
   pageKey: '',
 });
 
+const emit = defineEmits<{
+  'update:page': [page: number];
+  'update:page-size': [pageSize: number];
+}>();
 const navigationMemory = useNavigationMemory();
 
 const gridElement = ref<HTMLElement | null>(null);
 const columns = ref(6);
 const rowMultiplier = ref(1);
+const layoutMeasured = ref(false);
 let observer: ResizeObserver | undefined;
 
 // auto-fill minmax(7.5rem, 1fr) + 0.8rem gap → columns from the real width.
@@ -47,6 +55,7 @@ function measure(): void {
 
 onMounted(() => {
   measure();
+  layoutMeasured.value = true;
   window.addEventListener('resize', measure);
   if (typeof ResizeObserver === 'function') {
     observer = new ResizeObserver(measure);
@@ -63,28 +72,50 @@ const pageSize = computed(() => Math.max(
   1,
   columns.value * rowsPerPage.value * rowMultiplier.value,
 ));
-const pageCount = computed(() => Math.max(1, Math.ceil(props.items.length / pageSize.value)));
-const page = ref(props.pageKey ? (navigationMemory.pages.get(props.pageKey) ?? 1) : 1);
+const serverPaging = computed(() => props.totalItems !== undefined && props.externalPage !== undefined);
+const serverPageSize = computed(() => Math.min(100, pageSize.value));
+const pageCount = computed(() => Math.max(1, Math.ceil(
+  (serverPaging.value ? props.totalItems! : props.items.length)
+    / (serverPaging.value ? serverPageSize.value : pageSize.value),
+)));
+const page = ref(serverPaging.value
+  ? props.externalPage!
+  : (props.pageKey ? (navigationMemory.pages.get(props.pageKey) ?? 1) : 1));
 
 watch(() => props.pageKey, (nextKey) => {
-  page.value = nextKey ? (navigationMemory.pages.get(nextKey) ?? 1) : 1;
+  if (!serverPaging.value) {
+    page.value = nextKey ? (navigationMemory.pages.get(nextKey) ?? 1) : 1;
+  }
 });
 
-watch([pageSize, () => props.items.length], () => {
+watch(() => props.externalPage, (nextPage) => {
+  if (serverPaging.value && nextPage !== undefined) page.value = nextPage;
+});
+
+watch([serverPaging, serverPageSize, layoutMeasured], ([isServerPaging, nextPageSize, measured]) => {
+  // The 6-column setup value is only a SSR/jsdom-safe fallback. Emitting it
+  // before the first real measurement makes a remounted phone page briefly
+  // report the desktop page size and can clamp a remembered page 4/5 to 3.
+  if (isServerPaging && measured) emit('update:page-size', nextPageSize);
+}, { immediate: true });
+
+watch([pageSize, () => serverPaging.value ? props.totalItems : props.items.length], () => {
   if (page.value > pageCount.value) {
-    page.value = pageCount.value;
-    if (props.pageKey) navigationMemory.pages.set(props.pageKey, page.value);
+    setPage(pageCount.value);
   }
 });
 
 const visibleItems = computed(() => {
+  if (serverPaging.value) return props.items;
   const start = (page.value - 1) * pageSize.value;
   return props.items.slice(start, start + pageSize.value);
 });
 
 function setPage(next: number): void {
-  page.value = Math.min(Math.max(1, Math.floor(next)), pageCount.value);
-  if (props.pageKey) navigationMemory.pages.set(props.pageKey, page.value);
+  const bounded = Math.min(Math.max(1, Math.floor(next)), pageCount.value);
+  page.value = bounded;
+  if (props.pageKey) navigationMemory.pages.set(props.pageKey, bounded);
+  if (serverPaging.value) emit('update:page', bounded);
 }
 </script>
 

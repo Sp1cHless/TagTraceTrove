@@ -22,6 +22,9 @@ export interface AuthorDetail extends ProducerRecord {
   tags: ProducerTagAssignment[];
   looseEntries: AuthorWorkSummary[];
   directories: AuthorDirectoryRecord[];
+  looseEntryCount?: number | undefined;
+  workTypes?: string[] | undefined;
+  workCoverRefs?: string[] | undefined;
   ratings: RatingRowRecord[];
   usage: { viewCount: number; lastViewedAt: string | null };
 }
@@ -73,10 +76,15 @@ function getProducer(database: T3Database, producerId: number): ProducerRecord |
   } : null;
 }
 
-export function getAuthorDetail(database: T3Database, producerId: number): AuthorDetail | null {
+export function getAuthorDetail(
+  database: T3Database,
+  producerId: number,
+  options: { compact?: boolean } = {},
+): AuthorDetail | null {
   const producer = getProducer(database, producerId);
   if (!producer) return null;
-  const looseEntries = database.prepare(`
+  const compact = options.compact === true;
+  const looseEntries = compact ? [] : database.prepare(`
     SELECT entry.id, entry.title, entry.type, entry.cover_ref,
       COALESCE(usage.view_count, 0) AS view_count,
       COALESCE(usage.like_count, 0) AS like_count,
@@ -91,20 +99,49 @@ export function getAuthorDetail(database: T3Database, producerId: number): Autho
       AND membership.entry_id IS NULL
     ORDER BY entry.title COLLATE NOCASE, entry.id
   `).all(producerId) as AuthorWorkRow[];
+  const mappedLooseEntries = looseEntries.map((entry) => ({
+    id: entry.id,
+    title: entry.title,
+    type: entry.type,
+    coverRef: entry.cover_ref,
+    viewCount: entry.view_count,
+    likeCount: entry.like_count,
+    lastViewedAt: entry.last_viewed_at,
+  }));
+  const looseEntryCount = compact ? Number(database.prepare(`
+    SELECT COUNT(*)
+    FROM entry_producers AS relation
+    LEFT JOIN author_directory_entries AS membership
+      ON membership.producer_id = relation.producer_id
+     AND membership.entry_id = relation.entry_id
+    WHERE relation.producer_id = ? AND membership.entry_id IS NULL
+  `).pluck().get(producerId)) : undefined;
+  const workTypes = compact ? database.prepare(`
+    SELECT DISTINCT entry.type
+    FROM entry_producers AS relation
+    JOIN entries AS entry ON entry.id = relation.entry_id
+    WHERE relation.producer_id = ?
+    ORDER BY entry.type COLLATE NOCASE
+  `).pluck().all(producerId) as string[] : undefined;
+  const workCoverRefs = compact ? (database.prepare(`
+    SELECT entry.cover_ref
+    FROM entry_producers AS relation
+    JOIN entries AS entry ON entry.id = relation.entry_id
+    WHERE relation.producer_id = ? AND entry.cover_ref IS NOT NULL
+    ORDER BY entry.id
+    LIMIT 4
+  `).pluck().all(producerId) as string[]) : undefined;
   return {
     ...producer,
     galleryType: galleryTypeForProducer(database, producerId),
     tags: listProducerTags(database, producerId),
-    looseEntries: looseEntries.map((entry) => ({
-      id: entry.id,
-      title: entry.title,
-      type: entry.type,
-      coverRef: entry.cover_ref,
-      viewCount: entry.view_count,
-      likeCount: entry.like_count,
-      lastViewedAt: entry.last_viewed_at,
-    })),
-    directories: listAuthorDirectories(database, producerId),
+    looseEntries: compact ? [] : mappedLooseEntries,
+    directories: listAuthorDirectories(database, producerId, compact ? 4 : undefined),
+    ...(compact ? {
+      looseEntryCount,
+      workTypes,
+      workCoverRefs,
+    } : {}),
     ratings: listProducerRatings(database, producerId),
     usage: getProducerUsage(database, producerId),
   };

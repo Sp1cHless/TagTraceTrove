@@ -358,29 +358,32 @@ describe('Facet filter HTTP routes', () => {
     const app = createApiApp(database);
     const { series, akchu, tagIds } = seed(database);
 
-    const tagOnly = await app.request('/api/entries/filter', {
+    const tagOnly = await app.request('/api/entries/query', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         entryType: 'comic',
         conditions: [{ facetId: series.id, tagIds: [tagIds.azur] }],
+        sort: 'title-asc',
       }),
     });
     expect(tagOnly.status).toBe(200);
-    expect((await tagOnly.json() as Array<{ title: string }>).map((entry) => entry.title))
+    expect(((await tagOnly.json() as { items: Array<{ title: string }> }).items).map((entry) => entry.title))
       .toEqual(['Alpha work', 'Gamma work']);
 
-    const authorOnly = await app.request('/api/entries/filter', {
+    const authorOnly = await app.request('/api/entries/query', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ entryType: 'comic', conditions: [], authorIds: [akchu] }),
+      body: JSON.stringify({
+        entryType: 'comic', conditions: [], authorIds: [akchu], sort: 'title-asc',
+      }),
     });
     expect(authorOnly.status).toBe(200);
-    expect((await authorOnly.json() as Array<{ title: string }>).map((entry) => entry.title))
+    expect(((await authorOnly.json() as { items: Array<{ title: string }> }).items).map((entry) => entry.title))
       .toEqual(['Alpha work', 'Gamma work']);
     void series;
 
-    const duplicateTags = await app.request('/api/entries/filter', {
+    const duplicateTags = await app.request('/api/entries/query', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -450,7 +453,7 @@ describe('Facet filter HTTP routes', () => {
     })).toThrow(/does not belong/);
 
     const app = createApiApp(database);
-    const response = await app.request('/api/entries/filter', {
+    const response = await app.request('/api/entries/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

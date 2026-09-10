@@ -25,15 +25,14 @@ import {
   entryIdParamsSchema,
   entryProducerParamsSchema,
   entryRecordSchema,
-  entrySummarySchema,
+  entryPageQueryRequestSchema,
+  entryPageResponseSchema,
   entryTagAssignmentSchema,
   entryTagUsageSchema,
   entryTypeParamsSchema,
   entryTypeQuerySchema,
-  facetFilterEntriesRequestSchema,
   facetFilterOptionsResponseSchema,
   facetIdParamsSchema,
-  findEntriesQuerySchema,
   findProducersQuerySchema,
   collectionIdParamsSchema,
   collectionKindSchema,
@@ -42,7 +41,6 @@ import {
   galleryPartitionRequestSchema,
   gallerySummarySchema,
   reorderCollectionsRequestSchema,
-  searchQuerySchema,
   tagSearchQuerySchema,
   updateCollectionRequestSchema,
   tagSearchHitSchema,
@@ -61,6 +59,8 @@ import {
   producerMergePlanResponseSchema,
   producerMergeResponseSchema,
   producerRecordSchema,
+  producerPageQueryRequestSchema,
+  producerPageResponseSchema,
   producerSummarySchema,
   producerTagAssignmentSchema,
   renameEntryTagRequestSchema,
@@ -105,7 +105,14 @@ import {
   executeProducerMerges,
   planProducerMerges,
 } from '../import/merge-producers.js';
-import { deleteEntryMedia, readEntryMedia, storeEntryMedia, type EntryMediaKind } from '../import/media.js';
+import {
+  deleteEntryMedia,
+  readEntryMedia,
+  readEntryThumbnail,
+  resolveEntryThumbnail,
+  storeEntryMedia,
+  type EntryMediaKind,
+} from '../import/media.js';
 import { previewSiteProbeUpload } from '../import/upload-preview.js';
 import {
   createEntryContent,
@@ -123,8 +130,6 @@ import {
 import {
   applyEntryTagLayout,
   assignEntryTag,
-  findEntriesByFacetFilters,
-  findEntriesByTags,
   listEntryTags,
   listEntryTagsForType,
   listEntryTagsGlobally,
@@ -132,9 +137,9 @@ import {
   listUnassignedTags,
   moveEntryTag,
   moveUnassignedTagToFacet,
+  queryEntryPage,
   renameEntryTag,
   removeEntryTag,
-  searchEntriesByTitle,
   searchEntryTags,
 } from '../repositories/entry-tag-repository.js';
 import {
@@ -167,6 +172,7 @@ import {
   findProducers,
   listAuthorFilterOptions,
   listProducerTags,
+  queryProducerPage,
   renameProducerTag,
   removeProducerTag,
 } from '../repositories/producer-tag-repository.js';
@@ -214,7 +220,6 @@ import {
   removeViewLaterEntry,
   removeViewLaterProducer,
 } from '../repositories/view-later-repository.js';
-import { searchProducersByName } from '../repositories/producer-tag-repository.js';
 import {
   deleteTaxonomyAlias,
   importTaxonomyAliases,
@@ -318,6 +323,30 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
       bytes: new Uint8Array(await uploadedFile.arrayBuffer()),
     });
     return context.json(entryRecordSchema.parse(stored.entry));
+  });
+
+  app.get('/api/thumbnails/entries/:entryId/:fileName', async (context) => {
+    if (!options.assetRoot) return context.notFound();
+    const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+    const sourceFileName = context.req.param('fileName');
+    const thumbnailRef = await resolveEntryThumbnail(options.assetRoot, entryId, sourceFileName);
+    context.header('Cache-Control', 'no-cache');
+    return context.redirect(
+      thumbnailRef ?? `/api/assets/entries/${entryId}/${sourceFileName}`,
+      302,
+    );
+  });
+
+  app.get('/api/assets/entries/:entryId/thumbnails/:fileName', async (context) => {
+    if (!options.assetRoot) return context.notFound();
+    const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+    const bytes = await readEntryThumbnail(options.assetRoot, entryId, context.req.param('fileName'));
+    if (!bytes) return context.notFound();
+    const body = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    return context.body(body, 200, {
+      'Content-Type': 'image/webp',
+      'Cache-Control': 'private, max-age=31536000, immutable',
+    });
   });
 
   app.get('/api/assets/entries/:entryId/:fileName', async (context) => {
@@ -437,24 +466,16 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
 
   app.get('/api/collections', (context) => {
     const kind = collectionKindSchema.parse(context.req.query().kind);
-    return context.json(z.array(collectionRecordSchema).parse(listCollections(database, kind)));
+    return context.json(z.array(collectionRecordSchema).parse(listCollections(database, kind, {
+      compact: context.req.query('compact') === 'true',
+      includeNsfw: context.req.query('includeNsfw') !== 'false',
+    })));
   });
 
   app.post('/api/collections', async (context) => {
     const input = await parseJson(context.req.raw, createCollectionRequestSchema);
     const record = createCollection(database, input);
     return context.json(collectionRecordSchema.parse(record), 201);
-  });
-
-  app.get('/api/collections/:collectionId', (context) => {
-    const { collectionId } = collectionIdParamsSchema.parse({
-      collectionId: context.req.param('collectionId'),
-    });
-    const record = getCollection(database, collectionId);
-    if (!record) {
-      return context.json(errorPayload('NOT_FOUND', 'collection not found'), 404);
-    }
-    return context.json(collectionRecordSchema.parse(record));
   });
 
   app.patch('/api/collections/:collectionId', async (context) => {
@@ -479,7 +500,7 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     });
     const input = await parseJson(context.req.raw, z.strictObject({ nsfw: z.boolean() }));
     setCollectionNsfw(database, collectionId, input.nsfw);
-    return context.json(collectionRecordSchema.parse(getCollection(database, collectionId)));
+    return context.json(collectionRecordSchema.parse(getCollection(database, collectionId, { compact: true })));
   });
 
   app.put('/api/collections/order', async (context) => {
@@ -541,12 +562,6 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     return context.json(z.array(z.number().int()).parse(listCollectionIdsForProducer(database, producerId)));
   });
 
-  app.get('/api/search/entries', (context) => {
-    const { q, entryType } = searchQuerySchema.parse(context.req.query());
-    return context.json(entrySummarySchema.array().parse(
-      searchEntriesByTitle(database, q, entryType ?? null),
-    ));
-  });
 
   app.get('/api/search/tags', (context) => {
     const { q, includeNsfw } = tagSearchQuerySchema.parse(context.req.query());
@@ -555,10 +570,6 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     ));
   });
 
-  app.get('/api/search/producers', (context) => {
-    const { q } = searchQuerySchema.parse(context.req.query());
-    return context.json(producerSummarySchema.array().parse(searchProducersByName(database, q)));
-  });
 
   app.put('/api/galleries/:entryType/partition', async (context) => {
     const { entryType } = entryTypeParamsSchema.parse({ entryType: context.req.param('entryType') });
@@ -598,11 +609,10 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     return context.json(entryDetailResponseSchema.parse(detail));
   });
 
-  app.get('/api/entries', (context) => {
-    const query = findEntriesQuerySchema.parse(
-      Object.fromEntries(new URL(context.req.url).searchParams),
-    );
-    return context.json(entrySummarySchema.array().parse(findEntriesByTags(database, query)));
+
+  app.post('/api/entries/query', async (context) => {
+    const input = await parseJson(context.req.raw, entryPageQueryRequestSchema);
+    return context.json(entryPageResponseSchema.parse(queryEntryPage(database, input)));
   });
 
   app.get('/api/entries/facet-options/:entryType', (context) => {
@@ -621,10 +631,6 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     );
   });
 
-  app.post('/api/entries/filter', async (context) => {
-    const input = await parseJson(context.req.raw, facetFilterEntriesRequestSchema);
-    return context.json(entrySummarySchema.array().parse(findEntriesByFacetFilters(database, input)));
-  });
 
   app.get('/api/tags/unassigned', (context) => {
     return context.json(
@@ -798,7 +804,7 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     const { producerId } = producerIdParamsSchema.parse({
       producerId: context.req.param('producerId'),
     });
-    const detail = getAuthorDetail(database, producerId);
+    const detail = getAuthorDetail(database, producerId, { compact: true });
     if (!detail) throw new Error('producer not found');
     return context.json(authorDetailResponseSchema.parse(detail));
   });
@@ -1169,6 +1175,11 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
       Object.fromEntries(new URL(context.req.url).searchParams),
     );
     return context.json(producerSummarySchema.array().parse(findProducers(database, query)));
+  });
+
+  app.post('/api/producers/query', async (context) => {
+    const input = await parseJson(context.req.raw, producerPageQueryRequestSchema);
+    return context.json(producerPageResponseSchema.parse(queryProducerPage(database, input)));
   });
 
   if (options.staticRoot) {

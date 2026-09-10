@@ -13,11 +13,11 @@ import {
   createSectionRequestSchema,
   entryDetailResponseSchema,
   entryContentRecordSchema,
+  entryPageQueryRequestSchema,
+  entryPageResponseSchema,
   entryRecordSchema,
-  entrySummarySchema,
   entryTagAssignmentSchema,
   entryTagUsageSchema,
-  facetFilterEntriesRequestSchema,
   facetFilterOptionsResponseSchema,
   collectionRecordSchema,
   createCollectionRequestSchema,
@@ -34,6 +34,8 @@ import {
   producerRecordSchema,
   producerMergePlanResponseSchema,
   producerMergeResponseSchema,
+  producerPageQueryRequestSchema,
+  producerPageResponseSchema,
   producerSummarySchema,
   producerTagAssignmentSchema,
   renameEntryTagRequestSchema,
@@ -73,18 +75,15 @@ import {
   type CreateFacetRequest,
   type CreateSectionRequest,
   type EntryDetailResponse,
+  type EntryPageQueryRequest,
+  type EntryPageResponse,
   type EntryRecordDto,
   type EntryTagUsage,
-  type FacetFilterCondition,
   type FacetFilterOptions,
-  type RatingFilterCondition,
-  type RatingSort,
   type GallerySummary,
   type ImportBatch,
   type UnassignedTagGroups,
   type UnassignedTagMoveRequest,
-  type UsageFilterCondition,
-  type UsageSort,
   type UsageInfo,
   type UnassignedTagMoveResponse,
   type ImportCommitMapping,
@@ -95,6 +94,8 @@ import {
   type ProducerRecordDto,
   type ProducerMergePlanResponse,
   type ProducerMergeResponse,
+  type ProducerPageQueryRequest,
+  type ProducerPageResponse,
   type AuthorAliasGroup,
   type SaveAuthorAliasGroupRequest,
   type SaveAuthorAliasGroupResponse,
@@ -141,10 +142,6 @@ export interface GalleryAuthorSummary {
   nsfw: boolean;
 }
 
-export interface EntryListFilters {
-  includeTagIds?: number[];
-  excludeTagIds?: number[];
-}
 
 export interface GalleryApi {
   assetUrl(path: string): string;
@@ -155,23 +152,10 @@ export interface GalleryApi {
   addViewLaterAuthor(authorId: number): Promise<ViewLaterState>;
   removeViewLaterAuthor(authorId: number): Promise<ViewLaterState>;
   listGalleries(): Promise<GallerySummary[]>;
-  listEntries(type: string, filters?: EntryListFilters): Promise<GalleryEntrySummary[]>;
-  searchEntries(query: string, entryType?: string): Promise<GalleryEntrySummary[]>;
+  queryEntryPage(input: EntryPageQueryRequest): Promise<EntryPageResponse>;
+  queryProducerPage(input: ProducerPageQueryRequest): Promise<ProducerPageResponse>;
   searchTags(query: string, includeNsfw?: boolean): Promise<TagSearchHit[]>;
-  searchAuthors(query: string): Promise<GalleryAuthorSummary[]>;
   listFacetFilterOptions(type: string, authorId?: number): Promise<FacetFilterOptions>;
-  filterEntriesByFacets(
-    type: string,
-    conditions: FacetFilterCondition[],
-    authorIds: number[],
-    options?: {
-      ratingConditions?: RatingFilterCondition[];
-      ratingSort?: RatingSort | null;
-      usageConditions?: UsageFilterCondition[];
-      usageSort?: UsageSort | null;
-    },
-  ): Promise<GalleryEntrySummary[]>;
-  findEntriesByTag(tagId: number): Promise<GalleryEntrySummary[]>;
   listGalleryTags(type?: string): Promise<EntryTagUsage[]>;
   listUnassignedTags(): Promise<UnassignedTagGroups>;
   moveUnassignedTag(input: UnassignedTagMoveRequest): Promise<UnassignedTagMoveResponse>;
@@ -218,8 +202,7 @@ export interface GalleryApi {
   reorderAuthorRatingSlots(authorId: number, orderedSlotIds: number[]): Promise<void>;
   deleteFacet(facetId: number): Promise<void>;
   setGalleryPartition(entryType: string, nsfw: boolean): Promise<void>;
-  listCollections(kind: CollectionKind): Promise<CollectionRecordDto[]>;
-  getCollection(collectionId: number): Promise<CollectionRecordDto>;
+  listCollections(kind: CollectionKind, includeNsfw?: boolean): Promise<CollectionRecordDto[]>;
   createCollection(input: { kind: CollectionKind; title: string; description?: string; parentId?: number }): Promise<CollectionRecordDto>;
   updateCollection(collectionId: number, input: { title?: string; description?: string }): Promise<CollectionRecordDto>;
   deleteCollection(collectionId: number): Promise<void>;
@@ -249,8 +232,6 @@ export interface GalleryApi {
     nsfw: boolean;
   }>>;
   listAuthorFilterOptions(entryType?: string, includeNsfw?: boolean): Promise<AuthorFilterOptions>;
-  filterAuthors(ownTagIds: number[], relatedEntryTagIds: number[]): Promise<GalleryAuthorSummary[]>;
-  findAuthorsByTag(tagId: number): Promise<Array<{ id: number; name: string }>>;
   getAuthor(authorId: number): Promise<AuthorDetailResponse>;
   createAuthor(input: CreateProducerRequest): Promise<ProducerRecordDto>;
   updateAuthor(authorId: number, input: UpdateProducerRequest): Promise<ProducerRecordDto>;
@@ -317,18 +298,10 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
     async listGalleries() {
       return gallerySummarySchema.array().parse(await client.request('galleries'));
     },
-    async listEntries(type, filters = {}) {
-      return entrySummarySchema.array().parse(await client.request('entries', {
-        query: {
-          entryType: type,
-          includeTagIds: filters.includeTagIds?.join(','),
-          excludeTagIds: filters.excludeTagIds?.join(','),
-        },
-      }));
-    },
-    async searchEntries(query, entryType) {
-      return entrySummarySchema.array().parse(await client.request('search/entries', {
-        query: { q: query, ...(entryType === undefined ? {} : { entryType }) },
+    async queryEntryPage(input) {
+      return entryPageResponseSchema.parse(await client.request('entries/query', {
+        method: 'POST',
+        body: entryPageQueryRequestSchema.parse(input),
       }));
     },
     async searchTags(query, includeNsfw = true) {
@@ -336,9 +309,10 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
         query: { q: query, includeNsfw: String(includeNsfw) },
       }));
     },
-    async searchAuthors(query) {
-      return producerSummarySchema.array().parse(await client.request('search/producers', {
-        query: { q: query },
+    async queryProducerPage(input) {
+      return producerPageResponseSchema.parse(await client.request('producers/query', {
+        method: 'POST',
+        body: producerPageQueryRequestSchema.parse(input),
       }));
     },
     async listFacetFilterOptions(type, authorId) {
@@ -347,25 +321,6 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
           query: authorId === undefined ? {} : { authorId: String(authorId) },
         }),
       );
-    },
-    async filterEntriesByFacets(type, conditions, authorIds, options = {}) {
-      return entrySummarySchema.array().parse(await client.request('entries/filter', {
-        method: 'POST',
-        body: facetFilterEntriesRequestSchema.parse({
-          entryType: type,
-          conditions,
-          authorIds,
-          ratingConditions: options.ratingConditions ?? [],
-          ratingSort: options.ratingSort ?? null,
-          usageConditions: options.usageConditions ?? [],
-          usageSort: options.usageSort ?? null,
-        }),
-      }));
-    },
-    async findEntriesByTag(tagId) {
-      return entrySummarySchema.array().parse(await client.request('entries', {
-        query: { includeTagIds: String(tagId) },
-      }));
     },
     async listGalleryTags(type) {
       return entryTagUsageSchema.array().parse(await client.request('entry-tags', {
@@ -573,13 +528,10 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
         method: 'POST',
       }));
     },
-    async listCollections(kind) {
+    async listCollections(kind, includeNsfw = true) {
       return collectionRecordSchema.array().parse(await client.request('collections', {
-        query: { kind },
+        query: { kind, compact: 'true', includeNsfw: String(includeNsfw) },
       }));
-    },
-    async getCollection(collectionId) {
-      return collectionRecordSchema.parse(await client.request(`collections/${collectionId}`));
     },
     async createCollection(input) {
       return collectionRecordSchema.parse(await client.request('collections', {
@@ -671,19 +623,6 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
           ...(entryType === undefined ? {} : { entryType }),
           includeNsfw: String(includeNsfw),
         },
-      }));
-    },
-    async filterAuthors(ownTagIds, relatedEntryTagIds) {
-      return producerSummarySchema.array().parse(await client.request('producers', {
-        query: {
-          ownTagIds: ownTagIds.join(','),
-          relatedEntryTagIds: relatedEntryTagIds.join(','),
-        },
-      }));
-    },
-    async findAuthorsByTag(tagId) {
-      return producerSummarySchema.array().parse(await client.request('producers', {
-        query: { ownTagIds: String(tagId) },
       }));
     },
     async getAuthor(authorId) {

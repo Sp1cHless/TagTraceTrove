@@ -7,6 +7,7 @@ import PagedCardGrid from './components/PagedCardGrid.vue';
 import { useI18n } from './i18n.js';
 import { shuffledCopy } from './random-sort.js';
 import { useNavigationMemory } from './navigation-memory.js';
+import { entryCardMediaRef } from './entry-media-stack.js';
 import {
   removeAuthorFromViewLater,
   removeEntryFromViewLater,
@@ -186,19 +187,16 @@ async function load(): Promise<void> {
   loading.value = true;
   error.value = null;
   try {
-    const [galleries, authorSummaries] = await Promise.all([
+    const [galleries, authorSummaries, savedEntrySummaries] = await Promise.all([
       props.api.listGalleries(),
-      props.api.listAuthors(),
+      loadSavedAuthors(),
+      loadSavedEntries(),
     ]);
-    const grouped = await Promise.all(galleries.map(async (gallery) => ({
-      gallery,
-      entries: await props.api.listEntries(gallery.type),
-    })));
-    entries.value = grouped.flatMap((group) => group.entries);
+    entries.value = savedEntrySummaries;
     authors.value = authorSummaries;
-    tabs.value = grouped.map((group) => ({
-      type: group.gallery.type,
-      entryCount: group.entries.filter((entry) => viewLaterIds.value.includes(entry.id)).length,
+    tabs.value = galleries.map((gallery) => ({
+      type: gallery.type,
+      entryCount: savedEntrySummaries.filter((entry) => entry.type === gallery.type).length,
     }));
     if (!allowedGalleries.value.some((tab) => tab.type === activeTab.value)) {
       activeTab.value = allowedGalleries.value[0]?.type ?? '';
@@ -207,6 +205,49 @@ async function load(): Promise<void> {
     error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadSavedAuthors(): Promise<GalleryAuthorSummary[]> {
+  if (viewLaterAuthorIds.value.length === 0) return [];
+  const loaded: GalleryAuthorSummary[] = [];
+  let page = 1;
+  while (true) {
+    const result = await props.api.queryProducerPage({
+      producerIds: viewLaterAuthorIds.value,
+      ownTagIds: [],
+      relatedEntryTagIds: [],
+      includeNsfw: true,
+      sort: 'source-order',
+      page,
+      pageSize: 100,
+    });
+    loaded.push(...result.items);
+    if (loaded.length >= result.total || result.items.length === 0) return loaded;
+    page += 1;
+  }
+}
+
+async function loadSavedEntries(): Promise<GalleryEntrySummary[]> {
+  if (viewLaterIds.value.length === 0) return [];
+  const loaded: GalleryEntrySummary[] = [];
+  let page = 1;
+  while (true) {
+    const result = await props.api.queryEntryPage({
+      conditions: [],
+      authorIds: [],
+      ratingConditions: [],
+      ratingSort: null,
+      usageConditions: [],
+      usageSort: null,
+      entryIds: viewLaterIds.value,
+      sort: 'source-order',
+      page,
+      pageSize: 100,
+    });
+    loaded.push(...result.items);
+    if (loaded.length >= result.total || result.items.length === 0) return loaded;
+    page += 1;
   }
 }
 
@@ -329,7 +370,7 @@ async function removeAuthor(authorId: number): Promise<void> {
         <article v-for="author in items" :key="author.id" class="author-card" :data-view-later-author-id="author.id">
           <button type="button" class="author-card-main" @click="emit('open-author', author.id)">
             <span v-if="author.covers.length" class="author-cover-grid">
-              <img v-for="coverRef in author.covers.slice(0, 4)" :key="coverRef" :src="api.assetUrl(coverRef)" :alt="author.name" loading="lazy" decoding="async">
+              <img v-for="coverRef in author.covers.slice(0, 4)" :key="coverRef" :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="author.name" loading="lazy" decoding="async">
             </span>
             <span v-else class="author-placeholder">{{ author.name.slice(0, 1).toUpperCase() }}</span>
             <span class="author-card-meta">

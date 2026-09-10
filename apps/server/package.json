@@ -14,6 +14,7 @@
     "import:commit": "tsx src/import/commit-cli.ts",
     "import:site-probe": "tsx src/import/cli.ts",
     "merge:authors": "tsx src/import/merge-producers-cli.ts",
+    "media:thumbnails": "tsx src/import/thumbnail-backfill-cli.ts",
     "start": "tsx src/http/server-cli.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
@@ -22,6 +23,7 @@
     "@t3/shared": "workspace:*",
     "better-sqlite3": "^12.2.0",
     "hono": "^4.13.5",
+    "sharp": "^0.34.5",
     "zod": "^4.5.4"
   },
   "devDependencies": {

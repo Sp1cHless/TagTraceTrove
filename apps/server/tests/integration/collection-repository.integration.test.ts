@@ -108,11 +108,16 @@ describe('collections (real SQL)', () => {
     });
     expect(membership.status).toBe(200);
 
-    const detail = await app.request(`/api/collections/${collection.id}`);
-    expect(await detail.json()).toMatchObject({
-      title: 'Read list',
-      entries: [{ id: work.id, title: 'Routed Work' }],
-    });
+    const detail = await app.request('/api/collections?kind=entry&compact=true&includeNsfw=true');
+    expect(detail.status).toBe(200);
+    expect(await detail.json()).toEqual([
+      expect.objectContaining({
+        id: collection.id,
+        title: 'Read list',
+        entryCount: 1,
+        entries: [expect.objectContaining({ id: work.id, title: 'Routed Work' })],
+      }),
+    ]);
 
     const nsfw = await app.request(`/api/collections/${collection.id}/nsfw`, {
       method: 'PUT',
@@ -120,15 +125,13 @@ describe('collections (real SQL)', () => {
       body: JSON.stringify({ nsfw: true }),
     });
     expect(nsfw.status).toBe(200);
-    const nsfwDetail = await app.request(`/api/collections/${collection.id}`);
-    expect(await nsfwDetail.json() as { nsfw: boolean }).toMatchObject({ nsfw: true });
+    const nsfwDetail = await app.request('/api/collections?kind=entry&compact=true&includeNsfw=true');
+    expect((await nsfwDetail.json() as Array<{ nsfw: boolean }>)[0]).toMatchObject({ nsfw: true });
 
     const removal = await app.request(`/api/collections/${collection.id}/entries/${work.id}`, {
       method: 'DELETE',
     });
     expect(removal.status).toBe(200);
 
-    const missing = await app.request('/api/collections/999');
-    expect(missing.status).toBe(404);
   });
 });

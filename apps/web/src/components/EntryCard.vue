@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { entryStackLayerStyle, entryStackLayers } from '../entry-media-stack.js';
+import { entryCardMediaRef, entryStackLayerStyle, entryStackLayers } from '../entry-media-stack.js';
 import { useI18n } from '../i18n.js';
 import LazyCardImage from './LazyCardImage.vue';
 
@@ -40,7 +40,7 @@ interface GalleryApiLike {
           v-for="(ref, index) in entryStackLayers(entry)"
           :key="ref"
           class="entry-stack-image"
-          :src="props.api.assetUrl(ref)"
+          :src="props.api.assetUrl(entryCardMediaRef(ref))"
           :alt="entry.title"
           :style="entryStackLayerStyle(index, entryStackLayers(entry).length)"
           loading="lazy"

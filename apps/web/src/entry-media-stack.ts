@@ -4,6 +4,13 @@ export interface EntryStackMedia {
 }
 
 const MAX_VISIBLE_LAYERS = 4;
+const MANAGED_ENTRY_ASSET_PREFIX = '/api/assets/entries/';
+
+export function entryCardMediaRef(ref: string): string {
+  return ref.startsWith(MANAGED_ENTRY_ASSET_PREFIX)
+    ? ref.replace(MANAGED_ENTRY_ASSET_PREFIX, '/api/thumbnails/entries/')
+    : ref;
+}
 
 export function entryStackLayers(entry: EntryStackMedia): string[] {
   return [...new Set([

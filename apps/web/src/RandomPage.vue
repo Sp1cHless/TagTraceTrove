@@ -7,6 +7,7 @@ import FacetFilterBar, { type GalleryFacetFilters } from './components/FacetFilt
 import { showNsfw } from './stores/preferences.js';
 import { useI18n } from './i18n.js';
 import { useNavigationMemory } from './navigation-memory.js';
+import { entryCardMediaRef } from './entry-media-stack.js';
 
 /**
  * Random recommendation: a clean filter-style page. Works can be drawn with
@@ -75,15 +76,6 @@ const visibleGalleries = computed(() => (
 // More than one visible gallery → an extra "all galleries" deal is offered.
 const allowAllGalleries = computed(() => visibleGalleries.value.length > 1);
 
-const filterActive = computed(() => (
-  filters.value.conditions.some((condition) => condition.tagIds.length > 0)
-  || filters.value.authorIds.length > 0
-  || filters.value.ratingConditions.length > 0
-  || filters.value.ratingSort !== null
-  || filters.value.usageConditions.length > 0
-  || filters.value.usageSort !== null
-));
-
 function shuffle<T>(list: T[]): T[] {
   const result = [...list];
   for (let index = result.length - 1; index > 0; index -= 1) {
@@ -98,25 +90,30 @@ async function dealWorks(): Promise<void> {
   dealing.value = true;
   error.value = null;
   try {
-    let pool: GalleryEntrySummary[];
-    if (selectedType.value === '') {
-      const batches = await Promise.all(
-        visibleGalleries.value.map((gallery) => props.api.listEntries(gallery.type)),
-      );
-      pool = batches.flat();
-    } else {
-      const activeConditions = filters.value.conditions.filter((condition) => condition.tagIds.length > 0);
-      pool = filterActive.value
-        ? await props.api.filterEntriesByFacets(selectedType.value, activeConditions, filters.value.authorIds, {
-          ratingConditions: filters.value.ratingConditions,
-          ratingSort: filters.value.ratingSort,
-          usageConditions: filters.value.usageConditions,
-          usageSort: filters.value.usageSort,
-        })
-        : await props.api.listEntries(selectedType.value);
-    }
+    const selectedFilters = selectedType.value === '' ? {
+      conditions: [],
+      authorIds: [],
+      ratingConditions: [],
+      ratingSort: null,
+      usageConditions: [],
+      usageSort: null,
+    } : {
+      conditions: filters.value.conditions.filter((condition) => condition.tagIds.length > 0),
+      authorIds: filters.value.authorIds,
+      ratingConditions: filters.value.ratingConditions,
+      ratingSort: filters.value.ratingSort,
+      usageConditions: filters.value.usageConditions,
+      usageSort: filters.value.usageSort,
+    };
+    const result = await props.api.queryEntryPage({
+      ...(selectedType.value === '' ? {} : { entryType: selectedType.value }),
+      ...selectedFilters,
+      sort: 'random',
+      page: 1,
+      pageSize: RANDOM_PAGE_SIZE,
+    });
     if (requestSequence !== dealRequestSequence) return;
-    works.value = shuffle(pool).slice(0, RANDOM_PAGE_SIZE);
+    works.value = result.items;
   } catch (cause) {
     if (requestSequence === dealRequestSequence) {
       error.value = cause instanceof Error ? cause.message : t('random.error');
@@ -131,10 +128,17 @@ async function dealAuthors(): Promise<void> {
   dealing.value = true;
   error.value = null;
   try {
-    const everyone = await props.api.filterAuthors([], []);
+    const result = await props.api.queryProducerPage({
+      ownTagIds: [],
+      relatedEntryTagIds: [],
+      includeNsfw: showNsfw.value,
+      sort: 'random',
+      randomSeed: Math.floor(Math.random() * 2_147_483_648),
+      page: 1,
+      pageSize: RANDOM_PAGE_SIZE,
+    });
     if (requestSequence !== dealRequestSequence) return;
-    const visible = everyone.filter((author) => showNsfw.value || !author.nsfw);
-    authors.value = shuffle(visible).slice(0, RANDOM_PAGE_SIZE);
+    authors.value = result.items;
   } catch (cause) {
     if (requestSequence === dealRequestSequence) {
       error.value = cause instanceof Error ? cause.message : t('random.error');
@@ -334,7 +338,7 @@ onMounted(async () => {
               @click="emit('open-author', author.id)"
             >
               <span v-if="author.covers.length" class="author-list-cover">
-                <img v-for="coverRef in author.covers" :key="coverRef" :src="api.assetUrl(coverRef)" :alt="author.name">
+                <img v-for="coverRef in author.covers" :key="coverRef" :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="author.name">
               </span>
               <span v-else class="author-list-badge">{{ author.name.slice(0, 1).toUpperCase() }}</span>
               <strong>{{ author.name }}</strong>

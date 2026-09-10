@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { entryStackLayerStyle, entryStackLayers } from '../src/entry-media-stack.js';
+import {
+  entryCardMediaRef,
+  entryStackLayerStyle,
+  entryStackLayers,
+} from '../src/entry-media-stack.js';
 
 describe('Entry media stack', () => {
+  it('routes managed Entry card media through the thumbnail resolver', () => {
+    expect(entryCardMediaRef('/api/assets/entries/42/cover.png'))
+      .toBe('/api/thumbnails/entries/42/cover.png');
+    expect(entryCardMediaRef('https://example.com/remote.jpg'))
+      .toBe('https://example.com/remote.jpg');
+  });
+
   it('keeps natural-aspect pages narrow and fans previews in 3D', () => {
     const layers = entryStackLayers({
       coverRef: '/cover.webp',

@@ -15,6 +15,7 @@
     "import:site-probe": "pnpm --filter @t3/server import:site-probe",
     "import:commit": "pnpm --filter @t3/server import:commit",
     "merge:authors": "pnpm --filter @t3/server merge:authors",
+    "media:thumbnails": "pnpm --filter @t3/server media:thumbnails",
     "test": "vitest run --exclude '**/*.integration.test.ts'",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "start:server": "pnpm --filter @t3/server start"

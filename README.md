@@ -4,7 +4,7 @@ A lightweight, local-first, tag-first personal collection index.
 
 ## Current milestone
 
-The desktop product is feature-complete (2026-09). Implemented beyond the original foundation: ratings (shared per-Gallery slots, filtering and sorting), usage tracking (views/likes with derived author aggregates and Recently viewed), SFW/NSFW Gallery partitions with the Show-NSFW preference, global search, View later, Collections (entry/producer folders with one-level nesting), formal Gallery template files consumed by import, author alias groups, author tag filters, random picks, and backup/restore tooling (`db:backup` / `db:restore`). Gallery is derived from `Entry.type`; there is no Gallery table. Entry Tag results and Producer Tag results remain separate. See `docs/current-architecture.md`, `docs/api-contracts.md`, `docs/http-api.md`, and `docs/import-commit.md`; pending work lives in `docs/roadmap.md` (next: mobile).
+The desktop and mobile baseline is complete (2026-09), and the server-scaling phase now uses bounded Entry and Author-summary queries across the primary long-list views plus source-hash-addressed 512px WebP card thumbnails. Implemented beyond the original foundation: ratings (shared per-Gallery slots, filtering and sorting), usage tracking (views/likes with derived author aggregates and Recently viewed), SFW/NSFW Gallery partitions with the Show-NSFW preference, global search, View later, Collections (entry/producer folders with one-level nesting), formal Gallery template files consumed by import, author alias groups, author tag filters, random picks, and backup/restore tooling (`db:backup` / `db:restore`). Gallery is derived from `Entry.type`; there is no Gallery table. Entry Tag results and Producer Tag results remain separate. See `docs/current-architecture.md`, `docs/api-contracts.md`, `docs/http-api.md`, and `docs/import-commit.md`; pending work lives in `docs/roadmap.md`.
 
 Schema-independent import and HTTP-client foundations are available in parallel. See `docs/schema-integration-handoff.md` for their connection points.
 
@@ -41,6 +41,7 @@ Database integration tests use real SQLite, never mocks and never `.data/library
 ```bash
 pnpm db:probe
 pnpm db:doctor [optional-database-path]
+pnpm media:thumbnails
 ```
 
 Run the localhost API with `pnpm start:server`, or `pnpm dev:server` in watch mode. The server applies migrations before listening and defaults to `127.0.0.1:8765` with `.data/library.db`.

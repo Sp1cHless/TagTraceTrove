@@ -7,7 +7,6 @@ import AppIcon from './components/AppIcon.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
 import { showNsfw } from './stores/preferences.js';
 import { useI18n } from './i18n.js';
-import { shuffledCopy } from './random-sort.js';
 import { useNavigationMemory } from './navigation-memory.js';
 
 const props = defineProps<{
@@ -27,11 +26,12 @@ const savedState = navigationMemory.states.get('recent-view') as { tab?: string;
 type RecentMode = 'lastViewed' | 'mostViewed' | 'mostLiked' | 'random';
 
 const galleries = ref<GallerySummary[]>([]);
-const entriesByType = ref<Map<string, GalleryEntrySummary[]>>(new Map());
+const entries = ref<GalleryEntrySummary[]>([]);
 const activeTab = ref<string>(props.initialTab || savedState?.tab || '');
 const mode = ref<RecentMode>(savedState?.mode ?? 'lastViewed');
 const loading = ref(true);
 const error = ref<string | null>(null);
+let entriesRequestSequence = 0;
 
 const TAB_ORDER_KEY = 't3.recent-tabs.order';
 const draggedTab = ref<string | null>(null);
@@ -44,18 +44,44 @@ async function load(): Promise<void> {
   error.value = null;
   try {
     galleries.value = await props.api.listGalleries();
-    const lists = await Promise.all(
-      galleries.value.map(async (gallery) => [gallery.type, await props.api.listEntries(gallery.type)] as const),
-    );
-    entriesByType.value = new Map(lists);
     if (!tabs.value.some((tab) => tab.type === activeTab.value)) {
       activeTab.value = tabs.value[0]?.type ?? '';
     }
+    await loadActiveEntries();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.loadEntry');
   } finally {
     loading.value = false;
   }
+}
+
+async function loadActiveEntries(): Promise<void> {
+  if (!activeTab.value) {
+    entries.value = [];
+    return;
+  }
+  const sequence = ++entriesRequestSequence;
+  const usageSort = mode.value === 'mostViewed'
+    ? { field: 'views' as const, direction: 'desc' as const }
+    : mode.value === 'mostLiked'
+      ? { field: 'likes' as const, direction: 'desc' as const }
+      : mode.value === 'lastViewed'
+        ? { field: 'lastViewed' as const, direction: 'desc' as const }
+        : null;
+  const result = await props.api.queryEntryPage({
+    entryType: activeTab.value,
+    conditions: [],
+    authorIds: [],
+    ratingConditions: [],
+    ratingSort: null,
+    usageConditions: [],
+    usageSort,
+    recentOnly: true,
+    sort: mode.value === 'random' ? 'random' : 'date-desc',
+    page: 1,
+    pageSize: RECENT_MAX_CARDS,
+  });
+  if (sequence === entriesRequestSequence) entries.value = result.items;
 }
 
 // Every Gallery is a permanent tab (empty ones too); the saved order is a
@@ -127,6 +153,14 @@ watch(showNsfw, () => {
 watch(activeTab, (type) => emit('active-tab-change', type));
 watch([activeTab, mode], ([tab, currentMode]) => {
   navigationMemory.states.set('recent-view', { tab, mode: currentMode });
+  if (galleries.value.length > 0) {
+    loading.value = true;
+    void loadActiveEntries()
+      .catch((cause: unknown) => {
+        error.value = cause instanceof Error ? cause.message : t('error.loadEntry');
+      })
+      .finally(() => { loading.value = false; });
+  }
 });
 
 function onTabDragStart(type: string): void {
@@ -150,24 +184,7 @@ function onTabDrop(type: string): void {
 // so the page cannot grow unbounded (view data itself is kept).
 const RECENT_MAX_CARDS = 72;
 
-const activeEntries = computed(() => {
-  const list = (entriesByType.value.get(activeTab.value) ?? [])
-    .filter((entry) => entry.lastViewedAt !== null);
-  if (mode.value === 'random') return shuffledCopy(list).slice(0, RECENT_MAX_CARDS);
-  const sorted = [...list];
-  if (mode.value === 'mostViewed') {
-    sorted.sort((left, right) => right.viewCount - left.viewCount || left.id - right.id);
-  } else if (mode.value === 'mostLiked') {
-    sorted.sort((left, right) => right.likeCount - left.likeCount || left.id - right.id);
-  } else {
-    sorted.sort((left, right) => {
-      const leftTime = left.lastViewedAt ?? '';
-      const rightTime = right.lastViewedAt ?? '';
-      return rightTime.localeCompare(leftTime) || left.id - right.id;
-    });
-  }
-  return sorted.slice(0, RECENT_MAX_CARDS);
-});
+const activeEntries = computed(() => entries.value);
 
 function cardNote(entry: GalleryEntrySummary): string {
   if (mode.value === 'mostLiked') {

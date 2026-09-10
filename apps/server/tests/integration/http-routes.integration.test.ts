@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import sharp from 'sharp';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMigratedMemoryDatabase } from '../../src/database/testing.js';
 import { createApiApp } from '../../src/http/app.js';
@@ -63,8 +64,11 @@ describe('Entry HTTP routes', () => {
     temporaryDirectories.push(assetRoot);
     const app = createApiApp(database, { assetRoot });
     const entry = createEntry(database, { title: 'Media Entry', type: 'comic' });
+    const originalBytes = await sharp({
+      create: { width: 1_200, height: 800, channels: 3, background: '#c62828' },
+    }).png().toBuffer();
     const body = new FormData();
-    body.set('file', new File([new Uint8Array([1, 2, 3])], 'cover.png', { type: 'image/png' }));
+    body.set('file', new File([new Uint8Array(originalBytes)], 'cover.png', { type: 'image/png' }));
 
     const response = await app.request(`/api/entries/${entry.id}/media/cover`, {
       method: 'PUT',
@@ -75,7 +79,7 @@ describe('Entry HTTP routes', () => {
     const updated = await response.json() as { coverRef: string };
     expect(updated.coverRef).toBe(`/api/assets/entries/${entry.id}/cover.png`);
     await expect(readFile(join(assetRoot, 'entries', String(entry.id), 'cover.png')))
-      .resolves.toEqual(Buffer.from([1, 2, 3]));
+      .resolves.toEqual(originalBytes);
 
     const assetResponse = await app.request(updated.coverRef);
     expect(assetResponse.status).toBe(200);
@@ -83,7 +87,26 @@ describe('Entry HTTP routes', () => {
     expect(assetResponse.headers.get('cache-control')).toBe('private, max-age=0, must-revalidate');
     const etag = assetResponse.headers.get('etag');
     expect(etag).toMatch(/^"[A-Za-z0-9_-]+"$/);
-    expect(new Uint8Array(await assetResponse.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+    expect(new Uint8Array(await assetResponse.arrayBuffer())).toEqual(new Uint8Array(originalBytes));
+
+    const thumbnailResolver = await app.request(
+      `/api/thumbnails/entries/${entry.id}/cover.png`,
+      { redirect: 'manual' },
+    );
+    expect(thumbnailResolver.status).toBe(302);
+    expect(thumbnailResolver.headers.get('cache-control')).toBe('no-cache');
+    const thumbnailRef = thumbnailResolver.headers.get('location');
+    expect(thumbnailRef).toMatch(
+      new RegExp(`^/api/assets/entries/${entry.id}/thumbnails/cover\\.[a-f0-9]{16}\\.webp$`),
+    );
+    const thumbnailResponse = await app.request(thumbnailRef!);
+    expect(thumbnailResponse.status).toBe(200);
+    expect(thumbnailResponse.headers.get('content-type')).toContain('image/webp');
+    expect(thumbnailResponse.headers.get('cache-control')).toBe('private, max-age=31536000, immutable');
+    const thumbnailBytes = new Uint8Array(await thumbnailResponse.arrayBuffer());
+    const thumbnailMetadata = await sharp(thumbnailBytes).metadata();
+    expect(thumbnailMetadata.width).toBe(512);
+    expect(thumbnailMetadata.height).toBeLessThanOrEqual(512);
 
     const revalidatedResponse = await app.request(updated.coverRef, {
       headers: { 'If-None-Match': etag! },
@@ -91,8 +114,11 @@ describe('Entry HTTP routes', () => {
     expect(revalidatedResponse.status).toBe(304);
     expect(await revalidatedResponse.text()).toBe('');
 
+    const replacementBytes = await sharp({
+      create: { width: 1_200, height: 800, channels: 3, background: '#1565c0' },
+    }).png().toBuffer();
     const replacementBody = new FormData();
-    replacementBody.set('file', new File([new Uint8Array([4, 5, 6])], 'cover.png', { type: 'image/png' }));
+    replacementBody.set('file', new File([new Uint8Array(replacementBytes)], 'cover.png', { type: 'image/png' }));
     await app.request(`/api/entries/${entry.id}/media/cover`, {
       method: 'PUT',
       body: replacementBody,
@@ -102,7 +128,32 @@ describe('Entry HTTP routes', () => {
     });
     expect(changedResponse.status).toBe(200);
     expect(changedResponse.headers.get('etag')).not.toBe(etag);
-    expect(new Uint8Array(await changedResponse.arrayBuffer())).toEqual(new Uint8Array([4, 5, 6]));
+    expect(new Uint8Array(await changedResponse.arrayBuffer())).toEqual(new Uint8Array(replacementBytes));
+    const changedThumbnailResolver = await app.request(
+      `/api/thumbnails/entries/${entry.id}/cover.png`,
+      { redirect: 'manual' },
+    );
+    expect(changedThumbnailResolver.headers.get('location')).not.toBe(thumbnailRef);
+    expect((await app.request(thumbnailRef!)).status).toBe(404);
+  });
+
+  it('falls back to original media while an existing asset awaits thumbnail backfill', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const assetRoot = await mkdtemp(join(tmpdir(), 't3-assets-'));
+    temporaryDirectories.push(assetRoot);
+    const app = createApiApp(database, { assetRoot });
+    const entry = createEntry(database, { title: 'Legacy Media', type: 'comic' });
+    const directory = join(assetRoot, 'entries', String(entry.id));
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, 'cover.png'), new Uint8Array([1, 2, 3]));
+
+    const response = await app.request(`/api/thumbnails/entries/${entry.id}/cover.png`, {
+      redirect: 'manual',
+    });
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe(`/api/assets/entries/${entry.id}/cover.png`);
+    expect(response.headers.get('cache-control')).toBe('no-cache');
   });
 
   it('previews a site export folder and commits its reviewed canonical mapping', async () => {
@@ -412,7 +463,9 @@ describe('Producer HTTP routes', () => {
       name: 'Author',
       content: 'Note',
       tags: [{ name: 'Artist' }],
-      looseEntries: [{ id: first.id, coverRef: 'first.webp' }],
+      looseEntries: [],
+      looseEntryCount: 1,
+      workCoverRefs: ['first.webp', 'second.webp'],
       directories: [{
         id: directory.id,
         title: 'Manga',
@@ -520,13 +573,17 @@ describe('HTTP error boundary', () => {
     databases.push(database);
     const app = createApiApp(database);
 
-    const local = await app.request('/api/entries?entryType=game', {
-      headers: { Origin: 'http://127.0.0.1:5173' },
+    const local = await app.request('/api/entries/query', {
+      method: 'POST',
+      headers: { Origin: 'http://127.0.0.1:5173', 'content-type': 'application/json' },
+      body: JSON.stringify({ entryType: 'game', conditions: [], page: 1, pageSize: 30 }),
     });
     expect(local.headers.get('access-control-allow-origin')).toBe('http://127.0.0.1:5173');
 
-    const remote = await app.request('/api/entries?entryType=game', {
-      headers: { Origin: 'https://example.test' },
+    const remote = await app.request('/api/entries/query', {
+      method: 'POST',
+      headers: { Origin: 'https://example.test', 'content-type': 'application/json' },
+      body: JSON.stringify({ entryType: 'game', conditions: [], page: 1, pageSize: 30 }),
     });
     expect(remote.headers.get('access-control-allow-origin')).toBeNull();
   });
@@ -552,10 +609,17 @@ describe('Entry management HTTP routes', () => {
       content: 'https://example.test',
     });
 
-    const search = await app.request(`/api/entries?entryType=game&includeTagIds=${tag.tagId}`);
-    await expect(search.json()).resolves.toEqual([
-      { id: entry.id, title: 'Endfield', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
-    ]);
+    const search = await app.request('/api/entries/query', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ entryType: 'game', conditions: [], includeTagIds: [tag.tagId], page: 1, pageSize: 30 }),
+    });
+    await expect(search.json()).resolves.toMatchObject({
+      items: [
+        { id: entry.id, title: 'Endfield', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
+      ],
+      total: 1,
+    });
     await expect((await app.request(`/api/entries/${entry.id}/tags`)).json()).resolves.toEqual([
       expect.objectContaining({ tagId: tag.tagId, facetId: facet.id }),
     ]);

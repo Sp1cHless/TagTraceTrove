@@ -31,7 +31,7 @@ import {
   viewLaterIds,
 } from './stores/preferences.js';
 import SearchPage from './SearchPage.vue';
-import { entryStackLayerStyle, entryStackLayers } from './entry-media-stack.js';
+import { entryCardMediaRef, entryStackLayerStyle, entryStackLayers } from './entry-media-stack.js';
 import { accent, accentPresets, accentSwatchColors, rowsPerPage, rowsPerPageOptions, showNsfw } from './stores/preferences.js';
 import { useArmableAction } from './armable.js';
 import FacetFilterBar, { type GalleryFacetFilters } from './components/FacetFilterBar.vue';
@@ -40,7 +40,7 @@ import IconButton from './components/IconButton.vue';
 import LazyCardImage from './components/LazyCardImage.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
 import { supportedLocales, useI18n, type Locale } from './i18n.js';
-import { shuffledCopy } from './random-sort.js';
+
 import { createNavigationMemory, navigationMemoryKey } from './navigation-memory.js';
 
 type Theme = 'light' | 'dark';
@@ -55,6 +55,9 @@ interface EntryTagResults {
   tagId: number;
   tagName: string;
   entries: GalleryEntrySummary[];
+  total: number;
+  page: number;
+  pageSize: number;
   sourceEntry: { id: number; type: string; title: string } | null;
   sourceSearchQuery: string | null;
   sourceSearchScope: SearchScope | null;
@@ -64,6 +67,9 @@ interface AuthorTagResults {
   tagId: number;
   tagName: string;
   authors: Array<{ id: number; name: string }>;
+  total: number;
+  page: number;
+  pageSize: number;
   sourceAuthor: AuthorLocation;
 }
 type TagResults = EntryTagResults | AuthorTagResults;
@@ -71,7 +77,8 @@ type SearchOrigin = { searchQuery: string; searchScope: SearchScope };
 type EntryOrigin = AuthorLocation | { tagResults: EntryTagResults } | SearchOrigin;
 type CreationView = 'entry' | 'author';
 const props = defineProps<{ api: GalleryApi }>();
-provide(navigationMemoryKey, createNavigationMemory());
+const navigationMemory = createNavigationMemory();
+provide(navigationMemoryKey, navigationMemory);
 const galleries = ref<GallerySummary[]>([]);
 const authors = ref<Array<{
   id: number;
@@ -101,6 +108,10 @@ let galleryEntriesRequestSeq = 0;
 type GallerySort = 'date-desc' | 'date-asc' | 'title-asc' | 'title-desc' | 'random';
 // Newest first by default: recent imports land at the top of the gallery.
 const gallerySort = ref<GallerySort>('date-desc');
+const galleryRandomSeed = ref(Math.floor(Math.random() * 2_147_483_648));
+const galleryPage = ref(1);
+const galleryPageSize = ref(30);
+const galleryResultTotal = ref(0);
 const showUsageOnCards = computed(() => (
   facetFilters.value.usageConditions.length > 0 || facetFilters.value.usageSort !== null
 ));
@@ -132,26 +143,61 @@ const pagedTagItems = computed<Array<GalleryEntrySummary | { id: number; name: s
   return results.authors;
 });
 
-const sortedEntries = computed(() => {
-  const list = [...entries.value];
-  // A rating sort is performed by the server (unrated sink to the bottom);
-  // the local re-order must not undo it.
-  if (facetFilters.value.ratingSort !== null || facetFilters.value.usageSort !== null) {
-    return list;
-  }
-  if (gallerySort.value === 'random') return shuffledCopy(list);
-  const direction = gallerySort.value.endsWith('-desc') ? -1 : 1;
-  const byTitle = (a: GalleryEntrySummary, b: GalleryEntrySummary): number => (
-    a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
-  );
-  if (gallerySort.value.startsWith('title')) {
-    return list.sort((a, b) => direction * byTitle(a, b));
-  }
-  return list.sort((a, b) => {
-    const dateCompare = String(a.uploadDate ?? '').localeCompare(String(b.uploadDate ?? ''));
-    const tie = a.id - b.id;
-    return direction * (dateCompare !== 0 ? dateCompare : tie);
+async function queryEntryTagResults(
+  context: Omit<EntryTagResults, 'entries' | 'total' | 'page' | 'pageSize'>,
+  page = navigationMemory.pages.get(`tag:entry:${context.tagId}`) ?? 1,
+  pageSize = 30,
+): Promise<EntryTagResults> {
+  const result = await props.api.queryEntryPage({
+    conditions: [],
+    authorIds: [],
+    ratingConditions: [],
+    ratingSort: null,
+    usageConditions: [],
+    usageSort: null,
+    includeTagIds: [context.tagId],
+    excludeEntryTypes: showNsfw.value ? [] : [...entryNsfwTypes.value],
+    sort: 'date-desc',
+    page,
+    pageSize,
   });
+  return { ...context, entries: result.items, total: result.total, page, pageSize };
+}
+
+async function queryAuthorTagResults(
+  context: Omit<AuthorTagResults, 'authors' | 'total' | 'page' | 'pageSize'>,
+  page = navigationMemory.pages.get(`tag:author:${context.tagId}`) ?? 1,
+  pageSize = 30,
+): Promise<AuthorTagResults> {
+  const result = await props.api.queryProducerPage({
+    ownTagIds: [context.tagId],
+    relatedEntryTagIds: [],
+    includeNsfw: showNsfw.value,
+    sort: 'name-asc',
+    page,
+    pageSize,
+  });
+  return { ...context, authors: result.items, total: result.total, page, pageSize };
+}
+
+async function changeEntryTagPage(page: number): Promise<void> {
+  const current = tagResults.value;
+  if (!current) return;
+  tagResults.value = current.kind === 'entry'
+    ? await queryEntryTagResults(current, page, current.pageSize)
+    : await queryAuthorTagResults(current, page, current.pageSize);
+}
+
+async function changeEntryTagPageSize(pageSize: number): Promise<void> {
+  const current = tagResults.value;
+  if (!current || current.pageSize === pageSize) return;
+  tagResults.value = current.kind === 'entry'
+    ? await queryEntryTagResults(current, 1, pageSize)
+    : await queryAuthorTagResults(current, 1, pageSize);
+}
+
+const sortedEntries = computed(() => {
+  return [...entries.value];
 });
 const activeEntry = ref<EntryDetailResponse | null>(null);
 const activeType = ref<string | null>(null);
@@ -196,7 +242,10 @@ const viewLaterKind = ref<'entry' | 'author'>('entry');
 const viewLaterTab = ref('');
 const collectionsView = ref(false);
 const randomView = ref(false);
-const authorPageRef = ref<{ goBack: () => void | Promise<void> } | null>(null);
+const authorPageRef = ref<{
+  goBack: () => void | Promise<void>;
+  waitUntilReady: () => Promise<void>;
+} | null>(null);
 const collectionsPageRef = ref<{ goBack: () => void | Promise<void> } | null>(null);
 const returnScrollPositions: number[] = [];
 let scrollRestoreGeneration = 0;
@@ -541,15 +590,14 @@ async function openTagFromSearch(
   error.value = null;
   const origin = preserveSearchContext(query, scope);
   try {
-    tagResults.value = {
+    tagResults.value = await queryEntryTagResults({
       kind: 'entry',
       tagId: tag.tagId,
       tagName: tag.name,
-      entries: await props.api.findEntriesByTag(tag.tagId),
       sourceEntry: null,
       sourceSearchQuery: origin.searchQuery,
       sourceSearchScope: origin.searchScope,
-    };
+    });
     searchView.value = false;
     activeEntry.value = null;
     activeType.value = null;
@@ -559,6 +607,10 @@ async function openTagFromSearch(
     error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
   }
 }
+
+watch(showNsfw, () => {
+  if (tagResults.value) void changeEntryTagPage(1);
+});
 
 function isHttpUrl(value: string): boolean {
   return /^https?:\/\//u.test(value);
@@ -781,11 +833,11 @@ async function selectGallery(
   leaveAllViews(keepEntry, preserveScrollHistory);
   activeType.value = entryType;
   facetFilters.value = { conditions: [], authorIds: [], ratingConditions: [], ratingSort: null, usageConditions: [], usageSort: null };
-  const [summaries, filterOptions] = await Promise.all([
-    props.api.listEntries(entryType),
+  galleryPage.value = navigationMemory.pages.get(`gallery:${entryType}`) ?? 1;
+  const [, filterOptions] = await Promise.all([
+    loadGalleryEntries(),
     props.api.listFacetFilterOptions(entryType),
   ]);
-  entries.value = summaries;
   facetFilterOptions.value = filterOptions;
 }
 
@@ -794,29 +846,71 @@ async function loadGalleryEntries(): Promise<void> {
   const seq = ++galleryEntriesRequestSeq;
   const { conditions, authorIds, ratingConditions, ratingSort, usageConditions, usageSort } = facetFilters.value;
   const activeConditions = conditions.filter((condition) => condition.tagIds.length > 0);
-  const hasFilters = activeConditions.length > 0 || authorIds.length > 0
-    || ratingConditions.length > 0 || ratingSort !== null
-    || usageConditions.length > 0 || usageSort !== null;
-  const summaries = !hasFilters
-    ? await props.api.listEntries(activeType.value)
-    : await props.api.filterEntriesByFacets(activeType.value, activeConditions, authorIds, {
-      ratingConditions,
-      ratingSort,
-      usageConditions,
-      usageSort,
-    });
+
+  const result = await props.api.queryEntryPage({
+    entryType: activeType.value,
+    conditions: activeConditions,
+    authorIds,
+    ratingConditions,
+    ratingSort,
+    usageConditions,
+    usageSort,
+    sort: gallerySort.value,
+    ...(gallerySort.value === 'random' ? { randomSeed: galleryRandomSeed.value } : {}),
+    page: galleryPage.value,
+    pageSize: galleryPageSize.value,
+  });
   if (seq !== galleryEntriesRequestSeq) return; // superseded by a newer request
-  entries.value = summaries;
+  entries.value = result.items;
+  galleryResultTotal.value = result.total;
+  galleryPage.value = result.page;
+}
+
+async function onGalleryPageChange(page: number): Promise<void> {
+  galleryPage.value = page;
+  try {
+    await loadGalleryEntries();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
+  }
+}
+
+async function onGalleryPageSizeChange(pageSize: number): Promise<void> {
+  if (galleryPageSize.value === pageSize) return;
+  galleryPageSize.value = pageSize;
+  galleryPage.value = Math.min(
+    galleryPage.value,
+    Math.max(1, Math.ceil(galleryResultTotal.value / pageSize)),
+  );
+  try {
+    await loadGalleryEntries();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
+  }
 }
 
 async function onFacetFiltersChange(filters: GalleryFacetFilters): Promise<void> {
   facetFilters.value = filters;
+  galleryPage.value = 1;
+  navigationMemory.pages.set(`gallery:${activeType.value ?? ''}`, 1);
   try {
     await loadGalleryEntries();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('gallery.filterError');
   }
 }
+
+watch(gallerySort, (nextSort, previousSort) => {
+  if (!activeType.value) return;
+  if (nextSort === 'random' && previousSort !== 'random') {
+    galleryRandomSeed.value = Math.floor(Math.random() * 2_147_483_648);
+  }
+  galleryPage.value = 1;
+  navigationMemory.pages.set(`gallery:${activeType.value}`, 1);
+  void loadGalleryEntries().catch((cause: unknown) => {
+    error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
+  });
+});
 
 function showCollections(preserveScrollHistory: boolean | Event = false): void {
   leaveAllViews(false, preserveScrollHistory === true);
@@ -859,16 +953,15 @@ function openTagFromRandom(tag: { id: number; name: string }): void {
   rememberReturnScroll();
   error.value = null;
   randomTagReturn = true;
-  void props.api.findEntriesByTag(tag.id).then((entries) => {
-    tagResults.value = {
-      kind: 'entry',
-      tagId: tag.id,
-      tagName: tag.name,
-      entries,
-      sourceEntry: null,
-      sourceSearchQuery: null,
-      sourceSearchScope: null,
-    };
+  void queryEntryTagResults({
+    kind: 'entry',
+    tagId: tag.id,
+    tagName: tag.name,
+    sourceEntry: null,
+    sourceSearchQuery: null,
+    sourceSearchScope: null,
+  }).then((results) => {
+    tagResults.value = results;
     randomView.value = false;
     void scrollCurrentViewToTop();
   }).catch((cause: unknown) => {
@@ -1074,6 +1167,8 @@ async function closeEntry(): Promise<void> {
     authorView.value = true;
     editingEntry.value = false;
     resetLayoutEditors();
+    await nextTick();
+    await authorPageRef.value?.waitUntilReady();
     await restorePreviousScroll();
     return;
   }
@@ -1107,15 +1202,14 @@ async function openEntryTag(tag: { id: number; name: string }): Promise<void> {
   };
   error.value = null;
   try {
-    tagResults.value = {
+    tagResults.value = await queryEntryTagResults({
       kind: 'entry',
       tagId: tag.id,
       tagName: tag.name,
-      entries: await props.api.findEntriesByTag(tag.id),
       sourceEntry,
       sourceSearchQuery: null,
       sourceSearchScope: null,
-    };
+    });
     activeEntry.value = null;
     activeType.value = null;
     await scrollCurrentViewToTop();
@@ -1136,18 +1230,17 @@ async function openAuthorTag(payload: {
   rememberReturnScroll();
   error.value = null;
   try {
-    tagResults.value = {
+    tagResults.value = await queryAuthorTagResults({
       kind: 'author',
       tagId: payload.tagId,
       tagName: payload.tagName,
-      authors: await props.api.findAuthorsByTag(payload.tagId),
       sourceAuthor: {
         authorId: payload.authorId,
         authorName: payload.authorName,
         directoryId: null,
         directoryName: null,
       },
-    };
+    });
     authorView.value = false;
     authorTarget.value = null;
     await scrollCurrentViewToTop();
@@ -1776,10 +1869,28 @@ async function finishBatchImport(entryType: string, entryIds: number[] = [], vie
 }
 
 async function openBatchReviewEntries(): Promise<GalleryEntrySummary[]> {
-  if (!batchReview.value) return [];
-  const summaries = await props.api.listEntries(batchReview.value.entryType);
-  const wanted = new Set(batchReview.value.entryIds);
-  return summaries.filter((summary) => wanted.has(summary.id));
+  const review = batchReview.value;
+  if (!review || review.entryIds.length === 0) return [];
+  const loaded: GalleryEntrySummary[] = [];
+  let page = 1;
+  while (true) {
+    const result = await props.api.queryEntryPage({
+      entryType: review.entryType,
+      conditions: [],
+      authorIds: [],
+      ratingConditions: [],
+      ratingSort: null,
+      usageConditions: [],
+      usageSort: null,
+      entryIds: review.entryIds,
+      sort: 'source-order',
+      page,
+      pageSize: 100,
+    });
+    loaded.push(...result.items);
+    if (loaded.length >= result.total || result.items.length === 0) return loaded;
+    page += 1;
+  }
 }
 
 function completeBatchReview(): void {
@@ -1807,9 +1918,7 @@ watch(batchReview, async (review) => {
   }
   batchReviewLoading.value = true;
   try {
-    const summaries = await props.api.listEntries(review.entryType);
-    const wanted = new Set(review.entryIds);
-    batchReviewEntries.value = summaries.filter((summary) => wanted.has(summary.id));
+    batchReviewEntries.value = await openBatchReviewEntries();
   } catch {
     batchReviewEntries.value = [];
   } finally {
@@ -2140,15 +2249,23 @@ onUnmounted(() => {
             v-if="tagResults.kind === 'entry'"
             class="muted"
             data-testid="tag-results-count"
-          >{{ t(tagResults.entries.length === 1 ? 'gallery.entryCountOne' : 'gallery.entryCount', { count: tagResults.entries.length }) }}</p>
+          >{{ t(tagResults.total === 1 ? 'gallery.entryCountOne' : 'gallery.entryCount', { count: tagResults.total }) }}</p>
           <p
-            v-if="tagResults.kind === 'entry' && tagResults.entries.length === 0
+            v-if="tagResults.kind === 'entry' && tagResults.total === 0
               || tagResults.kind === 'author' && tagResults.authors.length === 0"
             class="muted"
           >
             {{ t('tag.noResults') }}
           </p>
-          <PagedCardGrid :items="pagedTagItems" :page-key="`tag:${tagResults.kind}:${tagResults.tagId}`" v-slot="{ items }">
+          <PagedCardGrid
+            :items="pagedTagItems"
+            :page-key="`tag:${tagResults.kind}:${tagResults.tagId}`"
+            :total-items="tagResults.total"
+            :external-page="tagResults.page"
+            @update:page="changeEntryTagPage"
+            @update:page-size="changeEntryTagPageSize"
+            v-slot="{ items }"
+          >
             <article
               v-for="entry in items.filter((item): item is GalleryEntrySummary => 'type' in item)"
               :key="`entry-${entry.id}`"
@@ -2166,7 +2283,7 @@ onUnmounted(() => {
                     :key="`${ref}-${stackIndex}`"
                     class="entry-stack-image"
                     :style="entryStackLayerStyle(stackIndex, entryStackLayers(entry).length)"
-                    :src="api.assetUrl(ref)"
+                    :src="api.assetUrl(entryCardMediaRef(ref))"
                     :alt="entry.title"
                     loading="lazy"
                     decoding="async"
@@ -2275,7 +2392,7 @@ onUnmounted(() => {
                   <LazyCardImage
                     v-else
                     class="entry-stack-image"
-                    :src="api.assetUrl(entry.coverRef ?? entry.previewRef ?? '')"
+                    :src="api.assetUrl(entryCardMediaRef(entry.coverRef ?? entry.previewRef ?? ''))"
                     :alt="entry.title"
                     loading="lazy"
                     decoding="async"
@@ -3141,9 +3258,9 @@ onUnmounted(() => {
               </label>
               <span data-testid="gallery-entry-count">
                 {{ galleryFilterActive
-                  ? t('gallery.filteredCount', { shown: entries.length, total: galleryTotalCount })
-                  : t(entries.length === 1 ? 'gallery.entryCountOne' : 'gallery.entryCount', {
-                    count: entries.length,
+                  ? t('gallery.filteredCount', { shown: galleryResultTotal, total: galleryTotalCount })
+                  : t(galleryResultTotal === 1 ? 'gallery.entryCountOne' : 'gallery.entryCount', {
+                    count: galleryResultTotal,
                   }) }}
               </span>
             </div>
@@ -3161,7 +3278,11 @@ onUnmounted(() => {
           <PagedCardGrid
             :items="sortedEntries"
             :page-key="`gallery:${activeType}`"
+            :total-items="galleryResultTotal"
+            :external-page="galleryPage"
             grid-testid="entry-list"
+            @update:page="onGalleryPageChange"
+            @update:page-size="onGalleryPageSizeChange"
             v-slot="{ items }"
           >
             <article
@@ -3181,7 +3302,7 @@ onUnmounted(() => {
                     :key="`${ref}-${stackIndex}`"
                     class="entry-stack-image"
                     :style="entryStackLayerStyle(stackIndex, entryStackLayers(entry).length)"
-                    :src="api.assetUrl(ref)"
+                    :src="api.assetUrl(entryCardMediaRef(ref))"
                     :alt="entry.title"
                     loading="lazy"
                     decoding="async"

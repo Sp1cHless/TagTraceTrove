@@ -33,23 +33,26 @@ const recentError = ref(false);
 onMounted(load);
 async function load(): Promise<void> {
   try {
-    const galleryList = await props.api.listGalleries();
+    const [galleryList, recent] = await Promise.all([
+      props.api.listGalleries(),
+      props.api.queryEntryPage({
+        conditions: [],
+        authorIds: [],
+        ratingConditions: [],
+        ratingSort: null,
+        recentOnly: true,
+        includeNsfw: showNsfw.value,
+        usageConditions: [],
+        usageSort: { field: 'lastViewed', direction: 'desc' },
+        sort: 'date-desc',
+        page: 1,
+        pageSize: 4,
+      }),
+    ]);
     totalCount.value = galleryList.reduce((sum, gallery) => sum + gallery.entryCount, 0);
     galleries.value = galleryList.filter((gallery) => showNsfw.value || !gallery.nsfw);
-    // Same aggregation path as the Recently viewed page: per-gallery entry
-    // lists already carry lastViewedAt, so Home adds no second history store.
-    const results = await Promise.allSettled(
-      galleries.value.map((gallery) => props.api.listEntries(gallery.type)),
-    );
-    const nsfwTypes = new Set(galleryList.filter((gallery) => gallery.nsfw).map((gallery) => gallery.type));
-    const entries = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
-    recentEntries.value = entries
-      .filter((entry) => entry.lastViewedAt !== null && (showNsfw.value || !nsfwTypes.has(entry.type)))
-      .sort((left, right) => String(right.lastViewedAt).localeCompare(String(left.lastViewedAt)))
-      .slice(0, 4);
-    // Partial failures degrade silently; only an empty result set is an error.
-    recentError.value = galleries.value.length > 0
-      && results.every((result) => result.status === 'rejected');
+    recentEntries.value = recent.items;
+    recentError.value = false;
   } catch {
     loadFailed.value = true;
   } finally {

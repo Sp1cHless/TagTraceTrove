@@ -14,6 +14,18 @@ describe('database verification', () => {
     }
   });
 
+  it('reports a missing performance-critical Entry paging index', () => {
+    const database = createMigratedMemoryDatabase();
+    try {
+      database.exec('DROP INDEX idx_entries_page_date');
+      expect(inspectDatabase(database).issues).toContain(
+        'missing required index: idx_entries_page_date',
+      );
+    } finally {
+      database.close();
+    }
+  });
+
   it('reports foreign-key corruption without modifying it', () => {
     const database = createMigratedMemoryDatabase();
 

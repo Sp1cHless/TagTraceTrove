@@ -98,7 +98,10 @@ function createAuthorApi() {
     listCollectionsForProducer: vi.fn(async () => []),
     listTaxonomyAliases: vi.fn(async () => []),
     listAuthorFilterOptions: vi.fn(async () => ({ authorTags: [], workTags: [] })),
-    filterAuthors: vi.fn(async () => []),
+    queryProducerPage: vi.fn(async (input) => {
+      const items = [{ id: 3, name: 'Example Author', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }];
+      return { items, total: items.length, page: input.page, pageSize: input.pageSize };
+    }),
     listFacetFilterOptions: vi.fn(async (type: string) => ({
       entryType: type,
       facets: [],
@@ -106,7 +109,21 @@ function createAuthorApi() {
       authors: [],
       ratingSlots: [],
     })),
-    filterEntriesByFacets: vi.fn(async () => []),
+    queryEntryPage: vi.fn(async (input) => {
+      const allWorks = [...looseEntries, ...directory.entries];
+      const source = input.producerDirectoryId === directory.id
+        ? directory.entries
+        : input.looseForProducerId !== undefined
+          ? looseEntries
+          : allWorks;
+      const offset = (input.page - 1) * input.pageSize;
+      return {
+        items: source.slice(offset, offset + input.pageSize),
+        total: source.length,
+        page: input.page,
+        pageSize: input.pageSize,
+      };
+    }),
   } as unknown as GalleryApi;
   return {
     api,
@@ -123,6 +140,7 @@ async function openAuthor(api: GalleryApi) {
   const wrapper = mount(AuthorPage, {
     props: { api, authors: [{ id: 3, name: 'Example Author', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }] },
   });
+  await flushPromises();
   await wrapper.get('[data-author-id="3"]').trigger('click');
   await flushPromises();
   return wrapper;
@@ -166,6 +184,7 @@ describe('AuthorPage', () => {
       props: { api, authors: [{ id: 3, name: 'Example Author', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }] },
     });
 
+    await flushPromises();
     await wrapper.get('[data-author-id="3"]').trigger('click');
     await flushPromises();
 
@@ -200,6 +219,7 @@ describe('AuthorPage', () => {
     await listRandom.trigger('click');
     expect(listRandom.classes()).toContain('recent-mode-active');
 
+    await flushPromises();
     await wrapper.get('[data-author-id="3"]').trigger('click');
     await flushPromises();
     const option = wrapper.get('[data-testid="author-sort"] option[value="random"]');
@@ -222,7 +242,15 @@ describe('AuthorPage', () => {
       lastViewedAt: null,
       nsfw: false,
     };
-    api.filterAuthors = vi.fn(async () => [matchingAuthor]);
+    api.queryProducerPage = vi.fn(async (input) => ({
+      items: input.ownTagIds.length > 0 ? [matchingAuthor] : [
+        { id: 3, name: 'Example Author', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false },
+        matchingAuthor,
+      ],
+      total: input.ownTagIds.length > 0 ? 1 : 2,
+      page: input.page,
+      pageSize: input.pageSize,
+    }));
     const wrapper = mount(AuthorPage, {
       props: {
         api,
@@ -245,7 +273,7 @@ describe('AuthorPage', () => {
     await authorTagInput.setValue('circl');
     await wrapper.get('[data-testid="author-tag-combobox-option"]').trigger('click');
     await flushPromises();
-    expect(api.filterAuthors).toHaveBeenLastCalledWith([2], []);
+    expect(api.queryProducerPage).toHaveBeenLastCalledWith(expect.objectContaining({ ownTagIds: [2], relatedEntryTagIds: [] }));
     expect(wrapper.get('[data-testid="author-tag-combobox-toggle"]').text()).toContain('Circle');
 
     await wrapper.get('[data-testid="add-work-tag-filter"]').trigger('click');
@@ -253,7 +281,7 @@ describe('AuthorPage', () => {
     await wrapper.get('[data-testid="work-tag-combobox-input"]').setValue('action');
     await wrapper.get('[data-testid="work-tag-combobox-option"]').trigger('click');
     await flushPromises();
-    expect(api.filterAuthors).toHaveBeenLastCalledWith([2], [5]);
+    expect(api.queryProducerPage).toHaveBeenLastCalledWith(expect.objectContaining({ ownTagIds: [2], relatedEntryTagIds: [5] }));
     expect(wrapper.findAll('[data-author-id]').map((card) => card.attributes('data-author-id')))
       .toEqual(['4']);
 
@@ -401,6 +429,13 @@ describe('AuthorPage', () => {
 
   it('shows faded other-language spellings under author names from the dictionary', async () => {
     const { api } = createAuthorApi();
+    api.queryProducerPage = vi.fn(async (input) => {
+      const items = [
+        { id: 3, name: '鲍勃', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false },
+        { id: 4, name: 'Hypergryph', covers: [], galleryType: 'manga', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false },
+      ];
+      return { items, total: items.length, page: input.page, pageSize: input.pageSize };
+    });
     api.listTaxonomyAliases = vi.fn(async (vocabulary) => vocabulary === 'producer'
       ? [
         {
@@ -483,13 +518,9 @@ describe('AuthorPage', () => {
       authors: [],
       ratingSlots: [],
     }));
-    const filterWorks = vi.fn(async (
-      _type: string,
-      conditions: Array<{ facetId: number | null; tagIds: number[] }>,
-      authorIds: number[],
-    ) => {
-      expect(authorIds).toEqual([3]); // the author is fixed server-side
-      return Array.from({ length: 34 }, (_, index) => index + 1)
+    const filterWorks = vi.fn(async (input: Parameters<GalleryApi['queryEntryPage']>[0]) => {
+      expect(input.authorIds).toEqual([3]); // the author is fixed server-side
+      const items = Array.from({ length: 34 }, (_, index) => index + 1)
         .filter((id) => id <= 5)
         .map((id) => ({
           id,
@@ -504,8 +535,10 @@ describe('AuthorPage', () => {
           likeCount: 0,
           lastViewedAt: null,
         }));
+      const start = (input.page - 1) * input.pageSize;
+      return { items: items.slice(start, start + input.pageSize), total: items.length, page: input.page, pageSize: input.pageSize };
     });
-    api.filterEntriesByFacets = filterWorks;
+    api.queryEntryPage = filterWorks;
 
     const wrapper = await openAuthor(api);
     expect(wrapper.find('[data-testid="facet-filter-bar"]').exists()).toBe(true);
@@ -529,12 +562,17 @@ describe('AuthorPage', () => {
     await action.trigger('click');
     await flushPromises();
 
-    expect(filterWorks).toHaveBeenCalledWith(
-      'manga',
-      [{ facetId: 11, tagIds: [1] }],
-      [3],
-      { ratingConditions: [], ratingSort: null, usageConditions: [], usageSort: null },
-    );
+    expect(filterWorks).toHaveBeenCalledWith(expect.objectContaining({
+      entryType: 'manga',
+      conditions: [{ facetId: 11, tagIds: [1] }],
+      authorIds: [3],
+      ratingConditions: [],
+      ratingSort: null,
+      usageConditions: [],
+      usageSort: null,
+      page: 1,
+      pageSize: 26,
+    }));
 
     // The filter UNFOLDS directories: no pinned row — loose works and
     // Directory members that match are shown as ONE flat set of work cards.
@@ -566,20 +604,24 @@ describe('AuthorPage', () => {
       5,
       ...Array.from({ length: 33 }, (_, index) => (index < 4 ? index + 1 : index + 2)),
     ];
-    const filterWorks = vi.fn(async () => sortedIds.map((id) => ({
-      id,
-      title: `Work ${id}`,
-      type: 'manga',
-      coverRef: null,
-      previewRef: null,
-      previewRefs: [],
-      uploadDate: null,
-      pageCount: null,
-      viewCount: id === 5 ? 12 : 0,
-      likeCount: 0,
-      lastViewedAt: id === 5 ? '2026-09-03T12:00:00.000Z' : null,
-    })));
-    api.filterEntriesByFacets = filterWorks;
+    const filterWorks = vi.fn(async (input: Parameters<GalleryApi['queryEntryPage']>[0]) => {
+      const items = sortedIds.map((id) => ({
+        id,
+        title: `Work ${id}`,
+        type: 'manga',
+        coverRef: null,
+        previewRef: null,
+        previewRefs: [],
+        uploadDate: null,
+        pageCount: null,
+        viewCount: id === 5 ? 12 : 0,
+        likeCount: 0,
+        lastViewedAt: id === 5 ? '2026-09-03T12:00:00.000Z' : null,
+      }));
+      const start = (input.page - 1) * input.pageSize;
+      return { items: items.slice(start, start + input.pageSize), total: items.length, page: input.page, pageSize: input.pageSize };
+    });
+    api.queryEntryPage = filterWorks;
 
     const wrapper = await openAuthor(api);
     await wrapper.get('[data-testid="usage-sort-select"]').setValue('views');

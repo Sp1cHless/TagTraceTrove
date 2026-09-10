@@ -261,15 +261,18 @@ export const ratingSortSchema = z.strictObject({
 
 export const usageFieldSchema = z.enum(['views', 'lastViewed', 'likes']);
 
-export const usageFilterConditionSchema = z.strictObject({
-  field: usageFieldSchema,
-  operator: z.enum(['eq', 'gt', 'lt']),
-  // views: non-negative integer; lastViewed: UTC date (yyyy-mm-dd).
-  value: z.union([z.number().int().min(0), z.string().regex(/^\d{4}-\d{2}-\d{2}$/u)]),
-}).refine(
-  (condition) => (condition.field === 'views' ? typeof condition.value === 'number' : typeof condition.value === 'string'),
-  { message: 'views takes a count, lastViewed takes a yyyy-mm-dd date' },
-);
+export const usageFilterConditionSchema = z.discriminatedUnion('field', [
+  z.strictObject({
+    field: z.enum(['views', 'likes']),
+    operator: z.enum(['eq', 'gt', 'lt']),
+    value: z.number().int().min(0),
+  }),
+  z.strictObject({
+    field: z.literal('lastViewed'),
+    operator: z.enum(['eq', 'gt', 'lt']),
+    value: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+  }),
+]);
 
 export const usageSortSchema = z.strictObject({
   field: usageFieldSchema,
@@ -290,6 +293,45 @@ export const facetFilterEntriesRequestSchema = z.strictObject({
   usageConditions: z.array(usageFilterConditionSchema).default([]),
   // Optional usage sort (view count / last view date); null keeps the default.
   usageSort: usageSortSchema.nullable().default(null),
+});
+
+export const entryListSortSchema = z.enum([
+  'date-desc',
+  'date-asc',
+  'title-asc',
+  'title-desc',
+  'type',
+  'source-order',
+  'random',
+]);
+
+/** Bounded SQL page request used by Gallery and later long-list migrations. */
+export const entryPageQueryRequestSchema = facetFilterEntriesRequestSchema.extend({
+  entryType: requiredTextSchema.optional(),
+  entryIds: z.array(apiIdSchema).optional(),
+  includeTagIds: z.array(apiIdSchema).optional(),
+  excludeEntryTypes: z.array(requiredTextSchema).optional(),
+  searchQuery: requiredTextSchema.optional(),
+  recentOnly: z.boolean().optional(),
+  producerDirectoryId: apiIdSchema.optional(),
+  looseForProducerId: apiIdSchema.optional(),
+  collectionId: apiIdSchema.optional(),
+  includeNsfw: z.boolean().optional(),
+  randomSeed: z.number().int().min(0).max(2_147_483_647).optional(),
+  sort: entryListSortSchema.default('date-desc'),
+  page: z.number().int().positive().default(1),
+  pageSize: z.number().int().min(1).max(100).default(30),
+}).superRefine((request, context) => {
+  const typeRequired = request.conditions.length > 0
+    || request.authorIds.length > 0
+    || request.ratingConditions.length > 0
+    || request.ratingSort !== null;
+  if (typeRequired && request.entryType === undefined) {
+    context.addIssue({ code: 'custom', path: ['entryType'], message: 'entryType is required for Gallery filters' });
+  }
+  if (request.sort === 'source-order' && (request.entryIds?.length ?? 0) === 0) {
+    context.addIssue({ code: 'custom', path: ['entryIds'], message: 'source-order requires entryIds' });
+  }
 });
 
 export const entryTypeQuerySchema = z.strictObject({
@@ -326,6 +368,8 @@ export interface CollectionRecordDto {
   children: CollectionRecordDto[];
   entries: Array<{ id: number; title: string; type: string; coverRef: string | null; previewRefs: string[] }>;
   producers: Array<{ id: number; name: string; covers: string[] }>;
+  entryCount?: number | undefined;
+  producerCount?: number | undefined;
 }
 
 export const collectionRecordSchema: z.ZodType<CollectionRecordDto> = z.lazy(() => z.strictObject({
@@ -338,6 +382,8 @@ export const collectionRecordSchema: z.ZodType<CollectionRecordDto> = z.lazy(() 
   children: z.array(collectionRecordSchema),
   entries: z.array(collectionEntryMemberSchema),
   producers: z.array(collectionProducerMemberSchema),
+  entryCount: z.number().int().nonnegative().optional(),
+  producerCount: z.number().int().nonnegative().optional(),
 }));
 
 export const createCollectionRequestSchema = z.strictObject({
@@ -444,6 +490,13 @@ export const entrySummarySchema = z.strictObject({
   lastViewedAt: nullableTextSchema,
 });
 
+export const entryPageResponseSchema = z.strictObject({
+  items: z.array(entrySummarySchema),
+  total: z.number().int().min(0),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().min(1).max(100),
+});
+
 export const gallerySummarySchema = z.strictObject({
   type: requiredTextSchema,
   entryCount: z.number().int().positive(),
@@ -531,6 +584,7 @@ export const authorDirectorySchema = z.strictObject({
   description: z.string(),
   sortOrder: sortOrderSchema,
   entries: z.array(authorWorkSummarySchema),
+  entryCount: z.number().int().nonnegative().optional(),
 });
 
 export const authorDetailResponseSchema = producerRecordSchema.extend({
@@ -538,6 +592,9 @@ export const authorDetailResponseSchema = producerRecordSchema.extend({
   tags: z.array(producerTagAssignmentSchema),
   looseEntries: z.array(authorWorkSummarySchema),
   directories: z.array(authorDirectorySchema),
+  looseEntryCount: z.number().int().nonnegative().optional(),
+  workTypes: z.array(requiredTextSchema).optional(),
+  workCoverRefs: z.array(requiredTextSchema).optional(),
   ratings: z.array(ratingRowSchema),
   usage: usageInfoSchema,
 });
@@ -583,6 +640,41 @@ export const producerSummarySchema = z.strictObject({
   lastViewedAt: nullableTextSchema,
   // Derived: any work of the Author sits in an NSFW Gallery.
   nsfw: z.boolean(),
+});
+
+export const producerListSortSchema = z.enum([
+  'name-asc',
+  'relevance',
+  'last-viewed-desc',
+  'views-desc',
+  'likes-desc',
+  'source-order',
+  'random',
+]);
+
+export const producerPageQueryRequestSchema = z.strictObject({
+  producerIds: z.array(apiIdSchema).optional(),
+  searchQuery: requiredTextSchema.optional(),
+  entryType: requiredTextSchema.optional(),
+  ownTagIds: uniqueIdArraySchema.optional().default([]),
+  relatedEntryTagIds: uniqueIdArraySchema.optional().default([]),
+  collectionId: apiIdSchema.optional(),
+  includeNsfw: z.boolean().default(true),
+  sort: producerListSortSchema.default('name-asc'),
+  randomSeed: z.number().int().min(0).max(2_147_483_647).optional(),
+  page: z.number().int().positive().default(1),
+  pageSize: z.number().int().min(1).max(100).default(30),
+}).superRefine((request, context) => {
+  if (request.sort === 'source-order' && (request.producerIds?.length ?? 0) === 0) {
+    context.addIssue({ code: 'custom', path: ['producerIds'], message: 'source-order requires producerIds' });
+  }
+});
+
+export const producerPageResponseSchema = z.strictObject({
+  items: z.array(producerSummarySchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
 });
 
 export const taxonomyVocabularySchema = z.enum(['entry', 'producer']);
@@ -853,6 +945,9 @@ export type FacetFilterOption = z.infer<typeof facetFilterOptionSchema>;
 export type FacetFilterOptionTag = z.infer<typeof facetFilterOptionTagSchema>;
 export type FacetFilterAuthorOption = z.infer<typeof facetFilterAuthorOptionSchema>;
 export type FacetFilterCondition = z.infer<typeof facetFilterConditionSchema>;
+export type EntryListSort = z.infer<typeof entryListSortSchema>;
+export type EntryPageQueryRequest = z.infer<typeof entryPageQueryRequestSchema>;
+export type EntryPageResponse = z.infer<typeof entryPageResponseSchema>;
 export type RatingFilterOperator = z.infer<typeof ratingFilterOperatorSchema>;
 export type RatingFilterCondition = z.infer<typeof ratingFilterConditionSchema>;
 export type RatingSort = z.infer<typeof ratingSortSchema>;
@@ -872,6 +967,9 @@ export type CreateProducerRequest = z.infer<typeof createProducerRequestSchema>;
 export type UpdateProducerRequest = z.infer<typeof updateProducerRequestSchema>;
 export type FindProducersQuery = z.infer<typeof findProducersQuerySchema>;
 export type AuthorFilterOptions = z.infer<typeof authorFilterOptionsResponseSchema>;
+export type ProducerListSort = z.infer<typeof producerListSortSchema>;
+export type ProducerPageQueryRequest = z.infer<typeof producerPageQueryRequestSchema>;
+export type ProducerPageResponse = z.infer<typeof producerPageResponseSchema>;
 export type AuthorDetailResponse = z.infer<typeof authorDetailResponseSchema>;
 export type AuthorDirectoryDto = z.infer<typeof authorDirectorySchema>;
 export type CreateAuthorDirectoryRequest = z.infer<typeof createAuthorDirectoryRequestSchema>;

@@ -66,8 +66,8 @@ function createMemoryApi(options: {
     entries: [{ ...entries[0]!, coverRef: null }],
   }] : [];
   const entryTags = new Map<number, number[]>([
-    [1, [1, 2]],
-    [2, [1]],
+    [1, [1, 2, 12]],
+    [2, [1, 12]],
     [3, [3]],
   ]);
   let assignedTagName: string | null = null;
@@ -105,6 +105,59 @@ function createMemoryApi(options: {
     content: string;
     sortOrder: number;
   } | null = null;
+
+  function filteredEntrySummaries(input: Parameters<GalleryApi['queryEntryPage']>[0]) {
+    const matchesRating = (entryId: number): boolean => input.ratingConditions.every((condition) => {
+      const value = entryRatings.find((row) => row.entryId === entryId && row.slotId === condition.slotId)?.stars ?? null;
+      if (condition.operator === 'unrated') return value === null;
+      if (value === null) return false;
+      const stars = condition.stars ?? 0;
+      if (condition.operator === 'eq') return value === stars;
+      if (condition.operator === 'gt') return value > stars;
+      return value < stars;
+    });
+    const matched = entries.filter((entry) => {
+      if (input.entryType && entry.type !== input.entryType) return false;
+      const tags = entryTags.get(entry.id) ?? [];
+      if (!input.conditions.every((condition) => condition.tagIds.every((tagId) => tags.includes(tagId)))) return false;
+      if (input.authorIds.length > 0
+        && !(linkedAuthorIds.get(entry.id) ?? []).some((id) => input.authorIds.includes(id))) return false;
+      if (!matchesRating(entry.id)) return false;
+      return input.usageConditions.every((condition) => {
+        const value = entryUsages.find((row) => row.entryId === entry.id);
+        if (condition.field === 'views') {
+          const count = value?.viewCount ?? 0;
+          const expected = condition.value as number;
+          if (condition.operator === 'eq') return count === expected;
+          if (condition.operator === 'gt') return count > expected;
+          return count < expected;
+        }
+        const date = (value?.lastViewedAt ?? '').slice(0, 10);
+        const expectedDate = condition.value as string;
+        if (condition.operator === 'eq') return date === expectedDate;
+        if (condition.operator === 'gt') return date > expectedDate;
+        return date < expectedDate;
+      });
+    });
+    if (input.usageSort) {
+      const usageOf = (entryId: number): number => {
+        const value = entryUsages.find((row) => row.entryId === entryId);
+        return input.usageSort?.field === 'views'
+          ? value?.viewCount ?? 0
+          : value?.lastViewedAt ? Date.parse(value.lastViewedAt) : -1;
+      };
+      const direction = input.usageSort.direction === 'desc' ? -1 : 1;
+      return matched.sort((left, right) => direction * (usageOf(left.id) - usageOf(right.id)) || left.id - right.id);
+    }
+    if (input.ratingSort) {
+      const starsOf = (entryId: number): number => (
+        entryRatings.find((row) => row.entryId === entryId && row.slotId === input.ratingSort?.slotId)?.stars ?? -1
+      );
+      return matched.sort((left, right) => starsOf(right.id) - starsOf(left.id) || left.id - right.id);
+    }
+    return matched;
+  }
+
   return {
     assetUrl(path) {
       return path;
@@ -172,9 +225,7 @@ function createMemoryApi(options: {
     async listCollections(kind: 'entry' | 'producer') {
       return collectionStore.filter((record) => record.kind === kind);
     },
-    async getCollection() {
-      throw new Error('Not implemented in memory API');
-    },
+
     async createCollection(input: { kind: 'entry' | 'producer'; title: string }) {
       const record = {
         id: 900 + collectionStore.length, kind: input.kind, title: input.title,
@@ -244,27 +295,40 @@ function createMemoryApi(options: {
       }
       return [...counts].map(([type, entryCount]) => ({ type, entryCount, nsfw: false }));
     },
-    async listEntries(type, filters?: { includeTagIds?: number[]; excludeTagIds?: number[] }) {
-      return entries.filter((entry) => {
-        if (entry.type !== type) return false;
-        const tags = entryTags.get(entry.id) ?? [];
-        return (filters?.includeTagIds ?? []).every((tagId) => tags.includes(tagId))
-          && (filters?.excludeTagIds ?? []).every((tagId) => !tags.includes(tagId));
-      });
+    async queryEntryPage(input) {
+      const matched = filteredEntrySummaries(input);
+      const requestedOrder = new Map((input.entryIds ?? []).map((id, index) => [id, index]));
+      let bounded = matched.filter((entry) => (
+        ((input.entryIds?.length ?? 0) === 0 || requestedOrder.has(entry.id))
+        && (input.includeTagIds ?? []).every((tagId) => (entryTags.get(entry.id) ?? []).includes(tagId))
+        && !(input.excludeEntryTypes ?? []).includes(entry.type)
+        && (!input.recentOnly || entry.lastViewedAt !== null)
+        && (!input.searchQuery || entry.title.toLocaleLowerCase().includes(input.searchQuery.toLocaleLowerCase()))
+      ));
+      if (input.ratingSort === null && input.usageSort === null) {
+        if (input.sort === 'source-order') {
+          bounded.sort((left, right) => requestedOrder.get(left.id)! - requestedOrder.get(right.id)!);
+        } else if (input.sort === 'random') {
+          bounded = bounded.reverse();
+        } else {
+          const direction = input.sort.endsWith('-desc') ? -1 : 1;
+          bounded.sort((left, right) => {
+            if (input.sort.startsWith('title')) {
+              return direction * left.title.localeCompare(right.title, undefined, { sensitivity: 'base' })
+                || left.id - right.id;
+            }
+            const dateCompare = String(left.uploadDate ?? '').localeCompare(String(right.uploadDate ?? ''));
+            return direction * (dateCompare || left.id - right.id);
+          });
+        }
+      }
+      const total = bounded.length;
+      const start = (input.page - 1) * input.pageSize;
+      return { items: bounded.slice(start, start + input.pageSize), total, page: input.page, pageSize: input.pageSize };
     },
-    async searchEntries(query) {
-      const needle = query.toLocaleLowerCase();
-      return entries.filter((entry) => entry.title.toLocaleLowerCase().includes(needle));
-    },
-    async searchTags(query) {
-      const candidates = [{ tagId: 12, name: 'Shared', normalizedName: 'shared', entryCount: 2 }];
-      const needle = query.toLocaleLowerCase();
-      return candidates.filter((tag) => tag.name.toLocaleLowerCase().includes(needle));
-    },
-    async searchAuthors(query) {
-      const needle = query.toLocaleLowerCase();
-      return authors
-        .filter((author) => author.name.toLocaleLowerCase().includes(needle))
+    async queryProducerPage(input) {
+      const requestedOrder = new Map((input.producerIds ?? []).map((id, index) => [id, index]));
+      let matched = authors
         .map((author) => ({
           id: author.id,
           name: author.name,
@@ -274,11 +338,30 @@ function createMemoryApi(options: {
           likeCount: 0,
           lastViewedAt: null,
           nsfw: false,
-        }));
+        }))
+        .filter((author) => (
+          ((input.producerIds?.length ?? 0) === 0 || requestedOrder.has(author.id))
+          && (input.includeNsfw || !author.nsfw)
+          && (!input.searchQuery || author.name.toLocaleLowerCase().includes(input.searchQuery.toLocaleLowerCase()))
+          && (input.ownTagIds.length === 0 || (author.id === 9 && input.ownTagIds.every((id) => id === 30)))
+        ));
+      if (input.sort === 'source-order') {
+        matched.sort((left, right) => requestedOrder.get(left.id)! - requestedOrder.get(right.id)!);
+      } else if (input.sort === 'random') {
+        matched = matched.reverse();
+      } else {
+        matched.sort((left, right) => left.name.localeCompare(right.name) || left.id - right.id);
+      }
+      const total = matched.length;
+      const start = (input.page - 1) * input.pageSize;
+      return { items: matched.slice(start, start + input.pageSize), total, page: input.page, pageSize: input.pageSize };
     },
-    async findEntriesByTag(tagId) {
-      return tagId === 12 ? entries.filter((entry) => entry.id !== 3) : [];
+    async searchTags(query) {
+      const candidates = [{ tagId: 12, name: 'Shared', normalizedName: 'shared', entryCount: 2 }];
+      const needle = query.toLocaleLowerCase();
+      return candidates.filter((tag) => tag.name.toLocaleLowerCase().includes(needle));
     },
+
     async listUnassignedTags() {
       return [];
     },
@@ -307,60 +390,7 @@ function createMemoryApi(options: {
         ratingSlots: [{ id: 40, name: 'Quality', sortOrder: 0 }],
       };
     },
-    async filterEntriesByFacets(type, conditions, authorIds, options = {}) {
-      const matchesRating = (entryId: number): boolean => (options.ratingConditions ?? []).every((condition) => {
-        const value = entryRatings.find((row) => row.entryId === entryId && row.slotId === condition.slotId)?.stars ?? null;
-        if (condition.operator === 'unrated') return value === null;
-        if (value === null) return false;
-        const stars = condition.stars ?? 0;
-        if (condition.operator === 'eq') return value === stars;
-        if (condition.operator === 'gt') return value > stars;
-        return value < stars;
-      });
-      const matched = entries.filter((entry) => {
-        if (entry.type !== type) return false;
-        const tags = entryTags.get(entry.id) ?? [];
-        const rowsMatch = conditions.every((condition) => (
-          condition.tagIds.every((tagId) => tags.includes(tagId))
-        ));
-        if (!rowsMatch) return false;
-        if (authorIds.length > 0
-          && !(linkedAuthorIds.get(entry.id) ?? []).some((id) => authorIds.includes(id))) return false;
-        if (!matchesRating(entry.id)) return false;
-        const matchesUsage = (options.usageConditions ?? []).every((condition) => {
-          const value = entryUsages.find((row) => row.entryId === entry.id);
-          if (condition.field === 'views') {
-            const count = value?.viewCount ?? 0;
-            const expected = condition.value as number;
-            if (condition.operator === 'eq') return count === expected;
-            if (condition.operator === 'gt') return count > expected;
-            return count < expected;
-          }
-          const date = (value?.lastViewedAt ?? '').slice(0, 10);
-          const expectedDate = condition.value as string;
-          if (condition.operator === 'eq') return date === expectedDate;
-          if (condition.operator === 'gt') return date > expectedDate;
-          return date < expectedDate;
-        });
-        return matchesUsage;
-      });
-      if (options.usageSort) {
-        const usageOf = (entryId: number): number => {
-          const value = entryUsages.find((row) => row.entryId === entryId);
-          if (options.usageSort?.field === 'views') return value?.viewCount ?? 0;
-          return value?.lastViewedAt ? Date.parse(value.lastViewedAt) : -1;
-        };
-        const direction = options.usageSort.direction === 'desc' ? -1 : 1;
-        return matched.sort((left, right) => direction * (usageOf(left.id) - usageOf(right.id)) || left.id - right.id);
-      }
-      if (options.ratingSort) {
-        const starsOf = (entryId: number): number => (
-          entryRatings.find((row) => row.entryId === entryId && row.slotId === options.ratingSort?.slotId)?.stars ?? -1
-        );
-        return matched.sort((left, right) => starsOf(right.id) - starsOf(left.id) || left.id - right.id);
-      }
-      return matched;
-    },
+
     async applyEntryTagLayout() {
       return {
         entryType: 'game',
@@ -624,11 +654,6 @@ function createMemoryApi(options: {
     async removeEntryTag() {
       removedTag = true;
     },
-    async listAuthors() {
-      return authors.map(({ id, name }) => ({
-        id, name, covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false,
-      }));
-    },
     async listAuthorFilterOptions() {
       return {
         authorTags: authorTags.map((tag) => ({ tagId: tag.tagId, name: tag.name })),
@@ -639,15 +664,10 @@ function createMemoryApi(options: {
         ],
       };
     },
-    async filterAuthors() {
+    async listAuthors() {
       return authors.map(({ id, name }) => ({
         id, name, covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false,
       }));
-    },
-    async findAuthorsByTag(tagId) {
-      return tagId === 30
-        ? authors.filter((author) => author.id === 9).map(({ id, name }) => ({ id, name, covers: [] }))
-        : [];
     },
     async getAuthor(authorId) {
       const author = authors.find((item) => item.id === authorId);
@@ -1135,6 +1155,14 @@ describe('GalleryApp', () => {
       ...(await getAuthor(authorId)),
       looseEntries: works,
     }));
+    const queryEntryPage = api.queryEntryPage.bind(api);
+    api.queryEntryPage = vi.fn(async (input) => {
+      if (input.authorIds.includes(9) || input.looseForProducerId === 9) {
+        const start = (input.page - 1) * input.pageSize;
+        return { items: works.slice(start, start + input.pageSize), total: works.length, page: input.page, pageSize: input.pageSize };
+      }
+      return queryEntryPage(input);
+    });
     api.getEntry = vi.fn(async (entryId: number) => {
       const work = works.find((candidate) => candidate.id === entryId);
       return work ? { ...(await getEntry(1)), ...work, producers: [] } : getEntry(entryId);
@@ -1179,11 +1207,16 @@ describe('GalleryApp', () => {
 
   it('opens global Entry search from the sidebar and navigates from a result card', async () => {
     const api = createMemoryApi();
-    api.searchEntries = vi.fn(async (query) => query === 'end'
-      ? [{ id: 1, title: 'Endfield', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null }]
-      : []);
+    api.queryEntryPage = vi.fn(async (input) => ({
+      items: input.searchQuery === 'end'
+        ? [{ id: 1, title: 'Endfield', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null }]
+        : [],
+      total: input.searchQuery === 'end' ? 1 : 0,
+      page: input.page,
+      pageSize: input.pageSize,
+    }));
     api.searchTags = vi.fn(async () => []);
-    api.searchAuthors = vi.fn(async () => []);
+    api.queryProducerPage = vi.fn(async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize }));
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
 
@@ -1192,7 +1225,7 @@ describe('GalleryApp', () => {
     await flushPromises();
 
     expect(wrapper.get('[data-testid="search-page"]').text()).toContain('Endfield');
-    expect(api.searchEntries).toHaveBeenCalledWith('end');
+    expect(api.queryEntryPage).toHaveBeenCalledWith(expect.objectContaining({ searchQuery: 'end' }));
     await wrapper.get('[data-testid="search-result-entry-1"]').trigger('click');
     await flushPromises();
     expect(wrapper.get('[data-testid="entry-detail"]').text()).toContain('Endfield');
@@ -1201,18 +1234,23 @@ describe('GalleryApp', () => {
 
   it('switches global search scopes and opens Tag and Author result views', async () => {
     const api = createMemoryApi();
-    api.searchEntries = vi.fn(async () => []);
+    api.queryEntryPage = vi.fn(async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize }));
     api.searchTags = vi.fn(async () => [{ tagId: 12, name: 'Shared', normalizedName: 'shared', entryCount: 2 }]);
-    api.searchAuthors = vi.fn(async () => [{
-      id: 9,
-      name: 'Hypergryph',
-      galleryType: 'game',
-      covers: [],
-      viewCount: 0,
-      likeCount: 0,
-      lastViewedAt: null,
-      nsfw: false,
-    }]);
+    api.queryProducerPage = vi.fn(async (input) => ({
+      items: input.searchQuery === 'sha' ? [{
+        id: 9,
+        name: 'Hypergryph',
+        galleryType: 'game',
+        covers: [],
+        viewCount: 0,
+        likeCount: 0,
+        lastViewedAt: null,
+        nsfw: false,
+      }] : [],
+      total: input.searchQuery === 'sha' ? 1 : 0,
+      page: input.page,
+      pageSize: input.pageSize,
+    }));
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
 
@@ -1233,7 +1271,7 @@ describe('GalleryApp', () => {
 
     await wrapper.get('[data-testid="search-scope-producers"]').trigger('click');
     await flushPromises();
-    expect(api.searchAuthors).toHaveBeenCalledWith('sha');
+    expect(api.queryProducerPage).toHaveBeenCalledWith(expect.objectContaining({ searchQuery: 'sha' }));
     await wrapper.get('[data-testid="search-result-author-9"]').trigger('click');
     await flushPromises();
     expect(wrapper.get('[data-testid="author-information-board"]').text()).toContain('Hypergryph');
@@ -1952,6 +1990,84 @@ describe('GalleryApp', () => {
     await flushPromises();
     expect(wrapper.get('[data-author-id="9"]').text()).toContain('Hypergryph');
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 600, left: 0, behavior: 'auto' });
+    scrollY.mockRestore();
+    scrollTo.mockRestore();
+  });
+
+  it('waits for an Author second page to render before restoring its Entry scroll position', async () => {
+    const api = createMemoryApi();
+    const originalGetAuthor = api.getAuthor.bind(api);
+    const originalQueryEntryPage = api.queryEntryPage.bind(api);
+    const baseAuthor = await originalGetAuthor(9);
+    const seedWork = baseAuthor.looseEntries[0]!;
+    const works = Array.from({ length: 30 }, (_, index) => ({
+      ...seedWork,
+      id: 100 + index,
+      title: `Author work ${index + 1}`,
+      previewRef: null,
+      previewRefs: [],
+      uploadDate: null,
+      pageCount: null,
+    }));
+    api.getAuthor = vi.fn(async (authorId: number) => authorId === 9
+      ? {
+          ...baseAuthor,
+          looseEntries: [],
+          looseEntryCount: works.length,
+          workTypes: ['game'],
+        }
+      : originalGetAuthor(authorId));
+    const originalGetEntry = api.getEntry.bind(api);
+    api.getEntry = vi.fn(async (entryId: number) => {
+      const work = works.find((candidate) => candidate.id === entryId);
+      return work
+        ? { ...(await originalGetEntry(1)), id: work.id, title: work.title, type: work.type }
+        : originalGetEntry(entryId);
+    });
+    let secondPageRequestCount = 0;
+    let releaseRestoredPage: (() => void) | undefined;
+    const restoredPageGate = new Promise<void>((resolve) => { releaseRestoredPage = resolve; });
+    api.queryEntryPage = vi.fn(async (input) => {
+      if (input.looseForProducerId !== 9) return originalQueryEntryPage(input);
+      if (input.page === 2) {
+        secondPageRequestCount += 1;
+        if (secondPageRequestCount === 2) await restoredPageGate;
+      }
+      const start = (input.page - 1) * input.pageSize;
+      return {
+        items: works.slice(start, start + input.pageSize),
+        total: works.length,
+        page: input.page,
+        pageSize: input.pageSize,
+      };
+    });
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    const scrollY = vi.spyOn(window, 'scrollY', 'get').mockReturnValue(0);
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="author-navigation"]').trigger('click');
+    await wrapper.get('[data-author-id="9"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="author-next-page"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('.author-works .pagination span').text()).toContain('2 of 2');
+
+    scrollY.mockReturnValue(420);
+    const sourceWork = wrapper.findAll('[data-author-work-id]').at(-1)!;
+    const sourceId = sourceWork.attributes('data-author-work-id');
+    await sourceWork.get('.author-card-main').trigger('click');
+    await flushPromises();
+    scrollTo.mockClear();
+
+    void wrapper.get('[data-testid="top-bar-back"]').trigger('click');
+    await flushPromises();
+    expect(scrollTo).not.toHaveBeenCalledWith({ top: 420, left: 0, behavior: 'auto' });
+
+    releaseRestoredPage?.();
+    await flushPromises();
+    expect(wrapper.get('.author-works .pagination span').text()).toContain('2 of 2');
+    expect(wrapper.find(`[data-author-work-id="${sourceId}"]`).exists()).toBe(true);
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 420, left: 0, behavior: 'auto' });
     scrollY.mockRestore();
     scrollTo.mockRestore();
   });
@@ -3061,6 +3177,7 @@ describe('Facet filter bar', () => {
 
     // Switching to ♥ Most viewed keeps the page on the same tab.
     await wrapper.get('[data-testid="recent-mode-most-viewed"]').trigger('click');
+    await flushPromises();
     expect(wrapper.get('[data-testid="recent-mode-most-viewed"]').classes())
       .toContain('recent-mode-active');
     expect(wrapper.findAll('[data-testid="shared-card-note"]')[0]!.text()).toContain('2 views');
@@ -3077,12 +3194,12 @@ describe('Facet filter bar', () => {
 
   it('returns from an Entry detail to the same active Recently viewed Gallery tab', async () => {
     const api = createMemoryApi();
-    const listEntries = api.listEntries.bind(api);
-    api.listEntries = vi.fn(async (type: string) => {
-      const listed = await listEntries(type);
-      return type === 'manga'
-        ? listed.map((entry) => ({ ...entry, lastViewedAt: '2026-09-06T01:00:00Z' }))
-        : listed;
+    const queryEntryPage = api.queryEntryPage.bind(api);
+    api.queryEntryPage = vi.fn(async (input) => {
+      const result = await queryEntryPage(input.entryType === 'manga' ? { ...input, recentOnly: false } : input);
+      return input.entryType === 'manga'
+        ? { ...result, items: result.items.map((entry) => ({ ...entry, lastViewedAt: '2026-09-06T01:00:00Z' })) }
+        : result;
     });
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
@@ -3090,6 +3207,7 @@ describe('Facet filter bar', () => {
     await wrapper.get('[data-testid="recent-view-navigation"]').trigger('click');
     await flushPromises();
     await wrapper.get('[data-recent-tab="manga"]').trigger('click');
+    await flushPromises();
     await wrapper.get('[data-testid="recent-entry-card"] .entry-card-main').trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="entry-back"]').trigger('click');
@@ -3423,10 +3541,11 @@ describe('Facet filter bar', () => {
       tagAssignmentCount: 0,
       contentCount: 0,
     }));
-    // The real backend returns the freshly committed entries from
-    // listEntries; the mock mirrors that for the review grid.
-    api.listEntries = vi.fn(async (type: string) => (type === 'game'
-      ? [400, 401].map((id: number) => ({
+    // The real backend returns the freshly committed entries from the bounded
+    // Entry query; the mock mirrors that for the review grid.
+    const queryEntryPage = api.queryEntryPage.bind(api);
+    api.queryEntryPage = vi.fn(async (input: Parameters<GalleryApi['queryEntryPage']>[0]) => (input.entryIds?.some((id) => id === 400 || id === 401)
+      ? { items: [400, 401].map((id: number) => ({
         id,
         title: 'Batch Work',
         type: 'game',
@@ -3438,8 +3557,8 @@ describe('Facet filter bar', () => {
         viewCount: 0,
         likeCount: 0,
         lastViewedAt: null,
-      }))
-      : []));
+      })), total: 2, page: input.page, pageSize: input.pageSize }
+      : queryEntryPage(input)));
     const baseGetBatchEntry = api.getEntry;
     api.getEntry = vi.fn(async (entryId: number) => {
       if (entryId !== 400 && entryId !== 401) return baseGetBatchEntry(entryId);
@@ -3709,7 +3828,6 @@ describe('Card grid pagination', () => {
 
   function createLargeApi(entryCount = 40): GalleryApi {
     const api = createMemoryApi();
-    const original = api.listEntries.bind(api);
     const generated = Array.from({ length: entryCount }, (_, index) => ({
       id: 100 + index,
       title: `Generated ${index + 1}`,
@@ -3723,7 +3841,27 @@ describe('Card grid pagination', () => {
       likeCount: 0,
       lastViewedAt: null,
     }));
-    api.listEntries = async (type: string) => (type === 'game' ? generated : original(type));
+    const queryEntryPage = api.queryEntryPage.bind(api);
+    api.queryEntryPage = async (input) => {
+      if (input.entryType !== 'game') return queryEntryPage(input);
+      const sorted = [...generated];
+      const direction = input.sort.endsWith('-desc') ? -1 : 1;
+      sorted.sort((left, right) => {
+        if (input.sort.startsWith('title')) {
+          return direction * left.title.localeCompare(right.title, undefined, { sensitivity: 'base' })
+            || left.id - right.id;
+        }
+        const dateCompare = String(left.uploadDate ?? '').localeCompare(String(right.uploadDate ?? ''));
+        return direction * (dateCompare || left.id - right.id);
+      });
+      const start = (input.page - 1) * input.pageSize;
+      return {
+        items: sorted.slice(start, start + input.pageSize),
+        total: sorted.length,
+        page: input.page,
+        pageSize: input.pageSize,
+      };
+    };
     const getEntry = api.getEntry.bind(api);
     api.getEntry = async (entryId: number) => {
       if (entryId < 100 || entryId >= 100 + entryCount) return getEntry(entryId);
@@ -3770,6 +3908,57 @@ describe('Card grid pagination', () => {
       if (originalClientWidth) Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth);
       else Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth');
     }
+  });
+
+  it('returns from a phone Gallery Entry to page five instead of clamping to the desktop page count', async () => {
+    const originalWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+    const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 260 });
+    let wrapper: ReturnType<typeof mount> | undefined;
+    try {
+      wrapper = mount(GalleryApp, { props: { api: createLargeApi(86) } });
+      await flushPromises();
+      await wrapper.get('[data-gallery-type="game"]').trigger('click');
+      await flushPromises();
+
+      for (let page = 2; page <= 5; page += 1) {
+        await wrapper.get('[aria-label="Next page"]').trigger('click');
+        await flushPromises();
+      }
+      expect(wrapper.get('[aria-current="page"]').text()).toBe('5');
+      const sourceId = wrapper.get('[data-testid="entry-list"] [data-entry-id]').attributes('data-entry-id');
+      await wrapper.get(`[data-testid="entry-list"] [data-entry-id="${sourceId}"]`).trigger('click');
+      await flushPromises();
+      await wrapper.get('[data-testid="top-bar-back"]').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.get('[aria-current="page"]').text()).toBe('5');
+      expect(wrapper.find(`[data-testid="entry-list"] [data-entry-id="${sourceId}"]`).exists()).toBe(true);
+    } finally {
+      wrapper?.unmount();
+      if (originalWidth) Object.defineProperty(window, 'innerWidth', originalWidth);
+      if (originalClientWidth) Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth);
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth');
+    }
+  });
+
+  it('requests the current Gallery page from the server', async () => {
+    const api = createLargeApi(40);
+    const query = vi.spyOn(api, 'queryEntryPage');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-gallery-type="game"]').trigger('click');
+    await flushPromises();
+
+    expect(query).toHaveBeenLastCalledWith(expect.objectContaining({
+      entryType: 'game', page: 1, pageSize: 30, sort: 'date-desc',
+    }));
+    await wrapper.findAll('.card-pagination-page').find((button) => button.text() === '2')!.trigger('click');
+    await flushPromises();
+    expect(query).toHaveBeenLastCalledWith(expect.objectContaining({
+      entryType: 'game', page: 2, pageSize: 30, sort: 'date-desc',
+    }));
   });
 
   it('pages the gallery grid by rows x columns and shows the bar above and below', async () => {

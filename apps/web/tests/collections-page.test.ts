@@ -46,6 +46,19 @@ function createCollectionsApi() {
     )),
     listGalleries: vi.fn(async () => []),
     listAuthors: vi.fn(async () => []),
+    queryEntryPage: vi.fn(async (input) => {
+      const find = (items: CollectionRecordDto[]): CollectionRecordDto | undefined => {
+        for (const item of items) {
+          if (item.id === input.collectionId) return item;
+          const nested = find(item.children);
+          if (nested) return nested;
+        }
+        return undefined;
+      };
+      const items = find(records)?.entries ?? [];
+      return { items, total: items.length, page: input.page, pageSize: input.pageSize };
+    }),
+    queryProducerPage: vi.fn(async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize })),
     addCollectionEntry,
     removeCollectionEntry,
     reorderCollections,

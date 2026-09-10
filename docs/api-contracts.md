@@ -4,15 +4,16 @@
 
 ## Contract families
 
-- Entry: create, partial update, record, complete detail, and tag-filtered summaries.
+- Entry: create, partial update, record, complete detail, legacy full-list/tag-filtered summaries, and bounded SQL pages.
 - Layout: create Section/Facet, rename/reorder groups, and ordered layout responses.
 - Entry Tags: assign, move, list assignment, per-type usage counts, and include/exclude filters.
 - Entry Content: create, partial update, record, and complete-list reorder.
 - Ratings: create shared slot (idempotent by name), upsert `{ slotId, stars }` (null = unrated, 0.5–5 half steps), and composed rating rows embedded in Entry/Author detail responses.
 - Producer: create, partial update, record, Entry linking parameters, Producer Tags, independent Author/work-Tag filter options, same-work AND Tag search, and Author work summaries carrying view/like/last-viewed usage.
+- Producer pages: bounded Author summaries for ID-backed lists, ranked search, Tag filters, usage/name/source ordering, and one-shot random samples.
 - Usage: record-a-view / add-a-like mutations returning the updated `entry_usage` record (view count, last-viewed timestamp, like count); the same usage fields ride on Entry and Author summaries and details. Sorting-only by design — no numeric or date condition schemas.
 - Gallery partition: `{ nsfw: boolean }` body on `PUT /api/galleries/:entryType/partition`; `nsfw` flags on Gallery and Producer summaries drive every visibility boundary.
-- Collections: create/read/update/delete per kind (`entry | producer`), folder-level `{ nsfw }` switch, per-kind reorder lists (duplicate IDs rejected), idempotent member put/delete routes, and `for-entry` / `for-producer` membership queries. Detail responses embed member Entry summaries (with preview refs) and Producer summaries (with covers).
+- Collections: create/read/update/delete per kind (`entry | producer`), compact trees with member counts/cover previews, folder-level `{ nsfw }` switch, per-kind reorder lists (duplicate IDs rejected), idempotent member put/delete routes, and `for-entry` / `for-producer` membership queries. Member cards use the bounded Entry/Producer page contracts with `collectionId`; the legacy non-compact detail response remains compatible.
 - View later: strict `{ entryIds: number[], producerIds: number[] }` shared-state response; GET reads both independent library-wide lists. PUT/DELETE by Entry or Producer id are idempotent. `{ entryIds }` merge only imports the legacy browser Entry list without replacing either server list. Duplicate wire IDs are rejected; the client deduplicates legacy input first.
 - Gallery templates: `GET /api/templates` returns per-Gallery summaries (structure, tag→facet assignments, local file paths, existence flags); apply responses keep relaxed objects (unknown fields ignored) so a version-mismatched server or cached page can never turn a successful apply into a spurious 400.
 - Author alias groups: save `{ displayName, tagNames }` (duplicate spellings rejected; spellings equal to the display name are dropped) and grouped listings of `{ canonicalName, aliases, producerId, producerName }`; the save response embeds the full producer-merge report that collapsed existing duplicates into the display-name row.
@@ -20,6 +21,30 @@
 - Common: positive integer path IDs, mutation success, and structured API errors.
 
 All object schemas are strict. Required labels are trimmed and reject blank values. Partial update bodies reject empty objects. IDs are positive integers. Reorder lists and tag-filter lists reject duplicate IDs.
+
+`entryPageQueryRequestSchema` is the additive bounded long-list contract used by
+Gallery, Entry search, Entry Tag results, Recently viewed, Random works, View
+later entries, and batch-import review. It keeps the existing
+Facet/Author/Rating/Usage filter body and adds optional source constraints:
+`entryType`, `entryIds`, `includeTagIds`, `excludeEntryTypes`, `searchQuery`,
+`recentOnly`, `producerDirectoryId`, `looseForProducerId`, `collectionId`, and
+`includeNsfw`. Generic sort values are `date-desc | date-asc | title-asc |
+title-desc | type | source-order | random`; `source-order` requires `entryIds`
+and preserves their wire order, while random accepts a stable request seed. `page` is positive and one-based, while `pageSize`
+is bounded to 1–100. Defaults are newest-first, page 1, 30 cards. The strict
+response is `{ items, total, page, pageSize }`; `total` is the complete filtered
+count, not the current page length. Usage count fields (`views`, `likes`) take
+non-negative integers, while `lastViewed` takes `yyyy-mm-dd`.
+
+The old full-array endpoints remain compatible for consumers not yet converted.
+Random works now use one bounded server sample and keep that returned set in the
+page state; `source-order` lets ID-backed lists avoid loading every Gallery.
+Entry search preserves the established ranked search implementation on the
+server and slices only the requested result page before crossing the HTTP
+boundary. If generic, rating, and usage sorts coexist, usage sort wins over
+rating sort, which wins over generic sort. Upload-date nulls retain the old
+Gallery behavior (last under descending, first under ascending). Title ordering
+is deterministic SQLite `NOCASE` ordering with `id` tie-breaks.
 
 ## Query encoding
 

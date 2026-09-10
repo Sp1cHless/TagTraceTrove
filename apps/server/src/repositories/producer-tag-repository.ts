@@ -1,4 +1,4 @@
-import { normalizeTag } from '@t3/shared';
+import { normalizeTag, type ProducerPageQueryRequest, type ProducerPageResponse } from '@t3/shared';
 import { authorHasNsfwWorks, listNsfwGalleryTypes } from './partition-repository.js';
 import { rankSearchResults } from './search-ranking.js';
 import type { T3Database } from '../database/connection.js';
@@ -333,4 +333,184 @@ export function findProducers(
       nsfw: authorHasNsfwWorks(database, row.id, nsfwTypes),
     };
   });
+}
+
+export function queryProducerPage(
+  database: T3Database,
+  input: ProducerPageQueryRequest,
+): ProducerPageResponse {
+  const baseClauses: string[] = [];
+  const baseParameters: Array<string | number> = [];
+  const ownTagIds = [...new Set(input.ownTagIds)];
+  const relatedEntryTagIds = [...new Set(input.relatedEntryTagIds)];
+  const producerIds = [...new Set(input.producerIds ?? [])];
+  const searchIds = input.searchQuery
+    ? rankSearchResults(
+      database.prepare(`
+        SELECT id, name
+        FROM producers
+        ORDER BY name COLLATE NOCASE, id
+      `).all() as Array<{ id: number; name: string }>,
+      input.searchQuery,
+      (producer) => producer.name,
+    ).map((producer) => producer.id)
+    : null;
+  if (searchIds !== null && searchIds.length === 0) {
+    return { items: [], total: 0, page: input.page, pageSize: input.pageSize };
+  }
+
+  if (ownTagIds.length > 0) {
+    baseClauses.push(`(
+      SELECT COUNT(DISTINCT assignment.tag_id)
+      FROM producer_tag_assignments AS assignment
+      WHERE assignment.producer_id = producer.id
+        AND assignment.tag_id IN (${ownTagIds.map(() => '?').join(', ')})
+    ) = ?`);
+    baseParameters.push(...ownTagIds, ownTagIds.length);
+  }
+  if (relatedEntryTagIds.length > 0) {
+    baseClauses.push(`EXISTS (
+      SELECT 1
+      FROM entry_producers AS relation
+      JOIN entry_tags AS entry_tag ON entry_tag.entry_id = relation.entry_id
+      WHERE relation.producer_id = producer.id
+        AND entry_tag.tag_id IN (${relatedEntryTagIds.map(() => '?').join(', ')})
+      GROUP BY relation.entry_id
+      HAVING COUNT(DISTINCT entry_tag.tag_id) = ?
+    )`);
+    baseParameters.push(...relatedEntryTagIds, relatedEntryTagIds.length);
+  }
+  if (producerIds.length > 0) {
+    baseClauses.push('producer.id IN (SELECT value FROM json_each(?))');
+    baseParameters.push(JSON.stringify(producerIds));
+  }
+  if (searchIds !== null) {
+    baseClauses.push('producer.id IN (SELECT value FROM json_each(?))');
+    baseParameters.push(JSON.stringify(searchIds));
+  }
+  if (input.collectionId !== undefined) {
+    baseClauses.push(`EXISTS (
+      SELECT 1 FROM collection_producers AS membership
+      WHERE membership.collection_id = ? AND membership.producer_id = producer.id
+    )`);
+    baseParameters.push(input.collectionId);
+  }
+
+  const baseWhere = baseClauses.length > 0 ? `WHERE ${baseClauses.join(' AND ')}` : '';
+  const candidateSql = `
+    WITH producer_usage AS (
+      SELECT relation.producer_id,
+             COALESCE(SUM(usage.view_count), 0) AS view_count,
+             COALESCE(SUM(usage.like_count), 0) AS like_count,
+             MAX(usage.last_viewed_at) AS last_viewed_at
+      FROM entry_producers AS relation
+      LEFT JOIN entry_usage AS usage ON usage.entry_id = relation.entry_id
+      GROUP BY relation.producer_id
+    ), producer_candidates AS (
+      SELECT producer.id,
+             producer.name,
+             COALESCE(producer_usage.view_count, 0) AS view_count,
+             COALESCE(producer_usage.like_count, 0) AS like_count,
+             producer_usage.last_viewed_at,
+             (
+               SELECT entry.type
+               FROM entry_producers AS relation
+               JOIN entries AS entry ON entry.id = relation.entry_id
+               WHERE relation.producer_id = producer.id
+               GROUP BY entry.type
+               ORDER BY COUNT(*) DESC, entry.type COLLATE NOCASE, entry.type
+               LIMIT 1
+             ) AS gallery_type,
+             EXISTS (
+               SELECT 1
+               FROM entry_producers AS relation
+               JOIN entries AS entry ON entry.id = relation.entry_id
+               JOIN gallery_settings AS partition ON partition.entry_type = entry.type
+               WHERE relation.producer_id = producer.id AND partition.nsfw = 1
+             ) AS nsfw
+      FROM producers AS producer
+      LEFT JOIN producer_usage ON producer_usage.producer_id = producer.id
+      ${baseWhere}
+    )
+  `;
+
+  const pageClauses: string[] = [];
+  const pageParameters: Array<string | number> = [];
+  if (input.entryType !== undefined) {
+    pageClauses.push('gallery_type = ?');
+    pageParameters.push(input.entryType);
+  }
+  if (!input.includeNsfw) pageClauses.push('nsfw = 0');
+  const pageWhere = pageClauses.length > 0 ? `WHERE ${pageClauses.join(' AND ')}` : '';
+
+  const orderParameters: Array<string | number> = [];
+  let orderSql = 'ORDER BY name COLLATE NOCASE, id';
+  if (input.sort === 'source-order') {
+    orderSql = 'ORDER BY COALESCE((SELECT CAST(key AS INTEGER) FROM json_each(?) WHERE value = id), 2147483647), id';
+    orderParameters.push(JSON.stringify(producerIds));
+  } else if (input.sort === 'last-viewed-desc') {
+    orderSql = "ORDER BY COALESCE(last_viewed_at, '') DESC, id";
+  } else if (input.sort === 'views-desc') {
+    orderSql = 'ORDER BY view_count DESC, id';
+  } else if (input.sort === 'likes-desc') {
+    orderSql = 'ORDER BY like_count DESC, id';
+  } else if (input.sort === 'random') {
+    orderSql = 'ORDER BY ((id * 1103515245 + ? * 12345) & 2147483647), id';
+    orderParameters.push(input.randomSeed ?? 0);
+  } else if (input.sort === 'relevance' && searchIds !== null) {
+    orderSql = 'ORDER BY COALESCE((SELECT CAST(key AS INTEGER) FROM json_each(?) WHERE value = id), 2147483647), id';
+    orderParameters.push(JSON.stringify(searchIds));
+  }
+
+  const allFilterParameters = [...baseParameters, ...pageParameters];
+  const total = Number(database.prepare(`
+    ${candidateSql}
+    SELECT COUNT(*) FROM producer_candidates ${pageWhere}
+  `).pluck().get(...allFilterParameters));
+  const offset = (input.page - 1) * input.pageSize;
+  const rows = database.prepare(`
+    ${candidateSql}
+    SELECT id, name, gallery_type, view_count, like_count, last_viewed_at, nsfw
+    FROM producer_candidates
+    ${pageWhere}
+    ${orderSql}
+    LIMIT ? OFFSET ?
+  `).all(
+    ...allFilterParameters,
+    ...orderParameters,
+    input.pageSize,
+    offset,
+  ) as Array<{
+    id: number;
+    name: string;
+    gallery_type: string | null;
+    view_count: number;
+    like_count: number;
+    last_viewed_at: string | null;
+    nsfw: number;
+  }>;
+  const coverStatement = database.prepare(`
+    SELECT entry.cover_ref
+    FROM entries AS entry
+    JOIN entry_producers AS relation ON relation.entry_id = entry.id
+    WHERE relation.producer_id = ? AND entry.cover_ref IS NOT NULL
+    ORDER BY entry.id
+    LIMIT 4
+  `);
+
+  return {
+    items: rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      covers: (coverStatement.all(row.id) as Array<{ cover_ref: string }>).map((cover) => cover.cover_ref),
+      galleryType: row.gallery_type,
+      viewCount: row.view_count,
+      likeCount: row.like_count,
+      lastViewedAt: row.last_viewed_at,
+      nsfw: row.nsfw === 1,
+    })),
+    total,
+    page: input.page,
+    pageSize: input.pageSize,
+  };
 }

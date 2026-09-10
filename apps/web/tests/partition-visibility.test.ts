@@ -33,9 +33,13 @@ function apiStub(overrides: Partial<GalleryApi>): GalleryApi {
   return {
     assetUrl: (path: string) => path,
     listGalleries: async () => [safeGallery, adultGallery],
-    listEntries: async (type: string) => type === 'safe'
-      ? [entry(1, 'Safe Work', 'safe')]
-      : [entry(2, 'Adult Work', 'adult')],
+    queryEntryPage: async (input) => {
+      let items = [entry(1, 'Safe Work', 'safe'), entry(2, 'Adult Work', 'adult')];
+      if (input.entryType) items = items.filter((item) => item.type === input.entryType);
+      if (input.includeNsfw === false) items = items.filter((item) => item.type !== 'adult');
+      return { items, total: items.length, page: input.page, pageSize: input.pageSize };
+    },
+    queryProducerPage: async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize }),
     ...overrides,
   } as GalleryApi;
 }
@@ -132,12 +136,12 @@ describe('whole-Gallery partition visibility outside Gallery pages', () => {
 
   it('ignores an NSFW random result from an older in-flight deal', async () => {
     showNsfw.value = true;
-    let resolveAdult: ((entries: GalleryEntrySummary[]) => void) | undefined;
-    const pendingAdult = new Promise<GalleryEntrySummary[]>((resolve) => { resolveAdult = resolve; });
+    let resolveAdult: ((page: { items: GalleryEntrySummary[]; total: number; page: number; pageSize: number }) => void) | undefined;
+    const pendingAdult = new Promise<{ items: GalleryEntrySummary[]; total: number; page: number; pageSize: number }>((resolve) => { resolveAdult = resolve; });
     const wrapper = mount(RandomPage, { props: { api: apiStub({
-      listEntries: async (type: string) => type === 'adult'
+      queryEntryPage: async (input) => input.entryType === 'adult'
         ? pendingAdult
-        : [entry(1, 'Safe Work', 'safe')],
+        : { items: [entry(1, 'Safe Work', 'safe')], total: 1, page: input.page, pageSize: input.pageSize },
       listFacetFilterOptions: async () => ({ entryType: 'safe', facets: [], allTags: [], authors: [], ratingSlots: [] }),
     }) } });
     await flushPromises();
@@ -146,7 +150,7 @@ describe('whole-Gallery partition visibility outside Gallery pages', () => {
 
     showNsfw.value = false;
     await nextTick();
-    resolveAdult?.([entry(2, 'Adult Work', 'adult')]);
+    resolveAdult?.({ items: [entry(2, 'Adult Work', 'adult')], total: 1, page: 1, pageSize: 24 });
     await flushPromises();
 
     expect(wrapper.find('[data-entry-id="2"]').exists()).toBe(false);
@@ -159,7 +163,10 @@ describe('whole-Gallery partition visibility outside Gallery pages', () => {
       { id: 2, name: 'Adult Author', covers: [], galleryType: 'adult', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: true },
     ];
     const wrapper = mount(RandomPage, { props: { api: apiStub({
-      filterAuthors: async () => authors,
+      queryProducerPage: async (input) => {
+        const items = input.includeNsfw ? authors : authors.filter((author) => !author.nsfw);
+        return { items, total: items.length, page: input.page, pageSize: input.pageSize };
+      },
       listFacetFilterOptions: async () => ({ entryType: 'safe', facets: [], allTags: [], authors: [], ratingSlots: [] }),
     }) } });
     await flushPromises();

@@ -9,6 +9,7 @@ import {
   findEntriesByTags,
   listEntryTagsForType,
   moveEntryTag,
+  queryEntryPage,
   renameEntryTag,
 } from '../repositories/entry-tag-repository.js';
 import {
@@ -413,6 +414,26 @@ export function runDatabaseProbe(): DatabaseProbeResult {
       removeViewLaterProducer(database, 1);
       return listViewLaterEntryIds(database).join(',') === '2'
         && listViewLaterProducerIds(database).length === 0;
+    });
+
+    check('query a bounded deterministic Entry page', () => {
+      const page = queryEntryPage(database, {
+        entryType: 'game',
+        conditions: [],
+        authorIds: [],
+        ratingConditions: [],
+        ratingSort: null,
+        usageConditions: [],
+        usageSort: null,
+        sort: 'title-asc',
+        page: 1,
+        pageSize: 1,
+      });
+      return page.total >= 1
+        && page.items.length === 1
+        && page.page === 1
+        && page.pageSize === 1
+        && page.items[0]?.type === 'game';
     });
 
     check('database doctor clean', () => inspectDatabase(database).ok);

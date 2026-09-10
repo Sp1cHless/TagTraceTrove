@@ -17,6 +17,7 @@ export interface AuthorDirectoryRecord {
   description: string;
   sortOrder: number;
   entries: AuthorWorkSummary[];
+  entryCount?: number;
 }
 
 export interface CreateAuthorDirectoryInput {
@@ -67,7 +68,7 @@ function mapWork(row: WorkRow): AuthorWorkSummary {
   };
 }
 
-function listDirectoryEntries(database: T3Database, directoryId: number): AuthorWorkSummary[] {
+function listDirectoryEntries(database: T3Database, directoryId: number, limit?: number): AuthorWorkSummary[] {
   const rows = database.prepare(`
     SELECT entry.id, entry.title, entry.type, entry.cover_ref,
       COALESCE(usage.view_count, 0) AS view_count,
@@ -78,7 +79,8 @@ function listDirectoryEntries(database: T3Database, directoryId: number): Author
     LEFT JOIN entry_usage AS usage ON usage.entry_id = entry.id
     WHERE membership.directory_id = ?
     ORDER BY membership.sort_order, membership.entry_id
-  `).all(directoryId) as WorkRow[];
+    ${limit === undefined ? '' : 'LIMIT ?'}
+  `).all(...(limit === undefined ? [directoryId] : [directoryId, limit])) as WorkRow[];
   return rows.map(mapWork);
 }
 
@@ -212,6 +214,7 @@ export function removeEntryFromAuthorDirectory(
 export function listAuthorDirectories(
   database: T3Database,
   producerId: number,
+  previewLimit?: number,
 ): AuthorDirectoryRecord[] {
   const rows = database.prepare(`
     SELECT id, producer_id, title, description, sort_order
@@ -225,6 +228,11 @@ export function listAuthorDirectories(
     title: row.title,
     description: row.description,
     sortOrder: row.sort_order,
-    entries: listDirectoryEntries(database, row.id),
+    entries: listDirectoryEntries(database, row.id, previewLimit),
+    ...(previewLimit === undefined ? {} : {
+      entryCount: Number(database.prepare(`
+        SELECT COUNT(*) FROM author_directory_entries WHERE directory_id = ?
+      `).pluck().get(row.id)),
+    }),
   }));
 }

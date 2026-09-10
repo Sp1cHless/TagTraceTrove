@@ -12,6 +12,35 @@ describe('default GalleryApi origin', () => {
 });
 
 describe('GalleryApi Entry Content', () => {
+  it('requests a bounded server-side Entry page with filters and sort', async () => {
+    const page = {
+      items: [{ id: 5, title: 'Middle', type: 'comic', coverRef: null, previewRef: null, previewRefs: [], uploadDate: '2024-03-01', pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null }],
+      total: 5,
+      page: 2,
+      pageSize: 1,
+    };
+    const request = vi.fn(async () => page);
+    const api = createGalleryApi({ request } as unknown as ApiClient);
+    const input = {
+      entryType: 'comic',
+      conditions: [],
+      authorIds: [],
+      ratingConditions: [],
+      ratingSort: null,
+      usageConditions: [],
+      usageSort: null,
+      sort: 'date-desc' as const,
+      page: 2,
+      pageSize: 1,
+    };
+
+    await expect(api.queryEntryPage(input)).resolves.toEqual(page);
+    expect(request).toHaveBeenCalledWith('entries/query', {
+      method: 'POST',
+      body: input,
+    });
+  });
+
   it('reads and mutates the shared Entry and Author View later lists', async () => {
     const state = { entryIds: [2, 1], producerIds: [8] };
     const request = vi.fn(async () => state);
@@ -107,39 +136,52 @@ describe('GalleryApi Entry Content', () => {
     expect(formData.get('file')).toBe(file);
   });
 
-  it('calls the three global search endpoints with the entered query', async () => {
+  it('queries bounded Entry/Author search pages and the Tag search endpoint', async () => {
     const request = vi.fn(async (path: string) => {
-      if (path === 'search/entries') return [
-        { id: 1, title: 'Endfield', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
-      ];
+      if (path === 'entries/query') return { items: [
+          { id: 1, title: 'Endfield', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
+        ], total: 1, page: 1, pageSize: 30 };
       if (path === 'search/tags') return [
         { tagId: 8, name: 'Endfield', normalizedName: 'endfield', entryCount: 1 },
       ];
-      return [
-        { id: 9, name: 'Hypergryph', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false },
-      ];
+      return { items: [
+          { id: 9, name: 'Hypergryph', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false },
+        ], total: 1, page: 1, pageSize: 30 };
     });
     const api = createGalleryApi({ request } as unknown as ApiClient);
+    const entryInput = {
+      conditions: [], authorIds: [], ratingConditions: [], ratingSort: null,
+      usageConditions: [], usageSort: null, searchQuery: 'end', sort: 'date-desc' as const,
+      page: 1, pageSize: 30,
+    };
+    const producerInput = {
+      searchQuery: 'hyper', ownTagIds: [], relatedEntryTagIds: [], includeNsfw: true,
+      sort: 'relevance' as const, page: 1, pageSize: 30,
+    };
 
-    await expect(api.searchEntries('end')).resolves.toHaveLength(1);
+    await expect(api.queryEntryPage(entryInput)).resolves.toMatchObject({ total: 1 });
     await expect(api.searchTags('end', false)).resolves.toHaveLength(1);
-    await expect(api.searchAuthors('hyper')).resolves.toHaveLength(1);
-    expect(request).toHaveBeenNthCalledWith(1, 'search/entries', { query: { q: 'end' } });
+    await expect(api.queryProducerPage(producerInput)).resolves.toMatchObject({ total: 1 });
+    expect(request).toHaveBeenNthCalledWith(1, 'entries/query', { method: 'POST', body: entryInput });
     expect(request).toHaveBeenNthCalledWith(2, 'search/tags', { query: { q: 'end', includeNsfw: 'false' } });
-    expect(request).toHaveBeenNthCalledWith(3, 'search/producers', { query: { q: 'hyper' } });
+    expect(request).toHaveBeenNthCalledWith(3, 'producers/query', { method: 'POST', body: producerInput });
   });
 
-  it('finds Entries across Gallery types through one Entry Tag', async () => {
-    const request = vi.fn(async () => [
-      { id: 1, title: 'Endfield', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
-      { id: 2, title: 'Witch Hat Atelier', type: 'manga', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
-    ]);
+  it('finds Entries across Gallery types through a bounded Entry Tag query', async () => {
+    const response = { items: [
+        { id: 1, title: 'Endfield', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
+        { id: 2, title: 'Witch Hat Atelier', type: 'manga', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
+      ], total: 2, page: 1, pageSize: 30 };
+    const request = vi.fn(async () => response);
     const api = createGalleryApi({ request } as unknown as ApiClient);
+    const input = {
+      conditions: [], authorIds: [], ratingConditions: [], ratingSort: null,
+      usageConditions: [], usageSort: null, includeTagIds: [8], sort: 'date-desc' as const,
+      page: 1, pageSize: 30,
+    };
 
-    await expect(api.findEntriesByTag(8)).resolves.toHaveLength(2);
-    expect(request).toHaveBeenCalledWith('entries', {
-      query: { includeTagIds: '8' },
-    });
+    await expect(api.queryEntryPage(input)).resolves.toEqual(response);
+    expect(request).toHaveBeenCalledWith('entries/query', { method: 'POST', body: input });
   });
 
   it('creates Content under the active Entry through the HTTP boundary', async () => {
@@ -229,37 +271,41 @@ describe('GalleryApi Entry Content', () => {
 describe('GalleryApi Authors', () => {
   it('loads Author filter options and combines both independent Tag groups', async () => {
     const summary = { id: 3, name: 'Author', covers: [], galleryType: 'Comic', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false };
+    const page = { items: [summary], total: 1, page: 1, pageSize: 30 };
     const request = vi.fn(async (path: string) => (path === 'producers/filter-options'
       ? {
           authorTags: [{ tagId: 2, name: 'Circle' }],
           workTags: [{ tagId: 5, name: 'Action' }],
         }
-      : [summary]));
+      : page));
     const api = createGalleryApi({ request } as unknown as ApiClient);
 
     await expect(api.listAuthorFilterOptions('Comic', false)).resolves.toEqual({
       authorTags: [{ tagId: 2, name: 'Circle' }],
       workTags: [{ tagId: 5, name: 'Action' }],
     });
-    await expect(api.filterAuthors([2, 3], [5, 8])).resolves.toEqual([summary]);
+    const input = {
+      ownTagIds: [2, 3], relatedEntryTagIds: [5, 8], includeNsfw: true,
+      sort: 'name-asc' as const, page: 1, pageSize: 30,
+    };
+    await expect(api.queryProducerPage(input)).resolves.toEqual(page);
     expect(request).toHaveBeenCalledWith('producers/filter-options', {
       query: { entryType: 'Comic', includeNsfw: 'false' },
     });
-    expect(request).toHaveBeenCalledWith('producers', {
-      query: { ownTagIds: '2,3', relatedEntryTagIds: '5,8' },
-    });
+    expect(request).toHaveBeenCalledWith('producers/query', { method: 'POST', body: input });
   });
 
-  it('finds Authors through the independent Producer Tag vocabulary', async () => {
-    const request = vi.fn(async () => [{ id: 3, name: 'Author', covers: [], galleryType: null, viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }]);
+  it('finds Authors through a bounded independent Producer Tag query', async () => {
+    const page = { items: [{ id: 3, name: 'Author', covers: [], galleryType: null, viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }], total: 1, page: 1, pageSize: 30 };
+    const request = vi.fn(async () => page);
     const api = createGalleryApi({ request } as unknown as ApiClient);
+    const input = {
+      ownTagIds: [8], relatedEntryTagIds: [], includeNsfw: true,
+      sort: 'name-asc' as const, page: 1, pageSize: 30,
+    };
 
-    await expect(api.findAuthorsByTag(8)).resolves.toEqual(
-      [{ id: 3, name: 'Author', covers: [], galleryType: null, viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }],
-    );
-    expect(request).toHaveBeenCalledWith('producers', {
-      query: { ownTagIds: '8' },
-    });
+    await expect(api.queryProducerPage(input)).resolves.toEqual(page);
+    expect(request).toHaveBeenCalledWith('producers/query', { method: 'POST', body: input });
   });
 
   it('uses Producer HTTP routes behind Author-facing client methods', async () => {

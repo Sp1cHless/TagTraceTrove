@@ -35,14 +35,12 @@ GET    /api/galleries
 PUT    /api/galleries/:entryType/partition
 GET    /api/templates
 POST   /api/entries
-GET    /api/entries?entryType=...&includeTagIds=1,2&excludeTagIds=3
-GET    /api/entries?includeTagIds=1
+POST   /api/entries/query
 GET    /api/entries/:entryId
 PATCH  /api/entries/:entryId
 POST   /api/entries/:entryId/template/apply
 POST   /api/entries/:entryId/tag-layout/apply
 GET    /api/entries/facet-options/:entryType
-POST   /api/entries/filter
 GET    /api/tags/unassigned
 POST   /api/tags/unassigned/move
 
@@ -57,7 +55,28 @@ DELETE /api/sections/:sectionId
 ```
 
 `GET /api/galleries` derives its results by grouping existing Entries by `type`; it does not read a Gallery table.
-`entryType` is optional on `GET /api/entries`: Gallery browsing supplies it, while an Entry Tag result page omits it to find matching Entries across all Gallery types.
+`entryType` is optional on `POST /api/entries/query`: Gallery browsing supplies it, while an Entry Tag result page omits it to find matching Entries across all Gallery types.
+
+`POST /api/entries/query` is the single bounded Entry-summary endpoint. Alongside
+the existing Facet/Author/Rating/Usage fields it accepts optional Gallery,
+ID-list, Tag, NSFW, ranked-search, recently-viewed, Author-directory/loose-work,
+and Collection membership source constraints; generic ordering also supports source order and seeded random
+sampling. It returns `{ items, total, page, pageSize }`, with page size capped at
+100. Gallery, Entry search, Entry Tag results, Recently viewed, Random works,
+View later entries, batch-import review, Home recents, Author works/directories,
+and Collection Entry members use this route. Full-array Entry browse/filter routes are retired; the remaining full Producer list is limited to editor autocomplete until that surface becomes remotely searchable.
+
+### Entry media and thumbnails
+
+```text
+PUT    /api/entries/:entryId/media/cover
+PUT    /api/entries/:entryId/media/preview
+GET    /api/assets/entries/:entryId/:fileName
+GET    /api/thumbnails/entries/:entryId/:fileName
+GET    /api/assets/entries/:entryId/thumbnails/:hashedFileName
+```
+
+Cover/preview uploads retain the original file and generate a card-only WebP with a 512px maximum dimension. Cards request the thumbnail resolver, which issues a no-cache redirect to a source-hash-addressed WebP; hashed thumbnail responses are private, immutable for one year. If an existing source has not been backfilled yet, the resolver redirects to the original asset instead, so the UI never breaks during a resumable backfill. Entry detail pages request originals directly. Run `pnpm media:thumbnails` to backfill the current `<dataDir>/assets` tree; completed images are skipped and failures do not stop later images. No database row or migration stores thumbnail state.
 
 `PUT /api/galleries/:entryType/partition` (body `{ nsfw: boolean }`) flips the whole Gallery between SFW and NSFW (`gallery_settings`, default SFW). Individual Entries are never partitioned. `GET /api/galleries` and Producer summaries carry the resulting `nsfw` flags; the web client's Show NSFW preference (localStorage `t3.showNsfw`) decides visibility: hidden NSFW Galleries in the sidebar, hidden NSFW Authors, and — via the search routes — NSFW-only tags omitted from tag results.
 
@@ -88,7 +107,6 @@ Two independent SQLite-backed lists (Entries and Producers/Authors) are authorit
 ```text
 GET    /api/collections?kind=entry|producer
 POST   /api/collections
-GET    /api/collections/:collectionId
 PATCH  /api/collections/:collectionId
 DELETE /api/collections/:collectionId
 PUT    /api/collections/:collectionId/nsfw
@@ -101,7 +119,7 @@ GET    /api/collections/for-entry/:entryId
 GET    /api/collections/for-producer/:producerId
 ```
 
-Collections are user-curated folders of Entries or Producers (internal name unchanged: Entry/Producer). `kind` is fixed at creation (`entry` or `producer`); entry collections may nest child folders exactly one level deep, producer collections stay flat. The folder-level NSFW switch (`PUT .../nsfw`) hides the whole folder regardless of the members' own states. `PUT /api/collections/order` persists one kind's visible order; membership routes are idempotent links, and removal only unlinks. The detail response embeds member Entry summaries (including preview refs) and Producer summaries (including covers); usage statistics over members stay derived, consistent with the rest of the app. The `for-entry` / `for-producer` queries return the collections a subject already belongs to (drives the ✓-marked add-to-collection menus on detail pages).
+Collections are user-curated folders of Entries or Producers (internal name unchanged: Entry/Producer). `kind` is fixed at creation (`entry` or `producer`); entry collections may nest child folders exactly one level deep, producer collections stay flat. The folder-level NSFW switch (`PUT .../nsfw`) hides the whole folder regardless of the members' own states. `PUT /api/collections/order` persists one kind's visible order; membership routes are idempotent links, and removal only unlinks. The web directory calls `GET /api/collections?...&compact=true&includeNsfw=...`: each folder carries filtered member counts and at most three member previews for its cover. Opening a folder pages Entry members through `/api/entries/query` or Author members through `/api/producers/query` with `collectionId`; it never downloads complete embedded member arrays. The `for-entry` / `for-producer` queries return the collections a subject already belongs to (drives the ✓-marked add-to-collection menus on detail pages).
 
 ### Gallery template files
 
@@ -110,12 +128,10 @@ Collections are user-curated folders of Entries or Producers (internal name unch
 ### Global search
 
 ```text
-GET    /api/search/entries?q=...&entryType=...
 GET    /api/search/tags?q=...&includeNsfw=false
-GET    /api/search/producers?q=...
 ```
 
-`q` is required, trimmed, and limited to 200 characters. Entry search optionally accepts one exact Gallery type. Tag search optionally accepts `includeNsfw=true|false` (omitted preserves the complete vocabulary); the web client always supplies the current Show NSFW preference. With `false`, tags used only by NSFW Galleries are omitted, and `entryCount` counts only SFW usage for shared tags. All three scopes rank case-insensitive exact/prefix/substring matches first and then allow a lightweight edit-distance match for queries of at least four characters; punctuation such as `%` and `_` is interpreted literally rather than as SQL wildcards. Entry and Author responses reuse their normal card summary contracts. Tag hits return `{ tagId, name, normalizedName, entryCount }` and the web client opens the existing cross-Gallery Tag results view.
+Entry and Author search submit `searchQuery` to their bounded page endpoints; only Tag search retains a dedicated GET route. Search text is trimmed and limited to 200 characters. Tag search accepts `includeNsfw=true|false`; with `false`, tags used only by NSFW Galleries are omitted and shared-tag counts include only SFW usage. Entry and Author results reuse their normal card summaries and server totals. Tag hits return `{ tagId, name, normalizedName, entryCount }` and open the existing cross-Gallery Tag results view.
 
 ### Entry Tags and Content
 
@@ -150,6 +166,7 @@ POST   /api/producers
 PATCH  /api/producers/:producerId
 GET    /api/producers/:producerId
 GET    /api/producers?ownTagIds=1,2&relatedEntryTagIds=3
+POST   /api/producers/query
 GET    /api/producers/filter-options?entryType=Comic&includeNsfw=false
 
 PUT    /api/entries/:entryId/producers/:producerId
@@ -172,7 +189,7 @@ POST   /api/producers/merge/plan
 POST   /api/producers/merge
 ```
 
-The product UI calls Producers `Author / 作者`; the internal route and persistence names remain Producer. `GET /api/producers/:producerId` composes Author basics, independent Producer Tags, loose related Entries, and persisted Directories. `ownTagIds` searches only the Producer Tag vocabulary, independently from Entry Tags. `relatedEntryTagIds` requires one related Entry to carry every selected Entry Tag; Tags split across different works do not match. The two sets AND together. `GET /api/producers/filter-options` returns the assigned Author Tag and related-work Tag vocabularies used by eligible Authors; `entryType` optionally scopes Authors by dominant Gallery and `includeNsfw=false` excludes options belonging only to hidden NSFW Authors. Producer Tag rename retargets only that Producer's assignment and does not rename another Producer's use of the shared vocabulary Tag.
+The product UI calls Producers `Author / 作者`; the internal route and persistence names remain Producer. `POST /api/producers/query` is the bounded summary counterpart to the compatibility `GET /api/producers` route, which remains only for editor autocomplete. It supports ID-backed lists, Collection membership, ranked name search, dominant-Gallery and NSFW boundaries, the two existing Tag filter sets, usage/name/source ordering, and seeded random ordering; filtering, stable sorting, count, and `LIMIT/OFFSET` occur before card cover enrichment. Page size is capped at 100. `GET /api/producers/:producerId` returns Author metadata, counts, cover previews, Tags, Ratings, and compact Directory summaries; works are paged through `/api/entries/query`. `ownTagIds` searches only the Producer Tag vocabulary, independently from Entry Tags. `relatedEntryTagIds` requires one related Entry to carry every selected Entry Tag; Tags split across different works do not match. The two sets AND together. `GET /api/producers/filter-options` returns the assigned Author Tag and related-work Tag vocabularies used by eligible Authors; `entryType` optionally scopes Authors by dominant Gallery and `includeNsfw=false` excludes options belonging only to hidden NSFW Authors. Producer Tag rename retargets only that Producer's assignment and does not rename another Producer's use of the shared vocabulary Tag.
 
 Directories are per-Author presentation layout. Creating one may include initial Entry IDs; moving an Entry into a Directory removes its previous Directory membership for that same Author. Deleting one Directory membership returns the Entry to that Author's loose works without deleting or unlinking the Entry. Directory operations do not change `Entry.type` or create a general-purpose Entry grouping.
 
@@ -180,7 +197,7 @@ Ratings are shared name+stars lines. `POST /api/entries/:entryId/rating-slots` (
 
 Slot order is part of the shared template too: `PUT /api/entries/:entryId/rating-slots/order` and `PUT /api/producers/:producerId/rating-slots/order` (body `{ orderedSlotIds }`, every slot exactly once) reorder the rating section on every same-Gallery card / same-partition Author in one call. `GET /api/rating-slots?entryType=...` lists a Gallery's shared slots for the import/entry-composer rating pickers.
 
-Rating filtering rides on `POST /api/entries/filter`: `ratingConditions` (`{ slotId, operator: eq|gt|lt|unrated, stars }`) AND with every tag row and the author list (`unrated` takes no stars; a slot from a foreign Gallery is a 409), and `ratingSort` (`{ slotId, direction: 'desc' }`) orders the response from high to low with unrated entries sinking below every rated one. `GET /api/entries/facet-options/:entryType` now also returns the Gallery's shared `ratingSlots` so the filter bar can render its rating rows (the Author page variant inherits them for its works).
+Rating filtering rides on `POST /api/entries/query`: `ratingConditions` (`{ slotId, operator: eq|gt|lt|unrated, stars }`) AND with every tag row and the author list (`unrated` takes no stars; a slot from a foreign Gallery is a 409), and `ratingSort` (`{ slotId, direction: 'desc' }`) orders the response from high to low with unrated entries sinking below every rated one. `GET /api/entries/facet-options/:entryType` now also returns the Gallery's shared `ratingSlots` so the filter bar can render its rating rows (the Author page variant inherits them for its works).
 
 `POST /api/producers/merge/plan` returns the would-be merge plan without writing (identical normalized names, plus `producer`-vocabulary dictionary merges). `POST /api/producers/merge` executes the same plan: it backs up a file-backed database first (`<db>.merge-backup-<timestamp>`; in-memory databases return `backupPath: null`), runs inside one transaction with foreign keys temporarily disabled, then reports per-plan rows (keeper, absorbed producers, relinked works/tags, moved/merged directories), totals, and `foreign_key_check` + doctor results. The Advanced editing page drives both endpoints; the `merge:authors` CLI wraps the same logic for one-shot runs.
 
@@ -201,7 +218,7 @@ One author may be recorded under several names — Japanese kana/kanji, a transl
 
 Producer responses (`GET /api/producers`, `GET /api/producers/:producerId`) now also carry `galleryType`: the Author's dominant Gallery (Entry type with the most works, name tie-break; `null` with no works), derived at read time and never stored — the Author list cards and detail header show it as their home-Gallery badge.
 
-`POST /api/entries/filter` filters Entries of one type: body `{ entryType, conditions: [{ facetId, tagIds }], authorIds }` where EVERY tag id of a condition must be present under the chosen Facet (AND inside a row — more tags always narrow the result), all conditions AND across rows, `facetId: null` matches tags in any Facet (the "All tags" row), and `authorIds` OR within the list and AND with every tag row (empty for tag-only filtering; `conditions` may be empty for author-only filtering). Responses are the same lean Entry summaries as `GET /api/entries`. Selecting the same tag in two rows is rejected client-side (a tag is unique globally, so a duplicate row can never match).
+`POST /api/entries/query` combines Gallery type, Facet/Tag, Author, Rating, Usage, Author-directory, Collection, recent, search, NSFW, and ID-backed membership constraints before a stable sort and `LIMIT/OFFSET`. Every selected Tag in a Facet condition is required (AND within and across rows); `facetId: null` is the “All tags” row. `authorIds` OR within the list and AND with the other constraints. Responses are lean Entry summaries plus the filtered server total.
 
 ### Taxonomy aliases
 

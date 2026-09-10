@@ -15,8 +15,9 @@ function createApi(): GalleryApi {
       { type: 'nsfw', entryCount: 0, nsfw: true },
       { type: 'manga', entryCount: 0, nsfw: false },
     ]),
-    listEntries: vi.fn(async () => []),
     listAuthors: vi.fn(async () => []),
+    queryEntryPage: vi.fn(async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize })),
+    queryProducerPage: vi.fn(async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize })),
     assetUrl: (assetRef: string) => assetRef,
   } as unknown as GalleryApi;
 }

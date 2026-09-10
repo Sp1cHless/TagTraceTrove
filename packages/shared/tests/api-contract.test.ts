@@ -9,6 +9,7 @@ import {
   createSectionRequestSchema,
   entryIdParamsSchema,
   entryDetailResponseSchema,
+  entryPageQueryRequestSchema,
   findEntriesQuerySchema,
   findProducersQuerySchema,
   moveEntryTagRequestSchema,
@@ -21,6 +22,22 @@ import {
 } from '../src/index.js';
 
 describe('entry API contracts', () => {
+  it('accepts numeric likes filters and rejects date values for count fields', () => {
+    const base = { entryType: 'game' };
+    expect(entryPageQueryRequestSchema.safeParse({
+      ...base,
+      usageConditions: [{ field: 'likes', operator: 'gt', value: 2 }],
+    }).success).toBe(true);
+    expect(entryPageQueryRequestSchema.safeParse({
+      ...base,
+      usageConditions: [{ field: 'likes', operator: 'gt', value: '2026-09-08' }],
+    }).success).toBe(false);
+    expect(entryPageQueryRequestSchema.safeParse({
+      ...base,
+      usageConditions: [{ field: 'views', operator: 'gt', value: '2026-09-08' }],
+    }).success).toBe(false);
+  });
+
   it('accepts entry writes and a complete hierarchical detail response', () => {
     expect(createEntryRequestSchema.parse({
       title: ' Arknights: Endfield ',
