@@ -21,6 +21,10 @@ const props = defineProps<{
   entry: EntryCardEntry;
   /** Optional muted footnote under the meta (e.g. view count). */
   note?: string | null;
+  /** Selection state used by edit-mode cards without changing their shared media layout. */
+  pressed?: boolean | undefined;
+  /** Optional legacy hook for parent interactions while the shared card owns rendering. */
+  mainClass?: string;
 }>();
 
 const emit = defineEmits<{ open: [] }>();
@@ -34,7 +38,7 @@ interface GalleryApiLike {
 
 <template>
   <article class="entry-card" data-testid="shared-entry-card">
-    <button type="button" class="entry-card-main" :data-entry-id="entry.id" @click="emit('open')">
+    <button type="button" :class="['entry-card-main', mainClass]" :data-entry-id="entry.id" :aria-pressed="pressed" @click="emit('open')">
       <div class="entry-stack">
         <LazyCardImage
           v-for="(ref, index) in entryStackLayers(entry)"

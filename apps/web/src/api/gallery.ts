@@ -13,6 +13,7 @@ import {
   createSectionRequestSchema,
   entryDetailResponseSchema,
   entryContentRecordSchema,
+  entrySourceRecordSchema,
   entryPageQueryRequestSchema,
   entryPageResponseSchema,
   entryRecordSchema,
@@ -21,6 +22,8 @@ import {
   facetFilterOptionsResponseSchema,
   collectionRecordSchema,
   createCollectionRequestSchema,
+  createTemporaryCollectionRequestSchema,
+  temporaryCollectionResponseSchema,
   galleryPartitionRequestSchema,
   gallerySummarySchema,
   importCommitRequestSchema,
@@ -30,6 +33,12 @@ import {
   layoutResponseSchema,
   layoutTemplateApplyResponseSchema,
   mergeViewLaterRequestSchema,
+  applyTitleShorteningRequestSchema,
+  applyTitleShorteningResponseSchema,
+  titleShorteningPlanResponseSchema,
+  mergeAuthorEntriesRequestSchema,
+  mergeAuthorEntriesResponseSchema,
+  convertEntryAuthorsResponseSchema,
   moveEntryTagRequestSchema,
   producerRecordSchema,
   producerMergePlanResponseSchema,
@@ -38,10 +47,25 @@ import {
   producerPageResponseSchema,
   producerSummarySchema,
   producerTagAssignmentSchema,
+
   renameEntryTagRequestSchema,
   renameProducerTagRequestSchema,
   reorderEntryContentsRequestSchema,
   reorderSectionFacetsRequestSchema,
+  relationSuggestionResponseSchema,
+  producerSuggestionQuerySchema,
+  tagSuggestionQuerySchema,
+  commitSourceMaintenanceRequestSchema,
+  commitSourceMaintenanceResponseSchema,
+  createSourceMaintenanceRunRequestSchema,
+  sourceMaintenanceItemPageQuerySchema,
+  sourceMaintenanceItemPageResponseSchema,
+  sourceMaintenanceItemPatchSchema,
+  sourceLibraryRecordSchema,
+  sourceStatusPatchSchema,
+  sourceStatusRecordSchema,
+  syncCapabilitiesSchema,
+  syncSnapshotSchema,
   ratingRowSchema,
   ratingSlotSchema,
   numberIdListSchema,
@@ -51,17 +75,16 @@ import {
   updateCollectionRequestSchema,
   tagLayoutApplyResponseSchema,
   tagSearchHitSchema,
+  tagMergeRequestSchema,
   templateSummarySchema,
   taxonomyAliasSchema,
-  unassignedTagGroupsResponseSchema,
-  unassignedTagMoveRequestSchema,
-  unassignedTagMoveResponseSchema,
   usageInfoSchema,
   upsertTaxonomyAliasRequestSchema,
   authorAliasGroupsResponseSchema,
   saveAuthorAliasGroupRequestSchema,
   saveAuthorAliasGroupResponseSchema,
   updateEntryContentRequestSchema,
+  updateEntryRequestSchema,
   updateAuthorDirectoryRequestSchema,
   updateProducerRequestSchema,
   viewLaterStateSchema,
@@ -78,24 +101,43 @@ import {
   type EntryPageQueryRequest,
   type EntryPageResponse,
   type EntryRecordDto,
+  type EntrySourceRecordDto,
+  type SourceLibraryRecordDto,
+  type SourceMaintenanceItemPageQuery,
+  type SourceMaintenanceItemRecordDto,
+  type SourceMaintenanceRunRecordDto,
+  type CommitSourceMaintenanceResponse,
+  type SourceStatusPatch,
+  type SourceStatusRecordDto,
+  type SyncCapabilities,
+  type SyncSnapshot,
   type EntryTagUsage,
   type FacetFilterOptions,
   type GallerySummary,
   type ImportBatch,
-  type UnassignedTagGroups,
-  type UnassignedTagMoveRequest,
+
   type UsageInfo,
-  type UnassignedTagMoveResponse,
   type ImportCommitMapping,
   type ImportCommitResult,
   type ImportPreview,
+  type ConvertEntryAuthorsResponse,
+  type ApplyTitleShorteningResponse,
+  type TitleShorteningChange,
+  type TitleShorteningPlanResponse,
+  type MergeAuthorEntriesRequest,
+  type MergeAuthorEntriesResponse,
   type ImportTaxonomyAliasesRequest,
   type CreateProducerRequest,
+  type TemporaryCollectionResponse,
   type ProducerRecordDto,
   type ProducerMergePlanResponse,
   type ProducerMergeResponse,
   type ProducerPageQueryRequest,
   type ProducerPageResponse,
+  type ProducerSuggestionQueryInput,
+  type RelationSuggestionDto,
+  type TagSuggestionQueryInput,
+
   type AuthorAliasGroup,
   type SaveAuthorAliasGroupRequest,
   type SaveAuthorAliasGroupResponse,
@@ -113,9 +155,10 @@ import {
   type UpdateAuthorDirectoryRequest,
   type UpdateProducerRequest,
   type UpdateEntryContentRequest,
+  type UpdateEntryRequest,
   type ViewLaterState,
 } from '@t3/shared';
-import { createApiClient, type ApiClient } from './client.js';
+import { ApiError, createApiClient, type ApiClient } from './client.js';
 
 export interface GalleryEntrySummary {
   id: number;
@@ -154,12 +197,13 @@ export interface GalleryApi {
   listGalleries(): Promise<GallerySummary[]>;
   queryEntryPage(input: EntryPageQueryRequest): Promise<EntryPageResponse>;
   queryProducerPage(input: ProducerPageQueryRequest): Promise<ProducerPageResponse>;
+  suggestTags(input: TagSuggestionQueryInput, signal?: AbortSignal): Promise<RelationSuggestionDto[]>;
+  suggestProducers(input: ProducerSuggestionQueryInput, signal?: AbortSignal): Promise<RelationSuggestionDto[]>;
   searchTags(query: string, includeNsfw?: boolean): Promise<TagSearchHit[]>;
   listFacetFilterOptions(type: string, authorId?: number): Promise<FacetFilterOptions>;
   listGalleryTags(type?: string): Promise<EntryTagUsage[]>;
-  listUnassignedTags(): Promise<UnassignedTagGroups>;
-  moveUnassignedTag(input: UnassignedTagMoveRequest): Promise<UnassignedTagMoveResponse>;
   createEntry(input: CreateEntryRequest): Promise<EntryRecordDto>;
+  updateEntry(entryId: number, input: UpdateEntryRequest): Promise<EntryRecordDto>;
   deleteEntry(entryId: number): Promise<void>;
   uploadEntryMedia(
     entryId: number,
@@ -176,10 +220,49 @@ export interface GalleryApi {
   saveAuthorAliasGroup(input: SaveAuthorAliasGroupRequest): Promise<SaveAuthorAliasGroupResponse>;
   planProducerMerge(): Promise<ProducerMergePlanResponse>;
   executeProducerMerge(): Promise<ProducerMergeResponse>;
+  planTitleShortening(): Promise<TitleShorteningPlanResponse>;
+  applyTitleShortening(
+    changes: TitleShorteningChange[],
+  ): Promise<ApplyTitleShorteningResponse>;
   applyEntryLayoutTemplate(entryId: number): Promise<LayoutTemplateApplyResponse>;
   applyEntryTagLayout(entryId: number): Promise<TagLayoutApplyResponse>;
   listLayout(type: string): Promise<ReturnType<typeof layoutResponseSchema.parse>>;
   getEntry(entryId: number): Promise<EntryDetailResponse>;
+  listEntrySources(entryId: number): Promise<EntrySourceRecordDto[]>;
+  listSourceLibrary(): Promise<SourceLibraryRecordDto[]>;
+  getSyncCapabilities(): Promise<SyncCapabilities>;
+  fetchSyncSnapshot(): Promise<SyncSnapshot>;
+  probeSourceTarget(homepage: string): Promise<{
+    ok: true;
+    adapterKey: string;
+    displayName: string;
+    origin: string;
+  } | { ok: false; reason: string; detail: string }>;
+  patchSourceStatus(sourceKey: string, patch: SourceStatusPatch): Promise<SourceStatusRecordDto>;
+  createSourceMaintenanceRun(input: {
+    originSourceKey: string;
+    adapterKey: string;
+    targetHomepage?: string;
+    markOriginInvalid: boolean;
+  }): Promise<SourceMaintenanceRunRecordDto>;
+  getSourceMaintenanceRun(runId: number): Promise<SourceMaintenanceRunRecordDto>;
+  startSourceMaintenanceRun(runId: number): Promise<SourceMaintenanceRunRecordDto>;
+  pauseSourceMaintenanceRun(runId: number): Promise<SourceMaintenanceRunRecordDto>;
+  resumeSourceMaintenanceRun(runId: number): Promise<SourceMaintenanceRunRecordDto>;
+  cancelSourceMaintenanceRun(runId: number): Promise<SourceMaintenanceRunRecordDto>;
+  listSourceMaintenanceItems(
+    runId: number,
+    query?: Partial<SourceMaintenanceItemPageQuery>,
+  ): Promise<{ run: SourceMaintenanceRunRecordDto; items: SourceMaintenanceItemRecordDto[]; total: number }>;
+  patchSourceMaintenanceItem(
+    runId: number,
+    entryId: number,
+    patch: { decision?: 'pending' | 'accept' | 'skip' | 'conflict' | 'error'; selectedUrl?: string | null },
+  ): Promise<SourceMaintenanceItemRecordDto>;
+  commitSourceMaintenanceRun(runId: number): Promise<CommitSourceMaintenanceResponse>;
+
+  mergeAuthorEntries(input: MergeAuthorEntriesRequest): Promise<MergeAuthorEntriesResponse>;
+  convertEntryAuthors(entryId: number): Promise<ConvertEntryAuthorsResponse>;
   createEntryContent(
     entryId: number,
     input: CreateEntryContentRequest,
@@ -204,6 +287,7 @@ export interface GalleryApi {
   setGalleryPartition(entryType: string, nsfw: boolean): Promise<void>;
   listCollections(kind: CollectionKind, includeNsfw?: boolean): Promise<CollectionRecordDto[]>;
   createCollection(input: { kind: CollectionKind; title: string; description?: string; parentId?: number }): Promise<CollectionRecordDto>;
+  createTemporaryCollection(entryIds: number[]): Promise<TemporaryCollectionResponse>;
   updateCollection(collectionId: number, input: { title?: string; description?: string }): Promise<CollectionRecordDto>;
   deleteCollection(collectionId: number): Promise<void>;
   setCollectionNsfw(collectionId: number, nsfw: boolean): Promise<CollectionRecordDto>;
@@ -214,6 +298,11 @@ export interface GalleryApi {
   removeCollectionProducer(collectionId: number, producerId: number): Promise<void>;
   listCollectionsForEntry(entryId: number): Promise<number[]>;
   listTemplates(): Promise<TemplateSummary[]>;
+  mergeTag(input: {
+    vocabulary: 'entry' | 'producer';
+    keptTagId: number;
+    mergedTagIds: number[];
+  }): Promise<{ keptTagId: number; movedAssignments: number; skippedDuplicates: number; deletedTags: number }>;
   listCollectionsForProducer(producerId: number): Promise<number[]>;
   recordEntryView(entryId: number): Promise<UsageInfo>;
   likeEntry(entryId: number): Promise<UsageInfo>;
@@ -304,6 +393,31 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
         body: entryPageQueryRequestSchema.parse(input),
       }));
     },
+    async suggestTags(input, signal) {
+      const parsed = tagSuggestionQuerySchema.parse(input);
+      return relationSuggestionResponseSchema.parse(await client.request('suggestions/tags', {
+        query: {
+          vocabulary: parsed.vocabulary,
+          q: parsed.q,
+          limit: parsed.limit,
+          excludeIds: parsed.excludeIds.join(','),
+          entryType: parsed.entryType,
+          facetId: parsed.facetId,
+        },
+        ...(signal === undefined ? {} : { signal }),
+      }));
+    },
+    async suggestProducers(input, signal) {
+      const parsed = producerSuggestionQuerySchema.parse(input);
+      return relationSuggestionResponseSchema.parse(await client.request('suggestions/producers', {
+        query: {
+          q: parsed.q,
+          limit: parsed.limit,
+          excludeIds: parsed.excludeIds.join(','),
+        },
+        ...(signal === undefined ? {} : { signal }),
+      }));
+    },
     async searchTags(query, includeNsfw = true) {
       return tagSearchHitSchema.array().parse(await client.request('search/tags', {
         query: { q: query, includeNsfw: String(includeNsfw) },
@@ -327,21 +441,16 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
         query: { entryType: type },
       }));
     },
-    async listUnassignedTags() {
-      return unassignedTagGroupsResponseSchema.parse(
-        await client.request('tags/unassigned'),
-      );
-    },
-    async moveUnassignedTag(input) {
-      return unassignedTagMoveResponseSchema.parse(await client.request('tags/unassigned/move', {
-        method: 'POST',
-        body: unassignedTagMoveRequestSchema.parse(input),
-      }));
-    },
     async createEntry(input) {
       return entryRecordSchema.parse(await client.request('entries', {
         method: 'POST',
         body: createEntryRequestSchema.parse(input),
+      }));
+    },
+    async updateEntry(entryId, input) {
+      return entryRecordSchema.parse(await client.request(`entries/${entryId}`, {
+        method: 'PATCH',
+        body: updateEntryRequestSchema.parse(input),
       }));
     },
     async deleteEntry(entryId) {
@@ -424,6 +533,19 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
         await client.request('producers/merge', { method: 'POST' }),
       );
     },
+    async planTitleShortening() {
+      return titleShorteningPlanResponseSchema.parse(
+        await client.request('entries/titles/plan', { method: 'POST' }),
+      );
+    },
+    async applyTitleShortening(changes) {
+      return applyTitleShorteningResponseSchema.parse(
+        await client.request('entries/titles/apply', {
+          method: 'POST',
+          body: applyTitleShorteningRequestSchema.parse({ changes }),
+        }),
+      );
+    },
     async applyEntryLayoutTemplate(entryId) {
       return layoutTemplateApplyResponseSchema.parse(
         await client.request(`entries/${entryId}/template/apply`, { method: 'POST' }),
@@ -439,6 +561,105 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
     },
     async getEntry(entryId) {
       return entryDetailResponseSchema.parse(await client.request(`entries/${entryId}`));
+    },
+    async listEntrySources(entryId) {
+      return entrySourceRecordSchema.array().parse(await client.request(`entries/${entryId}/sources`));
+    },
+    async listSourceLibrary() {
+      return sourceLibraryRecordSchema.array().parse(await client.request('source-library'));
+    },
+    async getSyncCapabilities() {
+      return syncCapabilitiesSchema.parse(await client.request('sync/capabilities'));
+    },
+    async fetchSyncSnapshot() {
+      return syncSnapshotSchema.parse(await client.request('sync/snapshot'));
+    },
+    async probeSourceTarget(homepage) {
+      let response: { ok: boolean; adapterKey?: string; displayName?: string; origin?: string; reason?: string; detail?: string };
+      try {
+        response = await client.request('source-maintenance/adapter-probe', {
+          method: 'POST',
+          body: { homepage },
+        }) as typeof response;
+      } catch (cause) {
+        if (cause instanceof ApiError) {
+          const payload = cause.payload as { reason?: string; detail?: string } | null;
+          return { ok: false, reason: payload?.reason ?? 'unsupported', detail: payload?.detail ?? '' };
+        }
+        throw cause;
+      }
+      if (response.ok === true && response.adapterKey !== undefined) {
+        return {
+          ok: true,
+          adapterKey: response.adapterKey,
+          displayName: response.displayName ?? response.adapterKey,
+          origin: response.origin ?? '',
+        };
+      }
+      return { ok: false, reason: response.reason ?? 'unsupported', detail: response.detail ?? '' };
+    },
+    async patchSourceStatus(sourceKey, patch) {
+      return sourceStatusRecordSchema.parse(await client.request(`source-statuses/${encodeURIComponent(sourceKey)}`, {
+        method: 'PATCH',
+        body: sourceStatusPatchSchema.parse(patch),
+      }));
+    },
+    async createSourceMaintenanceRun(input) {
+      const parsed = createSourceMaintenanceRunRequestSchema.parse(input);
+      return client.request('source-maintenance/runs', {
+        method: 'POST',
+        body: parsed,
+      }) as Promise<SourceMaintenanceRunRecordDto>;
+    },
+    async getSourceMaintenanceRun(runId) {
+      return client.request(`source-maintenance/runs/${runId}`) as Promise<SourceMaintenanceRunRecordDto>;
+    },
+    async startSourceMaintenanceRun(runId) {
+      return client.request(`source-maintenance/runs/${runId}/start`, { method: 'POST' }) as Promise<SourceMaintenanceRunRecordDto>;
+    },
+    async pauseSourceMaintenanceRun(runId) {
+      return client.request(`source-maintenance/runs/${runId}/pause`, { method: 'POST' }) as Promise<SourceMaintenanceRunRecordDto>;
+    },
+    async resumeSourceMaintenanceRun(runId) {
+      return client.request(`source-maintenance/runs/${runId}/resume`, { method: 'POST' }) as Promise<SourceMaintenanceRunRecordDto>;
+    },
+    async cancelSourceMaintenanceRun(runId) {
+      return client.request(`source-maintenance/runs/${runId}/cancel`, { method: 'POST' }) as Promise<SourceMaintenanceRunRecordDto>;
+    },
+    async listSourceMaintenanceItems(runId, query) {
+      const parsed = sourceMaintenanceItemPageQuerySchema.parse(query ?? {});
+      const search = new URLSearchParams();
+      if (parsed.page !== 1) search.set('page', String(parsed.page));
+      if (parsed.pageSize !== 20) search.set('pageSize', String(parsed.pageSize));
+      if (parsed.state !== 'all') search.set('state', parsed.state);
+      const suffix = search.toString() === '' ? '' : `?${search.toString()}`;
+      return sourceMaintenanceItemPageResponseSchema.parse(
+        await client.request(`source-maintenance/runs/${runId}/items${suffix}`),
+      );
+    },
+    async patchSourceMaintenanceItem(runId, entryId, patch) {
+      return client.request(`source-maintenance/runs/${runId}/items/${entryId}`, {
+        method: 'PATCH',
+        body: sourceMaintenanceItemPatchSchema.parse(patch),
+      }) as Promise<SourceMaintenanceItemRecordDto>;
+    },
+    async commitSourceMaintenanceRun(runId) {
+      return commitSourceMaintenanceResponseSchema.parse(await client.request(`source-maintenance/runs/${runId}/commit`, {
+        method: 'POST',
+        body: commitSourceMaintenanceRequestSchema.parse({}),
+      }));
+    },
+
+    async mergeAuthorEntries(input) {
+      return mergeAuthorEntriesResponseSchema.parse(await client.request('entries/merge', {
+        method: 'POST',
+        body: mergeAuthorEntriesRequestSchema.parse(input),
+      }));
+    },
+    async convertEntryAuthors(entryId) {
+      return convertEntryAuthorsResponseSchema.parse(
+        await client.request(`entries/${entryId}/multi-author`, { method: 'POST' }),
+      );
     },
     async createEntryContent(entryId, input) {
       return entryContentRecordSchema.parse(await client.request(`entries/${entryId}/contents`, {
@@ -539,6 +760,14 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
         body: createCollectionRequestSchema.parse(input),
       }));
     },
+    async createTemporaryCollection(entryIds) {
+      return temporaryCollectionResponseSchema.parse(
+        await client.request('collections/temporary', {
+          method: 'POST',
+          body: createTemporaryCollectionRequestSchema.parse({ entryIds }),
+        }),
+      );
+    },
     async updateCollection(collectionId, input) {
       return collectionRecordSchema.parse(await client.request(`collections/${collectionId}`, {
         method: 'PATCH',
@@ -572,6 +801,12 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
     },
     async removeCollectionProducer(collectionId, producerId) {
       await client.request(`collections/${collectionId}/producers/${producerId}`, { method: 'DELETE' });
+    },
+    async mergeTag(input) {
+      return client.request('tags/merge', {
+        method: 'POST',
+        body: tagMergeRequestSchema.parse(input),
+      }) as Promise<{ keptTagId: number; movedAssignments: number; skippedDuplicates: number; deletedTags: number }>;
     },
     async listTemplates() {
       return templateSummarySchema.array().parse(await client.request('templates'));

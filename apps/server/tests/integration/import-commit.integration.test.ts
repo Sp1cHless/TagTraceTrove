@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createMigratedMemoryDatabase } from '../../src/database/testing.js';
 import { commitImportBatch } from '../../src/import/commit.js';
-import { getEntryDetail } from '../../src/repositories/entry-repository.js';
+import { createEntry, getEntryDetail } from '../../src/repositories/entry-repository.js';
 import { createFacet, createSection } from '../../src/repositories/layout-repository.js';
-import { createProducer } from '../../src/repositories/producer-repository.js';
+import { createProducer, linkEntryProducer } from '../../src/repositories/producer-repository.js';
+import {
+  createRatingSlot,
+  listProducerRatings,
+} from '../../src/repositories/rating-repository.js';
 import { upsertTaxonomyAlias } from '../../src/repositories/taxonomy-repository.js';
 
 describe('commitImportBatch', () => {
@@ -45,15 +49,19 @@ describe('commitImportBatch', () => {
         language: { kind: 'content', contentType: 'language' },
       },
       ignoredFields: ['works'],
+      authorRatings: [],
     });
 
     expect(result).toEqual({
       entries: [{ entryId: 1, externalKey: 'example.test:42', title: 'Example comic' }],
       entryCount: 1,
+      skippedExistingEntryCount: 0,
       createdProducerCount: 1,
       producerLinkCount: 1,
       tagAssignmentCount: 2,
       contentCount: 1,
+      authorRatingCount: 0,
+      warnings: [],
     });
 
     expect(getEntryDetail(database, 1)).toMatchObject({
@@ -107,6 +115,7 @@ describe('commitImportBatch', () => {
         works: { kind: 'tag', facetId: seriesFacet.id },
       },
       ignoredFields: [],
+      authorRatings: [],
     });
 
     const withSeries = getEntryDetail(database, result.entries[0]!.entryId);
@@ -152,6 +161,7 @@ describe('commitImportBatch', () => {
         },
       },
       ignoredFields: [],
+      authorRatings: [],
     });
 
     expect(result.createdProducerCount).toBe(0);
@@ -178,6 +188,7 @@ describe('commitImportBatch', () => {
         },
       },
       ignoredFields: [],
+      authorRatings: [],
     };
 
     expect(() => commitImportBatch(database, {
@@ -204,7 +215,7 @@ describe('commitImportBatch', () => {
     database.close();
   });
 
-  it('rejects a source URL that was already imported without adding another Entry', () => {
+  it('skips an already-imported source URL while committing new entries from the same author manifest', () => {
     const database = createMigratedMemoryDatabase();
     const section = createSection(database, { entryType: 'comic', name: '分类' });
     const mapping = {
@@ -214,27 +225,44 @@ describe('commitImportBatch', () => {
       externalKeyContentType: 'external key',
       fieldMappings: {},
       ignoredFields: [],
+      authorRatings: [],
     };
-    const batch = {
+
+    commitImportBatch(database, {
       source: 'example.test',
       warnings: [],
       entries: [{
         externalKey: 'example.test:42',
-        title: 'First title',
+        title: 'Existing work',
         sources: [{ label: 'example.test', url: 'https://example.test/items/42' }],
       }],
-    };
+    }, mapping);
 
-    commitImportBatch(database, batch, mapping);
-    expect(() => commitImportBatch(database, {
-      ...batch,
-      entries: [{
-        externalKey: 'example.test:99',
-        title: 'Different title',
-        sources: [{ label: 'example.test', url: 'https://example.test/items/42' }],
-      }],
-    }, mapping)).toThrow('Source URL has already been imported');
-    expect(database.prepare('SELECT COUNT(*) FROM entries').pluck().get()).toBe(1);
+    const result = commitImportBatch(database, {
+      source: 'example.test',
+      warnings: [],
+      entries: [
+        {
+          externalKey: 'example.test:42',
+          title: 'Existing work from refreshed manifest',
+          sources: [{ label: 'example.test', url: 'https://example.test/items/42' }],
+        },
+        {
+          externalKey: 'example.test:99',
+          title: 'New work',
+          sources: [{ label: 'example.test', url: 'https://example.test/items/99' }],
+        },
+      ],
+    }, mapping);
+
+    expect(result.entryCount).toBe(1);
+    expect(result.skippedExistingEntryCount).toBe(1);
+    expect(result.entries).toEqual([{
+      entryId: expect.any(Number),
+      title: 'New work',
+      externalKey: 'example.test:99',
+    }]);
+    expect(database.prepare('SELECT COUNT(*) FROM entries').pluck().get()).toBe(2);
     database.close();
   });
 
@@ -248,6 +276,7 @@ describe('commitImportBatch', () => {
       externalKeyContentType: 'external key',
       fieldMappings: {},
       ignoredFields: [],
+      authorRatings: [],
     };
 
     const first = commitImportBatch(database, {
@@ -289,6 +318,7 @@ describe('commitImportBatch', () => {
         },
       },
       ignoredFields: [],
+      authorRatings: [],
     };
 
     // An alias spelling with no canonical producer yet creates the canonical name.
@@ -333,6 +363,211 @@ describe('commitImportBatch', () => {
     expect(linked.createdProducerCount).toBe(0);
     expect(linked.producerLinkCount).toBe(1);
     expect(database.prepare('SELECT COUNT(*) FROM producers').pluck().get()).toBe(1);
+    database.close();
+  });
+
+  it('keeps one placement when a source names the same tag as a series and a character', () => {
+    const database = createMigratedMemoryDatabase();
+    const basic = createSection(database, { entryType: 'comic', name: 'Basic Information' });
+    const series = createFacet(database, { sectionId: basic.id, name: 'Series' });
+    const characters = createFacet(database, { sectionId: basic.id, name: 'Characters' });
+    const mapping = {
+      entryType: 'comic',
+      canonicalTagFacetId: basic.defaultFacetId,
+      sourceContentType: 'source url',
+      externalKeyContentType: 'external key',
+      fieldMappings: {
+        works: { kind: 'tag' as const, facetId: series.id },
+        characters: { kind: 'tag' as const, facetId: characters.id },
+      },
+      ignoredFields: [],
+      authorRatings: [],
+    };
+
+    // A multi-series collection lists one name as both a series and a character.
+    const result = commitImportBatch(database, {
+      source: 'hitomi.la',
+      warnings: [],
+      entries: [{
+        externalKey: 'hitomi.la:1',
+        title: 'Artist collection',
+        fields: { works: ['Goblin Slayer'], characters: ['Goblin Slayer', 'Priestess'] },
+        sources: [{ label: 'hitomi.la', url: 'https://hitomi.la/imageset/1.html' }],
+      }],
+    }, mapping);
+
+    // The import succeeds: the first placement wins and the skipped one is reported.
+    expect(result.entryCount).toBe(1);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('Goblin Slayer');
+    expect(result.warnings[0]).toContain('Series');
+    expect(result.warnings[0]).toContain('Characters');
+    const detail = getEntryDetail(database, 1);
+    expect(detail?.sections[0]?.facets.find((facet) => facet.name === 'Series')?.tags.map((tag) => tag.name))
+      .toEqual(['Goblin Slayer']);
+    expect(detail?.sections[0]?.facets.find((facet) => facet.name === 'Characters')?.tags.map((tag) => tag.name))
+      .toEqual(['Priestess']);
+    expect(database.pragma('foreign_key_check')).toEqual([]);
+    database.close();
+  });
+
+  it('links an imported alias spelling to the author it already resolves to', () => {
+    const database = createMigratedMemoryDatabase();
+    const section = createSection(database, { entryType: 'comic', name: '分类' });
+    const author = createProducer(database, { name: '和泉' });
+    const existingWork = createEntry(database, { title: 'Existing work', type: 'comic' });
+    linkEntryProducer(database, existingWork.id, author.id);
+    upsertTaxonomyAlias(database, {
+      vocabulary: 'producer',
+      alias: '冷泉',
+      canonicalName: '和泉',
+    });
+
+    // The review sends no preselected match: the dictionary alone has to be
+    // enough for an alias-spelled credit to land on the existing author.
+    const result = commitImportBatch(database, {
+      source: 'hitomi.la',
+      warnings: [],
+      entries: [{
+        externalKey: 'hitomi.la:1',
+        title: 'Work credited to an alias spelling',
+        fields: { authors: ['冷泉'] },
+        sources: [{ label: 'hitomi.la', url: 'https://hitomi.la/cg/1.html' }],
+      }],
+    }, {
+      entryType: 'comic',
+      canonicalTagFacetId: section.defaultFacetId,
+      sourceContentType: 'Source URL',
+      externalKeyContentType: 'External Key',
+      fieldMappings: {
+        authors: { kind: 'producer', createUnmatched: true, existingProducerIds: {} },
+      },
+      ignoredFields: [],
+      authorRatings: [],
+    });
+
+    expect(result.createdProducerCount).toBe(0);
+    expect(result.producerLinkCount).toBe(1);
+    expect(database.prepare('SELECT name FROM producers ORDER BY id').pluck().all())
+      .toEqual(['和泉']);
+    expect(database.prepare(`
+      SELECT producer.name FROM entry_producers AS relation
+      JOIN producers AS producer ON producer.id = relation.producer_id
+      WHERE relation.entry_id = ?
+    `).pluck().all(result.entries[0]!.entryId)).toEqual(['和泉']);
+    database.close();
+  });
+
+  it('records reviewed Author ratings inside the import transaction and mirrors the dimension', () => {
+    const database = createMigratedMemoryDatabase();
+    const section = createSection(database, { entryType: 'Comic', name: '分类' });
+    createRatingSlot(database, { kind: 'entry', entryType: 'Comic', name: '画风精美' });
+    const mapping = {
+      entryType: 'Comic',
+      canonicalTagFacetId: section.defaultFacetId,
+      sourceContentType: 'source url',
+      externalKeyContentType: 'external key',
+      fieldMappings: {
+        authors: { kind: 'producer' as const, createUnmatched: true, existingProducerIds: {} },
+      },
+      ignoredFields: [],
+      authorRatings: [
+        { name: 'Example Author', slotName: '画风精美', stars: 4 },
+        { name: 'Second Author', slotName: '画风精美', stars: 2.5 },
+      ],
+    };
+
+    const result = commitImportBatch(database, {
+      source: 'hitomi.la',
+      warnings: [],
+      entries: [{
+        externalKey: 'hitomi.la:1',
+        title: 'Rated work',
+        fields: { authors: ['Example Author', 'Second Author'] },
+        sources: [{ label: 'hitomi.la', url: 'https://hitomi.la/example-1.html' }],
+      }],
+    }, mapping);
+
+    expect(result.authorRatingCount).toBe(2);
+    // The Author dimension is mirrored from the Gallery's Entry dimension by name.
+    const authorSlots = database.prepare(
+      "SELECT name FROM rating_slots WHERE subject_kind = 'producer' ORDER BY id",
+    ).pluck().all();
+    expect(authorSlots).toEqual(['画风精美']);
+    expect(database.prepare(
+      "SELECT subject_kind, entry_type FROM rating_slots WHERE name = '画风精美' ORDER BY subject_kind",
+    ).all()).toEqual([
+      { subject_kind: 'entry', entry_type: 'Comic' },
+      { subject_kind: 'producer', entry_type: 'Comic' },
+    ]);
+    expect(listProducerRatings(database, 1)).toEqual([
+      { slotId: expect.any(Number), name: '画风精美', stars: 4 },
+    ]);
+    expect(listProducerRatings(database, 2)).toEqual([
+      { slotId: expect.any(Number), name: '画风精美', stars: 2.5 },
+    ]);
+
+    // Re-committing the same batch is idempotent: every Entry is skipped, yet
+    // the reviewed Author ratings are upserted onto the same slots.
+    const repeated = commitImportBatch(database, {
+      source: 'hitomi.la',
+      warnings: [],
+      entries: [{
+        externalKey: 'hitomi.la:1',
+        title: 'Rated work',
+        fields: { authors: ['Example Author', 'Second Author'] },
+        sources: [{ label: 'hitomi.la', url: 'https://hitomi.la/example-1.html' }],
+      }],
+    }, mapping);
+    expect(repeated.skippedExistingEntryCount).toBe(1);
+    expect(repeated.authorRatingCount).toBe(2);
+    expect(database.prepare('SELECT COUNT(*) FROM producer_rating_values').pluck().get()).toBe(2);
+    expect(database.prepare('SELECT COUNT(*) FROM rating_slots').pluck().get()).toBe(2);
+    expect(listProducerRatings(database, 1)).toEqual([
+      { slotId: expect.any(Number), name: '画风精美', stars: 4 },
+    ]);
+    database.close();
+  });
+
+  it('refuses Author ratings for an Author or dimension outside the import and writes nothing', () => {
+    const database = createMigratedMemoryDatabase();
+    const section = createSection(database, { entryType: 'Comic', name: '分类' });
+    createRatingSlot(database, { kind: 'entry', entryType: 'Comic', name: 'Quality' });
+    const mapping = {
+      entryType: 'Comic',
+      canonicalTagFacetId: section.defaultFacetId,
+      sourceContentType: 'source url',
+      externalKeyContentType: 'external key',
+      fieldMappings: {
+        authors: { kind: 'producer' as const, createUnmatched: true, existingProducerIds: {} },
+      },
+      ignoredFields: [],
+      authorRatings: [{ name: 'Stranger', slotName: 'Quality', stars: 3 }],
+    };
+    const batch = {
+      source: 'hitomi.la',
+      warnings: [],
+      entries: [{
+        externalKey: 'hitomi.la:9',
+        title: 'Unrelated work',
+        fields: { authors: ['Example Author'] },
+        sources: [{ label: 'hitomi.la', url: 'https://hitomi.la/example-9.html' }],
+      }],
+    };
+
+    expect(() => commitImportBatch(database, batch, mapping)).toThrow(
+      /Import author rating "Stranger" is not an Author of this import/u,
+    );
+    expect(database.prepare('SELECT COUNT(*) FROM entries').pluck().get()).toBe(0);
+    expect(database.prepare('SELECT COUNT(*) FROM producers').pluck().get()).toBe(0);
+
+    expect(() => commitImportBatch(database, batch, {
+      ...mapping,
+      authorRatings: [{ name: 'Example Author', slotName: 'Nonexistent', stars: 3 }],
+    })).toThrow(
+      /Import author rating "Nonexistent" is not a rating dimension of Gallery "Comic"/u,
+    );
+    expect(database.prepare('SELECT COUNT(*) FROM entries').pluck().get()).toBe(0);
     database.close();
   });
 });

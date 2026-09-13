@@ -17,11 +17,29 @@ PRAGMA busy_timeout = 5000;
 
 - `createMemoryDatabase()` — fast integration tests with real SQLite.
 - `createTempFileDatabase()` — disposable DB for WAL and file-level behavior.
-- `applyAllMigrations(database)` — applies immutable migrations and validates stored SHA-256 checksums.
+- `applyAllMigrations(database)` — applies immutable migrations and validates stored SHA-256 checksums. Hash comparison treats LF and CRLF as equivalent so a Windows Git checkout cannot invalidate an already-applied migration; SQL changes still fail the checksum gate.
 - `createMigratedMemoryDatabase()` — isolated real-SQL schema tests.
 - `runDatabaseProbe()` — seeds and verifies the current Entry/Producer/Facet scenario.
 
 Tests must start from a known schema version and must not touch `.data/library.db`.
+
+## Derived Source library and Entry merge
+
+Source ownership remains in `entry_contents`. The Source library parses every
+HTTP(S) URL from every Content body at read time and groups known sites by a
+stable `known:<site>` key, with `host:<hostname>` fallback for unregistered
+sites. This keeps a
+URL entered manually in any Content type immediately discoverable without a
+dual-write table, migration, or repair job. Server-side callers can derive the
+Entry IDs for one Source key for future site-wide maintenance operations; the
+projection remains server-side until a future bounded Source-management API is needed.
+
+Merging two works is also schema-neutral. One repository transaction validates
+same Author and same Gallery, inserts missing `entry_tags`, appends selected
+absorbed-Entry URLs as `Source URL` Content, and deletes the absorbed Entry.
+Any failed validation or write rolls back Tags, Content, and deletion together.
+Other Content, media, Ratings, usage, Directory, Collection, and View later
+memberships from the absorbed Entry are deliberately not copied.
 
 ## Schema workflow
 

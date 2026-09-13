@@ -31,6 +31,7 @@ export interface EntryDetailProducer {
   occupation: string | null;
   artworkRef: string | null;
   content: string | null;
+  entryCount: number;
 }
 
 export interface EntryDetailContent {
@@ -109,6 +110,7 @@ interface ProducerRow {
   occupation: string | null;
   artwork_ref: string | null;
   content: string | null;
+  entry_count: number;
 }
 
 interface ContentRow {
@@ -270,7 +272,12 @@ export function getEntryDetail(database: T3Database, entryId: number): EntryDeta
       producer.name,
       producer.occupation,
       producer.artwork_ref,
-      producer.content
+      producer.content,
+      (
+        SELECT COUNT(*)
+        FROM entry_producers AS own_relation
+        WHERE own_relation.producer_id = producer.id
+      ) AS entry_count
     FROM entry_producers AS relation
     JOIN producers AS producer ON producer.id = relation.producer_id
     WHERE relation.entry_id = ?
@@ -322,6 +329,7 @@ export function getEntryDetail(database: T3Database, entryId: number): EntryDeta
       occupation: producer.occupation,
       artworkRef: producer.artwork_ref,
       content: producer.content,
+      entryCount: producer.entry_count,
     })),
     sections,
     contents: contents.map((content) => ({

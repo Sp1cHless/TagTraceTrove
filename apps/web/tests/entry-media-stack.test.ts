@@ -13,6 +13,24 @@ describe('Entry media stack', () => {
       .toBe('https://example.com/remote.jpg');
   });
 
+  it('lays a single Entry cover flat across the card media frame', () => {
+    const layers = entryStackLayers({
+      coverRef: '/cover.webp',
+      previewRefs: [],
+    });
+
+    expect(layers).toEqual(['/cover.webp']);
+    expect(entryStackLayerStyle(0, layers.length)).toMatchObject({
+      left: '0%',
+      top: '0%',
+      width: '100%',
+      height: '100%',
+      maxWidth: '100%',
+      objectFit: 'contain',
+      transform: 'none',
+    });
+  });
+
   it('keeps natural-aspect pages narrow and fans previews in 3D', () => {
     const layers = entryStackLayers({
       coverRef: '/cover.webp',

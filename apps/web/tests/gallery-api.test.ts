@@ -12,6 +12,49 @@ describe('default GalleryApi origin', () => {
 });
 
 describe('GalleryApi Entry Content', () => {
+  it('requests strict bounded relation suggestions through dedicated read endpoints', async () => {
+    const suggestions = [{
+      id: 3,
+      name: '青色之箱',
+      matchedAlias: 'Blue Box',
+      sameContextUsageCount: 2,
+      totalUsageCount: 5,
+    }];
+    const request = vi.fn(async () => suggestions);
+    const api = createGalleryApi({ request } as unknown as ApiClient);
+    const controller = new AbortController();
+
+    await expect(api.suggestTags({
+      vocabulary: 'entry',
+      q: 'blue b',
+      limit: 10,
+      excludeIds: [1, 2],
+      entryType: 'comic',
+      facetId: 7,
+    }, controller.signal)).resolves.toEqual(suggestions);
+    await expect(api.suggestProducers({
+      q: 'blue b',
+      limit: 20,
+      excludeIds: [8],
+    }, controller.signal)).resolves.toEqual(suggestions);
+
+    expect(request).toHaveBeenNthCalledWith(1, 'suggestions/tags', {
+      query: {
+        vocabulary: 'entry',
+        q: 'blue b',
+        limit: 10,
+        excludeIds: '1,2',
+        entryType: 'comic',
+        facetId: 7,
+      },
+      signal: controller.signal,
+    });
+    expect(request).toHaveBeenNthCalledWith(2, 'suggestions/producers', {
+      query: { q: 'blue b', limit: 20, excludeIds: '8' },
+      signal: controller.signal,
+    });
+  });
+
   it('requests a bounded server-side Entry page with filters and sort', async () => {
     const page = {
       items: [{ id: 5, title: 'Middle', type: 'comic', coverRef: null, previewRef: null, previewRefs: [], uploadDate: '2024-03-01', pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null }],
@@ -39,6 +82,26 @@ describe('GalleryApi Entry Content', () => {
       method: 'POST',
       body: input,
     });
+  });
+
+  it('requests all Galleries for one Author without requiring an Entry type', async () => {
+    const page = { items: [], total: 0, page: 1, pageSize: 26 };
+    const request = vi.fn(async () => page);
+    const api = createGalleryApi({ request } as unknown as ApiClient);
+    const input = {
+      conditions: [],
+      authorIds: [7],
+      ratingConditions: [],
+      ratingSort: null,
+      usageConditions: [],
+      usageSort: null,
+      sort: 'date-desc' as const,
+      page: 1,
+      pageSize: 26,
+    };
+
+    await expect(api.queryEntryPage(input)).resolves.toEqual(page);
+    expect(request).toHaveBeenCalledWith('entries/query', { method: 'POST', body: input });
   });
 
   it('reads and mutates the shared Entry and Author View later lists', async () => {
@@ -85,10 +148,13 @@ describe('GalleryApi Entry Content', () => {
         : {
             entries: [{ entryId: 7, title: 'Work', externalKey: '42' }],
             entryCount: 1,
+            skippedExistingEntryCount: 0,
             createdProducerCount: 0,
             producerLinkCount: 0,
             tagAssignmentCount: 0,
             contentCount: 1,
+            authorRatingCount: 0,
+            warnings: [],
           };
     });
     const api = createGalleryApi({ request } as unknown as ApiClient);
@@ -103,6 +169,7 @@ describe('GalleryApi Entry Content', () => {
       externalKeyContentType: 'External ID',
       fieldMappings: {},
       ignoredFields: [],
+      authorRatings: [],
     };
     await expect(api.commitImport(batch, mapping)).resolves.toMatchObject({ entryCount: 1 });
 
@@ -209,6 +276,27 @@ describe('GalleryApi Entry Content', () => {
     });
   });
 
+  it('updates an Entry title through the existing identity-preserving PATCH route', async () => {
+    const updated = {
+      id: 7,
+      title: 'Renamed work',
+      type: 'comic',
+      coverRef: null,
+      previewRef: null,
+      previewRefs: [],
+      uploadDate: null,
+      pageCount: null,
+    };
+    const request = vi.fn(async () => updated);
+    const api = createGalleryApi({ request } as unknown as ApiClient);
+
+    await expect(api.updateEntry(7, { title: 'Renamed work' })).resolves.toEqual(updated);
+    expect(request).toHaveBeenCalledWith('entries/7', {
+      method: 'PATCH',
+      body: { title: 'Renamed work' },
+    });
+  });
+
   it('updates one Content row through its dedicated route', async () => {
     const request = vi.fn(async () => ({
       id: 21,
@@ -264,6 +352,44 @@ describe('GalleryApi Entry Content', () => {
     expect(request).toHaveBeenCalledWith('entries/7/tags/21/name', {
       method: 'PATCH',
       body: { name: 'Action RPG' },
+    });
+  });
+
+  it('reads derived Sources and submits one Author-scoped Entry merge', async () => {
+    const source = {
+      entryId: 8,
+      contentId: 21,
+      sourceKey: 'known:hitomi',
+      sourceName: 'Hitomi',
+      host: 'hitomi.la',
+      url: 'https://hitomi.la/reader/123.html',
+    };
+    const request = vi.fn(async (path: string) => {
+      if (path === 'entries/8/sources') return [source];
+      return {
+        keptEntryId: 7,
+        absorbedEntryId: 8,
+        copiedTagCount: 1,
+        copiedSourceCount: 1,
+        sources: [{ ...source, entryId: 7 }],
+        mediaCleanupFailed: false,
+      };
+    });
+    const api = createGalleryApi({ request } as unknown as ApiClient);
+    const input = {
+      authorId: 3,
+      keepEntryId: 7,
+      absorbEntryId: 8,
+      copyTags: true,
+      sourceUrls: [source.url],
+    };
+
+    await expect(api.listEntrySources(8)).resolves.toEqual([source]);
+    await expect(api.mergeAuthorEntries(input)).resolves.toMatchObject({ keptEntryId: 7 });
+    expect(request).toHaveBeenNthCalledWith(1, 'entries/8/sources');
+    expect(request).toHaveBeenNthCalledWith(2, 'entries/merge', {
+      method: 'POST',
+      body: input,
     });
   });
 });

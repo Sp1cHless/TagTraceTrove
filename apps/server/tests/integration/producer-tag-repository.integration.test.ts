@@ -8,8 +8,10 @@ import {
   assignProducerTag,
   findProducers,
   listProducerTags,
+  queryProducerPage,
   renameProducerTag,
   removeProducerTag,
+  searchProducersByName,
 } from '../../src/repositories/producer-tag-repository.js';
 
 describe('producer tag repository', () => {
@@ -131,6 +133,51 @@ describe('producer tag repository', () => {
         ownTagIds: [featured.tagId],
         relatedEntryTagIds: [action.tagId, favorite.tagId],
       })).toEqual([{ id: firstProducer.id, name: 'First Creator', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }]);
+    } finally {
+      database.close();
+    }
+  });
+
+  it('hides Authors with no works from every searchable producer result without deleting them', () => {
+    const database = createMigratedMemoryDatabase();
+
+    try {
+      const emptyProducer = createProducer(database, { name: 'Empty Creator' });
+      const linkedProducer = createProducer(database, { name: 'Linked Creator' });
+      const work = createEntry(database, { title: 'Only Work', type: 'game' });
+      linkEntryProducer(database, work.id, linkedProducer.id);
+
+      expect(findProducers(database).map((producer) => producer.id)).toEqual([linkedProducer.id]);
+      expect(searchProducersByName(database, 'creator').map((producer) => producer.id))
+        .toEqual([linkedProducer.id]);
+      expect(queryProducerPage(database, {
+        ownTagIds: [],
+        relatedEntryTagIds: [],
+        includeNsfw: true,
+        sort: 'name-asc',
+        page: 1,
+        pageSize: 30,
+      })).toMatchObject({
+        items: [expect.objectContaining({ id: linkedProducer.id })],
+        total: 1,
+      });
+
+      database.prepare('DELETE FROM entries WHERE id = ?').run(work.id);
+
+      expect(findProducers(database)).toEqual([]);
+      expect(searchProducersByName(database, 'creator')).toEqual([]);
+      expect(queryProducerPage(database, {
+        ownTagIds: [],
+        relatedEntryTagIds: [],
+        includeNsfw: true,
+        sort: 'name-asc',
+        page: 1,
+        pageSize: 30,
+      })).toMatchObject({ items: [], total: 0 });
+      expect(database.prepare('SELECT id FROM producers ORDER BY id').all()).toEqual([
+        { id: emptyProducer.id },
+        { id: linkedProducer.id },
+      ]);
     } finally {
       database.close();
     }

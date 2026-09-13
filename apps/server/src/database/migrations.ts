@@ -17,9 +17,18 @@ interface AppliedMigration {
 
 interface MigrationFile extends AppliedMigration {
   sql: string;
+  compatibleChecksums: string[];
 }
 
 const defaultMigrationsDirectory = fileURLToPath(new URL('./migrations/', import.meta.url));
+
+function migrationChecksums(sql: string): string[] {
+  const lfSql = sql.replace(/\r\n?/gu, '\n');
+  const crlfSql = lfSql.replace(/\n/gu, '\r\n');
+  return [...new Set([lfSql, crlfSql, sql].map((value) => (
+    createHash('sha256').update(value).digest('hex')
+  )))];
+}
 
 function loadMigrations(directory: string): MigrationFile[] {
   const migrations = readdirSync(directory)
@@ -27,10 +36,12 @@ function loadMigrations(directory: string): MigrationFile[] {
     .map((name) => {
       const version = Number.parseInt(name.split('_', 1)[0] ?? '', 10);
       const sql = readFileSync(join(directory, name), 'utf8');
+      const compatibleChecksums = migrationChecksums(sql);
       return {
         version,
         name,
-        checksum: createHash('sha256').update(sql).digest('hex'),
+        checksum: compatibleChecksums[0]!,
+        compatibleChecksums,
         sql,
       };
     })
@@ -70,7 +81,7 @@ export function applyAllMigrations(
   for (const migration of migrations) {
     const existing = appliedByVersion.get(migration.version);
     if (existing) {
-      if (existing.name !== migration.name || existing.checksum !== migration.checksum) {
+      if (existing.name !== migration.name || !migration.compatibleChecksums.includes(existing.checksum)) {
         throw new Error(`migration ${migration.version} checksum mismatch`);
       }
       continue;

@@ -328,6 +328,47 @@ export function addCollectionEntry(
   `).run(collectionId, entryId);
 }
 
+/** Base name of the throwaway Collection a batch import can be filed into. */
+export const TEMPORARY_COLLECTION_TITLE = '临时';
+
+/**
+ * Files one batch of Entries into a fresh Collection named `临时`, then `临时2`,
+ * `临时3`, … so repeated batches stay separate. Ids that no longer exist are
+ * skipped rather than failing the whole action: this is a convenience grouping
+ * for reviewing a bulk import later, not a strict contract.
+ */
+export function createCollectionFromEntries(
+  database: T3Database,
+  entryIds: number[],
+): { collectionId: number; title: string; entryCount: number } {
+  return database.transaction(() => {
+    const takenTitles = new Set(
+      (database.prepare('SELECT title FROM collections WHERE kind = ?').pluck().all('entry') as string[]),
+    );
+    let title = TEMPORARY_COLLECTION_TITLE;
+    let suffix = 2;
+    while (takenTitles.has(title)) {
+      title = `${TEMPORARY_COLLECTION_TITLE}${suffix}`;
+      suffix += 1;
+    }
+
+    const collection = createCollection(database, { kind: 'entry', title });
+    const insert = database.prepare(`
+      INSERT INTO collection_entries (collection_id, entry_id) VALUES (?, ?)
+      ON CONFLICT (collection_id, entry_id) DO NOTHING
+    `);
+    const exists = database.prepare('SELECT 1 FROM entries WHERE id = ?');
+    const unique = [...new Set(entryIds)];
+    let entryCount = 0;
+    for (const entryId of unique) {
+      if (exists.get(entryId) === undefined) continue;
+      insert.run(collection.id, entryId);
+      entryCount += 1;
+    }
+    return { collectionId: collection.id, title: collection.title, entryCount };
+  })();
+}
+
 export function removeCollectionEntry(
   database: T3Database,
   collectionId: number,

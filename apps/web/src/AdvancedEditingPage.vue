@@ -7,24 +7,31 @@ import type {
   ProducerMergePlanResponse,
   ProducerMergeResponse,
   TaxonomyAliasDto,
+  TitleShorteningChange,
+  TitleShorteningPlanResponse,
+  TitleShorteningSide,
+  ApplyTitleShorteningResponse,
+  RelationSuggestion,
   TaxonomyVocabulary,
-  UnassignedTagGroup,
   UpsertTaxonomyAliasRequest,
 } from '@t3/shared';
 import type { GalleryApi } from './api/gallery.js';
 import { useI18n } from './i18n.js';
 import { parseTaxonomyDictionary } from './taxonomy-dictionary.js';
+import SuggestionInput from './components/SuggestionInput.vue';
+import SourceMaintenancePanel from './SourceMaintenancePanel.vue';
 import { useArmableAction } from './armable.js';
 
 const props = defineProps<{ api: GalleryApi }>();
 const emit = defineEmits<{
   back: [];
   'authors-changed': [];
+  'works-changed': [];
 }>();
 const { t } = useI18n();
 const { armedKey, arm, disarm } = useArmableAction();
 
-type Tab = 'dictionary' | 'merge' | 'unassigned' | 'templates' | 'authors';
+type Tab = 'tags' | 'authors' | 'templates' | 'titles' | 'sources';
 
 interface TemplateSummaryDto {
   entryType: string;
@@ -41,80 +48,22 @@ const templatesLoaded = ref(false);
 // The preview sketches the whole card: the gallery's shared rating slots and
 // a generic Content block below the Section → Facet layout.
 const templateRatingSlots = ref<Record<string, Array<{ id: number; name: string; sortOrder: number }>>>({});
-const tab = ref<Tab>('dictionary');
+const tab = ref<Tab>('tags');
 const error = ref<string | null>(null);
-
-// ---------------------------------------------------------------------------
-// Unassigned tags (per gallery). Lazy-loaded on first visit of the tab so
-// opening Advanced editing does not pay for an extra request.
-// ---------------------------------------------------------------------------
-const unassignedGroups = ref<UnassignedTagGroup[]>([]);
-const unassignedLoaded = ref(false);
-const expandedUnassigned = ref<Set<string>>(new Set());
-const targetForTag = ref<Record<number, number>>({});
-const movingTagId = ref<number | null>(null);
-const unassignedNotice = ref('');
-
-async function fetchUnassigned(): Promise<void> {
-  unassignedGroups.value = await props.api.listUnassignedTags();
-  unassignedLoaded.value = true;
-}
-
-async function moveTag(group: UnassignedTagGroup, tagName: string, tagId: number, facetId: number | undefined): Promise<void> {
-  const target = facetId ?? targetForTag.value[tagId];
-  if (target === undefined) return;
-  movingTagId.value = tagId;
-  unassignedNotice.value = '';
-  try {
-    const result = await props.api.moveUnassignedTag({
-      entryType: group.entryType,
-      tagId,
-      targetFacetId: target,
-    });
-    const targetName = group.facets.find((facet) => facet.facetId === target)?.facetName ?? '';
-    unassignedNotice.value = t('unassigned.moved', {
-      tag: tagName,
-      facet: targetName,
-      count: String(result.moved),
-    });
-    await fetchUnassigned(); // refresh the group so the row disappears
-    delete targetForTag.value[tagId];
-  } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : String(reason);
-  } finally {
-    movingTagId.value = null;
-  }
-}
-
-function toggleUnassignedGroup(entryType: string): void {
-  const next = new Set(expandedUnassigned.value);
-  if (next.has(entryType)) next.delete(entryType);
-  else next.add(entryType);
-  expandedUnassigned.value = next;
-}
 
 // ---------------------------------------------------------------------------
 // Dictionary (tag aliases), partitioned like the tag taxonomy
 // ---------------------------------------------------------------------------
 const aliases = ref<TaxonomyAliasDto[]>([]);
-const vocabulary = ref<TaxonomyVocabulary>('entry');
-const partition = ref('');
 const aliasName = ref('');
 const canonicalName = ref('');
+const aliasPartition = ref('');
 const busy = ref(false);
 const importSummary = ref('');
 
-const entryPartitions = ['series', 'characters', 'types', 'tags'];
-const producerPartitions = ['authors'];
-const partitionOptions = computed(() => (
-  vocabulary.value === 'producer' ? producerPartitions : entryPartitions
-));
-
-watch(vocabulary, () => {
-  partition.value = '';
-});
-
-const partitionOrder = ['series', 'characters', 'types', 'tags', 'authors', ''];
+// Author identity aliases live in the authors tab now; this dictionary works
+// on the Entry vocabulary only (partitions: series / characters / types / tags).
+const partitionOrder = ['series', 'characters', 'types', 'tags', ''];
 
 // Alias list display: groups start collapsed (a long dictionary otherwise
 // floods the page); toggling a group header expands it. `onlyUnmatched`
@@ -200,8 +149,8 @@ async function loadAliases(): Promise<void> {
 
 async function saveAlias(): Promise<void> {
   const request: UpsertTaxonomyAliasRequest = {
-    vocabulary: vocabulary.value,
-    partition: partition.value,
+    vocabulary: 'entry',
+    partition: aliasPartition.value,
     alias: aliasName.value.trim(),
     canonicalName: canonicalName.value.trim(),
   };
@@ -235,8 +184,7 @@ async function removeAlias(aliasId: number): Promise<void> {
 
 /** Loads a placeholder row (imported name, no canonical yet) into the form. */
 function startFill(alias: TaxonomyAliasDto): void {
-  vocabulary.value = alias.vocabulary;
-  partition.value = alias.partition;
+  aliasPartition.value = alias.partition;
   aliasName.value = alias.alias;
   canonicalName.value = '';
 }
@@ -267,6 +215,139 @@ async function importDictionary(event: Event): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Title shortening: reviewed list of `<original> | <translation>` titles.
+// One decision per Entry: which side to keep. Prefilled from the plan's
+// suggestion, left empty when the plan could not infer a direction.
+// ---------------------------------------------------------------------------
+const titleBusy = ref(false);
+const titlePlan = ref<TitleShorteningPlanResponse | null>(null);
+const titleResult = ref<ApplyTitleShorteningResponse | null>(null);
+const titleError = ref<string | null>(null);
+const titleChoices = ref<Record<number, TitleShorteningSide | null>>({});
+
+const chosenTitleChanges = computed<TitleShorteningChange[]>(() => {
+  const candidates = titlePlan.value?.candidates ?? [];
+  return candidates.flatMap((candidate) => {
+    const side = titleChoices.value[candidate.entryId] ?? null;
+    if (side === null) return [];
+    return [{
+      entryId: candidate.entryId,
+      title: candidate.title,
+      shortenedTitle: side === 'front' ? candidate.keepFront : candidate.keepBack,
+    }];
+  });
+});
+
+async function loadTitlePlan(): Promise<void> {
+  titleBusy.value = true;
+  titleError.value = null;
+  titleResult.value = null;
+  try {
+    titlePlan.value = await props.api.planTitleShortening();
+    const choices: Record<number, TitleShorteningSide | null> = {};
+    for (const candidate of titlePlan.value.candidates) {
+      choices[candidate.entryId] = candidate.suggested;
+    }
+    titleChoices.value = choices;
+  } catch (cause) {
+    titleError.value = cause instanceof Error ? cause.message : t('title.planError');
+  } finally {
+    titleBusy.value = false;
+  }
+}
+
+async function applyTitleShorteningChanges(): Promise<void> {
+  const changes = chosenTitleChanges.value;
+  if (changes.length === 0) return;
+  // Destructive bulk edit: the first tap only arms the button.
+  if (!arm('apply-title-shortening')) return;
+  disarm('apply-title-shortening');
+  titleBusy.value = true;
+  titleError.value = null;
+  try {
+    titleResult.value = await props.api.applyTitleShortening(changes);
+    titlePlan.value = null;
+    titleChoices.value = {};
+    emit('works-changed');
+  } catch (cause) {
+    titleError.value = cause instanceof Error ? cause.message : t('title.applyError');
+  } finally {
+    titleBusy.value = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tag merge: one kept tag absorbs the others — assignments move, merged tag
+// rows are deleted outright (old names have no retrieval value, unlike author
+// alternates). Inputs use the relation autocomplete in id-only mode: a merge
+// needs real, existing tags.
+// ---------------------------------------------------------------------------
+interface TagMergePick {
+  id: number;
+  name: string;
+}
+const mergeKept = ref<TagMergePick | null>(null);
+const mergeMerged = ref<TagMergePick[]>([]);
+const tagMergeBusy = ref(false);
+const tagMergeNotice = ref('');
+const tagMergeError = ref<string | null>(null);
+const tagMergeFormKey = ref(0);
+
+function suggestEntryTagsForMerge(query: string, excludeIds: number[], signal: AbortSignal) {
+  return props.api.suggestTags({ vocabulary: 'entry', q: query, excludeIds }, signal);
+}
+
+function pickMergeKept(suggestion: RelationSuggestion): void {
+  mergeMerged.value = mergeMerged.value.filter((pick) => pick.id !== suggestion.id);
+  mergeKept.value = { id: suggestion.id, name: suggestion.name };
+}
+
+function pickMergeMerged(suggestion: RelationSuggestion): void {
+  if (mergeKept.value?.id === suggestion.id) return;
+  if (mergeMerged.value.some((pick) => pick.id === suggestion.id)) return;
+  mergeMerged.value.push({ id: suggestion.id, name: suggestion.name });
+}
+
+function removeMergeMerged(id: number): void {
+  mergeMerged.value = mergeMerged.value.filter((pick) => pick.id !== id);
+}
+
+function removeMergeKept(): void {
+  mergeKept.value = null;
+}
+
+async function applyTagMerge(): Promise<void> {
+  if (mergeKept.value === null || mergeMerged.value.length === 0) return;
+  if (!arm('apply-tag-merge')) return;
+  disarm('apply-tag-merge');
+  tagMergeBusy.value = true;
+  tagMergeNotice.value = '';
+  tagMergeError.value = null;
+  error.value = null;
+  try {
+    const result = await props.api.mergeTag({
+      vocabulary: 'entry',
+      keptTagId: mergeKept.value.id,
+      mergedTagIds: mergeMerged.value.map((pick) => pick.id),
+    });
+    tagMergeNotice.value = t('tagMerge.notice', {
+      moved: String(result.movedAssignments),
+      skipped: String(result.skippedDuplicates),
+      deleted: String(result.deletedTags),
+    });
+    mergeKept.value = null;
+    mergeMerged.value = [];
+    tagMergeFormKey.value += 1; // rebuild the autocomplete inputs
+    await loadAliases();
+    emit('works-changed');
+  } catch (cause) {
+    tagMergeError.value = cause instanceof Error ? cause.message : t('tagMerge.error');
+  } finally {
+    tagMergeBusy.value = false;
+  }
+}
+
 // One-click author merge with a before/after report
 // ---------------------------------------------------------------------------
 const mergeBusy = ref(false);
@@ -300,8 +381,15 @@ function planLine(item: ProducerMergePlanItem): string {
   });
 }
 
-async function runMerge(): Promise<void> {
-  if (!plan.value || plan.value.plans.length === 0) return;
+const authorMergeArmed = computed(() => plan.value !== null && plan.value.plans.length > 0);
+
+/** One compact button: first tap plans (finds duplicate groups), second tap
+ * executes. Deliberately small — the merge itself is a single action. */
+async function authorMergeButton(): Promise<void> {
+  if (!authorMergeArmed.value) {
+    await loadPlan();
+    return;
+  }
   if (!arm('run-merge')) return;
   disarm('run-merge');
   mergeBusy.value = true;
@@ -355,6 +443,13 @@ const aliasDisplayName = ref('');
 const aliasTagNames = ref<string[]>([]);
 const aliasGroupBusy = ref(false);
 const aliasGroupNotice = ref('');
+const authorAliasFormKey = ref(0);
+
+/** Relation suggestions while typing alias names: existing Authors and their
+ * identity aliases (e.g. typing "kaise dake" offers "kaise_dake"). */
+function suggestProducersForAlias(query: string, excludeIds: number[], signal: AbortSignal) {
+  return props.api.suggestProducers({ q: query, excludeIds }, signal);
+}
 
 async function loadAuthorAliasGroups(): Promise<void> {
   try {
@@ -375,6 +470,11 @@ function removeAliasTagRow(index: number): void {
 }
 
 async function saveAuthorAliasGroup(): Promise<void> {
+  // A real click on Save blurs the focused input first (commit-on-blur writes
+  // its value); do the same explicitly so keyboard flows are equally safe.
+  if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+    document.activeElement.blur();
+  }
   const displayName = aliasDisplayName.value.trim();
   const tagNames = aliasTagNames.value.map((name) => name.trim()).filter((name) => name !== '');
   if (!displayName || tagNames.length === 0) return;
@@ -394,6 +494,7 @@ async function saveAuthorAliasGroup(): Promise<void> {
       : t('authorAlias.saved', { display: result.group.canonicalName });
     aliasDisplayName.value = '';
     aliasTagNames.value = [];
+    authorAliasFormKey.value += 1; // rebuild the autocomplete inputs
     await loadAuthorAliasGroups();
     emit('authors-changed');
   } catch (cause) {
@@ -438,11 +539,6 @@ watch(tab, (value) => {
       error.value = cause instanceof Error ? cause.message : t('advanced.loadError');
     });
   }
-  if (value === 'unassigned' && !unassignedLoaded.value) {
-    fetchUnassigned().catch((reason) => {
-      error.value = reason instanceof Error ? reason.message : String(reason);
-    });
-  }
   if (value === 'authors' && !authorAliasLoaded.value) {
     void loadAuthorAliasGroups();
   }
@@ -460,31 +556,22 @@ watch(tab, (value) => {
 
     <nav class="advanced-tabs" aria-label="advanced">
       <button
-        data-testid="advanced-tab-dictionary"
+        data-testid="advanced-tab-tags"
         class="secondary-button"
         type="button"
-        :class="{ active: tab === 'dictionary' }"
-        @click="tab = 'dictionary'"
+        :class="{ active: tab === 'tags' }"
+        @click="tab = 'tags'"
       >
-        {{ t('advanced.dictionaryTab') }}
+        {{ t('advanced.tagsTab') }}
       </button>
       <button
-        data-testid="advanced-tab-merge"
+        data-testid="advanced-tab-authors"
         class="secondary-button"
         type="button"
-        :class="{ active: tab === 'merge' }"
-        @click="tab = 'merge'"
+        :class="{ active: tab === 'authors' }"
+        @click="tab = 'authors'"
       >
-        {{ t('advanced.mergeTab') }}
-      </button>
-      <button
-        data-testid="advanced-tab-unassigned"
-        class="secondary-button"
-        type="button"
-        :class="{ active: tab === 'unassigned' }"
-        @click="tab = 'unassigned'"
-      >
-        {{ t('advanced.unassignedTab') }}
+        {{ t('advanced.authorsTab') }}
       </button>
       <button
         data-testid="advanced-tab-templates"
@@ -496,19 +583,28 @@ watch(tab, (value) => {
         {{ t('advanced.templatesTab') }}
       </button>
       <button
-        data-testid="advanced-tab-authors"
+        data-testid="advanced-tab-titles"
         class="secondary-button"
         type="button"
-        :class="{ active: tab === 'authors' }"
-        @click="tab = 'authors'"
+        :class="{ active: tab === 'titles' }"
+        @click="tab = 'titles'"
       >
-        {{ t('advanced.authorsTab') }}
+        {{ t('advanced.titlesTab') }}
+      </button>
+      <button
+        data-testid="advanced-tab-sources"
+        class="secondary-button"
+        type="button"
+        :class="{ active: tab === 'sources' }"
+        @click="tab = 'sources'"
+      >
+        {{ t('advanced.sourcesTab') }}
       </button>
     </nav>
 
     <p v-if="error" class="error-message" role="alert">{{ error }}</p>
 
-    <section v-if="tab === 'dictionary'" data-testid="advanced-dictionary" class="advanced-card">
+    <section v-if="tab === 'tags'" data-testid="advanced-tags" class="advanced-card">
       <h3>{{ t('taxonomy.title') }}</h3>
       <p class="muted">{{ t('taxonomy.hint') }}</p>
 
@@ -527,22 +623,6 @@ watch(tab, (value) => {
       </p>
 
       <form data-testid="taxonomy-alias-form" class="alias-form" @submit.prevent="saveAlias">
-        <label>
-          {{ t('taxonomy.vocabulary') }}
-          <select v-model="vocabulary" data-testid="taxonomy-vocabulary-select" name="taxonomyVocabulary">
-            <option value="entry">{{ t('taxonomy.entry') }}</option>
-            <option value="producer">{{ t('taxonomy.producer') }}</option>
-          </select>
-        </label>
-        <label>
-          {{ t('taxonomy.partition') }}
-          <select v-model="partition" data-testid="taxonomy-partition-select" name="taxonomyPartition">
-            <option value="">{{ t('taxonomy.unpartitioned') }}</option>
-            <option v-for="candidate in partitionOptions" :key="candidate" :value="candidate">
-              {{ partitionLabel(candidate) }}
-            </option>
-          </select>
-        </label>
         <label>
           {{ t('taxonomy.alias') }}
           <input
@@ -622,154 +702,87 @@ watch(tab, (value) => {
       <p v-if="onlyUnmatched && visibleGroups.length === 0" class="muted" data-testid="taxonomy-no-unmatched">
         {{ t('taxonomy.noUnmatched') }}
       </p>
-    </section>
 
-    <section v-else-if="tab === 'merge'" data-testid="advanced-merge" class="advanced-card">
-      <h3>{{ t('advanced.mergeTab') }}</h3>
-      <p class="muted">{{ t('merge.hint') }}</p>
-
-      <div class="merge-actions">
-        <button
-          data-testid="merge-plan-button"
-          class="secondary-button"
-          type="button"
-          :disabled="mergeBusy"
-          @click="loadPlan"
-        >
-          {{ mergeBusy ? t('merge.planning') : t('merge.plan') }}
-        </button>
-        <button
-          v-if="plan && plan.plans.length > 0"
-          data-testid="merge-run-button"
-          class="secondary-button danger-button"
-          :class="{ 'armable-armed': armedKey === 'run-merge' }"
-          type="button"
-          :disabled="mergeBusy"
-          @click="runMerge"
-        >
-          {{ mergeBusy
-            ? t('merge.executing')
-            : armedKey === 'run-merge' ? t('merge.confirmRunShort', { count: String(plan?.plans.length ?? 0) }) : t('merge.execute') }}
-        </button>
-      </div>
-
-      <p v-if="plan && plan.plans.length === 0" class="muted">{{ t('merge.noPlans') }}</p>
-      <ul v-if="plan && plan.plans.length > 0" data-testid="merge-plan-list" class="merge-list">
-        <li
-          v-for="(item, index) in plan.plans"
-          :key="`${item.keeper.id}-${item.keeper.name}`"
-          :data-testid="`merge-plan-item-${index}`"
-        >
-          {{ planLine(item) }}
-        </li>
-      </ul>
-
-      <section v-if="result" data-testid="merge-result" class="merge-result">
-        <h4>{{ t('merge.resultHeading') }}</h4>
-        <ul class="merge-list">
-          <li
-            v-for="(item, index) in result.plans"
-            :key="`${item.keeperId}-${item.keeperName}`"
-            :data-testid="`merge-result-item-${index}`"
-          >
-            {{ resultLine(item) }}
-            <small v-if="resultDetail(item).length > 0">{{ resultDetail(item).join(' · ') }}</small>
-          </li>
-        </ul>
-        <p data-testid="merge-totals">{{ t('merge.totals', {
-          deleted: result.totals.deletedProducers,
-          works: result.totals.worksRelinked,
-          renamed: result.totals.renamed,
-        }) }}</p>
-        <p v-if="result.backupPath" class="muted" data-testid="merge-backup">
-          {{ t('merge.backupPath', { path: result.backupPath }) }}
-        </p>
-        <p
-          class="merge-integrity"
-          :class="result.foreignKeyCheckPass && result.doctorPass ? 'merge-integrity-pass' : 'merge-integrity-fail'"
-          data-testid="merge-integrity"
-        >
-          {{ result.foreignKeyCheckPass && result.doctorPass
-            ? t('merge.integrityPass')
-            : t('merge.integrityFail', { issues: result.doctorIssues.join('; ') || 'foreign_key_check' }) }}
-        </p>
-      </section>
-    </section>
-
-    <section v-else-if="tab === 'unassigned'" data-testid="advanced-unassigned" class="advanced-card">
-      <h3>{{ t('unassigned.title') }}</h3>
-      <p class="muted">{{ t('unassigned.hint') }}</p>
-      <p v-if="unassignedNotice" class="merge-integrity merge-integrity-pass" data-testid="unassigned-notice" role="status">
-        {{ unassignedNotice }}
-      </p>
-
-      <div v-for="group in unassignedGroups" :key="group.entryType" class="alias-group">
-        <button
-          type="button"
-          class="alias-group-header"
-          :data-testid="`unassigned-group-${group.entryType}`"
-          :aria-expanded="expandedUnassigned.has(group.entryType)"
-          @click="toggleUnassignedGroup(group.entryType)"
-        >
-          <span class="alias-group-title">
-            <span class="alias-caret" aria-hidden="true">{{ expandedUnassigned.has(group.entryType) ? '▾' : '▸' }}</span>
-            {{ group.entryType }}
-            <small>{{ group.tags.length }}</small>
-          </span>
-        </button>
-        <ul v-if="expandedUnassigned.has(group.entryType)" data-testid="unassigned-tag-list" class="taxonomy-alias-list">
-          <li
-            v-for="tag in group.tags"
-            :key="`${group.entryType}-${tag.tagId}`"
-            :data-testid="`unassigned-tag-${tag.tagId}`"
-            class="unassigned-row"
-          >
-            <span class="unassigned-tag-name">
-              {{ tag.tagName }}
-              <small>{{ t('unassigned.entries', { count: String(tag.entryCount) }) }}</small>
-            </span>
-            <label class="unassigned-target">
-              {{ t('unassigned.moveTo') }}
-              <select
-                v-model.number="targetForTag[tag.tagId]"
-                :data-testid="`unassigned-target-${tag.tagId}`"
-              >
-                <option :value="undefined" disabled>{{ t('unassigned.chooseFacet') }}</option>
-                <option v-for="facet in group.facets" :key="facet.facetId" :value="facet.facetId">
-                  {{ facet.facetName }}
-                </option>
-              </select>
-            </label>
+      <div :key="tagMergeFormKey" class="alias-form tag-merge-form" data-testid="tag-merge-form">
+        <h4>{{ t('tagMerge.title') }}</h4>
+        <p class="muted">{{ t('tagMerge.hint') }}</p>
+        <div class="tag-merge-row">
+          <span class="tag-merge-label">{{ t('tagMerge.kept') }}</span>
+          <span v-if="mergeKept !== null" class="author-alias-chip">
+            {{ mergeKept.name }}
             <button
               type="button"
-              class="secondary-button"
-              :disabled="movingTagId === tag.tagId || targetForTag[tag.tagId] === undefined"
-              :data-testid="`unassigned-move-${tag.tagId}`"
-              @click="moveTag(group, tag.tagName, tag.tagId, undefined)"
-            >
-              {{ movingTagId === tag.tagId ? t('unassigned.moving') : t('unassigned.move') }}
-            </button>
-            <span v-if="tag.suggestion" class="unassigned-suggestion">
-              {{ t('unassigned.majority', {
-                facet: tag.suggestion.facetName,
-                count: String(tag.suggestion.count),
-              }) }}
-              <button
-                type="button"
-                class="alias-action"
-                :disabled="movingTagId === tag.tagId"
-                :data-testid="`unassigned-follow-${tag.tagId}`"
-                @click="moveTag(group, tag.tagName, tag.tagId, tag.suggestion!.facetId)"
-              >
-                {{ t('unassigned.follow') }}
-              </button>
-            </span>
-          </li>
-        </ul>
+              class="remove-tag-button"
+              :aria-label="t('tag.removeSelection')"
+              data-testid="tag-merge-kept-remove"
+              @click="removeMergeKept"
+            >×</button>
+          </span>
+          <SuggestionInput
+            v-else
+            mode="id-only"
+            name="tagMergeKept"
+            :provider="suggestEntryTagsForMerge"
+            :exclude-ids="mergeMerged.map((pick) => pick.id)"
+            :aria-label="t('tagMerge.kept')"
+            :placeholder="t('suggestion.searchPlaceholder')"
+            @select="pickMergeKept"
+          />
+        </div>
+        <div class="tag-merge-row">
+          <span class="tag-merge-label">{{ t('tagMerge.merged') }}</span>
+          <span
+            v-for="pick in mergeMerged"
+            :key="pick.id"
+            class="author-alias-chip"
+            :data-testid="`tag-merge-pick-${pick.id}`"
+          >
+            {{ pick.name }}
+            <button
+              type="button"
+              class="remove-tag-button"
+              :aria-label="t('tag.removeSelection')"
+              :data-testid="`tag-merge-remove-${pick.id}`"
+              @click="removeMergeMerged(pick.id)"
+            >×</button>
+          </span>
+          <SuggestionInput
+            mode="id-only"
+            name="tagMergeMerged"
+            :provider="suggestEntryTagsForMerge"
+            :exclude-ids="[...(mergeKept === null ? [] : [mergeKept.id]), ...mergeMerged.map((pick) => pick.id)]"
+            :aria-label="t('tagMerge.merged')"
+            :placeholder="t('suggestion.searchPlaceholder')"
+            @select="pickMergeMerged"
+          />
+        </div>
+        <button
+          type="button"
+          class="primary-button tag-merge-apply"
+          :class="{ 'armable-armed': armedKey === 'apply-tag-merge' }"
+          :disabled="tagMergeBusy || mergeKept === null || mergeMerged.length === 0"
+          data-testid="tag-merge-apply"
+          @click="applyTagMerge"
+        >
+          {{ armedKey === 'apply-tag-merge' ? t('tagMerge.applyConfirm') : t('tagMerge.apply') }}
+        </button>
+        <p
+          v-if="tagMergeError"
+          class="merge-integrity merge-integrity-fail"
+          data-testid="tag-merge-error"
+          role="alert"
+        >
+          {{ tagMergeError }}
+        </p>
+        <p
+          v-if="tagMergeNotice"
+          class="merge-integrity merge-integrity-pass"
+          data-testid="tag-merge-notice"
+          role="status"
+        >
+          {{ tagMergeNotice }}
+        </p>
       </div>
-      <p v-if="unassignedLoaded && unassignedGroups.length === 0" class="muted" data-testid="unassigned-empty">
-        {{ t('unassigned.empty') }}
-      </p>
     </section>
 
     <section v-else-if="tab === 'templates'" data-testid="advanced-templates" class="advanced-card">
@@ -851,35 +864,199 @@ watch(tab, (value) => {
       </div>
     </section>
 
+    <section v-else-if="tab === 'titles'" data-testid="advanced-titles" class="advanced-card">
+      <h3>{{ t('advanced.titlesTab') }}</h3>
+      <p class="muted">{{ t('title.hint') }}</p>
+
+      <div class="merge-actions">
+        <button
+          data-testid="title-plan-button"
+          class="secondary-button"
+          type="button"
+          :disabled="titleBusy"
+          @click="loadTitlePlan"
+        >
+          {{ titleBusy ? t('title.planning') : t('title.plan') }}
+        </button>
+      </div>
+
+      <p v-if="titlePlan && titlePlan.candidates.length === 0" class="muted">
+        {{ t('title.noCandidates') }}
+      </p>
+      <ul v-if="titlePlan" class="merge-list">
+        <li
+          v-for="(candidate, index) in titlePlan.candidates"
+          :key="candidate.entryId"
+          :data-testid="`title-plan-item-${index}`"
+        >
+          <p class="title-current" :data-testid="`title-current-${index}`">{{ candidate.title }}</p>
+          <div class="title-side-picker">
+            <button
+              type="button"
+              class="title-side-button"
+              :class="{ active: titleChoices[candidate.entryId] === 'front' }"
+              :data-testid="`title-keep-front-${index}`"
+              @click="titleChoices[candidate.entryId] = 'front'"
+            >
+              {{ candidate.keepFront }}
+              <small>{{ t('title.keepFront') }}</small>
+            </button>
+            <button
+              type="button"
+              class="title-side-button"
+              :class="{ active: titleChoices[candidate.entryId] === 'back' }"
+              :data-testid="`title-keep-back-${index}`"
+              @click="titleChoices[candidate.entryId] = 'back'"
+            >
+              {{ candidate.keepBack }}
+              <small>{{ t('title.keepBack') }}</small>
+            </button>
+            <small
+              v-if="candidate.suggested === null && titleChoices[candidate.entryId] === null"
+              class="title-side-note"
+              :data-testid="`title-undecided-${index}`"
+            >
+              {{ t('title.undecided') }}
+            </small>
+          </div>
+        </li>
+      </ul>
+
+      <button
+        v-if="chosenTitleChanges.length > 0"
+        data-testid="title-apply-button"
+        class="secondary-button danger-button"
+        :class="{ 'armable-armed': armedKey === 'apply-title-shortening' }"
+        type="button"
+        :disabled="titleBusy"
+        @click="applyTitleShorteningChanges"
+      >
+        {{ titleBusy
+          ? t('title.applying')
+          : armedKey === 'apply-title-shortening'
+            ? t('title.confirmShort', { count: String(chosenTitleChanges.length) })
+            : t('title.apply', { count: String(chosenTitleChanges.length) }) }}
+      </button>
+      <p v-if="titleError" class="merge-integrity merge-integrity-fail" role="alert">{{ titleError }}</p>
+      <section v-if="titleResult" data-testid="title-result" class="merge-result">
+        <h4>{{ t('title.resultHeading') }}</h4>
+        <p data-testid="title-totals">{{ t('title.totals', {
+          shortened: String(titleResult.shortenedCount),
+          skipped: String(titleResult.skippedCount),
+        }) }}</p>
+        <p v-if="titleResult.backupPath" class="muted" data-testid="title-backup">
+          {{ t('merge.backupPath', { path: titleResult.backupPath }) }}
+        </p>
+      </section>
+    </section>
     <section v-else-if="tab === 'authors'" data-testid="advanced-authors" class="advanced-card">
       <h3>{{ t('advanced.authorsTab') }}</h3>
       <p class="muted">{{ t('authorAlias.hint') }}</p>
+
+      <section data-testid="author-merge-compact" class="alias-form">
+        <h4>{{ t('advanced.mergeTab') }}</h4>
+        <button
+          data-testid="merge-run-button"
+          class="primary-button"
+          :class="{ 'armable-armed': armedKey === 'run-merge' }"
+          type="button"
+          :disabled="mergeBusy"
+          @click="authorMergeButton"
+        >
+          {{ mergeBusy
+            ? t('merge.executing')
+            : authorMergeArmed
+              ? t('merge.confirmRunShort', { count: String(plan?.plans.length ?? 0) })
+              : t('merge.execute') }}
+        </button>
+        <p v-if="plan && plan.plans.length === 0" class="muted">{{ t('merge.noPlans') }}</p>
+        <p v-if="plan && plan.plans.length > 0" class="muted" data-testid="merge-plan-summary">
+          {{ t('merge.planSummary', { count: String(plan.plans.length) }) }}
+        </p>
+        <details v-if="plan && plan.plans.length > 0">
+          <summary class="muted">{{ t('merge.planDetails') }}</summary>
+          <ul data-testid="merge-plan-list" class="merge-list">
+            <li
+              v-for="(item, index) in plan.plans"
+              :key="`${item.keeper.id}-${item.keeper.name}`"
+              :data-testid="`merge-plan-item-${index}`"
+            >
+              {{ planLine(item) }}
+            </li>
+          </ul>
+        </details>
+
+        <section v-if="result" data-testid="merge-result" class="merge-result">
+          <h4>{{ t('merge.resultHeading') }}</h4>
+          <ul class="merge-list">
+            <li
+              v-for="(item, index) in result.plans"
+              :key="`${item.keeperId}-${item.keeperName}`"
+              :data-testid="`merge-result-item-${index}`"
+            >
+              {{ resultLine(item) }}
+              <small v-if="resultDetail(item).length > 0">{{ resultDetail(item).join(' · ') }}</small>
+            </li>
+          </ul>
+          <p data-testid="merge-totals">{{ t('merge.totals', {
+            deleted: result.totals.deletedProducers,
+            works: result.totals.worksRelinked,
+            renamed: result.totals.renamed,
+          }) }}</p>
+          <p v-if="result.backupPath" class="muted" data-testid="merge-backup">
+            {{ t('merge.backupPath', { path: result.backupPath }) }}
+          </p>
+          <p
+            class="merge-integrity"
+            :class="result.foreignKeyCheckPass && result.doctorPass ? 'merge-integrity-pass' : 'merge-integrity-fail'"
+            data-testid="merge-integrity"
+          >
+            {{ result.foreignKeyCheckPass && result.doctorPass
+              ? t('merge.integrityPass')
+              : t('merge.integrityFail') }}
+          </p>
+        </section>
+      </section>
       <p v-if="aliasGroupNotice" class="merge-integrity merge-integrity-pass" data-testid="author-alias-notice" role="status">
         {{ aliasGroupNotice }}
       </p>
 
-      <form data-testid="author-alias-form" class="alias-form" @submit.prevent="saveAuthorAliasGroup">
+      <form
+        :key="authorAliasFormKey"
+        data-testid="author-alias-form"
+        class="alias-form"
+        @submit.prevent="saveAuthorAliasGroup"
+      >
         <label>
           {{ t('authorAlias.displayName') }}
-          <input
-            v-model="aliasDisplayName"
+          <SuggestionInput
+            mode="creatable-text"
+            select-fills-input
+            commit-on-blur
             name="authorAliasDisplayName"
+            :provider="suggestProducersForAlias"
+            :aria-label="t('authorAlias.displayName')"
             :placeholder="t('authorAlias.displayNamePlaceholder')"
-            required
-            autocomplete="off"
-          >
+            @select="(suggestion) => (aliasDisplayName = suggestion.name)"
+            @submit-text="(text) => (aliasDisplayName = text)"
+          />
         </label>
         <div class="alias-tag-rows">
           <label v-for="(_name, index) in aliasTagNames" :key="`alias-tag-${index}`">
             {{ t('authorAlias.tagName') }}
             <span class="alias-tag-row">
-              <input
-                v-model="aliasTagNames[index]"
+              <SuggestionInput
+                mode="creatable-text"
+                select-fills-input
+                commit-on-blur
                 :name="`authorAliasTag${index}`"
+                :provider="suggestProducersForAlias"
+                :aria-label="t('authorAlias.tagName')"
                 :data-testid="`author-alias-tag-${index}`"
                 :placeholder="t('authorAlias.tagNamePlaceholder')"
-                autocomplete="off"
-              >
+                @select="(suggestion) => (aliasTagNames[index] = suggestion.name)"
+                @submit-text="(text) => (aliasTagNames[index] = text)"
+              />
               <button
                 type="button"
                 class="remove-tag-button"
@@ -926,6 +1103,11 @@ watch(tab, (value) => {
         </li>
       </ul>
     </section>
+    <SourceMaintenancePanel
+      v-if="tab === 'sources'"
+      :api="props.api"
+      @works-changed="emit('works-changed')"
+    />
   </section>
 </template>
 
@@ -959,6 +1141,11 @@ watch(tab, (value) => {
   font-weight: 400;
 }
 .alias-arrow { text-align: center; color: var(--text-muted); }
+.tag-merge-form h4 { margin: 0; }
+.tag-merge-form .muted { margin: 0; }
+.tag-merge-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.tag-merge-label { flex: 0 0 5.5rem; color: var(--text-muted); font-size: 0.78rem; font-weight: 700; }
+.tag-merge-apply { justify-self: start; }
 .primary-button { padding: 0.5rem 0.8rem; border: 1px solid var(--accent); border-radius: 0.55rem; color: white; background: var(--accent); font: inherit; cursor: pointer; }
 .primary-button:disabled { opacity: 0.55; cursor: default; }
 .secondary-button { padding: 0.5rem 0.8rem; border: 1px solid var(--border-subtle); border-radius: 0.55rem; color: var(--text-primary); background: var(--surface); font: inherit; cursor: pointer; }

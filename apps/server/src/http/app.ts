@@ -29,6 +29,7 @@ import {
   entryPageResponseSchema,
   entryTagAssignmentSchema,
   entryTagUsageSchema,
+  entrySourceRecordSchema,
   entryTypeParamsSchema,
   entryTypeQuerySchema,
   facetFilterOptionsResponseSchema,
@@ -38,6 +39,8 @@ import {
   collectionKindSchema,
   collectionRecordSchema,
   createCollectionRequestSchema,
+  createTemporaryCollectionRequestSchema,
+  temporaryCollectionResponseSchema,
   galleryPartitionRequestSchema,
   gallerySummarySchema,
   reorderCollectionsRequestSchema,
@@ -50,6 +53,12 @@ import {
   layoutResponseSchema,
   layoutTemplateApplyResponseSchema,
   mergeViewLaterRequestSchema,
+  mergeAuthorEntriesRequestSchema,
+  mergeAuthorEntriesResponseSchema,
+  convertEntryAuthorsResponseSchema,
+  applyTitleShorteningRequestSchema,
+  applyTitleShorteningResponseSchema,
+  titleShorteningPlanResponseSchema,
   moveEntryTagRequestSchema,
   mutationSuccessResponseSchema,
   authorAliasGroupsResponseSchema,
@@ -63,7 +72,10 @@ import {
   producerPageResponseSchema,
   producerSummarySchema,
   producerTagAssignmentSchema,
+
   renameEntryTagRequestSchema,
+  tagMergeRequestSchema,
+  tagMergeResponseSchema,
   renameProducerTagRequestSchema,
   renameTagGroupRequestSchema,
   ratingRowSchema,
@@ -73,6 +85,9 @@ import {
   reorderRatingSlotsRequestSchema,
   reorderSectionFacetsRequestSchema,
   reorderTagGroupRequestSchema,
+  relationSuggestionResponseSchema,
+  producerSuggestionQuerySchema,
+  tagSuggestionQuerySchema,
   sectionIdParamsSchema,
   setRatingRequestSchema,
   tagGroupIdParamsSchema,
@@ -98,6 +113,25 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { z, ZodError, type ZodType } from 'zod';
+import {
+  commitSourceMaintenanceRequestSchema,
+  commitSourceMaintenanceResponseSchema,
+  createSourceMaintenanceRunRequestSchema,
+  sourceMaintenanceItemPageQuerySchema,
+  sourceMaintenanceItemPageResponseSchema,
+  sourceMaintenanceItemPatchSchema,
+  sourceMaintenanceItemRecordSchema,
+  sourceMaintenanceRunRecordSchema,
+  sourceLibraryRecordSchema,
+  sourceStatusPatchSchema,
+  sourceStatusRecordSchema,
+  syncCapabilitiesSchema,
+  syncSnapshotSchema,
+} from '@t3/shared';
+import type {
+  SourceLibraryRecord,
+  SourceStatusRecord,
+} from '@t3/shared';
 import type { T3Database } from '../database/connection.js';
 import { inspectDatabase } from '../database/doctor.js';
 import { commitImportBatch } from '../import/commit.js';
@@ -120,6 +154,12 @@ import {
   reorderEntryContents,
   updateEntryContent,
 } from '../repositories/entry-content-repository.js';
+import { mergeAuthorEntries } from '../repositories/entry-merge-repository.js';
+import { convertEntryAuthorsToMultiAuthor } from '../repositories/entry-multi-author-repository.js';
+import {
+  applyTitleShortening,
+  planTitleShortening,
+} from '../repositories/title-shortening-repository.js';
 import {
   createEntry,
   deleteEntry,
@@ -142,6 +182,10 @@ import {
   removeEntryTag,
   searchEntryTags,
 } from '../repositories/entry-tag-repository.js';
+import {
+  listEntrySources,
+  listSourceLibrary,
+} from '../repositories/source-library-repository.js';
 import {
   applyLayoutTemplate,
   createFacet,
@@ -198,6 +242,7 @@ import {
 } from '../repositories/template-export.js';
 import {
   addCollectionEntry,
+  createCollectionFromEntries,
   addCollectionProducer,
   createCollection,
   deleteCollection,
@@ -226,6 +271,22 @@ import {
   listTaxonomyAliases,
   upsertTaxonomyAlias,
 } from '../repositories/taxonomy-repository.js';
+import { suggestProducers, suggestTags } from '../repositories/suggestion-repository.js';
+import { mergeTag } from '../repositories/tag-merge-repository.js';
+import {
+  createRun,
+  getRun,
+  listRunItems,
+  patchItem,
+  updateRunStatus,
+  listSourceStatuses,
+  setSourceStatus,
+} from '../source-maintenance/repository.js';
+import { executeSearchRun } from '../source-maintenance/job-manager.js';
+import { commitSourceMaintenanceRun, CommitConflictError, CommitStaleError } from '../source-maintenance/commit-service.js';
+import { getSourceAdapter, probeTargetHomepage } from '../source-maintenance/adapter-registry.js';
+import { buildSyncCapabilities, buildSyncSnapshot } from '../sync/sync-service.js';
+import type { TitleCatalogProvider } from '../source-maintenance/catalog-provider.js';
 
 async function parseJson<T>(request: Request, schema: ZodType<T>): Promise<T> {
   return schema.parse(await request.json());
@@ -258,7 +319,24 @@ function isDomainConflictError(error: unknown): boolean {
     return false;
   }
   return error.message.startsWith('cannot ')
-    || error.message.startsWith('content reorder must ');
+    || error.message.startsWith('content reorder must ')
+    || error.message.startsWith('Entry merge ')
+    || error.message.startsWith('Both Entries ')
+    || error.message.startsWith('Multi Author conversion ')
+    || error.message.startsWith('Selected source URL ');
+}
+
+/**
+ * Export folder and upload problems are client data problems: the caller must
+ * see which file or field is wrong, so these keep their own message instead of
+ * collapsing into the generic validation error.
+ */
+function isExportDataError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return error.message.startsWith('Export ')
+    || error.message.startsWith('Unsupported site_probe export format');
 }
 
 export interface ApiAppOptions {
@@ -266,12 +344,22 @@ export interface ApiAppOptions {
   /** Live database path, used for the merge backup snapshot. */
   databasePath?: string;
   /**
+   * Catalog providers used by Source maintenance runs. The production server
+   * wires the live providers; tests inject fixture-backed ones so no test
+   * ever touches the real network.
+   */
+  catalogProviders?: TitleCatalogProvider[];
+  /**
    * Directory of a built web app (`apps/web/dist`). When set, non-`/api` GET
    * requests are served from it (files first, then a single-page fallback to
    * `index.html` for client-side routes). API-only mode when omitted.
    */
   staticRoot?: string;
 }
+
+const runIdOnlyParams = z.object({ runId: z.coerce.number().int().positive() });
+const runRecordSchema = sourceMaintenanceRunRecordSchema;
+const itemRecordSchema = sourceMaintenanceItemRecordSchema;
 
 export function createApiApp(database: T3Database, options: ApiAppOptions = {}): Hono {
   const app = new Hono();
@@ -478,6 +566,14 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     return context.json(collectionRecordSchema.parse(record), 201);
   });
 
+  app.post('/api/collections/temporary', async (context) => {
+    const input = await parseJson(context.req.raw, createTemporaryCollectionRequestSchema);
+    return context.json(
+      temporaryCollectionResponseSchema.parse(createCollectionFromEntries(database, input.entryIds)),
+      201,
+    );
+  });
+
   app.patch('/api/collections/:collectionId', async (context) => {
     const { collectionId } = collectionIdParamsSchema.parse({
       collectionId: context.req.param('collectionId'),
@@ -570,6 +666,31 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     ));
   });
 
+  app.get('/api/suggestions/tags', (context) => {
+    const input = tagSuggestionQuerySchema.parse(context.req.query());
+    return context.json(relationSuggestionResponseSchema.parse(suggestTags(database, input)));
+  });
+
+  app.get('/api/suggestions/producers', (context) => {
+    const input = producerSuggestionQuerySchema.parse(context.req.query());
+    return context.json(relationSuggestionResponseSchema.parse(suggestProducers(database, input)));
+  });
+
+  app.post('/api/tags/merge', async (context) => {
+    const input = await parseJson(context.req.raw, tagMergeRequestSchema);
+    const backupPath = options.databasePath === undefined
+      ? null
+      : `${options.databasePath}.tag-merge-backup-${new Date()
+        .toISOString()
+        .replace(/[-:]/gu, '')
+        .replace(/\.\d{3}/u, '')}`;
+    if (backupPath !== null) {
+      await database.backup(backupPath);
+    }
+    const result = mergeTag(database, input);
+    return context.json(tagMergeResponseSchema.parse(result));
+  });
+
 
   app.put('/api/galleries/:entryType/partition', async (context) => {
     const { entryType } = entryTypeParamsSchema.parse({ entryType: context.req.param('entryType') });
@@ -607,6 +728,55 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
       return context.json(errorPayload('NOT_FOUND', 'Entry not found'), 404);
     }
     return context.json(entryDetailResponseSchema.parse(detail));
+  });
+
+  app.post('/api/entries/titles/plan', (context) => (
+    context.json(titleShorteningPlanResponseSchema.parse(planTitleShortening(database)))
+  ));
+
+  app.post('/api/entries/titles/apply', async (context) => {
+    const input = await parseJson(context.req.raw, applyTitleShorteningRequestSchema);
+    const backupPath = options.databasePath === undefined || input.changes.length === 0
+      ? null
+      : `${options.databasePath}.title-backup-${new Date()
+        .toISOString()
+        .replace(/[-:]/gu, '')
+        .replace(/\.\d{3}/u, '')}`;
+    if (backupPath !== null) {
+      await database.backup(backupPath);
+    }
+    const result = applyTitleShortening(database, input.changes);
+    return context.json(applyTitleShorteningResponseSchema.parse({ ...result, backupPath }));
+  });
+
+  app.get('/api/entries/:entryId/sources', (context) => {
+    const { entryId } = entryIdParamsSchema.parse(context.req.param());
+    if (!getEntryDetail(database, entryId)) {
+      return context.json(errorPayload('NOT_FOUND', 'Entry not found'), 404);
+    }
+    return context.json(entrySourceRecordSchema.array().parse(listEntrySources(database, entryId)));
+  });
+
+
+  app.post('/api/entries/:entryId/multi-author', (context) => {
+    const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+    return context.json(
+      convertEntryAuthorsResponseSchema.parse(convertEntryAuthorsToMultiAuthor(database, entryId)),
+    );
+  });
+
+  app.post('/api/entries/merge', async (context) => {
+    const input = await parseJson(context.req.raw, mergeAuthorEntriesRequestSchema);
+    const result = mergeAuthorEntries(database, input);
+    let mediaCleanupFailed = false;
+    if (options.assetRoot) {
+      try {
+        await deleteEntryMedia(options.assetRoot, result.absorbedEntryId);
+      } catch {
+        mediaCleanupFailed = true;
+      }
+    }
+    return context.json(mergeAuthorEntriesResponseSchema.parse({ ...result, mediaCleanupFailed }));
   });
 
 
@@ -892,6 +1062,7 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
       deletedProducers: 0,
       worksRelinked: 0,
       tagsRelinked: 0,
+      ratingsRelinked: 0,
       directoriesMoved: 0,
       directoriesMerged: 0,
       membershipsMoved: 0,
@@ -934,6 +1105,7 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
       deletedProducers: sum.deletedProducers + execution.deletedProducers,
       worksRelinked: sum.worksRelinked + execution.worksRelinked,
       tagsRelinked: sum.tagsRelinked + execution.tagsRelinked,
+      ratingsRelinked: sum.ratingsRelinked + execution.ratingsRelinked,
       directoriesMoved: sum.directoriesMoved + execution.directoriesMoved,
       directoriesMerged: sum.directoriesMerged + execution.directoriesMerged,
       membershipsMoved: sum.membershipsMoved + execution.membershipsMoved,
@@ -951,6 +1123,7 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
         absorbedProducers: plan.others.length,
         worksRelinked: execution.worksRelinked,
         tagsRelinked: execution.tagsRelinked,
+        ratingsRelinked: execution.ratingsRelinked,
         directoriesMoved: execution.directoriesMoved,
         directoriesMerged: execution.directoriesMerged,
         membershipsMoved: execution.membershipsMoved,
@@ -1182,6 +1355,175 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     return context.json(producerPageResponseSchema.parse(queryProducerPage(database, input)));
   });
 
+  // --- Offline sync (read-only snapshot, plan §24) ---------------------------
+
+  app.get('/api/sync/capabilities', (context) => {
+    return context.json(syncCapabilitiesSchema.parse(
+      buildSyncCapabilities(database, 't3-server-0.1.0'),
+    ));
+  });
+
+  app.get('/api/sync/snapshot', (context) => {
+    const { media } = z.object({ media: z.enum(['none', 'thumbnails']).optional().default('none') })
+      .parse(context.req.query());
+    const snapshot = buildSyncSnapshot(database);
+    if (media === 'none') {
+      // The full snapshot stays available; the media manifest is only
+      // meaningful for clients planning thumbnail downloads.
+      return context.json(syncSnapshotSchema.parse(snapshot));
+    }
+    return context.json(syncSnapshotSchema.parse(snapshot));
+  });
+
+  // --- Source invalidation maintenance (Advanced) ---------------------------
+
+  app.get('/api/source-library', (context) => {
+    const records: SourceLibraryRecord[] = listSourceLibrary(database);
+    return context.json(z.array(sourceLibraryRecordSchema).parse(records));
+  });
+
+  app.patch('/api/source-statuses/:sourceKey', async (context) => {
+    const { sourceKey } = z.object({ sourceKey: z.string().min(1) }).parse(context.req.param());
+    const input = await parseJson(context.req.raw, sourceStatusPatchSchema);
+    const record: SourceStatusRecord = setSourceStatus(database, sourceKey, input.state, input.note);
+    return context.json(sourceStatusRecordSchema.parse(record));
+  });
+
+  app.get('/api/source-statuses', (context) => {
+    return context.json(z.array(sourceStatusRecordSchema).parse(listSourceStatuses(database)));
+  });
+
+  app.post('/api/source-maintenance/adapter-probe', async (context) => {
+    const input = await parseJson(context.req.raw, z.object({ homepage: z.string().min(1) }));
+    const probe = probeTargetHomepage(input.homepage);
+    if (!probe.ok) {
+      return context.json({ ok: false, reason: probe.reason, detail: probe.detail }, 422);
+    }
+    return context.json({
+      ok: true,
+      adapterKey: probe.adapter.key,
+      displayName: probe.adapter.displayName,
+      origin: probe.homepage.origin,
+    });
+  });
+
+  app.post('/api/source-maintenance/runs', async (context) => {
+    const input = await parseJson(context.req.raw, createSourceMaintenanceRunRequestSchema);
+    const adapter = getSourceAdapter(input.adapterKey);
+    if (adapter === null) {
+      return context.json(errorPayload('VALIDATION_ERROR', 'Unsupported target; adapter required'), 422);
+    }
+    let targetOrigin = '';
+    if (input.targetHomepage !== undefined) {
+      const probe = probeTargetHomepage(input.targetHomepage);
+      if (!probe.ok || probe.adapter.key !== input.adapterKey) {
+        return context.json(errorPayload('VALIDATION_ERROR', 'Unsupported target; adapter required'), 422);
+      }
+      targetOrigin = probe.homepage.origin;
+    }
+    const run = createRun(database, {
+      originSourceKey: input.originSourceKey,
+      adapterKey: input.adapterKey,
+      targetOrigin,
+      markOriginInvalid: input.markOriginInvalid,
+      settings: {},
+    });
+    return context.json(runRecordSchema.parse(run), 201);
+  });
+
+  app.get('/api/source-maintenance/runs/:runId', (context) => {
+    const { runId } = runIdOnlyParams.parse(context.req.param());
+    const run = getRun(database, runId);
+    if (run === null) return context.json(errorPayload('NOT_FOUND', 'run not found'), 404);
+    return context.json(runRecordSchema.parse(run));
+  });
+
+  app.post('/api/source-maintenance/runs/:runId/start', (context) => {
+    const { runId } = runIdOnlyParams.parse(context.req.param());
+    const run = getRun(database, runId);
+    if (run === null) return context.json(errorPayload('NOT_FOUND', 'run not found'), 404);
+    if (run.status !== 'draft' && run.status !== 'paused') {
+      return context.json(errorPayload('CONFLICT', `run is ${run.status}`), 409);
+    }
+    void executeSearchRun(database, runId, {
+      adapter: getSourceAdapter(run.adapterKey)!,
+      ...(options.catalogProviders === undefined ? {} : { catalogProviders: options.catalogProviders }),
+    });
+    return context.json(runRecordSchema.parse(getRun(database, runId)!));
+  });
+
+  app.post('/api/source-maintenance/runs/:runId/pause', (context) => {
+    const { runId } = runIdOnlyParams.parse(context.req.param());
+    const run = getRun(database, runId);
+    if (run === null) return context.json(errorPayload('NOT_FOUND', 'run not found'), 404);
+    if (run.status !== 'running' && run.status !== 'draft') {
+      return context.json(errorPayload('CONFLICT', `run is ${run.status}`), 409);
+    }
+    updateRunStatus(database, runId, 'paused');
+    return context.json(runRecordSchema.parse(getRun(database, runId)!));
+  });
+
+  app.post('/api/source-maintenance/runs/:runId/resume', (context) => {
+    const { runId } = runIdOnlyParams.parse(context.req.param());
+    const run = getRun(database, runId);
+    if (run === null) return context.json(errorPayload('NOT_FOUND', 'run not found'), 404);
+    if (run.status !== 'paused') {
+      return context.json(errorPayload('CONFLICT', `run is ${run.status}`), 409);
+    }
+    void executeSearchRun(database, runId, {
+      adapter: getSourceAdapter(run.adapterKey)!,
+      ...(options.catalogProviders === undefined ? {} : { catalogProviders: options.catalogProviders }),
+    });
+    return context.json(runRecordSchema.parse(getRun(database, runId)!));
+  });
+
+  app.post('/api/source-maintenance/runs/:runId/cancel', (context) => {
+    const { runId } = runIdOnlyParams.parse(context.req.param());
+    const run = getRun(database, runId);
+    if (run === null) return context.json(errorPayload('NOT_FOUND', 'run not found'), 404);
+    if (run.status === 'committed' || run.status === 'cancelled') {
+      return context.json(errorPayload('CONFLICT', `run is ${run.status}`), 409);
+    }
+    updateRunStatus(database, runId, 'cancelled');
+    return context.json(runRecordSchema.parse(getRun(database, runId)!));
+  });
+
+  app.get('/api/source-maintenance/runs/:runId/items', (context) => {
+    const { runId } = runIdOnlyParams.parse(context.req.param());
+    const query = sourceMaintenanceItemPageQuerySchema.parse(context.req.query());
+    const run = getRun(database, runId);
+    if (run === null) return context.json(errorPayload('NOT_FOUND', 'run not found'), 404);
+    const { items, total } = listRunItems(database, runId, query.page, query.pageSize, query.state);
+    return context.json(sourceMaintenanceItemPageResponseSchema.parse({
+      run,
+      items,
+      total,
+    }));
+  });
+
+  app.patch('/api/source-maintenance/runs/:runId/items/:entryId', async (context) => {
+    const params = z.object({ runId: z.coerce.number().int().positive(), entryId: z.coerce.number().int().positive() })
+      .parse(context.req.param());
+    const input = await parseJson(context.req.raw, sourceMaintenanceItemPatchSchema);
+    const item = patchItem(database, params.runId, params.entryId, input);
+    if (item === null) return context.json(errorPayload('NOT_FOUND', 'item not found'), 404);
+    return context.json(itemRecordSchema.parse(item));
+  });
+
+  app.post('/api/source-maintenance/runs/:runId/commit', async (context) => {
+    const { runId } = runIdOnlyParams.parse(context.req.param());
+    await parseJson(context.req.raw, commitSourceMaintenanceRequestSchema);
+    if (options.databasePath === undefined) {
+      return context.json(errorPayload('INTERNAL_ERROR', 'server has no database path for backups'), 500);
+    }
+    const result = await commitSourceMaintenanceRun({
+      database,
+      databasePath: options.databasePath,
+      runId,
+    });
+    return context.json(commitSourceMaintenanceResponseSchema.parse(result));
+  });
+
   if (options.staticRoot) {
     const staticMiddleware = serveStatic({ root: options.staticRoot });
     app.use('*', async (context, next) => {
@@ -1212,8 +1554,14 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
       const details = error instanceof ZodError ? error.issues : undefined;
       return context.json(errorPayload('VALIDATION_ERROR', 'Invalid request', details), 400);
     }
+    if (error instanceof Error && isExportDataError(error)) {
+      return context.json(errorPayload('VALIDATION_ERROR', error.message), 400);
+    }
     if (error instanceof Error && error.message.includes('not found')) {
       return context.json(errorPayload('NOT_FOUND', error.message), 404);
+    }
+    if (error instanceof CommitStaleError || error instanceof CommitConflictError) {
+      return context.json(errorPayload('CONFLICT', error.message), 409);
     }
     if (isSqliteConstraintError(error) || isDomainConflictError(error)) {
       return context.json(errorPayload('CONFLICT', 'Request conflicts with current data'), 409);

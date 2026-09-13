@@ -1,0 +1,34 @@
+{
+  "18comic_vip": {
+    "metadataCount": 230,
+    "metadataAggregateSha256": "3388429e56092a4fd32e0b0bf292f8127829761f6a9814fed7412f30977dd1dc",
+    "artifacts": {
+      "taxonomy_dictionary.json": {
+        "exists": false,
+        "sha256": null,
+        "size": 0
+      },
+      "tag_review.csv": {
+        "exists": false,
+        "sha256": null,
+        "size": 0
+      }
+    }
+  },
+  "hanime1_me": {
+    "metadataCount": 47,
+    "metadataAggregateSha256": "28f2c0159e5685f7e2420b50e2d546463f3418197e86d95e8e02c4fbe95d589f",
+    "artifacts": {
+      "taxonomy_dictionary.json": {
+        "exists": true,
+        "sha256": "973d6b79a02469c2f0389283a2fffa008cf034576681282298889cd16a8f907f",
+        "size": 6540
+      },
+      "tag_review.csv": {
+        "exists": true,
+        "sha256": "6eab0f40140e491548837a4a78ac77f636c4e9ad3fe19555405eca315aa49776",
+        "size": 22
+      }
+    }
+  }
+}

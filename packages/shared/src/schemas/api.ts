@@ -65,6 +65,9 @@ export const entryDetailProducerSchema = z.strictObject({
   occupation: nullableTextSchema,
   artworkRef: nullableTextSchema,
   content: nullableTextSchema,
+  // Derived: how many Entries link this Producer. Entry edit mode uses it to
+  // offer the multi-author cleanup only for Authors limited to this work.
+  entryCount: z.number().int().nonnegative(),
 });
 
 export const entryDetailContentSchema = z.strictObject({
@@ -257,6 +260,10 @@ export const ratingSortSchema = z.strictObject({
   slotId: apiIdSchema,
   // Ratings sort from high to low; unrated entries sink to the bottom.
   direction: z.literal('desc'),
+  // When set, an Entry without its own value for this slot falls back to its
+  // Authors' value for the same-named dimension. Works of four or more Authors
+  // never inherit an Author rating. Filters stay entry-only.
+  applyAuthorRating: z.boolean().default(false),
 });
 
 export const usageFieldSchema = z.enum(['views', 'lastViewed', 'likes']);
@@ -323,7 +330,6 @@ export const entryPageQueryRequestSchema = facetFilterEntriesRequestSchema.exten
   pageSize: z.number().int().min(1).max(100).default(30),
 }).superRefine((request, context) => {
   const typeRequired = request.conditions.length > 0
-    || request.authorIds.length > 0
     || request.ratingConditions.length > 0
     || request.ratingSort !== null;
   if (typeRequired && request.entryType === undefined) {
@@ -391,6 +397,22 @@ export const createCollectionRequestSchema = z.strictObject({
   title: requiredTextSchema,
   description: z.string().optional(),
   parentId: apiIdSchema.optional(),
+});
+
+/**
+ * Files a whole batch of just-imported Entries into a new throwaway Collection,
+ * named `临时`, `临时2`, … by the server so repeated batches never collide. The
+ * batch review is one-time; a Collection survives it, which is what a bulk
+ * import too large to check in one sitting needs.
+ */
+export const createTemporaryCollectionRequestSchema = z.strictObject({
+  entryIds: z.array(apiIdSchema).min(1),
+});
+
+export const temporaryCollectionResponseSchema = z.strictObject({
+  collectionId: apiIdSchema,
+  title: requiredTextSchema,
+  entryCount: z.number().int().nonnegative(),
 });
 
 export const updateCollectionRequestSchema = z.strictObject({
@@ -526,6 +548,110 @@ export const entryContentRecordSchema = entryDetailContentSchema.extend({
 
 export const reorderEntryContentsRequestSchema = z.strictObject({
   orderedContentIds: uniqueIdArraySchema,
+});
+
+const httpSourceUrlSchema = z.string().max(4096).refine((value) => {
+  try {
+    const url = new URL(value);
+    return (url.protocol === 'http:' || url.protocol === 'https:')
+      && url.toString().length <= 4096;
+  } catch {
+    return false;
+  }
+}, 'Source URL must use HTTP or HTTPS and remain within 4096 normalized characters');
+
+export const entrySourceRecordSchema = z.strictObject({
+  entryId: apiIdSchema,
+  contentId: apiIdSchema,
+  sourceKey: requiredTextSchema,
+  sourceName: requiredTextSchema,
+  host: requiredTextSchema,
+  url: httpSourceUrlSchema,
+});
+
+export const mergeAuthorEntriesRequestSchema = z.strictObject({
+  authorId: apiIdSchema,
+  keepEntryId: apiIdSchema,
+  absorbEntryId: apiIdSchema,
+  copyTags: z.boolean(),
+  /** Title to store on the kept Entry; omit to keep the title it already has. */
+  title: requiredTextSchema.optional(),
+  sourceUrls: z.array(httpSourceUrlSchema).max(100).refine(
+    (values) => new Set(values).size === values.length,
+    { message: 'Source URLs must be unique' },
+  ),
+}).refine((value) => value.keepEntryId !== value.absorbEntryId, {
+  message: 'Entry merge requires two different Entries',
+});
+
+export const mergeAuthorEntriesResponseSchema = z.strictObject({
+  keptEntryId: apiIdSchema,
+  absorbedEntryId: apiIdSchema,
+  copiedTagCount: z.number().int().nonnegative(),
+  copiedSourceCount: z.number().int().nonnegative(),
+  sources: z.array(entrySourceRecordSchema),
+  mediaCleanupFailed: z.boolean(),
+});
+
+/**
+ * Canonical Author that absorbs anthology contributors whose only work is the
+ * anthology itself. Created on demand by the multi-author conversion and reused
+ * by name afterwards, so it behaves like any other Author.
+ */
+export const multiAuthorProducerName = 'multiple author';
+
+export const multiAuthorConversionAuthorSchema = z.strictObject({
+  id: apiIdSchema,
+  name: requiredTextSchema,
+});
+
+export const convertEntryAuthorsResponseSchema = z.strictObject({
+  entryId: apiIdSchema,
+  multiAuthorId: apiIdSchema,
+  multiAuthorName: requiredTextSchema,
+  convertedAuthors: z.array(multiAuthorConversionAuthorSchema),
+});
+
+/**
+ * One reviewed title rewrite. `title` is the title the plan was built from: the
+ * apply step refuses a change whose Entry no longer carries it, so a stale plan
+ * cannot overwrite a rename that happened in between.
+ */
+export const titleShorteningChangeSchema = z.strictObject({
+  entryId: apiIdSchema,
+  title: requiredTextSchema,
+  shortenedTitle: requiredTextSchema,
+});
+
+export const titleShorteningSideSchema = z.enum(['front', 'back']);
+
+/**
+ * One title that can be shortened, with both sides of the separator so the
+ * review can pick either. `suggested` is the side the script would keep:
+ * `back` when the part after the separator carries Han/Kana text, `front` when
+ * it only carries Hangul (a Korean title is not a substitute for the original),
+ * and null when both sides are ASCII, where no direction can be inferred.
+ */
+export const titleShorteningCandidateSchema = z.strictObject({
+  entryId: apiIdSchema,
+  title: requiredTextSchema,
+  keepFront: requiredTextSchema,
+  keepBack: requiredTextSchema,
+  suggested: titleShorteningSideSchema.nullable(),
+});
+
+export const titleShorteningPlanResponseSchema = z.strictObject({
+  candidates: z.array(titleShorteningCandidateSchema),
+});
+
+export const applyTitleShorteningRequestSchema = z.strictObject({
+  changes: z.array(titleShorteningChangeSchema),
+});
+
+export const applyTitleShorteningResponseSchema = z.strictObject({
+  shortenedCount: z.number().int().nonnegative(),
+  skippedCount: z.number().int().nonnegative(),
+  backupPath: z.string().nullable(),
 });
 
 export const reorderSectionFacetsRequestSchema = z.strictObject({
@@ -753,6 +879,7 @@ export const producerMergeExecutionItemSchema = z.strictObject({
   absorbedProducers: mergeWorkCountSchema,
   worksRelinked: mergeWorkCountSchema,
   tagsRelinked: mergeWorkCountSchema,
+  ratingsRelinked: mergeWorkCountSchema,
   directoriesMoved: mergeWorkCountSchema,
   directoriesMerged: mergeWorkCountSchema,
   membershipsMoved: mergeWorkCountSchema,
@@ -765,6 +892,7 @@ export const producerMergeTotalsSchema = z.strictObject({
   deletedProducers: mergeWorkCountSchema,
   worksRelinked: mergeWorkCountSchema,
   tagsRelinked: mergeWorkCountSchema,
+  ratingsRelinked: mergeWorkCountSchema,
   directoriesMoved: mergeWorkCountSchema,
   directoriesMerged: mergeWorkCountSchema,
   membershipsMoved: mergeWorkCountSchema,
@@ -934,6 +1062,9 @@ export type SearchScope = z.infer<typeof searchScopeSchema>;
 export type TagSearchHit = z.infer<typeof tagSearchHitSchema>;
 export type TemplateSummary = z.infer<typeof templateSummarySchema>;
 export type CollectionKind = z.infer<typeof collectionKindSchema>;
+
+export type CreateTemporaryCollectionRequest = z.infer<typeof createTemporaryCollectionRequestSchema>;
+export type TemporaryCollectionResponse = z.infer<typeof temporaryCollectionResponseSchema>;
 export type CreateSectionRequest = z.infer<typeof createSectionRequestSchema>;
 export type CreateFacetRequest = z.infer<typeof createFacetRequestSchema>;
 export type AssignEntryTagRequest = z.infer<typeof assignEntryTagRequestSchema>;
@@ -962,6 +1093,20 @@ export type UnassignedTagMoveRequest = z.infer<typeof unassignedTagMoveRequestSc
 export type UnassignedTagMoveResponse = z.infer<typeof unassignedTagMoveResponseSchema>;
 export type CreateEntryContentRequest = z.infer<typeof createEntryContentRequestSchema>;
 export type UpdateEntryContentRequest = z.infer<typeof updateEntryContentRequestSchema>;
+export type EntrySourceRecordDto = z.infer<typeof entrySourceRecordSchema>;
+
+export type MergeAuthorEntriesRequest = z.infer<typeof mergeAuthorEntriesRequestSchema>;
+export type MergeAuthorEntriesResponse = z.infer<typeof mergeAuthorEntriesResponseSchema>;
+
+export type MultiAuthorConversionAuthor = z.infer<typeof multiAuthorConversionAuthorSchema>;
+export type ConvertEntryAuthorsResponse = z.infer<typeof convertEntryAuthorsResponseSchema>;
+
+export type TitleShorteningChange = z.infer<typeof titleShorteningChangeSchema>;
+export type TitleShorteningSide = z.infer<typeof titleShorteningSideSchema>;
+export type TitleShorteningCandidate = z.infer<typeof titleShorteningCandidateSchema>;
+export type TitleShorteningPlanResponse = z.infer<typeof titleShorteningPlanResponseSchema>;
+export type ApplyTitleShorteningRequest = z.infer<typeof applyTitleShorteningRequestSchema>;
+export type ApplyTitleShorteningResponse = z.infer<typeof applyTitleShorteningResponseSchema>;
 export type ProducerRecordDto = z.infer<typeof producerRecordSchema>;
 export type CreateProducerRequest = z.infer<typeof createProducerRequestSchema>;
 export type UpdateProducerRequest = z.infer<typeof updateProducerRequestSchema>;
@@ -989,3 +1134,24 @@ export type AuthorAliasGroupsResponse = z.infer<typeof authorAliasGroupsResponse
 export type SaveAuthorAliasGroupRequest = z.infer<typeof saveAuthorAliasGroupRequestSchema>;
 export type SaveAuthorAliasGroupResponse = z.infer<typeof saveAuthorAliasGroupResponseSchema>;
 export type ApiErrorResponse = z.infer<typeof apiErrorResponseSchema>;
+
+export const tagMergeRequestSchema = z.strictObject({
+  vocabulary: z.enum(['entry', 'producer']),
+  keptTagId: apiIdSchema,
+  mergedTagIds: z.array(apiIdSchema)
+    .min(1)
+    .max(50)
+    .refine((ids) => new Set(ids).size === ids.length, { message: 'Merged tag IDs must be unique' }),
+}).refine((input) => !input.mergedTagIds.includes(input.keptTagId), {
+  message: 'The kept tag cannot also be merged',
+});
+
+export const tagMergeResponseSchema = z.strictObject({
+  keptTagId: apiIdSchema,
+  movedAssignments: z.number().int().nonnegative(),
+  skippedDuplicates: z.number().int().nonnegative(),
+  deletedTags: z.number().int().nonnegative(),
+});
+
+export type TagMergeRequest = z.infer<typeof tagMergeRequestSchema>;
+export type TagMergeResponse = z.infer<typeof tagMergeResponseSchema>;

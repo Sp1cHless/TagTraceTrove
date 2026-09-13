@@ -107,7 +107,12 @@ watch([pageSize, () => serverPaging.value ? props.totalItems : props.items.lengt
 
 const visibleItems = computed(() => {
   if (serverPaging.value) return props.items;
-  const start = (page.value - 1) * pageSize.value;
+  // A remembered page can outlive the data that justified it — the temporary
+  // batch review reuses one key per Gallery, so a page number from a longer
+  // earlier batch would slice past the end of a shorter one and render nothing.
+  // Bounding by the current page count makes that impossible.
+  const currentPage = Math.min(page.value, pageCount.value);
+  const start = (currentPage - 1) * pageSize.value;
   return props.items.slice(start, start + pageSize.value);
 });
 

@@ -28,6 +28,7 @@ internal static class Program
     private static ToolStripMenuItem? _lanToggleItem;
     private static ToolStripMenuItem? _mobileAddressesItem;
     private static Process? _server;
+    private static string? _nodeExecutable;
     private static bool _noBrowser;
     private static bool _lanEnabled;
 
@@ -67,6 +68,18 @@ internal static class Program
 
         _tray = BuildTray();
         Application.ApplicationExit += (_, _) => StopServer();
+
+        _nodeExecutable = LauncherPolicy.FindCompatibleNode(RepoRoot, ServerDir);
+        if (_nodeExecutable == null)
+        {
+            Notify("T3 could not find a Node.js runtime compatible with the installed database module. See t3-server.log.");
+            File.AppendAllText(ServerLog,
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] no compatible Node.js runtime found{Environment.NewLine}");
+            Application.Run();
+            return;
+        }
+        File.AppendAllText(ServerLog,
+            $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] using Node.js: {_nodeExecutable}{Environment.NewLine}");
 
         if (!File.Exists(WebIndex))
         {
@@ -302,7 +315,7 @@ internal static class Program
     {
         try
         {
-            using var build = Process.Start(new ProcessStartInfo
+            var start = new ProcessStartInfo
             {
                 FileName = "npm",
                 Arguments = "exec --yes --package=pnpm@10.15.0 -- pnpm run build",
@@ -311,7 +324,9 @@ internal static class Program
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-            });
+            };
+            LauncherPolicy.PrependExecutableDirectory(start, _nodeExecutable!);
+            using var build = Process.Start(start);
             if (build == null) { return false; }
             string output = build.StandardOutput.ReadToEnd() + build.StandardError.ReadToEnd();
             build.WaitForExit();
@@ -338,6 +353,7 @@ internal static class Program
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
+        LauncherPolicy.PrependExecutableDirectory(start, _nodeExecutable!);
         LauncherPolicy.ApplyServerEnvironment(start, _lanEnabled);
         try
         {

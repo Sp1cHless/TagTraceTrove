@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
 
-import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import GalleryApp from '../src/GalleryApp.vue';
 
+// App-level window listeners (focus, popstate, keydown) only detach on unmount.
+enableAutoUnmount(afterEach);
+
 vi.stubGlobal('scrollTo', vi.fn());
+
+const suggestionDebounce = (ms = 220) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+import { multiAuthorProducerName } from '@t3/shared';
 import type { GalleryApi } from '../src/api/gallery.js';
 import { setLocale } from '../src/i18n.js';
 
@@ -162,6 +168,126 @@ function createMemoryApi(options: {
     assetUrl(path) {
       return path;
     },
+    async suggestTags(input: Parameters<GalleryApi['suggestTags']>[0]) {
+      const query = String(input.q).trim().toLocaleLowerCase();
+      const excluded = new Set<number>(
+        (Array.isArray(input.excludeIds) ? input.excludeIds : []).map((id) => Number(id)),
+      );
+      const limit = input.limit === undefined ? 20 : Number(input.limit);
+      return [
+        { id: 51, name: 'School Life', sameContextUsageCount: 3, totalUsageCount: 30 },
+        { id: 52, name: 'School Uniform', sameContextUsageCount: 2, totalUsageCount: 12 },
+        { id: 53, name: 'Roguelike', sameContextUsageCount: 5, totalUsageCount: 40 },
+      ]
+        .filter((tag) => !excluded.has(tag.id) && tag.name.toLocaleLowerCase().includes(query))
+        .slice(0, limit);
+    },
+    async listSourceLibrary() {
+      return [];
+    },
+    async getSyncCapabilities() {
+      return {
+        libraryId: 'memory', syncEpoch: 'memory', sqliteSchemaVersion: 15,
+        snapshotFormatVersion: 1, syncProtocolVersion: 1, serverBuild: 'test',
+        featureFlags: { readOnlySnapshot: true, offlineMutations: false },
+      };
+    },
+    async fetchSyncSnapshot() {
+      return {
+        header: {
+          libraryId: 'memory', syncEpoch: 'memory', snapshotSeq: 0,
+          generatedAt: new Date().toISOString(), sqliteSchemaVersion: 15,
+          snapshotFormatVersion: 1, counts: { entries: 0, producers: 0, entryContents: 0, entryTags: 0, collections: 0 },
+          checksum: '0'.repeat(64),
+        },
+        payload: {
+          entries: [], producers: [], entryProducers: [], tags: [], tagGroups: [], entryTags: [],
+          producerTags: [], producerTagAssignments: [], entryContents: [], ratingSlots: [],
+          entryRatingValues: [], producerRatingValues: [], collections: [], collectionMembers: [],
+          authorDirectories: [], authorDirectoryEntries: [], entryUsage: [], viewLaterEntries: [],
+          viewLaterProducers: [], gallerySettings: [], mediaRefs: [],
+        },
+      };
+    },
+    async probeSourceTarget(homepage: string) {
+      return { ok: false as const, reason: 'unsupported', detail: homepage };
+    },
+    async patchSourceStatus(sourceKey, patch) {
+      return { sourceKey, state: patch.state, note: patch.note ?? null, updatedAt: new Date().toISOString() };
+    },
+    async createSourceMaintenanceRun(input) {
+      return {
+        id: 1,
+        originSourceKey: input.originSourceKey,
+        adapterKey: input.adapterKey,
+        targetOrigin: '',
+        status: 'draft',
+        markOriginInvalid: input.markOriginInvalid,
+        counts: { total: 0, processed: 0, matched: 0, ambiguous: 0, noMatch: 0, errors: 0 },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    },
+    async getSourceMaintenanceRun(runId) {
+      return {
+        id: runId,
+        originSourceKey: 'known:hitomi',
+        adapterKey: 'fake',
+        targetOrigin: '',
+        status: 'draft',
+        markOriginInvalid: false,
+        counts: { total: 0, processed: 0, matched: 0, ambiguous: 0, noMatch: 0, errors: 0 },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    },
+    async startSourceMaintenanceRun(runId) { return this.getSourceMaintenanceRun(runId); },
+    async pauseSourceMaintenanceRun(runId) { return this.getSourceMaintenanceRun(runId); },
+    async resumeSourceMaintenanceRun(runId) { return this.getSourceMaintenanceRun(runId); },
+    async cancelSourceMaintenanceRun(runId) { return this.getSourceMaintenanceRun(runId); },
+    async listSourceMaintenanceItems(runId) {
+      return {
+        run: await this.getSourceMaintenanceRun(runId),
+        items: [],
+        total: 0,
+      };
+    },
+    async patchSourceMaintenanceItem(runId, entryId, patch) {
+      return {
+        entryId,
+        entryTitleSnapshot: '',
+        originUrls: [],
+        queryTitles: [],
+        candidates: [],
+        decision: patch.decision ?? 'pending',
+        selectedUrl: patch.selectedUrl ?? null,
+        errorText: null,
+        updatedAt: new Date().toISOString(),
+      };
+    },
+    async commitSourceMaintenanceRun(runId) {
+      return {
+        runId,
+        status: 'committed',
+        createdCount: 0,
+        skippedCount: 0,
+        unresolvedCount: 0,
+        originMarkedInvalid: false,
+        backupDir: '',
+      };
+    },
+    async suggestProducers(input: Parameters<GalleryApi['suggestProducers']>[0]) {
+      const query = String(input.q).trim().toLocaleLowerCase();
+      const excluded = new Set<number>(
+        (Array.isArray(input.excludeIds) ? input.excludeIds : []).map((id) => Number(id)),
+      );
+      const limit = input.limit === undefined ? 20 : Number(input.limit);
+      return authors
+        .filter((author) => !excluded.has(author.id))
+        .filter((author) => query !== '' && author.name.toLocaleLowerCase().includes(query))
+        .slice(0, limit)
+        .map((author) => ({ id: author.id, name: author.name, sameContextUsageCount: 0, totalUsageCount: 0 }));
+    },
     async getViewLaterState() {
       return { entryIds: [...viewLaterStore], producerIds: [...viewLaterAuthorStore] };
     },
@@ -189,6 +315,25 @@ function createMemoryApi(options: {
       const index = entries.findIndex((item) => item.id === entryId);
       if (index >= 0) entries.splice(index, 1);
     },
+    async listEntrySources() {
+      return [];
+    },
+
+    async mergeAuthorEntries(input) {
+      const index = entries.findIndex((item) => item.id === input.absorbEntryId);
+      if (index >= 0) entries.splice(index, 1);
+      return {
+        keptEntryId: input.keepEntryId,
+        absorbedEntryId: input.absorbEntryId,
+        copiedTagCount: 0,
+        copiedSourceCount: 0,
+        sources: [],
+        mediaCleanupFailed: false,
+      };
+    },
+    async mergeTag(input: { vocabulary: 'entry' | 'producer'; keptTagId: number; mergedTagIds: number[] }) {
+      return { keptTagId: input.keptTagId, movedAssignments: 0, skippedDuplicates: 0, deletedTags: input.mergedTagIds.length };
+    },
     async listTemplates() {
       return [];
     },
@@ -210,6 +355,7 @@ function createMemoryApi(options: {
             deletedProducers: 0,
             worksRelinked: 0,
             tagsRelinked: 0,
+            ratingsRelinked: 0,
             directoriesMoved: 0,
             directoriesMerged: 0,
             membershipsMoved: 0,
@@ -234,6 +380,22 @@ function createMemoryApi(options: {
       };
       collectionStore.push(record);
       return record;
+    },
+    async createTemporaryCollection(entryIds: number[]) {
+      // Mirrors the server: take the next free 临时N name, then file the batch.
+      let title = '临时';
+      let suffix = 2;
+      while (collectionStore.some((collection) => collection.title === title)) {
+        title = `临时${suffix}`;
+        suffix += 1;
+      }
+      const id = 900 + collectionStore.length;
+      collectionStore.push({
+        id, kind: 'entry', title,
+        description: '', nsfw: false, sortOrder: collectionStore.length,
+        children: [], entries: [], producers: [],
+      });
+      return { collectionId: id, title, entryCount: new Set(entryIds).size };
     },
     async updateCollection() {
       throw new Error('Not implemented in memory API');
@@ -362,12 +524,6 @@ function createMemoryApi(options: {
       return candidates.filter((tag) => tag.name.toLocaleLowerCase().includes(needle));
     },
 
-    async listUnassignedTags() {
-      return [];
-    },
-    async moveUnassignedTag(input) {
-      return { ...input, moved: 0 };
-    },
     async listFacetFilterOptions(type) {
       if (type !== 'game') return { entryType: type, facets: [], allTags: [], authors: [], ratingSlots: [] };
       return {
@@ -430,6 +586,12 @@ function createMemoryApi(options: {
       };
       entries.push(created);
       return created;
+    },
+    async updateEntry(entryId, input) {
+      const entry = entries.find((item) => item.id === entryId);
+      if (!entry) throw new Error('Entry not found');
+      if (input.title !== undefined) entry.title = input.title.trim();
+      return entry;
     },
     async uploadEntryMedia(entryId, kind, file) {
       void file;
@@ -509,7 +671,13 @@ function createMemoryApi(options: {
         previewRefs: [],
         uploadDate: null,
         pageCount: null,
-        producers: authors.filter((author) => (linkedAuthorIds.get(entryId) ?? []).includes(author.id)),
+        producers: authors
+          .filter((author) => (linkedAuthorIds.get(entryId) ?? []).includes(author.id))
+          .map((author) => ({
+            ...author,
+            entryCount: entries
+              .filter((entry) => (linkedAuthorIds.get(entry.id) ?? []).includes(author.id)).length,
+          })),
         sections: hasLayout ? [{
           id: 10,
           name: entryId === 3 ? mangaSectionName as string : 'Basics',
@@ -711,6 +879,64 @@ function createMemoryApi(options: {
     async unlinkEntryAuthor(entryId, authorId) {
       linkedAuthorIds.set(entryId, (linkedAuthorIds.get(entryId) ?? []).filter((id) => id !== authorId));
     },
+    async planTitleShortening() {
+      const candidates = entries.flatMap((entry) => {
+        const parts = entry.title.split('|').map((part) => part.trim());
+        if (!entry.title.includes('|') || parts.length !== 2) return [];
+        const [front = '', back = ''] = parts;
+        if (front === '' || back === '') return [];
+        const suggested = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(back)
+          ? 'back' as const
+          : /\p{Script=Hangul}/u.test(back) ? 'front' as const : null;
+        return [{
+          entryId: entry.id,
+          title: entry.title,
+          keepFront: front,
+          keepBack: back,
+          suggested,
+        }];
+      });
+      return { candidates };
+    },
+    async applyTitleShortening(changes) {
+      let shortenedCount = 0;
+      let skippedCount = 0;
+      for (const change of changes) {
+        const entry = entries.find((item) => item.id === change.entryId);
+        if (!entry || entry.title !== change.title) {
+          skippedCount += 1;
+          continue;
+        }
+        entry.title = change.shortenedTitle;
+        shortenedCount += 1;
+      }
+      return { shortenedCount, skippedCount, backupPath: null };
+    },
+    async convertEntryAuthors(entryId) {
+      const linked = linkedAuthorIds.get(entryId) ?? [];
+      const multiAuthor = authors.find((author) => author.name === multiAuthorProducerName);
+      // Every credited Author is absorbed, whatever else they have.
+      const convertible = linked
+        .filter((id) => id !== multiAuthor?.id)
+        .map((id) => authors.find((author) => author.id === id)!)
+        .filter(Boolean);
+      const target = multiAuthor ?? {
+        id: Math.max(0, ...authors.map((author) => author.id)) + 1,
+        name: multiAuthorProducerName,
+        occupation: null,
+        artworkRef: null,
+        content: null,
+      };
+      if (!multiAuthor) authors.push(target);
+      linkedAuthorIds.set(entryId, [target.id]);
+      const toAuthor = (author: { id: number; name: string }) => ({ id: author.id, name: author.name });
+      return {
+        entryId,
+        multiAuthorId: target.id,
+        multiAuthorName: target.name,
+        convertedAuthors: convertible.map(toAuthor),
+      };
+    },
     async assignAuthorTag(_authorId, name) {
       authorTags.push({ tagId: 31, name: name.trim(), normalizedName: name.trim().toLowerCase() });
     },
@@ -773,6 +999,7 @@ function createMemoryApi(options: {
           deletedProducers: 0,
           worksRelinked: 0,
           tagsRelinked: 0,
+          ratingsRelinked: 0,
           directoriesMoved: 0,
           directoriesMerged: 0,
           membershipsMoved: 0,
@@ -790,6 +1017,7 @@ function createMemoryApi(options: {
         entryType: 'game',
         entriesAffected: 0,
         tagsRelinked: 0,
+        ratingsRelinked: 0,
         orphansMoved: 0,
         sectionsRecreated: 0,
         backupPath: null,
@@ -932,60 +1160,6 @@ describe('GalleryApp', () => {
     expect(unmatchedText).not.toContain('鲍勃');
   });
 
-  it('moves unassigned tags per gallery from Advanced editing, incl. follow-majority', async () => {
-    const api = createMemoryApi();
-    api.listUnassignedTags = vi.fn(async () => [{
-      entryType: 'comic',
-      facets: [
-        { facetId: 20, facetName: 'Series' },
-        { facetId: 21, facetName: 'Characters' },
-      ],
-      tags: [{
-        tagId: 30,
-        tagName: 'unfiled',
-        entryCount: 2,
-        suggestion: { facetId: 20, facetName: 'Series', count: 5 },
-      }],
-    }]);
-    api.moveUnassignedTag = vi.fn(async (input) => ({ ...input, moved: 2 }));
-    const wrapper = mount(GalleryApp, { props: { api } });
-    await flushPromises();
-
-    await wrapper.get('[data-testid="settings-button"]').trigger('click');
-    await wrapper.get('[data-testid="advanced-entry"]').trigger('click');
-    await flushPromises();
-    await wrapper.get('[data-testid="advanced-tab-unassigned"]').trigger('click');
-    await flushPromises();
-
-    // Group starts collapsed, expands to one row with a majority hint.
-    expect(wrapper.get('[data-testid="unassigned-group-comic"]').text()).toContain('comic');
-    expect(wrapper.find('[data-testid="unassigned-tag-list"]').exists()).toBe(false);
-    await wrapper.get('[data-testid="unassigned-group-comic"]').trigger('click');
-    const row = wrapper.get('[data-testid="unassigned-tag-30"]');
-    expect(row.text()).toContain('unfiled');
-    expect(row.text()).toContain('Series ×5');
-
-    // Follow-majority moves without picking a facet manually.
-    await wrapper.get('[data-testid="unassigned-follow-30"]').trigger('click');
-    await flushPromises();
-    expect(api.moveUnassignedTag).toHaveBeenCalledWith({
-      entryType: 'comic',
-      tagId: 30,
-      targetFacetId: 20,
-    });
-    expect(wrapper.get('[data-testid="unassigned-notice"]').text()).toContain('2');
-
-    // Manual target + Move button also works.
-    await wrapper.get('[data-testid="unassigned-target-30"]').setValue(21);
-    await wrapper.get('[data-testid="unassigned-move-30"]').trigger('click');
-    await flushPromises();
-    expect(api.moveUnassignedTag).toHaveBeenLastCalledWith({
-      entryType: 'comic',
-      tagId: 30,
-      targetFacetId: 21,
-    });
-  });
-
   it('saves an author alias group from Advanced editing and lists existing groups', async () => {
     const api = createMemoryApi();
     const groups: Array<{
@@ -1012,6 +1186,7 @@ describe('GalleryApp', () => {
             deletedProducers: 0,
             worksRelinked: 0,
             tagsRelinked: 0,
+            ratingsRelinked: 0,
             directoriesMoved: 0,
             directoriesMerged: 0,
             membershipsMoved: 0,
@@ -1035,11 +1210,28 @@ describe('GalleryApp', () => {
 
     expect(wrapper.find('[data-testid="author-alias-empty"]').exists()).toBe(true);
     const form = wrapper.get('[data-testid="author-alias-form"]');
-    await form.get('[name="authorAliasDisplayName"]').setValue('海盗猫');
+    // Fill-in inputs commit through Enter, picking a suggestion, OR blur —
+    // typing and clicking Save directly must also work (blur commits first).
+    // Real flow: tap the field (focus), type, tap elsewhere (blur commits).
+    const displayNameInput = form.get('[name="authorAliasDisplayName"]');
+    await displayNameInput.trigger('focus');
+    await displayNameInput.setValue('海盗猫');
+    await displayNameInput.trigger('blur');
+    // The committed text stays visible: clearing it on blur looked like "my input never saved".
+    expect((displayNameInput.element as HTMLInputElement).value).toBe('海盗猫');
     await wrapper.get('[data-testid="author-alias-add-tag"]').trigger('click');
-    await wrapper.get('[data-testid="author-alias-tag-0"]').setValue('pirate cat');
+    expect((displayNameInput.element as HTMLInputElement).value).toBe('海盗猫');
+    const tag0 = wrapper.get('[data-testid="author-alias-tag-0"] input');
+    await tag0.trigger('focus');
+    await tag0.setValue('pirate cat');
+    await tag0.trigger('blur');
+    expect((tag0.element as HTMLInputElement).value).toBe('pirate cat');
     await wrapper.get('[data-testid="author-alias-add-tag"]').trigger('click');
-    await wrapper.get('[data-testid="author-alias-tag-1"]').setValue('海盜貓');
+    const tag1 = wrapper.get('[data-testid="author-alias-tag-1"] input');
+    await tag1.trigger('focus');
+    await tag1.setValue('海盜貓');
+    await tag1.trigger('blur');
+    expect((tag0.element as HTMLInputElement).value).toBe('pirate cat');
     await form.trigger('submit');
     await flushPromises();
 
@@ -1138,7 +1330,7 @@ describe('GalleryApp', () => {
     const api = createMemoryApi();
     const getAuthor = api.getAuthor.bind(api);
     const getEntry = api.getEntry.bind(api);
-    const works = Array.from({ length: 30 }, (_, index) => ({
+    const works = Array.from({ length: 40 }, (_, index) => ({
       id: 500 + index,
       title: `Author work ${index + 1}`,
       type: 'game',
@@ -1232,6 +1424,43 @@ describe('GalleryApp', () => {
     expect(wrapper.get('[data-testid="entry-back"]').text()).toContain('Search');
   });
 
+  it('returns to the same Search after deleting an opened result', async () => {
+    const api = createMemoryApi();
+    let deleted = false;
+    const deleteEntry = api.deleteEntry.bind(api);
+    api.deleteEntry = vi.fn(async (entryId: number) => {
+      await deleteEntry(entryId);
+      deleted = true;
+    });
+    api.queryEntryPage = vi.fn(async (input) => ({
+      items: input.searchQuery === 'end' && !deleted
+        ? [{ id: 1, title: 'Endfield', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null }]
+        : [],
+      total: input.searchQuery === 'end' && !deleted ? 1 : 0,
+      page: input.page,
+      pageSize: input.pageSize,
+    }));
+    api.searchTags = vi.fn(async () => []);
+    api.queryProducerPage = vi.fn(async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize }));
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="sidebar-search-input"]').setValue('end');
+    await wrapper.get('[data-testid="sidebar-search-form"]').trigger('submit');
+    await flushPromises();
+    await wrapper.get('[data-testid="search-result-entry-1"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');
+    const deleteButton = wrapper.get('[data-testid="delete-entry"]');
+    await deleteButton.trigger('click');
+    await deleteButton.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="search-page"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="search-main-input"]').element).toHaveProperty('value', 'end');
+    expect(wrapper.find('[data-testid="search-result-entry-1"]').exists()).toBe(false);
+  });
+
   it('switches global search scopes and opens Tag and Author result views', async () => {
     const api = createMemoryApi();
     api.queryEntryPage = vi.fn(async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize }));
@@ -1276,6 +1505,60 @@ describe('GalleryApp', () => {
     await flushPromises();
     expect(wrapper.get('[data-testid="author-information-board"]').text()).toContain('Hypergryph');
     expect(wrapper.get('[data-testid="author-information-board"] .text-button').text()).toContain('Search');
+  });
+
+  it('shows the alias spelling an author was found through on the search card', async () => {
+    const api = createMemoryApi();
+    api.listTaxonomyAliases = vi.fn(async () => [
+      {
+        id: 1,
+        vocabulary: 'producer' as const,
+        partition: 'authors',
+        alias: 'ishikei',
+        normalizedAlias: 'ishikei',
+        canonicalName: '石恵',
+        normalizedCanonical: '石恵',
+      },
+      // A placeholder row belongs to no author and must not show anywhere.
+      {
+        id: 2,
+        vocabulary: 'producer' as const,
+        partition: 'authors',
+        alias: 'notyet',
+        normalizedAlias: 'notyet',
+        canonicalName: '',
+        normalizedCanonical: '',
+      },
+    ]);
+    api.queryProducerPage = vi.fn(async (input) => ({
+      items: input.searchQuery === 'ishikei' ? [{
+        id: 42,
+        name: '石恵',
+        galleryType: 'Comic',
+        covers: [],
+        viewCount: 0,
+        likeCount: 0,
+        lastViewedAt: null,
+        nsfw: false,
+      }] : [],
+      total: input.searchQuery === 'ishikei' ? 1 : 0,
+      page: input.page,
+      pageSize: input.pageSize,
+    }));
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="sidebar-search-input"]').setValue('ishikei');
+    await wrapper.get('[data-testid="sidebar-search-form"]').trigger('submit');
+    await flushPromises();
+    await wrapper.get('[data-testid="search-scope-producers"]').trigger('click');
+    await flushPromises();
+
+    // The author is found, listed under their own name, with the spelling that
+    // matched shown underneath.
+    const card = wrapper.get('[data-testid="search-result-author-42"]');
+    expect(card.text()).toContain('石恵');
+    expect(wrapper.get('[data-testid="search-result-author-alternates-42"]').text()).toBe('ishikei');
   });
 
   it('lists Galleries derived from Entry types and browses one type', async () => {
@@ -1354,10 +1637,13 @@ describe('GalleryApp', () => {
     api.commitImport = vi.fn(async () => ({
       entries: [{ entryId: 4, title: 'Imported work', externalKey: '18comic.vip:42' }],
       entryCount: 1,
+      skippedExistingEntryCount: 0,
       createdProducerCount: 1,
       producerLinkCount: 1,
       tagAssignmentCount: 1,
       contentCount: 2,
+      authorRatingCount: 0,
+      warnings: [],
     }));
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
@@ -1381,6 +1667,183 @@ describe('GalleryApp', () => {
         canonicalTagFacetId: 11,
         ignoredFields: ['works'],
       }));
+  });
+
+  it('reports the source quirks a commit resolved without failing the import', async () => {
+    setLocale('en');
+    const api = createMemoryApi();
+    api.previewSiteProbeFolder = vi.fn(async () => ({
+      source: 'hitomi.la',
+      entryCount: 1,
+      tagAssignmentCount: 0,
+      uniqueTagCount: 0,
+      entriesMissingCover: 0,
+      warnings: [],
+      batch: {
+        source: 'hitomi.la',
+        warnings: [],
+        entries: [{ externalKey: 'hitomi.la:1', title: 'Artist collection', tags: [] }],
+      },
+    }));
+    api.listLayout = vi.fn(async () => [
+      { id: 10, name: 'Tags', sortOrder: 0, facets: [{ id: 11, name: '', sortOrder: 0 }] },
+    ]);
+    api.commitImport = vi.fn(async () => ({
+      entries: [{ entryId: 7, title: 'Artist collection', externalKey: 'hitomi.la:1' }],
+      entryCount: 1,
+      skippedExistingEntryCount: 0,
+      createdProducerCount: 0,
+      producerLinkCount: 0,
+      tagAssignmentCount: 2,
+      contentCount: 1,
+      authorRatingCount: 0,
+      warnings: ['Tag "Goblin Slayer" arrived for both "Series" and "Characters" in one Entry; kept the first placement'],
+    }));
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await wrapper.get('.batch-import-toggle .secondary-button').trigger('click');
+    const batchTypeInput = wrapper.get('.batch-import input[list="add-entry-gallery-types"]');
+    await batchTypeInput.setValue('game');
+    await batchTypeInput.trigger('change');
+    await flushPromises();
+    const batchInput = wrapper.get('.batch-import input[webkitdirectory]');
+    const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
+    Object.defineProperty(file, 'webkitRelativePath', {
+      value: 'hews/items/4103646/metadata.json',
+    });
+    Object.defineProperty(batchInput.element, 'files', { value: [file] });
+    await batchInput.trigger('change');
+    await flushPromises();
+
+    await wrapper.get('.batch-import .primary-button').trigger('click');
+    await flushPromises();
+
+    // The batch ran, and the review view shows the placement it skipped: the
+    // Add Entry page itself is gone by the time the run finishes.
+    const review = wrapper.get('[data-testid="batch-review"]');
+    const warnings = review.get('[data-testid="batch-review-warnings"]');
+    expect(warnings.text()).toContain('kept the first placement');
+    expect(warnings.text()).toContain('Series');
+  });
+
+  it('shows which export items an import skipped', async () => {
+    setLocale('zh-CN');
+    const skipped = 'Skipped work 888260: items/888260/metadata.json is missing';
+    const api = createMemoryApi();
+    api.previewSiteProbeFolder = vi.fn(async () => ({
+      source: 'hitomi.la',
+      entryCount: 1,
+      tagAssignmentCount: 0,
+      uniqueTagCount: 0,
+      entriesMissingCover: 0,
+      warnings: [skipped],
+      batch: {
+        source: 'hitomi.la',
+        warnings: [skipped],
+        entries: [{ externalKey: 'hitomi.la:111', title: 'Present work', tags: [] }],
+      },
+    }));
+    api.listLayout = vi.fn(async () => []);
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const metadata = new File(['{}'], 'metadata.json', { type: 'application/json' });
+    Object.defineProperty(metadata, 'webkitRelativePath', { value: 'export/metadata.json' });
+    const input = wrapper.get('input[webkitdirectory]');
+    Object.defineProperty(input.element, 'files', { value: [metadata] });
+    await input.trigger('change');
+    await flushPromises();
+
+    const warnings = wrapper.get('[data-testid="import-warnings"]');
+    expect(warnings.text()).toContain('已跳过 1 个条目');
+    expect(warnings.text()).toContain('items/888260/metadata.json is missing');
+  });
+
+  it('uploads media by external key when a manifest skips already-imported Entries', async () => {
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:test') });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+    const api = createMemoryApi();
+    api.previewSiteProbeFolder = vi.fn(async () => ({
+      source: 'hitomi.la',
+      entryCount: 2,
+      tagAssignmentCount: 0,
+      uniqueTagCount: 0,
+      entriesMissingCover: 0,
+      warnings: [],
+      batch: {
+        source: 'hitomi.la',
+        warnings: [],
+        entries: [
+          {
+            externalKey: 'hitomi.la:42',
+            title: 'Existing work',
+            cover: 'items/42/cover/cover.webp',
+          },
+          {
+            externalKey: 'hitomi.la:99',
+            title: 'New work',
+            cover: 'items/99/cover/cover.webp',
+          },
+        ],
+      },
+    }));
+    api.listLayout = vi.fn(async () => [{
+      id: 10,
+      name: 'Tags',
+      sortOrder: 0,
+      facets: [{ id: 11, name: '', sortOrder: 0 }],
+    }]);
+    api.commitImport = vi.fn(async () => ({
+      entries: [{ entryId: 99, title: 'New work', externalKey: 'hitomi.la:99' }],
+      entryCount: 1,
+      skippedExistingEntryCount: 1,
+      createdProducerCount: 0,
+      producerLinkCount: 0,
+      tagAssignmentCount: 0,
+      contentCount: 1,
+      authorRatingCount: 0,
+      warnings: [],
+    }));
+    const uploadEntryMedia = vi.fn<GalleryApi['uploadEntryMedia']>(async () => ({
+      id: 99,
+      title: 'New work',
+      type: 'game',
+      coverRef: '/api/assets/entries/99/cover.webp',
+      previewRef: null,
+      previewRefs: [],
+      uploadDate: null,
+      pageCount: null,
+    }));
+    api.uploadEntryMedia = uploadEntryMedia;
+
+    const files = [
+      new File(['{}'], 'metadata.json', { type: 'application/json' }),
+      new File(['old'], 'cover.webp', { type: 'image/webp' }),
+      new File(['new'], 'cover.webp', { type: 'image/webp' }),
+    ];
+    for (const [file, path] of files.map((file, index) => [file, [
+      'amamitsuki/metadata.json',
+      'amamitsuki/items/42/cover/cover.webp',
+      'amamitsuki/items/99/cover/cover.webp',
+    ][index]!] as const)) {
+      Object.defineProperty(file, 'webkitRelativePath', { value: path });
+    }
+
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const input = wrapper.get('.folder-dropzone input[webkitdirectory]');
+    Object.defineProperty(input.element, 'files', { value: files });
+    await input.trigger('change');
+    await flushPromises();
+    await wrapper.get('[data-testid="import-review"] .primary-button').trigger('click');
+    await flushPromises();
+
+    expect(uploadEntryMedia).toHaveBeenCalledTimes(1);
+    expect(uploadEntryMedia.mock.calls[0]?.slice(0, 2)).toEqual([99, 'cover']);
+    expect(uploadEntryMedia.mock.calls[0]?.[2]).toBe(files[2]);
+    expect(uploadEntryMedia.mock.calls[0]?.[2]).not.toBe(files[1]);
   });
 
   it('auto-assigns supported fields to the matching template Facets on import', async () => {
@@ -1426,10 +1889,13 @@ describe('GalleryApp', () => {
     api.commitImport = vi.fn(async () => ({
       entries: [{ entryId: 4, title: 'Work', externalKey: 'hitomi.la:99' }],
       entryCount: 1,
+      skippedExistingEntryCount: 0,
       createdProducerCount: 1,
       producerLinkCount: 1,
       tagAssignmentCount: 5,
       contentCount: 1,
+      authorRatingCount: 0,
+      warnings: [],
     }));
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
@@ -1505,10 +1971,13 @@ describe('GalleryApp', () => {
     api.commitImport = vi.fn(async () => ({
       entries: [{ entryId: 14, title: 'Work', externalKey: 'hanime1.me:99' }],
       entryCount: 1,
+      skippedExistingEntryCount: 0,
       createdProducerCount: 1,
       producerLinkCount: 1,
       tagAssignmentCount: 4,
       contentCount: 1,
+      authorRatingCount: 0,
+      warnings: [],
     }));
 
     const wrapper = mount(GalleryApp, { props: { api } });
@@ -1600,10 +2069,13 @@ describe('GalleryApp', () => {
         externalKey: entry.externalKey,
       })),
       entryCount: batch.entries.length,
+      skippedExistingEntryCount: 0,
       createdProducerCount: 0,
       producerLinkCount: 0,
       tagAssignmentCount: 2,
       contentCount: 1,
+      authorRatingCount: 0,
+      warnings: [],
     }));
     api.commitImport = commitImportMock;
 
@@ -1684,10 +2156,13 @@ describe('GalleryApp', () => {
         externalKey: entry.externalKey,
       })),
       entryCount: batch.entries.length,
+      skippedExistingEntryCount: 0,
       createdProducerCount: 0,
       producerLinkCount: 1,
       tagAssignmentCount: 1,
       contentCount: 1,
+      authorRatingCount: 0,
+      warnings: [],
     }));
     api.commitImport = commitImportMock;
 
@@ -1769,10 +2244,13 @@ describe('GalleryApp', () => {
           externalKey: entry.externalKey,
         })),
         entryCount: batch.entries.length,
+        skippedExistingEntryCount: 0,
         createdProducerCount: commitCount === 1 ? 1 : 0,
         producerLinkCount: 1,
         tagAssignmentCount: 1,
         contentCount: 1,
+        authorRatingCount: 0,
+        warnings: [],
       };
     });
     api.commitImport = commitImportMock;
@@ -1860,10 +2338,13 @@ describe('GalleryApp', () => {
         externalKey: entry.externalKey,
       })),
       entryCount: batch.entries.length,
+      skippedExistingEntryCount: 0,
       createdProducerCount: 0,
       producerLinkCount: 1,
       tagAssignmentCount: 1,
       contentCount: 1,
+      authorRatingCount: 0,
+      warnings: [],
     }));
     api.commitImport = commitImportMock;
 
@@ -1944,13 +2425,80 @@ describe('GalleryApp', () => {
 
     expect(wrapper.find('select[name="existingAuthorId"]').exists()).toBe(false);
     await wrapper.get('[data-testid="link-entry-author"]').trigger('click');
-    await wrapper.get('[name="existingAuthorName"]').setValue('guest');
-    expect(wrapper.get('[data-testid="author-suggestions"]').text()).toContain('Guest Artist');
-    expect(wrapper.get('[data-testid="author-suggestions"]').text()).not.toContain('Hypergryph');
-    await wrapper.get('[name="existingAuthorName"]').trigger('blur');
+    const input = wrapper.get('[name="existingAuthorName"]');
+    // The dropdown only opens for a focused field, like a real keyboard flow.
+    await input.trigger('focus');
+    await input.setValue('guest');
+    await suggestionDebounce();
+    const suggestions = wrapper.get('[data-testid="link-existing-author-form"] [role="listbox"]');
+    expect(suggestions.text()).toContain('Guest Artist');
+    expect(suggestions.text()).not.toContain('Hypergryph');
+    // Enter without a highlighted candidate must not link anything.
+    await input.trigger('keydown.enter');
+    await flushPromises();
+    expect(wrapper.find('[data-entry-author-id="10"]').exists()).toBe(false);
+    await suggestions.get('[role="option"] button').trigger('click');
     await flushPromises();
 
-    expect(wrapper.get('[data-testid="entry-detail"]').text()).toContain('Guest Artist');
+    expect(wrapper.get('[data-entry-author-id="10"]').text()).toContain('Guest Artist');
+  });
+
+  it('adds an Entry Tag through a server suggestion by submitting the canonical name', async () => {
+    const api = createMemoryApi();
+    const assignSpy = vi.spyOn(api, 'assignEntryTag');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    await wrapper.get('[data-add-tag-facet-id="11"]').trigger('click');
+    const input = wrapper.get('[data-create-tag-facet-id="11"] [name="tagName"]');
+    await input.trigger('focus');
+    await input.setValue('rogue');
+    await suggestionDebounce();
+    const options = wrapper.get('[data-create-tag-facet-id="11"] [role="listbox"]').findAll('[role="option"] button');
+    expect(options.map((option) => option.text())).toEqual(['Roguelike']);
+    await options[0]!.trigger('click');
+    await flushPromises();
+
+    expect(assignSpy).toHaveBeenCalledWith(1, { facetId: 11, name: 'Roguelike' });
+    expect(wrapper.get('[data-facet-id="11"]').text()).toContain('Roguelike');
+  });
+
+  it('keeps the editor open for consecutive tags: type, tap away, type again', async () => {
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    await wrapper.get('[data-add-tag-facet-id="11"]').trigger('click');
+    const input = wrapper.get('[data-create-tag-facet-id="11"] [name="tagName"]');
+    // Short editor that grows with the text, never with the dropdown.
+    expect(input.attributes('size')).toBe('5');
+    await input.setValue('女仆');
+    await input.trigger('blur');
+    await flushPromises();
+    expect(wrapper.get('[data-facet-id="11"]').text()).toContain('女仆');
+
+    // The editor closed with the commit; open it again for the second tag —
+    // this mirrors the old rhythm of adding several tags in a row.
+    await wrapper.get('[data-add-tag-facet-id="11"]').trigger('click');
+    const second = wrapper.get('[data-create-tag-facet-id="11"] [name="tagName"]');
+    await second.setValue('女忍');
+    await second.trigger('blur');
+    await flushPromises();
+    expect(wrapper.get('[data-facet-id="11"]').text()).toContain('女忍');
+  });
+
+  it('warns when a new Author name matches an existing Author or alias', async () => {
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    await wrapper.get('[data-testid="add-entry-author"]').trigger('click');
+    await wrapper.get('[name="authorName"]').setValue('Hyper');
+    await suggestionDebounce(260);
+
+    expect(wrapper.get('[data-testid="create-author-duplicate-warning"]').text())
+      .toContain('Hypergryph');
   });
 
   it('unlinks one Author inline from Entry edit mode', async () => {
@@ -1963,7 +2511,10 @@ describe('GalleryApp', () => {
 
     expect(wrapper.find('[data-unlink-author-id="9"]').exists()).toBe(false);
     await wrapper.get('[data-testid="link-entry-author"]').trigger('click');
-    expect(wrapper.get('[data-testid="author-suggestions"]').text()).toContain('Hypergryph');
+    await wrapper.get('[name="existingAuthorName"]').trigger('focus');
+    await wrapper.get('[name="existingAuthorName"]').setValue('hyper');
+    await suggestionDebounce();
+    expect(wrapper.get('[data-testid="link-existing-author-form"] [role="listbox"]').text()).toContain('Hypergryph');
   });
 
   it('returns an Entry opened from an Author to that Author detail', async () => {
@@ -1994,13 +2545,33 @@ describe('GalleryApp', () => {
     scrollTo.mockRestore();
   });
 
+  it('returns to the Author page when the opened work is deleted', async () => {
+    const api = createMemoryApi();
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="author-navigation"]').trigger('click');
+    await wrapper.get('[data-author-id="9"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-author-work-id="1"] .author-card-main').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');
+    const deleteButton = wrapper.get('[data-testid="delete-entry"]');
+    await deleteButton.trigger('click');
+    await deleteButton.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="author-information-board"]').text()).toContain('Hypergryph');
+    expect(wrapper.find('[data-testid="gallery-main"]').exists()).toBe(false);
+  });
+
   it('waits for an Author second page to render before restoring its Entry scroll position', async () => {
     const api = createMemoryApi();
     const originalGetAuthor = api.getAuthor.bind(api);
     const originalQueryEntryPage = api.queryEntryPage.bind(api);
     const baseAuthor = await originalGetAuthor(9);
     const seedWork = baseAuthor.looseEntries[0]!;
-    const works = Array.from({ length: 30 }, (_, index) => ({
+    const works = Array.from({ length: 40 }, (_, index) => ({
       ...seedWork,
       id: 100 + index,
       title: `Author work ${index + 1}`,
@@ -2088,6 +2659,80 @@ describe('GalleryApp', () => {
     await flushPromises();
 
     expect(wrapper.get('.directory-heading').text()).toContain('Selected works');
+  });
+
+  it('leaves a collection straight from the Entry detail menu when it is already joined', async () => {
+    const api = createMemoryApi();
+    const created = await api.createCollection({ kind: 'entry', title: 'Read list' });
+    const addCollectionEntry = vi.fn(async () => undefined);
+    const removeCollectionEntry = vi.fn(async () => undefined);
+    api.addCollectionEntry = addCollectionEntry;
+    api.removeCollectionEntry = removeCollectionEntry;
+    api.listCollectionsForEntry = vi.fn(async () => [created.id]);
+
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-entry-id="1"]').trigger('click');
+    await flushPromises();
+
+    await wrapper.get('[data-testid="entry-add-to-collection"] button').trigger('click');
+    await flushPromises();
+
+    const option = wrapper.get('[data-testid="entry-add-to-collection"] .add-to-collection-option');
+    expect(option.text()).toContain('✓ Read list');
+    expect(option.attributes('aria-checked')).toBe('true');
+    expect(option.attributes('disabled')).toBeUndefined();
+
+    await option.trigger('click');
+    await flushPromises();
+
+    expect(removeCollectionEntry).toHaveBeenCalledWith(created.id, 1);
+    expect(addCollectionEntry).not.toHaveBeenCalled();
+    // 菜单保持打开，✓ 就地消失，可继续退出其它合集。
+    expect(option.text()).not.toContain('✓');
+    expect(option.attributes('aria-checked')).toBe('false');
+
+    await option.trigger('click');
+    await flushPromises();
+
+    expect(addCollectionEntry).toHaveBeenCalledWith(created.id, 1);
+    expect(removeCollectionEntry).toHaveBeenCalledTimes(1);
+    // 加入与退出都保持菜单打开（✓ 就地更新），可连续勾选多个合集。
+    expect(wrapper.get('[data-testid="entry-add-to-collection"] .add-to-collection-option').text()).toContain('✓');
+  });
+
+  it('keeps the Entry collection menu open across joins and closes it on outside taps', async () => {
+    const api = createMemoryApi();
+    await api.createCollection({ kind: 'entry', title: 'Read list' });
+    await api.createCollection({ kind: 'entry', title: 'Watch list' });
+    // attachTo: document.body — the outside-tap handler listens on the
+    // document, which requires the component tree to be attached.
+    const wrapper = mount(GalleryApp, { props: { api }, attachTo: document.body });
+    await flushPromises();
+    await wrapper.get('[data-entry-id="1"]').trigger('click');
+    await flushPromises();
+
+    await wrapper.get('[data-testid="entry-add-to-collection"] button').trigger('click');
+    await flushPromises();
+    const options = wrapper.findAll('[data-testid="entry-add-to-collection"] .add-to-collection-option');
+    expect(options).toHaveLength(2);
+
+    // Join the first collection; the menu stays open for the second pick.
+    await options[0]!.trigger('click');
+    await flushPromises();
+    expect(options[0]!.text()).toContain('✓ Read list');
+    expect(wrapper.findAll('[data-testid="entry-add-to-collection"] .add-to-collection-option')).toHaveLength(2);
+
+    // Join the second one in the same session.
+    const stillOpen = wrapper.findAll('[data-testid="entry-add-to-collection"] .add-to-collection-option');
+    await stillOpen[1]!.trigger('click');
+    await flushPromises();
+    expect(stillOpen[1]!.text()).toContain('✓ Watch list');
+
+    // A tap outside the menu closes it.
+    await wrapper.get('[data-testid="entry-detail"]').trigger('pointerdown');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="entry-add-to-collection"] .add-to-collection-option').exists()).toBe(false);
   });
 
   it('opens an Author detail by tapping its chip in Entry read mode', async () => {
@@ -2213,11 +2858,151 @@ describe('GalleryApp', () => {
     expect(detail.find('[data-testid="add-section-button"]').exists()).toBe(false);
   });
 
+  it('renames an Entry by double-clicking its title only while Entry edit mode is active', async () => {
+    const api = createMemoryApi();
+    const updateEntry = vi.fn(async (entryId: number, input: { title?: string }) => ({
+      id: entryId,
+      title: input.title ?? 'Endfield',
+      type: 'game',
+      coverRef: null,
+      previewRef: null,
+      previewRefs: [],
+      uploadDate: null,
+      pageCount: null,
+    }));
+    Object.assign(api, { updateEntry });
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await wrapper.get('[data-entry-id="1"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('.detail-heading h2').trigger('dblclick');
+    expect(wrapper.find('[data-testid="entry-title-input"]').exists()).toBe(false);
+
+    await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');
+    await wrapper.get('.detail-heading h2').trigger('dblclick');
+    const input = wrapper.get('[data-testid="entry-title-input"]');
+    expect((input.element as HTMLInputElement).value).toBe('Endfield');
+
+    await input.setValue('  Endfield: New Title  ');
+    await input.trigger('keydown.enter');
+    await flushPromises();
+
+    expect(updateEntry).toHaveBeenCalledOnce();
+    expect(updateEntry).toHaveBeenCalledWith(1, { title: 'Endfield: New Title' });
+    expect(wrapper.get('.detail-heading h2').text()).toBe('Endfield: New Title');
+  });
+
+  it('replaces every credited Author of a work with the multi-author Author', async () => {
+    const api = createMemoryApi();
+    const convertEntryAuthors = vi.spyOn(api, 'convertEntryAuthors');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    // Hypergryph keeps three works and the two Guests exist nowhere else; the
+    // conversion deliberately does not judge who deserves to stay.
+    const guestA = await api.createAuthor({ name: 'Guest A' });
+    const guestB = await api.createAuthor({ name: 'Guest B' });
+    await api.linkEntryAuthor(1, guestA.id);
+    await api.linkEntryAuthor(1, guestB.id);
+
+    await openGalleryType(wrapper);
+    await openEntryForEditing(wrapper, 1);
+
+    const button = wrapper.get('[data-testid="convert-multi-author"]');
+    expect(button.text()).toContain('3');
+    expect(button.attributes('title')).toContain(multiAuthorProducerName);
+    await button.trigger('click');
+    await flushPromises();
+
+    expect(convertEntryAuthors).toHaveBeenCalledWith(1);
+    const chipText = wrapper.findAll('[data-entry-author-id]').map((chip) => chip.text()).join(' ');
+    expect(chipText).toContain(multiAuthorProducerName);
+    expect(chipText).not.toContain('Hypergryph');
+    expect(chipText).not.toContain('Guest A');
+    expect(chipText).not.toContain('Guest B');
+    expect(wrapper.get('[data-testid="multi-author-notice"]').text())
+      .toContain('Replaced 3 Author(s) with multiple author');
+    // Only the multi-author Author is left, so the action disappears.
+    expect(wrapper.find('[data-testid="convert-multi-author"]').exists()).toBe(false);
+  });
+
+  it('offers no multi-author action on a work with a single Author', async () => {
+    const api = createMemoryApi();
+    const convertEntryAuthors = vi.spyOn(api, 'convertEntryAuthors');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await openGalleryType(wrapper);
+    await openEntryForEditing(wrapper, 1);
+
+    expect(wrapper.find('[data-testid="convert-multi-author"]').exists()).toBe(false);
+    expect(convertEntryAuthors).not.toHaveBeenCalled();
+  });
+
+  it('plans and applies title shortening from Advanced editing', async () => {
+    const api = createMemoryApi();
+    const applyTitleShortening = vi.spyOn(api, 'applyTitleShortening');
+    // The plan is reviewed before anything is written, so the fixtures carry
+    // the three title shapes this feature cares about.
+    await api.updateEntry(1, { title: 'Hyakudaku no Tou | 百濁之塔 -壹-' });
+    await api.updateEntry(2, { title: 'Yuuka (Gym Uniform) | 유우카' });
+    await api.updateEntry(3, { title: 'Nagareboshi | Shooting Star' });
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="settings-button"]').trigger('click');
+    await wrapper.get('[data-testid="advanced-entry"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="advanced-tab-titles"]').trigger('click');
+    await flushPromises();
+
+    await wrapper.get('[data-testid="title-plan-button"]').trigger('click');
+    await flushPromises();
+
+    // Every candidate offers both sides; the plan's suggestion is preselected
+    // — keep the translated side, but keep the original when the other side is
+    // only Korean.
+    expect(wrapper.get('[data-testid="title-plan-item-0"]').text())
+      .toContain('百濁之塔 -壹-');
+    expect(wrapper.get('[data-testid="title-keep-back-0"]').classes()).toContain('active');
+    expect(wrapper.get('[data-testid="title-keep-front-1"]').classes()).toContain('active');
+    // Both sides ASCII: nothing is preselected.
+    expect(wrapper.get('[data-testid="title-keep-front-2"]').classes()).not.toContain('active');
+    expect(wrapper.get('[data-testid="title-keep-back-2"]').classes()).not.toContain('active');
+    expect(wrapper.get('[data-testid="title-undecided-2"]').text()).toContain('plain ASCII');
+    // Two preselected decisions are ready to apply.
+    expect(wrapper.get('[data-testid="title-apply-button"]').text()).toContain('Shorten 2 titles');
+
+    // Overriding a suggestion is a single click.
+    await wrapper.get('[data-testid="title-keep-back-1"]').trigger('click');
+    expect(wrapper.get('[data-testid="title-apply-button"]').text()).toContain('Shorten 2 titles');
+
+    // Destructive bulk edit: the first tap only arms the button.
+    const applyButton = wrapper.get('[data-testid="title-apply-button"]');
+    await applyButton.trigger('click');
+    expect(applyTitleShortening).not.toHaveBeenCalled();
+    expect(applyButton.text()).toContain('Confirm 2');
+    await applyButton.trigger('click');
+    await flushPromises();
+
+    expect(applyTitleShortening).toHaveBeenCalledWith([
+      { entryId: 1, title: 'Hyakudaku no Tou | 百濁之塔 -壹-', shortenedTitle: '百濁之塔 -壹-' },
+      { entryId: 2, title: 'Yuuka (Gym Uniform) | 유우카', shortenedTitle: '유우카' },
+    ]);
+    expect(wrapper.get('[data-testid="title-totals"]').text())
+      .toContain('Shortened 2, skipped 0');
+    expect((await api.getEntry(1)).title).toBe('百濁之塔 -壹-');
+    expect((await api.getEntry(2)).title).toBe('유우카');
+    // The undecided one keeps its title.
+    expect((await api.getEntry(3)).title).toBe('Nagareboshi | Shooting Star');
+  });
+
   it('requires two explicit taps before deleting an Entry from edit mode', async () => {
     const api = createMemoryApi();
     const deleteEntry = vi.spyOn(api, 'deleteEntry');
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
+    await openGalleryType(wrapper);
     await openEntryForEditing(wrapper, 1);
 
     const button = wrapper.get('[data-testid="delete-entry"]');
@@ -2230,6 +3015,9 @@ describe('GalleryApp', () => {
     await flushPromises();
     expect(deleteEntry).toHaveBeenCalledOnce();
     expect(deleteEntry).toHaveBeenCalledWith(1);
+    expect(wrapper.get('[data-testid="active-gallery-title"]').text()).toBe('game');
+    expect(wrapper.find('[data-entry-id="1"]').exists()).toBe(false);
+    expect(wrapper.find('[data-entry-id="2"]').exists()).toBe(true);
   });
 
   it('keeps Tag mutation and dragging controls out of read mode', async () => {
@@ -2427,9 +3215,9 @@ describe('GalleryApp', () => {
     }
     const form = wrapper.get(`[data-create-tag-facet-id="${facetId}"]`);
     const input = form.get('[name="tagName"]');
-    expect(input.attributes('size')).toBe('5');
     expect(form.find('button[type="submit"]').exists()).toBe(false);
     await input.setValue(tagName);
+    // Tap-elsewhere-to-save: blur commits the typed tag (or closes when empty).
     await input.trigger('blur');
     await flushPromises();
 
@@ -2484,7 +3272,7 @@ describe('GalleryApp', () => {
     await wrapper.get('[data-add-direct-tag-section-id="10"]').trigger('click');
     const input = wrapper.get('[data-create-tag-facet-id="11"] [name="tagName"]');
     await input.setValue('Favorite');
-    await input.trigger('blur');
+    await input.trigger('keydown.enter');
     await flushPromises();
 
     expect(wrapper.get('[data-facet-id="11"]').text()).toContain('Favorite');
@@ -2580,6 +3368,7 @@ describe('GalleryApp', () => {
       entryType: 'game',
       entriesAffected: 2,
       tagsRelinked: 3,
+      ratingsRelinked: 0,
       orphansMoved: 0,
       sectionsRecreated: 1,
       backupPath: null,
@@ -2625,6 +3414,7 @@ describe('GalleryApp', () => {
       entryType: 'game',
       entriesAffected: 2,
       tagsRelinked: 3,
+      ratingsRelinked: 0,
       orphansMoved: 0,
       sectionsRecreated: 1,
       backupPath: null,
@@ -2980,6 +3770,32 @@ describe('Facet filter bar', () => {
     expect(wrapper.get('[data-testid="entry-list"]').text()).toContain('Hades II');
   });
 
+  it('offers the Author-rating mode inside the rating sort control', async () => {
+    const api = createMemoryApi();
+    const queryEntryPage = vi.spyOn(api, 'queryEntryPage');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openGameGallery(wrapper);
+
+    const sortSelect = wrapper.get('[data-testid="rating-sort-select"]');
+    expect(sortSelect.findAll('option').map((option) => option.text())).toContain('Quality ↓ 👤');
+    expect(sortSelect.attributes('title')).toBe(
+      'Works without their own rating sort by their Author rating',
+    );
+
+    await sortSelect.setValue('40:author');
+    await flushPromises();
+    expect(queryEntryPage.mock.calls.at(-1)?.[0]).toMatchObject({
+      ratingSort: { slotId: 40, direction: 'desc', applyAuthorRating: true },
+    });
+
+    await sortSelect.setValue('40');
+    await flushPromises();
+    expect(queryEntryPage.mock.calls.at(-1)?.[0]).toMatchObject({
+      ratingSort: { slotId: 40, direction: 'desc', applyAuthorRating: false },
+    });
+  });
+
   it('applies a rating chosen on the manual entry form after creating the entry', async () => {
     const api = createMemoryApi();
     const setRating = vi.fn(async (_entryId: number, slotId: number, stars: number | null) => ({
@@ -3013,19 +3829,15 @@ describe('Facet filter bar', () => {
     expect(entryId).toBeGreaterThan(0);
   });
 
-  it('applies the batch-wide rating to every imported item', async () => {
+  it('records the reviewed Author rating for the batch instead of rating every imported work', async () => {
     const api = createMemoryApi();
-    const setRating = vi.fn(async (_entryId: number, slotId: number, stars: number | null) => ({
-      slotId,
-      name: 'Quality',
-      stars,
-    }));
-    api.setEntryRating = setRating;
+    const setEntryRating = vi.fn(async () => ({}));
+    api.setEntryRating = setEntryRating as unknown as typeof api.setEntryRating;
     api.listRatingSlots = vi.fn(async () => [{ id: 40, name: 'Quality', sortOrder: 0 }]);
     api.listLayout = vi.fn(async () => [
       { id: 10, name: 'Tags', sortOrder: 0, facets: [{ id: 11, name: '', sortOrder: 0 }] },
     ]);
-    api.previewSiteProbeFolder = vi.fn(async () => ({
+    const preview = {
       source: 'hitomi.la',
       entryCount: 1,
       tagAssignmentCount: 1,
@@ -3042,19 +3854,23 @@ describe('Facet filter bar', () => {
           fields: { authors: ['Author'] },
         }],
       },
-    }));
+    };
+    api.previewSiteProbeFolder = vi.fn(async () => preview);
     const entryIdSeq = { value: 300 };
-    api.commitImport = vi.fn(async (batch) => ({
+    const commitImport = vi.fn(async (batch: typeof preview.batch, mapping: unknown) => ({
       entries: batch.entries.map((entry: { title: string; externalKey?: string }) => {
         entryIdSeq.value += 1;
         return { entryId: entryIdSeq.value, title: entry.title, externalKey: entry.externalKey };
       }),
       entryCount: batch.entries.length,
+      skippedExistingEntryCount: 0,
       createdProducerCount: 0,
       producerLinkCount: 0,
       tagAssignmentCount: 0,
       contentCount: 0,
+      authorRatingCount: (mapping as { authorRatings?: unknown[] }).authorRatings?.length ?? 0,
     }));
+    api.commitImport = commitImport as unknown as typeof api.commitImport;
 
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
@@ -3066,8 +3882,9 @@ describe('Facet filter bar', () => {
     await batchTypeInput.trigger('change');
     await flushPromises();
 
-    await wrapper.get('[data-testid="batch-ratings"] select').setValue('4');
-
+    // Imports no longer rate works: the batch dialog has no rating block, and
+    // choosing the folder reviews the Authors the batch will touch.
+    expect(wrapper.find('[data-testid="batch-ratings"]').exists()).toBe(false);
     const batchInput = wrapper.get('.batch-import input[webkitdirectory]');
     const files = ['100089', '102331'].map((itemId) => {
       const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
@@ -3080,15 +3897,25 @@ describe('Facet filter bar', () => {
     await batchInput.trigger('change');
     await flushPromises();
 
+    // Rating inputs appear only for an Author the user ticked.
+    expect(wrapper.find('[data-testid="author-ratings-Author"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="author-rating-toggle-Author"]').setValue(true);
+    expect(wrapper.find('[data-testid="author-ratings-Author"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="author-rating-Author-Quality"]').setValue('4');
+    // The batch button, not the single-work one, commits this run.
+    expect(wrapper.find('[data-testid="batch-review-hint"]').exists()).toBe(true);
+
     await wrapper.get('.batch-import .primary-button').trigger('click');
     await flushPromises();
 
-    expect(setRating).toHaveBeenCalledTimes(2);
-    for (const [entryId, slotId, stars] of setRating.mock.calls) {
-      expect(entryId).toBeGreaterThan(300);
-      expect(slotId).toBe(40);
-      expect(stars).toBe(4);
+    // Both items commit with the same reviewed Author rating.
+    expect(commitImport).toHaveBeenCalledTimes(2);
+    for (const call of commitImport.mock.calls) {
+      expect(call[1]).toMatchObject({
+        authorRatings: [{ name: 'Author', slotName: 'Quality', stars: 4 }],
+      });
     }
+    expect(setEntryRating).not.toHaveBeenCalled();
     expect(wrapper.find('[data-testid="batch-review"]').exists()).toBe(true);
   });
   it('shows usage stats and records a view only when the source URL opens', async () => {
@@ -3438,6 +4265,36 @@ describe('Facet filter bar', () => {
     expect(wrapper.find('[data-testid="home-page"]').exists()).toBe(true);
   });
 
+  it('returns to the exact Collection when its opened Entry is deleted', async () => {
+    const api = createMemoryApi();
+    api.listCollections = vi.fn(async (kind: 'entry' | 'producer') => (kind === 'entry' ? [{
+      id: 71,
+      kind: 'entry' as const,
+      title: 'Current shelf',
+      description: '',
+      nsfw: false,
+      sortOrder: 0,
+      children: [],
+      entries: [{ id: 1, title: 'Endfield', type: 'game', coverRef: null, previewRefs: [] }],
+      producers: [],
+    }] : []));
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="collections-navigation"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-collection-id="71"]').trigger('click');
+    await wrapper.get('[data-testid="collection-entry-card"] .entry-card-main').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');
+    const deleteButton = wrapper.get('[data-testid="delete-entry"]');
+    await deleteButton.trigger('click');
+    await deleteButton.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="collection-detail"]').text()).toContain('Current shelf');
+  });
+
   it('opens the freshly imported Entry after a single folder import', async () => {
     const api = createMemoryApi();
     api.listLayout = vi.fn(async () => [
@@ -3464,10 +4321,13 @@ describe('Facet filter bar', () => {
     api.commitImport = vi.fn(async () => ({
       entries: [{ entryId: 400, title: 'Freshly Imported Work', externalKey: 'hitomi.la:400' }],
       entryCount: 1,
+      skippedExistingEntryCount: 0,
       createdProducerCount: 0,
       producerLinkCount: 0,
       tagAssignmentCount: 1,
       contentCount: 0,
+      authorRatingCount: 0,
+      warnings: [],
     }));
     const baseGetEntry = api.getEntry;
     api.getEntry = vi.fn(async (entryId: number) => {
@@ -3536,10 +4396,13 @@ describe('Facet filter bar', () => {
         externalKey: entry.externalKey,
       })),
       entryCount: batch.entries.length,
+      skippedExistingEntryCount: 0,
       createdProducerCount: 0,
       producerLinkCount: 0,
       tagAssignmentCount: 0,
       contentCount: 0,
+      authorRatingCount: 0,
+      warnings: [],
     }));
     // The real backend returns the freshly committed entries from the bounded
     // Entry query; the mock mirrors that for the review grid.
@@ -3628,6 +4491,299 @@ describe('Facet filter bar', () => {
     await flushPromises();
     expect(wrapper.find('[data-testid="batch-review"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="recent-view-page"]').exists()).toBe(true);
+  });
+
+  it('saves a batch import as a temporary Collection from the review view', async () => {
+    setLocale('en');
+    const api = createMemoryApi();
+    const createTemporaryCollection = vi.spyOn(api, 'createTemporaryCollection');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    api.listLayout = vi.fn(async () => [
+      { id: 10, name: 'Tags', sortOrder: 0, facets: [{ id: 11, name: '', sortOrder: 0 }] },
+    ]);
+    const summaries = (ids: number[]) => ids.map((id) => ({
+      id,
+      title: `Batch Work ${id}`,
+      type: 'game',
+      coverRef: null,
+      previewRef: null,
+      previewRefs: [],
+      uploadDate: null,
+      pageCount: null,
+      viewCount: 0,
+      likeCount: 0,
+      lastViewedAt: null,
+    }));
+    let nextEntryId = 700;
+    api.commitImport = vi.fn(async (batch) => {
+      const entries = batch.entries.map((entry: { title: string }) => {
+        nextEntryId += 1;
+        return { entryId: nextEntryId, title: entry.title };
+      });
+      return {
+        entries,
+        entryCount: entries.length,
+        skippedExistingEntryCount: 0,
+        createdProducerCount: 0,
+        producerLinkCount: 0,
+        tagAssignmentCount: 0,
+        contentCount: 0,
+        authorRatingCount: 0,
+        warnings: [],
+      };
+    });
+    api.queryEntryPage = vi.fn(async (input) => ({
+      items: summaries(input.entryIds ?? []),
+      total: (input.entryIds ?? []).length,
+      page: input.page,
+      pageSize: input.pageSize,
+    }));
+    api.previewSiteProbeFolder = vi.fn(async () => ({
+      source: 'hitomi.la',
+      entryCount: 1,
+      tagAssignmentCount: 0,
+      uniqueTagCount: 0,
+      entriesMissingCover: 0,
+      warnings: [],
+      batch: {
+        source: 'hitomi.la',
+        warnings: [],
+        entries: [{
+          externalKey: 'hitomi.la:1',
+          title: 'Batch Work',
+          tags: [],
+          fields: { authors: ['Author'] },
+        }],
+      },
+    }));
+
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await wrapper.get('.batch-import-toggle .secondary-button').trigger('click');
+    const typeInput = wrapper.get('.batch-import input[list="add-entry-gallery-types"]');
+    await typeInput.setValue('game');
+    await typeInput.trigger('change');
+    await flushPromises();
+    const batchInput = wrapper.get('.batch-import input[webkitdirectory]');
+    const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
+    Object.defineProperty(file, 'webkitRelativePath', {
+      value: 'playlist_640641/items/100089/metadata.json',
+    });
+    Object.defineProperty(batchInput.element, 'files', { value: [file] });
+    await batchInput.trigger('change');
+    await flushPromises();
+    await wrapper.get('.batch-import .primary-button').trigger('click');
+    await flushPromises();
+
+    // The review files the run into a Collection that outlives it.
+    const button = wrapper.get('[data-testid="batch-review-save-collection"]');
+    await button.trigger('click');
+    await flushPromises();
+
+    expect(createTemporaryCollection).toHaveBeenCalledWith([nextEntryId]);
+    expect(wrapper.get('[data-testid="batch-review-collection-notice"]').text())
+      .toContain('临时');
+    expect(wrapper.get('[data-testid="batch-review-collection-notice"]').text()).toContain('1');
+    // Saving once marks it done instead of creating another copy.
+    expect(wrapper.get('[data-testid="batch-review-save-collection"]').attributes('disabled'))
+      .toBeDefined();
+    expect(wrapper.get('[data-testid="batch-review-save-collection"]').text())
+      .toContain('临时');
+    // The one-time review itself is still there.
+    expect(wrapper.find('[data-testid="batch-review"]').exists()).toBe(true);
+  });
+
+  it('shows a later batch review even after paging through a longer earlier one', async () => {
+    const api = createMemoryApi();
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    api.listLayout = vi.fn(async () => [
+      { id: 10, name: 'Tags', sortOrder: 0, facets: [{ id: 11, name: '', sortOrder: 0 }] },
+    ]);
+    const summaries = (ids: number[]) => ids.map((id) => ({
+      id,
+      title: `Batch Work ${id}`,
+      type: 'game',
+      coverRef: null,
+      previewRef: null,
+      previewRefs: [],
+      uploadDate: null,
+      pageCount: null,
+      viewCount: 0,
+      likeCount: 0,
+      lastViewedAt: null,
+    }));
+    let nextEntryId = 600;
+    api.commitImport = vi.fn(async (batch) => {
+      const entries = batch.entries.map((entry: { title: string }) => {
+        nextEntryId += 1;
+        return { entryId: nextEntryId, title: entry.title };
+      });
+      return {
+        entries,
+        entryCount: entries.length,
+        skippedExistingEntryCount: 0,
+        createdProducerCount: 0,
+        producerLinkCount: 0,
+        tagAssignmentCount: 0,
+        contentCount: 0,
+        authorRatingCount: 0,
+        warnings: [],
+      };
+    });
+    api.queryEntryPage = vi.fn(async (input) => ({
+      items: summaries(input.entryIds ?? []),
+      total: (input.entryIds ?? []).length,
+      page: input.page,
+      pageSize: input.pageSize,
+    }));
+    api.previewSiteProbeFolder = vi.fn(async () => ({
+      source: 'hitomi.la',
+      entryCount: 1,
+      tagAssignmentCount: 0,
+      uniqueTagCount: 0,
+      entriesMissingCover: 0,
+      warnings: [],
+      batch: {
+        source: 'hitomi.la',
+        warnings: [],
+        entries: Array.from({ length: 20 }, (_, index) => ({
+          externalKey: `hitomi.la:${index}`,
+          title: `Batch Work ${index}`,
+          tags: [],
+        })),
+      },
+    }));
+
+    const runBatch = async (itemIds: string[]) => {
+      await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+      await wrapper.get('.batch-import-toggle .secondary-button').trigger('click');
+      const typeInput = wrapper.get('.batch-import input[list="add-entry-gallery-types"]');
+      await typeInput.setValue('game');
+      await typeInput.trigger('change');
+      await flushPromises();
+      const batchInput = wrapper.get('.batch-import input[webkitdirectory]');
+      Object.defineProperty(batchInput.element, 'files', {
+        value: itemIds.map((itemId) => {
+          const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
+          Object.defineProperty(file, 'webkitRelativePath', {
+            value: `playlist_640641/items/${itemId}/metadata.json`,
+          });
+          return file;
+        }),
+      });
+      await batchInput.trigger('change');
+      await flushPromises();
+      await wrapper.get('.batch-import .primary-button').trigger('click');
+      await flushPromises();
+    };
+
+    // A long batch: 2 items × 20 entries = 40 cards, so the review paginates.
+    await runBatch(['100089', '102331']);
+    const firstReview = wrapper.get('[data-testid="batch-review"]');
+    expect(firstReview.findAll('.entry-card')).toHaveLength(30);
+    await firstReview.get('[aria-label="Next page"]').trigger('click');
+    await flushPromises();
+    expect(firstReview.findAll('.entry-card')).toHaveLength(10);
+    await wrapper.get('[data-testid="complete-batch-review"]').trigger('click');
+    await flushPromises();
+
+    // A short batch of the same Gallery must still show its own cards.
+    await runBatch(['100089']);
+    const secondReview = wrapper.get('[data-testid="batch-review"]');
+    expect(secondReview.findAll('.entry-card')).toHaveLength(20);
+    expect(secondReview.findAll('.entry-card')[0]!.text()).toContain('Batch Work');
+  });
+
+  it('lists the imported cards even when the typed Gallery spelling was not the stored one', async () => {
+    const api = createMemoryApi();
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await wrapper.get('.batch-import-toggle .secondary-button').trigger('click');
+
+    // Typing `GAME` is legitimate: the import resolves it to the stored `game`
+    // Gallery case-insensitively, so the review must look at the same type.
+    const batchTypeInput = wrapper.get('.batch-import input[list="add-entry-gallery-types"]');
+    await batchTypeInput.setValue('GAME');
+    await batchTypeInput.trigger('change');
+    await flushPromises();
+
+    const batchInput = wrapper.get('.batch-import input[webkitdirectory]');
+    const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
+    Object.defineProperty(file, 'webkitRelativePath', {
+      value: 'playlist_640641/items/100089/metadata.json',
+    });
+    Object.defineProperty(batchInput.element, 'files', { value: [file] });
+    await batchInput.trigger('change');
+    await flushPromises();
+
+    api.listLayout = vi.fn(async () => [
+      { id: 10, name: 'Tags', sortOrder: 0, facets: [{ id: 11, name: '', sortOrder: 0 }] },
+    ]);
+    api.commitImport = vi.fn(async (batch) => ({
+      entries: batch.entries.map((entry: { title: string }, index: number) => ({
+        entryId: 500 + index,
+        title: entry.title,
+      })),
+      entryCount: batch.entries.length,
+      skippedExistingEntryCount: 0,
+      createdProducerCount: 0,
+      producerLinkCount: 0,
+      tagAssignmentCount: 0,
+      contentCount: 0,
+      authorRatingCount: 0,
+      warnings: [],
+    }));
+    // Mirrors the server: the Entry query matches the Gallery type exactly.
+    const queryEntryPage = api.queryEntryPage.bind(api);
+    api.queryEntryPage = vi.fn(async (input: Parameters<GalleryApi['queryEntryPage']>[0]) => (
+      input.entryIds?.includes(500) && (input.entryType === undefined || input.entryType === 'game')
+        ? {
+          items: [{
+            id: 500,
+            title: 'Typed Type Work',
+            type: 'game',
+            coverRef: null,
+            previewRef: null,
+            previewRefs: [],
+            uploadDate: null,
+            pageCount: null,
+            viewCount: 0,
+            likeCount: 0,
+            lastViewedAt: null,
+          }],
+          total: 1,
+          page: input.page,
+          pageSize: input.pageSize,
+        }
+        : queryEntryPage(input)));
+    api.previewSiteProbeFolder = vi.fn(async () => ({
+      source: 'hitomi.la',
+      entryCount: 1,
+      tagAssignmentCount: 1,
+      uniqueTagCount: 1,
+      entriesMissingCover: 0,
+      warnings: [],
+      batch: {
+        source: 'hitomi.la',
+        warnings: [],
+        entries: [{
+          externalKey: 'hitomi.la:1',
+          title: 'Typed Type Work',
+          tags: [{ name: 'Full Color' }],
+          fields: { authors: ['Author'] },
+        }],
+      },
+    }));
+
+    await wrapper.get('.batch-import .primary-button').trigger('click');
+    await flushPromises();
+
+    const review = wrapper.get('[data-testid="batch-review"]');
+    // The heading names the Gallery the commits landed in, not the typed text.
+    expect(review.get('[data-testid="batch-review-title"]').text()).toBe('game');
+    expect(review.text()).toContain('Typed Type Work');
   });
 });
 

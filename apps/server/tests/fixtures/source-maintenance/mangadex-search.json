@@ -1,0 +1,44 @@
+{
+  "data": [
+    {
+      "id": "b7d0f5e3-51b1-4b13-9f6a-3aa2efc91234",
+      "type": "manga",
+      "attributes": {
+        "title": { "en": "Blue Box", "ja-ro": "Ao no Hako" },
+        "altTitles": [
+          { "ja": "アオのハコ" },
+          { "zh-ro__ja": "青色之箱" },
+          { "en": "青春之箱" }
+        ],
+        "originalLanguage": "ja",
+        "status": "ongoing",
+        "contentRating": "safe",
+        "tags": [
+          { "id": "0234-1", "type": "tag", "attributes": { "name": { "en": "Romance" } } },
+          { "id": "0234-2", "type": "tag", "attributes": { "name": { "en": "Sports" } } }
+        ]
+      },
+      "relationships": [
+        { "id": "auth-1", "type": "author", "attributes": { "name": "MIURA Kouji" } },
+        { "id": "art-1", "type": "artist", "attributes": { "name": "MIURA Kouji" } }
+      ]
+    },
+    {
+      "id": "c9e1a7b5-99f2-4c20-8a31-6bb3ffd04567",
+      "type": "manga",
+      "attributes": {
+        "title": { "ja-ro": "Ao no Hako" },
+        "altTitles": [{ "en": "Blue Box (Oneshot)" }],
+        "originalLanguage": "ja",
+        "status": "completed",
+        "contentRating": "safe",
+        "tags": [
+          { "id": "0456-1", "type": "tag", "attributes": { "name": { "en": "Oneshot" } } }
+        ]
+      },
+      "relationships": [
+        { "id": "auth-1", "type": "author", "attributes": { "name": "MIURA Kouji" } }
+      ]
+    }
+  ]
+}

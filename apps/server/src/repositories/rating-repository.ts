@@ -45,6 +45,26 @@ export function listRatingSlots(
 }
 
 /**
+ * Finds one slot by its dimension name. Author rating dimensions mirror the
+ * Gallery's Entry dimensions by name, so this is the lookup that maps an Entry
+ * slot onto the Author slot carrying the same dimension.
+ */
+export function findRatingSlotId(
+  database: T3Database,
+  kind: RatingSubjectKind,
+  entryType: string,
+  name: string,
+): number | undefined {
+  return database.prepare(`
+    SELECT id
+    FROM rating_slots
+    WHERE subject_kind = ? AND entry_type = ? AND name = ?
+    ORDER BY id
+    LIMIT 1
+  `).pluck().get(kind, entryType, name.trim()) as number | undefined;
+}
+
+/**
  * Creates the shared slot for one Gallery (or reuses the existing slot with
  * the same name — slots are fully templated per Gallery, so every card of the
  * Gallery shows the row immediately).

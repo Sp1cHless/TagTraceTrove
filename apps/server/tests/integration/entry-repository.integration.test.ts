@@ -106,6 +106,7 @@ describe('entry repository', () => {
             occupation: null,
             artworkRef: null,
             content: 'Important creator note',
+            entryCount: 1,
           },
         ],
         sections: [

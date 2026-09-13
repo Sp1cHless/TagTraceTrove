@@ -161,6 +161,18 @@ input[type='checkbox'] {
 .add-to-collection-option { display: block; width: 100%; padding: 0.4rem 0.55rem; border: 0; border-radius: 0.45rem; background: transparent; color: var(--text-primary); font: inherit; font-size: 0.85rem; text-align: left; cursor: pointer; }
 .add-to-collection-option:hover:not(:disabled), .add-to-collection-option:focus-visible:not(:disabled) { background: var(--surface-muted); outline: none; }
 .add-to-collection-option:disabled { color: var(--accent); cursor: default; }
+.add-to-collection-option.is-member { color: var(--accent); }
+
+/* On phones the quick-action buttons sit in the top-left corner; anchoring
+   the menu with `right: 0` would extend it off-screen to the left. Anchor
+   the left edge instead and cap it to the viewport. */
+@media (max-width: 44rem) {
+  .add-to-collection-menu {
+    left: 0;
+    right: auto;
+    max-width: calc(100vw - 2.5rem);
+  }
+}
 
 /* Shared entry-card base. Pages may re-declare these in scoped styles (the
    scoped copy then wins); components without their own copy — such as the

@@ -7,6 +7,7 @@ import {
   addCollectionEntry,
   addCollectionProducer,
   createCollection,
+  createCollectionFromEntries,
   deleteCollection,
   getCollection,
   listCollectionIdsForEntry,
@@ -25,6 +26,46 @@ afterEach(() => {
   for (const database of databases.splice(0)) {
     database.close();
   }
+});
+
+describe('temporary collection from a batch import', () => {
+  it('numbers each saved batch 临时, 临时2, 临时3 and files every Entry', () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const first = createEntry(database, { title: 'First batch work', type: 'comic' });
+    const second = createEntry(database, { title: 'Second batch work', type: 'comic' });
+    const third = createEntry(database, { title: 'Third batch work', type: 'comic' });
+
+    const one = createCollectionFromEntries(database, [first.id, second.id]);
+    expect(one).toEqual({ collectionId: one.collectionId, title: '临时', entryCount: 2 });
+    const two = createCollectionFromEntries(database, [third.id]);
+    expect(two.title).toBe('临时2');
+    const three = createCollectionFromEntries(database, [third.id]);
+    expect(three.title).toBe('临时3');
+
+    // Each saved batch is its own Collection, and the members are the Entries.
+    const titles = listCollections(database, 'entry').map((collection) => collection.title);
+    expect(titles).toEqual(['临时', '临时2', '临时3']);
+    expect(getCollection(database, one.collectionId)?.entries.map((entry) => entry.id))
+      .toEqual([first.id, second.id]);
+    // Repeating an id inside one request does not duplicate the member.
+    expect(createCollectionFromEntries(database, [first.id, first.id]).entryCount).toBe(1);
+
+    database.close();
+  });
+
+  it('skips Entries that no longer exist instead of failing the whole save', () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const work = createEntry(database, { title: 'Still here', type: 'comic' });
+
+    const saved = createCollectionFromEntries(database, [work.id, 9_999]);
+
+    expect(saved.entryCount).toBe(1);
+    expect(getCollection(database, saved.collectionId)?.entries.map((entry) => entry.id))
+      .toEqual([work.id]);
+    database.close();
+  });
 });
 
 describe('collections (real SQL)', () => {
@@ -89,6 +130,35 @@ describe('collections (real SQL)', () => {
       .toThrow(/exactly once/);
   });
 
+  it('saves a batch import into a numbered temporary Collection through HTTP', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const first = createEntry(database, { title: 'Batch one', type: 'comic' });
+    const second = createEntry(database, { title: 'Batch two', type: 'comic' });
+    const app = createApiApp(database);
+    const save = (entryIds: number[]) => app.request('/api/collections/temporary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entryIds }),
+    });
+
+    const saved = await save([first.id, second.id]);
+    expect(saved.status).toBe(201);
+    await expect(saved.json()).resolves.toEqual({
+      collectionId: expect.any(Number),
+      title: '临时',
+      entryCount: 2,
+    });
+    // A second batch is numbered, never merged into the first.
+    await expect((await save([first.id])).json()).resolves.toMatchObject({ title: '临时2' });
+    expect(listCollections(database, 'entry').map((collection) => collection.title))
+      .toEqual(['临时', '临时2']);
+
+    // An empty id list is a validation error, not an empty Collection.
+    expect((await save([])).status).toBe(400);
+    database.close();
+  });
+
   it('exposes collection CRUD through HTTP routes', async () => {
     const database = createMigratedMemoryDatabase();
     databases.push(database);
@@ -132,6 +202,9 @@ describe('collections (real SQL)', () => {
       method: 'DELETE',
     });
     expect(removal.status).toBe(200);
+    expect(listCollectionIdsForEntry(database, work.id)).toEqual([]);
+    expect(database.prepare('SELECT id FROM entries WHERE id = ?').get(work.id))
+      .toEqual({ id: work.id });
 
   });
 });

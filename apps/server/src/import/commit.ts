@@ -13,9 +13,15 @@ import { assignEntryTag } from '../repositories/entry-tag-repository.js';
 import { createEntryContent } from '../repositories/entry-content-repository.js';
 import {
   createProducer,
+  findProducerIdByName,
   linkEntryProducer,
   type ProducerRecord,
 } from '../repositories/producer-repository.js';
+import {
+  createProducerRatingSlot,
+  findRatingSlotId,
+  setProducerRating,
+} from '../repositories/rating-repository.js';
 import { resolveTaxonomyName } from '../repositories/taxonomy-repository.js';
 import { majorityFacetForTag } from '../repositories/template-export.js';
 
@@ -28,10 +34,15 @@ export interface ImportCommitEntryResult {
 export interface ImportCommitResult {
   entries: ImportCommitEntryResult[];
   entryCount: number;
+  skippedExistingEntryCount: number;
   createdProducerCount: number;
   producerLinkCount: number;
   tagAssignmentCount: number;
   contentCount: number;
+  authorRatingCount: number;
+  /** Non-fatal source quirks resolved during the commit, e.g. one tag name
+   *  arriving for two Facets of the same Entry. Empty when nothing was skipped. */
+  warnings: string[];
 }
 
 interface PendingTag {
@@ -85,11 +96,11 @@ function assertReviewedFields(batch: ImportBatch, mapping: ImportCommitMapping):
   }
 }
 
-function assertNoDuplicates(
+function partitionImportEntries(
   database: T3Database,
   batch: ImportBatch,
   mapping: ImportCommitMapping,
-): void {
+): { entriesToImport: ImportEntry[]; skippedExistingEntryCount: number } {
   const batchSourceUrls = new Set<string>();
   const existingSourceUrls = new Set(
     (database.prepare('SELECT content FROM entry_contents WHERE content_type = ?')
@@ -97,6 +108,8 @@ function assertNoDuplicates(
       .map((row) => row.content),
   );
 
+  const entriesToImport: ImportEntry[] = [];
+  let skippedExistingEntryCount = 0;
   for (const entry of batch.entries) {
     const primarySource = entry.sources?.find((source) => source.url) ?? entry.sources?.[0];
     if (primarySource?.url) {
@@ -105,10 +118,13 @@ function assertNoDuplicates(
       }
       batchSourceUrls.add(primarySource.url);
       if (existingSourceUrls.has(primarySource.url)) {
-        throw new Error(`Source URL has already been imported: ${primarySource.url}`);
+        skippedExistingEntryCount += 1;
+        continue;
       }
     }
+    entriesToImport.push(entry);
   }
+  return { entriesToImport, skippedExistingEntryCount };
 }
 
 function createEntryRecord(
@@ -124,11 +140,24 @@ function createEntryRecord(
   });
 }
 
+/** Human label for a Facet: its name, else its Section's name, else `#id`. */
+function facetLabel(database: T3Database, facetId: number): string {
+  const row = database.prepare(`
+    SELECT COALESCE(NULLIF(trim(facet.name), ''), NULLIF(trim(section.name), ''), '#' || facet.id) AS label
+    FROM tag_groups AS facet
+    LEFT JOIN tag_groups AS section ON section.id = facet.parent_id
+    WHERE facet.id = ?
+  `).get(facetId) as { label: string } | undefined;
+  return row?.label ?? `#${facetId}`;
+}
+
 function collectTags(
   database: T3Database,
   entry: ImportEntry,
   mapping: ImportCommitMapping,
-): PendingTag[] {  const tags = new Map<string, PendingTag>();
+  warnings: string[],
+): PendingTag[] {
+  const tags = new Map<string, PendingTag>();
   const addTag = (name: string, fallbackFacetId: number): void => {
     const resolvedName = resolveTaxonomyName(database, 'entry', name);
     const key = normalizeName(resolvedName);
@@ -138,12 +167,21 @@ function collectTags(
     const layoutFacet = majorityFacetForTag(database, mapping.entryType, resolvedName);
     const facetId = layoutFacet?.facetId ?? fallbackFacetId;
     const previous = tags.get(key);
-    if (previous && previous.facetId !== facetId) {
-      throw new Error(`Tag "${resolvedName}" is mapped to more than one Facet for the same Entry`);
+    if (previous) {
+      // One tag cannot sit in two Facets of the same Entry, and a source can
+      // name the same thing as both a series and a character (a collection of
+      // several series lists "Goblin Slayer" in both fields). The first
+      // placement wins and the skipped one is reported, because refusing the
+      // whole import over it would be far worse than one placement choice.
+      if (previous.facetId !== facetId) {
+        warnings.push(
+          `Tag "${resolvedName}" arrived for both "${facetLabel(database, previous.facetId)}" `
+          + `and "${facetLabel(database, facetId)}" in one Entry; kept the first placement`,
+        );
+      }
+      return;
     }
-    if (!previous) {
-      tags.set(key, { name: resolvedName, facetId });
-    }
+    tags.set(key, { name: resolvedName, facetId });
   };
 
   for (const tag of entry.tags ?? []) {
@@ -207,6 +245,42 @@ function buildExistingProducerMap(
   return producers;
 }
 
+/**
+ * Records the Author ratings reviewed alongside one import. The reviewed
+ * dimension must already exist as an Entry slot of the import Gallery; the
+ * Author's own dimension is mirrored from it by name, which is what lets a
+ * rating sort fall back to the Author value for the same dimension.
+ *
+ * Runs inside the commit transaction and after the Entries were linked, so a
+ * freshly created Author already has the works that give them a Gallery.
+ */
+function applyAuthorRatings(
+  database: T3Database,
+  mapping: ImportCommitMapping,
+  knownProducers: Map<string, number>,
+): number {
+  let authorRatingCount = 0;
+  for (const rating of mapping.authorRatings) {
+    const canonicalName = resolveTaxonomyName(database, 'producer', rating.name);
+    const producerId = knownProducers.get(normalizeName(canonicalName))
+      ?? findProducerIdByName(database, canonicalName);
+    if (producerId === undefined) {
+      throw new Error(
+        `Import author rating "${rating.name}" is not an Author of this import`,
+      );
+    }
+    if (findRatingSlotId(database, 'entry', mapping.entryType, rating.slotName) === undefined) {
+      throw new Error(
+        `Import author rating "${rating.slotName}" is not a rating dimension of Gallery "${mapping.entryType}"`,
+      );
+    }
+    const slot = createProducerRatingSlot(database, { producerId, name: rating.slotName });
+    setProducerRating(database, { producerId, slotId: slot.id, stars: rating.stars });
+    authorRatingCount += 1;
+  }
+  return authorRatingCount;
+}
+
 export function commitImportBatch(
   database: T3Database,
   rawBatch: ImportBatch,
@@ -217,7 +291,7 @@ export function commitImportBatch(
 
   return database.transaction(() => {
     assertReviewedFields(batch, mapping);
-    assertNoDuplicates(database, batch, mapping);
+    const { entriesToImport, skippedExistingEntryCount } = partitionImportEntries(database, batch, mapping);
     assertFacet(database, mapping.canonicalTagFacetId, mapping.entryType);
     for (const fieldMapping of Object.values(mapping.fieldMappings)) {
       if (fieldMapping.kind === 'tag') {
@@ -231,8 +305,9 @@ export function commitImportBatch(
     let producerLinkCount = 0;
     let tagAssignmentCount = 0;
     let contentCount = 0;
+    const warnings: string[] = [];
 
-    for (const entry of batch.entries) {
+    for (const entry of entriesToImport) {
       const createdEntry = createEntryRecord(database, entry, mapping.entryType);
       results.push({
         entryId: createdEntry.id,
@@ -240,7 +315,7 @@ export function commitImportBatch(
         ...(entry.externalKey === undefined ? {} : { externalKey: entry.externalKey }),
       });
 
-      const collectedTags = collectTags(database, entry, mapping);
+      const collectedTags = collectTags(database, entry, mapping, warnings);
       for (const tag of collectedTags) {
         assignEntryTag(database, {
           entryId: createdEntry.id,
@@ -274,6 +349,17 @@ export function commitImportBatch(
           const canonicalName = resolveTaxonomyName(database, 'producer', name);
           const key = normalizeName(canonicalName);
           let producerId = knownProducers.get(key);
+          if (producerId === undefined) {
+            // The dictionary already resolved this spelling to a canonical
+            // author, so an author under that name is linked to rather than
+            // duplicated: importing a work credited to `冷泉` must land on the
+            // existing 和泉, whether or not the review preselected it.
+            const canonicalMatch = findProducerIdByName(database, canonicalName);
+            if (canonicalMatch !== undefined) {
+              producerId = canonicalMatch;
+              knownProducers.set(key, producerId);
+            }
+          }
           if (producerId === undefined) {
             if (!fieldMapping.createUnmatched) {
               throw new Error(
@@ -311,13 +397,18 @@ export function commitImportBatch(
       }
     }
 
+    const authorRatingCount = applyAuthorRatings(database, mapping, knownProducers);
+
     return {
       entries: results,
       entryCount: results.length,
+      skippedExistingEntryCount,
       createdProducerCount: createdProducerIds.size,
       producerLinkCount,
       tagAssignmentCount,
       contentCount,
+      authorRatingCount,
+      warnings,
     };
   })();
 }

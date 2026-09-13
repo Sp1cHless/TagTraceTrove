@@ -3,7 +3,7 @@ import { createMigratedMemoryDatabase } from '../../src/database/testing.js';
 import { createApiApp } from '../../src/http/app.js';
 import { createEntry } from '../../src/repositories/entry-repository.js';
 import { createSection } from '../../src/repositories/layout-repository.js';
-import { createProducer } from '../../src/repositories/producer-repository.js';
+import { createProducer, linkEntryProducer } from '../../src/repositories/producer-repository.js';
 import { setGalleryPartition } from '../../src/repositories/partition-repository.js';
 import {
   assignEntryTag,
@@ -11,6 +11,10 @@ import {
   searchEntryTags,
 } from '../../src/repositories/entry-tag-repository.js';
 import { searchProducersByName } from '../../src/repositories/producer-tag-repository.js';
+import {
+  importTaxonomyAliases,
+  upsertTaxonomyAlias,
+} from '../../src/repositories/taxonomy-repository.js';
 
 type TestDatabase = ReturnType<typeof createMigratedMemoryDatabase>;
 const databases: TestDatabase[] = [];
@@ -41,7 +45,8 @@ describe('global search', () => {
     const second = createEntry(database, { title: 'Second', type: 'game' });
     assignEntryTag(database, { entryId: first.id, facetId: section.defaultFacetId, name: 'Cyberpunk' });
     assignEntryTag(database, { entryId: second.id, facetId: section.defaultFacetId, name: 'Cyberpunk' });
-    createProducer(database, { name: 'Hypergryph' });
+    const producer = createProducer(database, { name: 'Hypergryph' });
+    linkEntryProducer(database, first.id, producer.id);
 
     expect(searchEntryTags(database, 'cyberpnk')).toEqual([
       expect.objectContaining({ name: 'Cyberpunk', entryCount: 2 }),
@@ -87,7 +92,8 @@ describe('global search', () => {
     const section = createSection(database, { entryType: 'game', name: 'Basic' });
     const entry = createEntry(database, { title: 'Arknights: Endfield', type: 'game' });
     assignEntryTag(database, { entryId: entry.id, facetId: section.defaultFacetId, name: 'Cyberpunk' });
-    createProducer(database, { name: 'Hypergryph' });
+    const producer = createProducer(database, { name: 'Hypergryph' });
+    linkEntryProducer(database, entry.id, producer.id);
     const app = createApiApp(database);
 
     const postJson = (path: string, body: unknown) => app.request(path, {
@@ -121,5 +127,47 @@ describe('global search', () => {
       items: [expect.objectContaining({ name: 'Hypergryph' })],
       total: 1,
     });
+  });
+
+  it('finds an author through a recorded alias spelling', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const app = createApiApp(database);
+    const author = createProducer(database, { name: '石恵' });
+    const work = createEntry(database, { title: 'Some work', type: 'comic' });
+    linkEntryProducer(database, work.id, author.id);
+    upsertTaxonomyAlias(database, {
+      vocabulary: 'producer',
+      alias: 'ishikei',
+      canonicalName: '石恵',
+    });
+    // A placeholder row (imported spelling, canonical not filled in yet) belongs
+    // to no author and must not make one findable. The manual upsert refuses an
+    // empty canonical, so it arrives through the batch import path.
+    importTaxonomyAliases(database, [
+      { vocabulary: 'producer', partition: 'authors', alias: 'notyet', canonicalName: '' },
+    ]);
+
+    const search = (searchQuery: string) => app.request('/api/producers/query', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ownTagIds: [],
+        relatedEntryTagIds: [],
+        includeNsfw: true,
+        sort: 'relevance',
+        searchQuery,
+      }),
+    });
+
+    // The alias resolves to the author, and the card still shows their own name.
+    await expect((await search('ishikei')).json()).resolves.toMatchObject({
+      items: [expect.objectContaining({ id: author.id, name: '石恵' })],
+      total: 1,
+    });
+    // A typo in the alias spelling is tolerated like any other name.
+    await expect((await search('ishikeii')).json()).resolves.toMatchObject({ total: 1 });
+    await expect((await search('notyet')).json()).resolves.toMatchObject({ total: 0 });
+    await expect((await search('unrelated')).json()).resolves.toMatchObject({ total: 0 });
   });
 });

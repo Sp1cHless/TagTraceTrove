@@ -8,6 +8,7 @@
 - Layout: create Section/Facet, rename/reorder groups, and ordered layout responses.
 - Entry Tags: assign, move, list assignment, per-type usage counts, and include/exclude filters.
 - Entry Content: create, partial update, record, and complete-list reorder.
+- Entry Source projection: URL records detected from arbitrary Content and the transactional same-Author Entry merge request/report.
 - Ratings: create shared slot (idempotent by name), upsert `{ slotId, stars }` (null = unrated, 0.5–5 half steps), and composed rating rows embedded in Entry/Author detail responses.
 - Producer: create, partial update, record, Entry linking parameters, Producer Tags, independent Author/work-Tag filter options, same-work AND Tag search, and Author work summaries carrying view/like/last-viewed usage.
 - Producer pages: bounded Author summaries for ID-backed lists, ranked search, Tag filters, usage/name/source ordering, and one-shot random samples.
@@ -18,6 +19,7 @@
 - Gallery templates: `GET /api/templates` returns per-Gallery summaries (structure, tag→facet assignments, local file paths, existence flags); apply responses keep relaxed objects (unknown fields ignored) so a version-mismatched server or cached page can never turn a successful apply into a spurious 400.
 - Author alias groups: save `{ displayName, tagNames }` (duplicate spellings rejected; spellings equal to the display name are dropped) and grouped listings of `{ canonicalName, aliases, producerId, producerName }`; the save response embeds the full producer-merge report that collapsed existing duplicates into the display-name row.
 - Global search: shared scope enum, trimmed query, optional Entry type, optional Tag-search `includeNsfw`, Entry/Producer card summaries, and partition-aware Tag hit summaries with usage counts.
+- Relation suggestions: dedicated strict Tag/Author query schemas plus lightweight suggestion DTOs. Query text is trimmed/nonblank/max-200, result limits are 1–20, exclusions are at most 100 unique positive IDs, and response arrays are capped at 20 unique canonical numeric IDs. Relation matching uses the separate pure full-normalized-substring policy rather than global-search fuzzy ranking.
 - Common: positive integer path IDs, mutation success, and structured API errors.
 
 All object schemas are strict. Required labels are trimmed and reject blank values. Partial update bodies reject empty objects. IDs are positive integers. Reorder lists and tag-filter lists reject duplicate IDs.
@@ -58,8 +60,35 @@ Tag filter queries accept either number arrays after framework parsing or comma-
 
 Every include/search set retains repository AND semantics. Excluded Entry Tags retain `NOT EXISTS` semantics.
 Global search uses `?q=...` (required, trimmed, 1–200 characters); Entry-title search alone also accepts optional `entryType` for an exact Gallery boundary, while Tag search accepts optional `includeNsfw=true|false`. `searchScopeSchema` is the UI/shared vocabulary (`entries | tags | producers`), while the wire API keeps one explicit endpoint per scope.
+Offline sync contracts (`schemas/sync.ts`) are strict end to end: the
+capabilities response is a closed object, the snapshot header carries the
+identity pair (`libraryId`, `syncEpoch`), the monotonic `snapshotSeq`,
+schema/format versions, bounded counts and the checksum, and the payload is
+a closed set of read-model row arrays (entries, producers, tag vocabularies
+and groups, contents, ratings, collections, directories, usage, View later,
+Gallery partitions, media refs). Clients verify the checksum before atomically
+switching their active IndexedDB generation and fail closed on library or
+epoch mismatches.
+
+Source maintenance contracts are strict as well: run creation requires an
+origin source key, a registered adapter key and an explicit
+`markOriginInvalid` boolean; candidates carry an evidence band
+(`exact-safe | strong-review | ambiguous | conflict | no-match | error`)
+with machine-readable reasons and their external `catalogIds`; item patches
+accept only `decision` and `selectedUrl`; item pages are bounded (pageSize
+1–100) with an `all|pending|accepted|skipped|unresolved` state filter; the
+commit response is a strict `{ runId, status, createdCount, skippedCount,
+unresolvedCount, originMarkedInvalid, backupDir }`. Stored `candidates_json`
+is parsed back through the shared schema on every read.
+
+Relation suggestions also use `?q=...`, but their contracts are distinct: Tag suggestions require `vocabulary=entry|producer`, optionally accept ranking context (`entryType`, `facetId`), and both Tag/Producer endpoints accept comma-separated `excludeIds`. Empty/Unicode-whitespace-only queries are invalid at the HTTP boundary and produce no client request. The editing surfaces (`SuggestionInput.vue`) enforce the same rule locally: they send the normalized query only after a visible character, debounce at 150ms, abort superseded requests, drop stale responses, suppress requests and commits during IME composition, and treat blur as close-only — committing is an explicit Enter (highlighted candidate, or the typed text in creatable mode) or a candidate click.
 The per-type Entry Tag query returns `{ id, name, normalizedName, entryCount }`
 records for building one Gallery's filter controls.
+An Entry detail's `producers` entries carry a derived `entryCount` — the number of
+Entries linking that Author — which Entry edit mode uses to offer the multi-author
+cleanup only while some Author is limited to the open work. `multiAuthorProducerName`
+(`multiple author`) is the shared canonical Author that cleanup targets, so both
+sides agree on the name without duplicating the string.
 
 ## Errors
 

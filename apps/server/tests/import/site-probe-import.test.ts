@@ -19,6 +19,44 @@ async function writeMetadata(document: unknown): Promise<{ directory: string; me
   return { directory, metadataPath };
 }
 
+interface HitomiWorkFixture {
+  source_id: string;
+  title: string;
+  language?: unknown;
+  分类信息?: Record<string, string[]>;
+}
+
+/** Writes a Hitomi author export: a manifest plus one folder per work. */
+async function writeHitomiAuthorExport(
+  works: HitomiWorkFixture[],
+  options: { manifestItems?: string[] } = {},
+): Promise<{ directory: string; metadataPath: string }> {
+  const { directory, metadataPath } = await writeMetadata({
+    source_site: 'hitomi.la',
+    artist: 'Example Artist',
+    items: options.manifestItems ?? works.map((work) => work.source_id),
+  });
+  for (const work of works) {
+    const itemDirectory = join(directory, 'items', work.source_id);
+    await mkdir(itemDirectory, { recursive: true });
+    await writeFile(join(itemDirectory, 'metadata.json'), JSON.stringify({
+      source_site: 'hitomi.la',
+      source_id: work.source_id,
+      title: work.title,
+      detail_url: `https://hitomi.la/example-${work.source_id}.html`,
+      分类信息: work.分类信息 ?? {
+        作品: [],
+        登场人物: [],
+        分类标签: [],
+        作者: ['Example Artist'],
+        作品类型: [],
+      },
+      ...(work.language === undefined ? {} : { language: work.language }),
+    }), 'utf8');
+  }
+  return { directory, metadataPath };
+}
+
 describe('loadSiteProbeExport', () => {
   it('adapts an 18comic export without assuming database fields', async () => {
     const { directory, metadataPath } = await writeMetadata({
@@ -263,6 +301,48 @@ describe('loadSiteProbeExport', () => {
         sourceTagsRaw: ['Accepted Tag'],
       },
     }]);
+  });
+
+  it('imports Hitomi works whose language is unknown instead of rejecting the folder', async () => {
+    const { metadataPath } = await writeHitomiAuthorExport([
+      { source_id: '1668831', title: 'No language at all', language: { code: null, name: null } },
+      { source_id: '3868000', title: 'Code without name', language: { code: 'textless narrative', name: null } },
+      { source_id: '2000000', title: 'Known language', language: { code: 'chinese', name: '中文' } },
+    ]);
+
+    const batch = await loadSiteProbeExport(metadataPath);
+
+    expect(batch.entries.map((entry) => entry.fields)).toEqual([
+      { works: [], characters: [], authors: ['Example Artist'], contentTypes: [] },
+      { works: [], characters: [], authors: ['Example Artist'], contentTypes: [] },
+      { works: [], characters: [], authors: ['Example Artist'], contentTypes: [], language: ['中文'] },
+    ]);
+    expect(batch.warnings).toEqual([]);
+  });
+
+  it('skips a manifest work with no metadata file and reports it instead of failing the folder', async () => {
+    const { directory, metadataPath } = await writeHitomiAuthorExport(
+      [{ source_id: '111', title: 'Present work' }],
+      { manifestItems: ['111', '888260'] },
+    );
+    await mkdir(join(directory, 'items', '888260'), { recursive: true });
+
+    const batch = await loadSiteProbeExport(metadataPath);
+
+    expect(batch.entries.map((entry) => entry.title)).toEqual(['Present work']);
+    expect(batch.warnings).toEqual([
+      'Skipped work 888260: items/888260/metadata.json is missing',
+    ]);
+  });
+
+  it('names the offending work when a manifest item does not match the export schema', async () => {
+    const { metadataPath } = await writeHitomiAuthorExport([
+      { source_id: '5', title: '   ' },
+    ]);
+
+    await expect(loadSiteProbeExport(metadataPath)).rejects.toThrow(
+      /Export work 5 does not match the hitomi\.la export schema: title/u,
+    );
   });
 });
 

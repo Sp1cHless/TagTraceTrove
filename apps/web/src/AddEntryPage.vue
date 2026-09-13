@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { normalizeTag } from '@t3/shared';
-import type { ImportBatch, ImportCommitMapping, ImportCommitResult, ImportEntry, ImportPreview, RatingSlotDto } from '@t3/shared';
+import type { ImportAuthorRating, ImportBatch, ImportCommitMapping, ImportCommitResult, ImportEntry, ImportPreview, RatingSlotDto } from '@t3/shared';
 import type { GalleryApi } from './api/gallery.js';
 import { collectDroppedFiles } from './dropped-files.js';
 import { useI18n } from './i18n.js';
@@ -24,14 +24,14 @@ export interface ManualEntryDraft {
 const props = defineProps<{
   api: GalleryApi;
   galleryTypes: string[];
-  authors: Array<{ id: number; name: string }>;
+  authors: Array<{ id: number; name: string; galleryType: string | null }>;
   submitting: boolean;
 }>();
 const emit = defineEmits<{
   back: [];
   submit: [draft: ManualEntryDraft];
   imported: [entryType: string, entryIds: number[], viewLater: boolean];
-  batchImported: [entryType: string, entryIds: number[], viewLater: boolean];
+  batchImported: [entryType: string, entryIds: number[], viewLater: boolean, warnings: string[]];
 }>();
 const { t } = useI18n();
 const title = ref('');
@@ -51,10 +51,14 @@ const importViewLater = ref(false);
 const committedImportEntryIds: number[] = [];
 const manualRatingSlots = ref<RatingSlotDto[]>([]);
 const manualRatings = ref<Record<number, number | null>>({});
-const importRatingSlots = ref<RatingSlotDto[]>([]);
-const importRatings = ref<Record<number, number | null>>({});
-const batchRatingSlots = ref<RatingSlotDto[]>([]);
-const batchRatings = ref<Record<number, number | null>>({});
+// Import reviews Author ratings instead of per-work ratings: a bulk import
+// cannot judge every work, while the Author score is one decision per name.
+// Dimensions are the import Gallery's Entry rating slots, which the server
+// mirrors onto the Author by name. Values are keyed by author name and survive
+// every batch item so each commit re-sends the same reviewed values.
+const authorRatingSlots = ref<RatingSlotDto[]>([]);
+const authorRatingOpen = ref<Record<string, boolean>>({});
+const authorRatings = ref<Record<string, Record<string, number | null>>>({});
 const contentTypeOptions = ref<string[]>([]);
 const canonicalFacetId = ref<number | null>(null);
 const fieldDestinations = ref<Record<string, string>>({});
@@ -63,7 +67,7 @@ const producerMatches = ref<Record<string, number | null>>({});
 // single-import commit, so batch import keeps its own copy and re-fetches it
 // whenever a commit creates producers — otherwise every batch item whose author
 // was created earlier in the same batch would spawn a duplicate producer.
-const authorOptions = ref<Array<{ id: number; name: string }>>(props.authors);
+const authorOptions = ref<Array<{ id: number; name: string; galleryType: string | null }>>(props.authors);
 watch(() => props.authors, (list) => {
   authorOptions.value = list;
 });
@@ -386,24 +390,73 @@ async function prepareImport(files: File[]): Promise<void> {
   }
 }
 
-async function loadRatingSlots(entryType: string, target: 'manual' | 'import' | 'batch'): Promise<void> {
+async function loadRatingSlots(entryType: string, target: 'manual' | 'import'): Promise<void> {
   try {
     const slots = await props.api.listRatingSlots(entryType);
     if (target === 'manual') {
       manualRatingSlots.value = slots;
       manualRatings.value = Object.fromEntries(slots.map((slot) => [slot.id, null]));
-    } else if (target === 'import') {
-      importRatingSlots.value = slots;
-      importRatings.value = Object.fromEntries(slots.map((slot) => [slot.id, null]));
     } else {
-      batchRatingSlots.value = slots;
-      batchRatings.value = Object.fromEntries(slots.map((slot) => [slot.id, null]));
+      // Reloaded for every batch item: keep the reviewed Author values and only
+      // drop dimensions the newly resolved Gallery no longer defines.
+      const dimensions = new Set(slots.map((slot) => slot.name));
+      authorRatingSlots.value = slots;
+      authorRatings.value = Object.fromEntries(Object.entries(authorRatings.value).map(
+        ([name, values]) => [
+          name,
+          Object.fromEntries(Object.entries(values).filter(([dimension]) => dimensions.has(dimension))),
+        ],
+      ));
     }
   } catch {
     if (target === 'manual') manualRatingSlots.value = [];
-    else if (target === 'import') importRatingSlots.value = [];
-    else batchRatingSlots.value = [];
+    else authorRatingSlots.value = [];
   }
+}
+
+function authorRatingValue(name: string, dimension: string): string {
+  const value = authorRatings.value[name]?.[dimension];
+  return value === null || value === undefined ? '' : String(value);
+}
+
+function setAuthorRatingValue(name: string, dimension: string, event: Event): void {
+  const value = (event.target as HTMLSelectElement).value;
+  const values = authorRatings.value[name] ?? {};
+  values[dimension] = value === '' ? null : Number(value);
+  authorRatings.value = { ...authorRatings.value, [name]: values };
+}
+
+function toggleAuthorRating(name: string, event: Event): void {
+  authorRatingOpen.value = {
+    ...authorRatingOpen.value,
+    [name]: (event.target as HTMLInputElement).checked,
+  };
+}
+
+/**
+ * An Author rating can only be recorded on the Author's own dominant Gallery,
+ * so the review offers it for new Authors and for linked Authors that already
+ * belong to the import Gallery.
+ */
+function canRateAuthor(name: string): boolean {
+  if (authorRatingSlots.value.length === 0) return false;
+  const matchedId = producerMatches.value[name];
+  if (matchedId === null || matchedId === undefined) return true;
+  const author = authorOptions.value.find((candidate) => candidate.id === matchedId);
+  const galleryType = author?.galleryType ?? null;
+  return galleryType === null || galleryType === importType.value.trim();
+}
+
+function reviewedAuthorRatings(): ImportAuthorRating[] {
+  const ratings: ImportAuthorRating[] = [];
+  for (const [name, values] of Object.entries(authorRatings.value)) {
+    if (authorRatingOpen.value[name] !== true) continue;
+    for (const [slotName, stars] of Object.entries(values)) {
+      if (stars === null || stars === undefined) continue;
+      ratings.push({ name, slotName, stars });
+    }
+  }
+  return ratings;
 }
 
 function ratingValue(map: Record<number, number | null>, slotId: number): string {
@@ -475,7 +528,6 @@ async function loadBatchLayout(): Promise<void> {
     resolvedType,
     findFacetIdByNames(batchLayout.value, ['type']),
   );
-  await loadRatingSlots(resolvedType, 'batch');
 }
 
 function selectedFile(relativePath: string): File | null {
@@ -545,10 +597,18 @@ async function commitCurrentImport(): Promise<ImportCommitResult> {
     externalKeyContentType: 'External Key',
     fieldMappings,
     ignoredFields,
+    authorRatings: reviewedAuthorRatings(),
   });
+  const importedEntriesByExternalKey = new Map(
+    importPreview.value.batch.entries
+      .filter((entry): entry is typeof entry & { externalKey: string } => entry.externalKey !== undefined)
+      .map((entry) => [entry.externalKey, entry]),
+  );
   for (let index = 0; index < result.entries.length; index += 1) {
     const entryRecord = result.entries[index]!;
-    const imported = importPreview.value.batch.entries[index];
+    const imported = entryRecord.externalKey === undefined
+      ? (result.skippedExistingEntryCount === 0 ? importPreview.value.batch.entries[index] : undefined)
+      : importedEntriesByExternalKey.get(entryRecord.externalKey);
     const cover = imported?.cover;
     if (cover && !/^https?:\/\//u.test(cover)) {
       const file = selectedFile(cover);
@@ -562,14 +622,9 @@ async function commitCurrentImport(): Promise<ImportCommitResult> {
       }
     }
   }
-  // Imported data carries no ratings — apply the ones chosen at review time
-  // (the batch flow overwrites importRatings with the batch-wide values).
-  for (const [slotId, stars] of Object.entries(importRatings.value)) {
-    if (stars === null) continue;
-    for (const entryRecord of result.entries) {
-      await props.api.setEntryRating(entryRecord.entryId, Number(slotId), stars);
-    }
-  }
+  // Imported data carries no work ratings any more: the review records Author
+  // ratings inside the commit instead, and individual works are rated from
+  // their own detail pages.
   return result;
 }
 
@@ -604,14 +659,33 @@ function itemsByFolder(files: File[]): Array<{ key: string; files: File[] }> {
   return [...map.entries()].map(([key, groupFiles]) => ({ key, files: groupFiles }));
 }
 
+/**
+ * Reviews the batch before it runs. The Author decisions and Author ratings are
+ * per name and are re-sent by every commit in the batch, so the review only
+ * needs one representative work to list the Authors it will touch.
+ */
+async function reviewBatchFolder(): Promise<void> {
+  const first = itemsByFolder(batchImportFiles.value)[0];
+  if (!first) return;
+  try {
+    await loadImportPreview(first.files, batchImportType.value);
+  } catch {
+    // A single unreadable work must not block the batch: the run reports its
+    // own per-item failures.
+    importPreview.value = null;
+  }
+}
+
 async function dropBatchFolder(event: DragEvent): Promise<void> {
   if (!event.dataTransfer) return;
   batchImportFiles.value = await collectDroppedFiles(event.dataTransfer);
+  await reviewBatchFolder();
 }
 
-function chooseBatchFolder(event: Event): void {
+async function chooseBatchFolder(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement;
   batchImportFiles.value = input.files ? [...input.files] : [];
+  await reviewBatchFolder();
 }
 
 async function runBatchImport(): Promise<void> {
@@ -626,6 +700,7 @@ async function runBatchImport(): Promise<void> {
   }
   batchImportBusy.value = true;
   batchResult.value = null;
+  const batchWarnings: string[] = [];
   batchProgress.value = { total: folderItems.length, current: 0 };
   let succeedCount = 0;
   let failedCount = 0;
@@ -634,9 +709,6 @@ async function runBatchImport(): Promise<void> {
     try {
       manualContentType.value = batchContentType.value.trim();
       await loadImportPreview(item.files, itemType);
-      // loadImportLayout resets the per-import ratings — reapply the
-      // batch-wide choices after the preview, before the commit.
-      importRatings.value = { ...batchRatings.value };
       const result = await commitCurrentImport();
       for (const record of result.entries) committedEntryIds.push(record.entryId);
       // A commit that created producers means new author names entered the DB.
@@ -650,6 +722,7 @@ async function runBatchImport(): Promise<void> {
           // duplicate, but that beats counting this successful item as failed.
         }
       }
+      batchWarnings.push(...result.warnings);
       succeedCount += 1;
     } catch {
       failedCount += 1;
@@ -660,11 +733,13 @@ async function runBatchImport(): Promise<void> {
   importPreview.value = null;
   importFiles.value = [];
   manualContentType.value = '';
-  importRatings.value = {};
   importResult.value = null;
   importError.value = null;
   batchResult.value = t('import.batchDone', { success: succeedCount, failed: failedCount });
-  emit('batchImported', itemType, committedEntryIds, batchViewLater.value);
+  // Emit the type the commits actually used, not the raw text the user typed:
+  // the batch review loads its cards by that type, and a typed `comic` resolves
+  // to the stored `Comic`, so passing the raw text would show an empty group.
+  emit('batchImported', importType.value.trim(), committedEntryIds, batchViewLater.value, batchWarnings);
 }
 
 async function loadManualRatingSlots(): Promise<void> {
@@ -811,19 +886,6 @@ onBeforeUnmount(() => {
       <datalist id="batch-content-type-options">
         <option v-for="name in batchContentTypeOptions" :key="name" :value="name" />
       </datalist>
-      <div v-if="batchRatingSlots.length > 0" data-testid="batch-ratings" class="rating-select-list">
-        <strong class="rating-select-title">{{ t('rating.title') }}</strong>
-        <label v-for="slot in batchRatingSlots" :key="slot.id" class="rating-select-row">
-          <span>{{ slot.name }}</span>
-          <select :value="ratingValue(batchRatings, slot.id)" @change="setRatingValue(batchRatings, slot.id, $event)">
-            <option value="">{{ t('rating.unrated') }}</option>
-            <option v-for="value in ratingStarValues" :key="value" :value="value">
-              {{ t('rating.starsOption', { stars: value }) }}
-            </option>
-          </select>
-        </label>
-        <span class="muted">{{ t('import.ratingsHint') }}</span>
-      </div>
       <p v-if="batchImportFiles.length > 0" class="muted">
         {{ t('import.batchLoaded', { path: batchFolderName, count: batchImportFiles.length }) }}
       </p>
@@ -857,6 +919,12 @@ onBeforeUnmount(() => {
             covers: importPreview.entriesMissingCover,
           }) }}</p>
         </header>
+        <div v-if="importPreview.warnings.length > 0" class="import-warnings" data-testid="import-warnings">
+          <p class="import-warnings-title">{{ t('import.skippedItems', { count: importPreview.warnings.length }) }}</p>
+          <ul>
+            <li v-for="warning in importPreview.warnings" :key="warning">{{ warning }}</li>
+          </ul>
+        </div>
         <label>
           {{ t('entry.type') }}
           <select v-model="importType" name="importType" required @change="loadImportLayout">
@@ -891,19 +959,6 @@ onBeforeUnmount(() => {
         <datalist id="import-content-type-options">
           <option v-for="name in contentTypeOptions" :key="name" :value="name" />
         </datalist>
-        <div v-if="importRatingSlots.length > 0" data-testid="import-ratings" class="rating-select-list">
-          <strong class="rating-select-title">{{ t('rating.title') }}</strong>
-          <label v-for="slot in importRatingSlots" :key="slot.id" class="rating-select-row">
-            <span>{{ slot.name }}</span>
-            <select :value="ratingValue(importRatings, slot.id)" @change="setRatingValue(importRatings, slot.id, $event)">
-              <option value="">{{ t('rating.unrated') }}</option>
-              <option v-for="value in ratingStarValues" :key="value" :value="value">
-                {{ t('rating.starsOption', { stars: value }) }}
-              </option>
-            </select>
-          </label>
-          <span class="muted">{{ t('import.ratingsHint') }}</span>
-        </div>
         <section
           v-if="previewEntry"
           data-testid="import-template-preview"
@@ -994,20 +1049,54 @@ onBeforeUnmount(() => {
             <input v-model="createUnmatchedAuthors" type="checkbox">
             {{ t('import.createAuthors') }}
           </label>
-          <label v-for="name in importedAuthorValues" :key="name">
-            <span>{{ name }}</span>
-            <select v-model="producerMatches[name]">
-              <option :value="null">{{ t('import.createAuthor') }}</option>
-              <option v-for="author in authorOptions" :key="author.id" :value="author.id">
-                {{ t('import.linkAuthor', { name: author.name }) }}
-              </option>
-            </select>
-          </label>
+          <template v-for="name in importedAuthorValues" :key="name">
+            <label>
+              <span>{{ name }}</span>
+              <select v-model="producerMatches[name]" :data-testid="`import-author-match-${name}`">
+                <option :value="null">{{ t('import.createAuthor') }}</option>
+                <option v-for="author in authorOptions" :key="author.id" :value="author.id">
+                  {{ t('import.linkAuthor', { name: author.name }) }}
+                </option>
+              </select>
+            </label>
+            <div v-if="canRateAuthor(name)" class="import-author-rating">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  :data-testid="`author-rating-toggle-${name}`"
+                  :checked="authorRatingOpen[name] === true"
+                  @change="toggleAuthorRating(name, $event)"
+                >
+                {{ t('import.authorRating') }}
+              </label>
+              <div
+                v-if="authorRatingOpen[name] === true"
+                class="rating-select-list"
+                :data-testid="`author-ratings-${name}`"
+              >
+                <label v-for="slot in authorRatingSlots" :key="slot.id" class="rating-select-row">
+                  <span>{{ slot.name }}</span>
+                  <select
+                    :value="authorRatingValue(name, slot.name)"
+                    :data-testid="`author-rating-${name}-${slot.name}`"
+                    @change="setAuthorRatingValue(name, slot.name, $event)"
+                  >
+                    <option value="">{{ t('rating.unrated') }}</option>
+                    <option v-for="value in ratingStarValues" :key="value" :value="value">
+                      {{ t('rating.starsOption', { stars: value }) }}
+                    </option>
+                  </select>
+                </label>
+                <span class="muted">{{ t('import.authorRatingHint') }}</span>
+              </div>
+            </div>
+          </template>
         </section>
         <p v-if="facets.length === 0" class="error-message">
           {{ t('import.layoutRequired') }}
         </p>
         <button
+          v-if="!batchImportOpen"
           class="primary-button"
           type="button"
           :disabled="importBusy || canonicalFacetId === null"
@@ -1015,6 +1104,9 @@ onBeforeUnmount(() => {
         >
           {{ t('import.commit', { count: importPreview.entryCount }) }}
         </button>
+        <p v-else class="muted" data-testid="batch-review-hint">
+          {{ t('import.batchReviewHint') }}
+        </p>
         <p v-if="importResult" class="success-message">{{ importResult }}</p>
       </template>
     </section>
@@ -1070,11 +1162,17 @@ onBeforeUnmount(() => {
 .import-review > label, .mapping-list label, .producer-review label { display: grid; gap: .4rem; }
 .mapping-list, .producer-review { display: grid; gap: .75rem; padding: 1rem; border-radius: 14px; background: var(--surface-muted); }
 .mapping-list label, .producer-review label:not(.checkbox-label) { grid-template-columns: minmax(120px, .5fr) minmax(220px, 1fr); align-items: center; }
+.import-author-rating { display: grid; gap: .4rem; }
+.import-author-rating > .checkbox-label { min-height: 0; }
+.producer-review label.rating-select-row { grid-template-columns: minmax(8rem, 1fr) minmax(8rem, 1fr); }
 .checkbox-label { grid-template-columns: auto 1fr; justify-content: start; }
 .rating-select-list { display: grid; gap: .45rem; padding: .8rem; border-radius: 12px; background: var(--surface-muted); }
 .rating-select-title { font-size: .8rem; color: var(--text-muted); }
 .rating-select-row { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(8rem, 1fr); align-items: center; gap: .6rem; }
 .success-message { color: var(--accent); }
+.import-warnings { display: grid; gap: .35rem; padding: .7rem .85rem; border-radius: 12px; background: var(--surface-muted); font-size: .8rem; }
+.import-warnings-title { margin: 0; color: var(--text-muted); }
+.import-warnings ul { margin: 0; padding-left: 1.1rem; }
 @media (max-width: 760px) {
   .add-page-toolbar { align-items: flex-start; flex-wrap: wrap; }
   .add-page-toolbar h2 { flex-basis: 100%; }

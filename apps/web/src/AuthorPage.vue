@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { normalizeTag } from '@t3/shared';
 import type {
   AuthorDetailResponse,
   AuthorDirectoryDto,
   AuthorFilterOptions,
+  EntrySourceRecordDto,
+  EntryPageResponse,
   FacetFilterOptions,
   ProducerRecordDto,
   RatingRow,
@@ -14,8 +16,11 @@ import FacetFilterBar, { type GalleryFacetFilters } from './components/FacetFilt
 import AppIcon from './components/AppIcon.vue';
 import IconButton from './components/IconButton.vue';
 import TagCombobox from './components/TagCombobox.vue';
+import SuggestionInput from './components/SuggestionInput.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
-import { showNsfw } from './stores/preferences.js';
+import EntryCard from './components/EntryCard.vue';
+import CoverComposition from './components/CoverComposition.vue';
+import { rowsPerPage, showNsfw } from './stores/preferences.js';
 import { flattenCollectionOptions, type CollectionMenuOption } from './collection-tree.js';
 import type { CollectionRecordDto } from '@t3/shared';
 import { useI18n } from './i18n.js';
@@ -37,8 +42,9 @@ interface AuthorSummary {
 }
 
 type AuthorWork = AuthorDetailResponse['looseEntries'][number];
+type AuthorWorkPageItem = EntryPageResponse['items'][number];
 type DirectoryCard = { kind: 'directory'; directory: AuthorDirectoryDto };
-type WorkCard = { kind: 'work'; work: AuthorWork };
+type WorkCard = { kind: 'work'; work: AuthorWorkPageItem };
 type AuthorCard = DirectoryCard | WorkCard;
 
 const props = defineProps<{
@@ -68,6 +74,7 @@ const emit = defineEmits<{
   }];
   'back': [];
   'authors-changed': [];
+  'works-changed': [];
 }>();
 const { t } = useI18n();
 const { armedKey, arm, disarm } = useArmableAction();
@@ -117,6 +124,17 @@ async function restorePreviousScroll(): Promise<void> {
 }
 const editingAuthor = ref(false);
 const editingDirectory = ref(false);
+const entryMergeMode = ref(false);
+const entryMergeSelection = ref<AuthorWork[]>([]);
+const entryMergeSources = ref<Record<number, EntrySourceRecordDto[]>>({});
+const entryMergeConfirmationOpen = ref(false);
+const entryMergeKeepId = ref<number | null>(null);
+const entryMergeCopyTags = ref(true);
+const entryMergeSelectedUrls = ref<string[]>([]);
+const entryMergeTitleSourceId = ref<number | null>(null);
+const entryMergeTitleDraft = ref('');
+const entryMergeSubmitting = ref(false);
+let entryMergeSourceRequestId = 0;
 const page = ref(initialDetailState?.page ?? initialListState?.page ?? 1);
 const draggedWorkId = ref<number | null>(null);
 const dropTarget = ref<string | null>(null);
@@ -126,13 +144,30 @@ const authorOccupation = ref('');
 const authorArtwork = ref('');
 const authorContent = ref('');
 const tagEditorOpen = ref(false);
-const tagName = ref('');
+// Producer Tag autocomplete: server-side eligibility/exclusions, same
+// interaction contract as the Entry editors.
+const authorTagExcludeIds = computed(() => (
+  (activeAuthor.value?.tags ?? []).map((tag) => tag.tagId)
+));
+
+function suggestProducerTags(query: string, excludeIds: number[], signal: AbortSignal) {
+  return props.api.suggestTags({ vocabulary: 'producer', q: query, excludeIds }, signal);
+}
 
 // Add-to-collection menu on the author detail toolbar (same pattern as the
 // Entry detail toolbar).
 const authorCollectionOptions = ref<CollectionMenuOption[]>([]);
 const authorCollectionIds = ref<number[]>([]);
 const authorCollectionMenuOpen = ref(false);
+const authorCollectionRoot = ref<HTMLElement | null>(null);
+function onDocumentPointerDownForAuthorCollection(event: PointerEvent): void {
+  if (!authorCollectionMenuOpen.value) return;
+  const root = authorCollectionRoot.value;
+  if (root !== null && event.target instanceof Node && root.contains(event.target)) return;
+  authorCollectionMenuOpen.value = false;
+}
+onMounted(() => document.addEventListener('pointerdown', onDocumentPointerDownForAuthorCollection));
+onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerDownForAuthorCollection));
 
 async function toggleAuthorCollectionMenu(): Promise<void> {
   authorCollectionMenuOpen.value = !authorCollectionMenuOpen.value;
@@ -152,7 +187,8 @@ async function toggleAuthorCollectionMenu(): Promise<void> {
 
 async function addAuthorToCollection(collectionId: number): Promise<void> {
   if (!activeAuthor.value) return;
-  authorCollectionMenuOpen.value = false;
+  // Keep the menu open so several collections can be joined in a row; a tap
+  // anywhere outside the menu closes it.
   error.value = null;
   try {
     await props.api.addCollectionProducer(collectionId, activeAuthor.value.id);
@@ -161,6 +197,27 @@ async function addAuthorToCollection(collectionId: number): Promise<void> {
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.createEntry');
   }
+}
+
+async function removeAuthorFromCollection(collectionId: number): Promise<void> {
+  if (!activeAuthor.value) return;
+  // Keep the menu open so the ✓ clears in place and several collections can be left in a row.
+  error.value = null;
+  try {
+    await props.api.removeCollectionProducer(collectionId, activeAuthor.value.id);
+    authorCollectionIds.value = authorCollectionIds.value.filter((id) => id !== collectionId);
+    await refreshAuthor();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.createEntry');
+  }
+}
+
+function toggleAuthorCollection(collection: CollectionMenuOption): void {
+  if (authorCollectionIds.value.includes(collection.id)) {
+    void removeAuthorFromCollection(collection.id);
+    return;
+  }
+  void addAuthorToCollection(collection.id);
 }
 
 const ratingEditorOpen = ref(false);
@@ -177,8 +234,25 @@ type AuthorSort = 'date-desc' | 'date-asc' | 'title-asc' | 'title-desc' | 'type'
 const authorSort = ref<AuthorSort>((initialDetailState?.sort as AuthorSort | undefined) ?? 'date-desc');
 // One page of loose works; Directories always render above them (they are
 // drop targets, so they must never be pushed onto a later page).
-const pageSize = 26;
-const workPageItems = ref<AuthorWork[]>([]);
+// `.author-card-grid` renders a fixed 6 / 3 / 2 columns (see the styles below),
+// so one server page must request exactly the rows that fit on screen:
+// columns × the rows-per-page preference, doubled on phones where the grid is
+// short — the same formula the shared card grid uses. A hardcoded page size left
+// the last row half empty and paginated a screen early.
+const worksColumns = ref(6);
+const worksRowMultiplier = ref(1);
+
+function measureWorksGrid(): void {
+  if (typeof window.matchMedia !== 'function') return;
+  worksColumns.value = window.matchMedia('(max-width: 30rem)').matches
+    ? 2
+    : window.matchMedia('(max-width: 52rem)').matches ? 3 : 6;
+  worksRowMultiplier.value = window.matchMedia('(max-width: 44rem)').matches ? 2 : 1;
+}
+
+const pageSize = computed(() => worksColumns.value * rowsPerPage.value * worksRowMultiplier.value);
+measureWorksGrid();
+const workPageItems = ref<AuthorWorkPageItem[]>([]);
 const workTotal = ref(0);
 const workRequestId = ref(0);
 const workRandomSeed = ref(Math.floor(Math.random() * 2_147_483_648));
@@ -427,15 +501,21 @@ async function loadAuthorWorks(resetPage = false): Promise<void> {
   }
   if (resetPage) page.value = 1;
   const requestId = ++workRequestId.value;
-  const useFilters = filterActive.value && activeDirectoryId.value === null && authorFilterType.value !== null;
+  const mergeAllWorks = entryMergeMode.value && activeDirectoryId.value === null;
+  const useFilters = !mergeAllWorks
+    && filterActive.value
+    && activeDirectoryId.value === null
+    && authorFilterType.value !== null;
   const result = await props.api.queryEntryPage({
     ...(useFilters && authorFilterType.value ? { entryType: authorFilterType.value } : {}),
     ...(activeDirectoryId.value !== null
       ? { producerDirectoryId: activeDirectoryId.value }
+      : mergeAllWorks
+        ? {}
       : useFilters
         ? {}
         : { looseForProducerId: author.id }),
-    authorIds: useFilters ? [author.id] : [],
+    authorIds: useFilters || mergeAllWorks ? [author.id] : [],
     conditions: useFilters ? authorFilters.value.conditions.filter((condition) => condition.tagIds.length > 0) : [],
     ratingConditions: useFilters ? authorFilters.value.ratingConditions : [],
     ratingSort: useFilters ? authorFilters.value.ratingSort : null,
@@ -444,10 +524,10 @@ async function loadAuthorWorks(resetPage = false): Promise<void> {
     sort: authorSort.value,
     ...(authorSort.value === 'random' ? { randomSeed: workRandomSeed.value } : {}),
     page: page.value,
-    pageSize,
+    pageSize: pageSize.value,
   });
   if (requestId !== workRequestId.value) return;
-  const maxPage = Math.max(1, Math.ceil(result.total / pageSize));
+  const maxPage = Math.max(1, Math.ceil(result.total / pageSize.value));
   if (page.value > maxPage) {
     page.value = maxPage;
     await loadAuthorWorks(false);
@@ -462,6 +542,12 @@ async function setWorkPage(nextPage: number): Promise<void> {
   await loadAuthorWorks(false);
   await scrollCurrentViewToTop();
 }
+
+watch(pageSize, (nextSize, previousSize) => {
+  if (nextSize === previousSize || activeAuthor.value === null) return;
+  page.value = 1;
+  void loadAuthorWorks(false);
+});
 
 watch(authorSort, (nextSort, previousSort) => {
   if (nextSort === 'random' && previousSort !== 'random') {
@@ -495,12 +581,12 @@ async function onAuthorFiltersChange(filters: GalleryFacetFilters): Promise<void
 
 // Filtered view unfolds Directories and displays one bounded server page of
 // matching works. The regular view keeps Directories pinned above loose works.
-const filterFlat = computed<boolean>(() => filterActive.value);
+const filterFlat = computed<boolean>(() => filterActive.value || entryMergeMode.value);
 const displayCards = computed<WorkCard[]>(() => workCards.value);
 const hasAnyCards = computed(() => (
   workTotal.value > 0 || (!filterFlat.value && directoryCards.value.length > 0)
 ));
-const pageCount = computed(() => Math.max(1, Math.ceil(workTotal.value / pageSize)));
+const pageCount = computed(() => Math.max(1, Math.ceil(workTotal.value / pageSize.value)));
 const visibleWorkCards = computed<WorkCard[]>(() => displayCards.value);
 const authorCoverCovers = computed<string[]>(() => {
   if (!activeAuthor.value) return [];
@@ -575,6 +661,7 @@ async function openAuthor(
   }
   error.value = null;
   try {
+    resetEntryMergeState();
     activeAuthor.value = await props.api.getAuthor(authorId);
     activeDirectoryId.value = null;
     editingAuthor.value = false;
@@ -613,6 +700,7 @@ function openAuthorTag(tagId: number, tagName: string): void {
 }
 
 onMounted(async () => {
+  window.addEventListener('resize', measureWorksGrid);
   try {
     await Promise.all([loadAuthorAlternates(), loadAuthorListFilterOptions(), applyAuthorListFilters(false)]);
     if (props.initialAuthorId) {
@@ -636,6 +724,10 @@ onMounted(async () => {
   }
 });
 
+onUnmounted(() => {
+  window.removeEventListener('resize', measureWorksGrid);
+});
+
 async function closeAuthor(): Promise<void> {
   if (props.backLabel || (
     props.initialAuthorId !== null
@@ -649,6 +741,7 @@ async function closeAuthor(): Promise<void> {
   activeDirectoryId.value = null;
   editingAuthor.value = false;
   editingDirectory.value = false;
+  resetEntryMergeState();
   clearDragState();
   await restorePreviousScroll();
 }
@@ -661,6 +754,7 @@ function beginAuthorEdit(): void {
   authorArtwork.value = activeAuthor.value.artworkRef ?? '';
   authorContent.value = activeAuthor.value.content ?? '';
   ratingEditorOpen.value = false;
+  resetEntryMergeState();
   editingAuthor.value = true;
 }
 
@@ -675,6 +769,7 @@ async function saveAuthor(): Promise<void> {
       content: authorContent.value || null,
     });
     editingAuthor.value = false;
+    resetEntryMergeState();
     clearDragState();
     await refreshAuthor();
     emit('authors-changed');
@@ -707,12 +802,11 @@ async function toggleActiveAuthorViewLater(): Promise<void> {
   }
 }
 
-async function addTag(): Promise<void> {
-  if (!activeAuthor.value || !tagName.value.trim()) return;
+async function addTag(name: string): Promise<void> {
+  if (!activeAuthor.value || name.trim() === '') return;
   error.value = null;
   try {
-    await props.api.assignAuthorTag(activeAuthor.value.id, tagName.value);
-    tagName.value = '';
+    await props.api.assignAuthorTag(activeAuthor.value.id, name);
     tagEditorOpen.value = false;
     await refreshAuthor();
     await loadAuthorListFilterOptions();
@@ -832,8 +926,148 @@ async function createDirectory(entryIds?: number[]): Promise<void> {
   }
 }
 
+function resetEntryMergeState(): void {
+  entryMergeSourceRequestId += 1;
+  entryMergeMode.value = false;
+  entryMergeSelection.value = [];
+  entryMergeSources.value = {};
+  entryMergeConfirmationOpen.value = false;
+  entryMergeKeepId.value = null;
+  entryMergeCopyTags.value = true;
+  entryMergeSelectedUrls.value = [];
+  entryMergeTitleSourceId.value = null;
+  entryMergeTitleDraft.value = '';
+  entryMergeSubmitting.value = false;
+}
+
+async function beginEntryMerge(): Promise<void> {
+  if (!editingAuthor.value || !activeAuthor.value) return;
+  resetEntryMergeState();
+  entryMergeMode.value = true;
+  clearDragState();
+  await loadAuthorWorks(true);
+}
+
+async function cancelEntryMerge(): Promise<void> {
+  const wasActive = entryMergeMode.value;
+  resetEntryMergeState();
+  if (wasActive && activeAuthor.value) await loadAuthorWorks(true);
+}
+
+function isEntryMergeSelected(entryId: number): boolean {
+  return entryMergeSelection.value.some((work) => work.id === entryId);
+}
+
+function chooseEntryMergeKeeper(entryId: number): void {
+  if (!entryMergeSelection.value.some((work) => work.id === entryId)) return;
+  entryMergeKeepId.value = entryId;
+  const absorbed = entryMergeSelection.value.find((work) => work.id !== entryId);
+  entryMergeSelectedUrls.value = absorbed
+    ? (entryMergeSources.value[absorbed.id] ?? []).map((source) => source.url)
+    : [];
+  // 换保留对象时标题默认跟着它走，仍可再改成另一条的标题或直接改写。
+  chooseEntryMergeTitleSource(entryId);
+}
+
+function chooseEntryMergeTitleSource(entryId: number): void {
+  if (!entryMergeSelection.value.some((work) => work.id === entryId)) return;
+  entryMergeTitleSourceId.value = entryId;
+  entryMergeTitleDraft.value = entryMergeSelection.value.find((work) => work.id === entryId)?.title ?? '';
+}
+
+function entryMergeSourcesFor(entryId: number): EntrySourceRecordDto[] {
+  return entryMergeSources.value[entryId] ?? [];
+}
+
+const entryMergeTitleInvalid = computed(() => entryMergeTitleDraft.value.trim().length === 0);
+
+function entryMergeAbsorbedWork(): AuthorWork | null {
+  if (entryMergeKeepId.value === null) return null;
+  return entryMergeSelection.value.find((work) => work.id !== entryMergeKeepId.value) ?? null;
+}
+
+function entryMergeAvailableSources(): EntrySourceRecordDto[] {
+  const absorbed = entryMergeAbsorbedWork();
+  return absorbed ? (entryMergeSources.value[absorbed.id] ?? []) : [];
+}
+
+async function selectEntryForMerge(work: AuthorWork): Promise<void> {
+  if (!entryMergeMode.value) return;
+  entryMergeSourceRequestId += 1;
+  const selectedIndex = entryMergeSelection.value.findIndex((item) => item.id === work.id);
+  if (selectedIndex >= 0) {
+    entryMergeSelection.value = entryMergeSelection.value.filter((item) => item.id !== work.id);
+    entryMergeConfirmationOpen.value = false;
+    entryMergeKeepId.value = null;
+    entryMergeSelectedUrls.value = [];
+    return;
+  }
+  const first = entryMergeSelection.value[0];
+  if (first && first.type !== work.type) {
+    error.value = t('entryMerge.sameGallery');
+    return;
+  }
+  if (entryMergeSelection.value.length >= 2) return;
+  entryMergeSelection.value = [...entryMergeSelection.value, work];
+  if (entryMergeSelection.value.length !== 2) return;
+
+  const selectedWorks = [...entryMergeSelection.value] as [AuthorWork, AuthorWork];
+  const selectedAuthorId = activeAuthor.value?.id ?? null;
+  const requestId = entryMergeSourceRequestId;
+  error.value = null;
+  try {
+    const [firstSources, secondSources] = await Promise.all([
+      props.api.listEntrySources(selectedWorks[0].id),
+      props.api.listEntrySources(selectedWorks[1].id),
+    ]);
+    if (
+      requestId !== entryMergeSourceRequestId
+      || !entryMergeMode.value
+      || activeAuthor.value?.id !== selectedAuthorId
+      || entryMergeSelection.value.length !== 2
+      || entryMergeSelection.value[0]?.id !== selectedWorks[0].id
+      || entryMergeSelection.value[1]?.id !== selectedWorks[1].id
+    ) return;
+    entryMergeSources.value = {
+      [selectedWorks[0].id]: firstSources,
+      [selectedWorks[1].id]: secondSources,
+    };
+    chooseEntryMergeKeeper(selectedWorks[0].id);
+    entryMergeConfirmationOpen.value = true;
+  } catch (cause) {
+    if (requestId !== entryMergeSourceRequestId) return;
+    error.value = cause instanceof Error ? cause.message : t('entryMerge.loadError');
+  }
+}
+
+async function confirmEntryMerge(): Promise<void> {
+  const author = activeAuthor.value;
+  const absorbed = entryMergeAbsorbedWork();
+  const title = entryMergeTitleDraft.value.trim();
+  if (!author || entryMergeKeepId.value === null || !absorbed || !title || entryMergeSubmitting.value) return;
+  entryMergeSubmitting.value = true;
+  error.value = null;
+  try {
+    const result = await props.api.mergeAuthorEntries({
+      authorId: author.id,
+      keepEntryId: entryMergeKeepId.value,
+      absorbEntryId: absorbed.id,
+      copyTags: entryMergeCopyTags.value,
+      title,
+      sourceUrls: entryMergeSelectedUrls.value,
+    });
+    resetEntryMergeState();
+    await refreshAuthor();
+    if (result.mediaCleanupFailed) error.value = t('entryMerge.mediaCleanupWarning');
+    emit('works-changed');
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('entryMerge.mergeError');
+    entryMergeSubmitting.value = false;
+  }
+}
+
 function beginWorkDrag(workId: number): void {
-  if (editingAuthor.value) draggedWorkId.value = workId;
+  if (editingAuthor.value && !entryMergeMode.value) draggedWorkId.value = workId;
 }
 
 function selectLooseWork(workId: number): void {
@@ -843,6 +1077,10 @@ function selectLooseWork(workId: number): void {
 }
 
 function openOrSelectLooseWork(work: AuthorWork): void {
+  if (entryMergeMode.value) {
+    void selectEntryForMerge(work);
+    return;
+  }
   if (editingAuthor.value && !filterFlat.value) {
     selectLooseWork(work.id);
     return;
@@ -855,7 +1093,7 @@ function cardKey(card: AuthorCard): string {
 }
 
 function markDropTarget(card: AuthorCard): void {
-  if (editingAuthor.value && draggedWorkId.value !== null) dropTarget.value = cardKey(card);
+  if (editingAuthor.value && !entryMergeMode.value && draggedWorkId.value !== null) dropTarget.value = cardKey(card);
 }
 
 function clearDragState(): void {
@@ -863,20 +1101,21 @@ function clearDragState(): void {
   dropTarget.value = null;
 }
 
-function finishAuthorEdit(): void {
+async function finishAuthorEdit(): Promise<void> {
+  if (entryMergeMode.value) await cancelEntryMerge();
   editingAuthor.value = false;
   clearDragState();
 }
 
-async function mergeWithWork(targetWorkId: number): Promise<void> {
+async function groupWorksIntoDirectory(targetWorkId: number): Promise<void> {
   const sourceWorkId = draggedWorkId.value;
-  if (!editingAuthor.value || sourceWorkId === null || sourceWorkId === targetWorkId) return;
+  if (entryMergeMode.value || !editingAuthor.value || sourceWorkId === null || sourceWorkId === targetWorkId) return;
   dropTarget.value = null;
   await createDirectory([sourceWorkId, targetWorkId]);
 }
 
 async function moveToDirectory(directoryId: number): Promise<void> {
-  if (!editingAuthor.value || !activeAuthor.value || draggedWorkId.value === null) return;
+  if (entryMergeMode.value || !editingAuthor.value || !activeAuthor.value || draggedWorkId.value === null) return;
   const workId = draggedWorkId.value;
   clearDragState();
   try {
@@ -888,6 +1127,7 @@ async function moveToDirectory(directoryId: number): Promise<void> {
 }
 
 async function openDirectory(directory: AuthorDirectoryDto): Promise<void> {
+  if (entryMergeMode.value) return;
   rememberReturnScroll();
   directoryReturnPage.value = page.value;
   activeDirectoryId.value = directory.id;
@@ -1024,27 +1264,21 @@ async function removeFromDirectory(): Promise<void> {
       >{{ t('directory.removeHint') }}</p>
       <p v-if="workTotal === 0" class="muted">{{ t('directory.empty') }}</p>
       <div v-else class="author-card-grid">
-        <article
+        <EntryCard
           v-for="work in workPageItems"
           :key="work.id"
+          :api="api"
+          :entry="work"
+          :pressed="editingDirectory ? draggedWorkId === work.id : undefined"
+          main-class="author-card-main"
           class="author-card"
           :class="{ 'selected-work': draggedWorkId === work.id }"
           :data-directory-work-id="work.id"
           :draggable="editingDirectory"
           @dragstart="editingDirectory && (draggedWorkId = work.id)"
           @dragend="clearDragState"
-        >
-          <button
-            type="button"
-            class="author-card-main"
-            :aria-pressed="editingDirectory ? draggedWorkId === work.id : undefined"
-            @click="openOrSelectDirectoryWork(work)"
-          >
-            <img v-if="work.coverRef" :src="api.assetUrl(entryCardMediaRef(work.coverRef))" :alt="work.title" loading="lazy" decoding="async">
-            <span v-else class="cover-placeholder">{{ work.title.slice(0, 1).toUpperCase() }}</span>
-            <span class="author-card-meta"><strong>{{ work.title }}</strong><small>{{ work.type }}</small></span>
-          </button>
-        </article>
+          @open="openOrSelectDirectoryWork(work)"
+        />
       </div>
       <nav v-if="pageCount > 1" class="pagination">
         <button type="button" :disabled="page === 1" @click="setWorkPage(page - 1)">{{ t('author.previousPage') }}</button>
@@ -1075,7 +1309,7 @@ async function removeFromDirectory(): Promise<void> {
           >
             {{ t('author.done') }}
           </button>
-          <div class="add-to-collection" data-testid="author-add-to-collection">
+          <div ref="authorCollectionRoot" class="add-to-collection" data-testid="author-add-to-collection">
             <IconButton
               icon="folder-plus"
               :label="t('a11y.addToCollection')"
@@ -1094,17 +1328,21 @@ async function removeFromDirectory(): Promise<void> {
               <p v-if="authorCollectionOptions.length === 0" class="muted">
                 {{ t('collections.empty') }}
               </p>
-              <button
-                v-for="collection in authorCollectionOptions"
-                :key="collection.id"
-                type="button"
-                role="menuitem"
-                class="add-to-collection-option"
-                :disabled="authorCollectionIds.includes(collection.id)"
-                @click="addAuthorToCollection(collection.id)"
-              >
-                {{ authorCollectionIds.includes(collection.id) ? '✓ ' : '' }}{{ collection.title }}
-              </button>
+                <button
+                  v-for="collection in authorCollectionOptions"
+                  :key="collection.id"
+                  type="button"
+                  role="menuitemcheckbox"
+                  class="add-to-collection-option"
+                  :class="{ 'is-member': authorCollectionIds.includes(collection.id) }"
+                  :aria-checked="authorCollectionIds.includes(collection.id)"
+                  :title="authorCollectionIds.includes(collection.id)
+                    ? t('collections.leaveHint')
+                    : t('collections.joinHint')"
+                  @click="toggleAuthorCollection(collection)"
+                >
+                  {{ authorCollectionIds.includes(collection.id) ? '✓ ' : '' }}{{ collection.title }}
+                </button>
             </div>
           </div>
           <IconButton
@@ -1138,9 +1376,13 @@ async function removeFromDirectory(): Promise<void> {
           <template v-if="activeAuthor.artworkRef">
             <img :src="api.assetUrl(activeAuthor.artworkRef)" :alt="activeAuthor.name" class="author-artwork">
           </template>
-          <div v-else-if="authorCoverCovers.length" class="author-artwork author-cover-grid" :aria-label="activeAuthor.name">
-            <img v-for="coverRef in authorCoverCovers" :key="coverRef" :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="activeAuthor.name">
-          </div>
+          <CoverComposition
+            v-else-if="authorCoverCovers.length"
+            variant="author-detail"
+            :cover-refs="authorCoverCovers"
+            :alt="activeAuthor.name"
+            :asset-url="api.assetUrl"
+          />
           <div v-else class="author-artwork author-cover-placeholder">{{ activeAuthor.name.slice(0, 1).toUpperCase() }}</div>
           <div>
             <p class="eyebrow">{{ t('author.occupation') }}</p>
@@ -1189,8 +1431,18 @@ async function removeFromDirectory(): Promise<void> {
               <button v-if="editingAuthor" type="button" :aria-label="t('tag.remove', { name: tag.name })" @click="removeTag(tag.tagId)">×</button>
             </span>
             <button v-if="editingAuthor && !tagEditorOpen" type="button" class="add-button" @click="tagEditorOpen = true">{{ t('tag.add') }}</button>
-            <form v-else-if="editingAuthor" class="compact-editor" @submit.prevent="addTag">
-              <input v-model="tagName" name="authorTagName" required :placeholder="t('tag.namePlaceholder')" @blur="tagName.trim() && addTag()">
+            <form v-else-if="editingAuthor" class="compact-editor" @submit.prevent>
+              <SuggestionInput
+                mode="creatable-text"
+                name="authorTagName"
+                commit-on-blur
+                :provider="suggestProducerTags"
+                :exclude-ids="authorTagExcludeIds"
+                :aria-label="t('tag.namePlaceholder')"
+                :placeholder="t('tag.namePlaceholder')"
+                @select="(suggestion) => addTag(suggestion.name)"
+                @submit-text="(text) => addTag(text)"
+              />
             </form>
           </div>
         </div>
@@ -1317,7 +1569,7 @@ async function removeFromDirectory(): Promise<void> {
             </select>
           </label>
           <button
-            v-if="editingAuthor"
+            v-if="editingAuthor && !entryMergeMode"
             data-testid="add-author-directory"
             type="button"
             class="add-button"
@@ -1325,14 +1577,33 @@ async function removeFromDirectory(): Promise<void> {
           >
             {{ t('directory.add') }}
           </button>
+          <button
+            v-if="editingAuthor && !entryMergeMode"
+            data-testid="start-entry-merge"
+            type="button"
+            class="secondary-button"
+            @click="beginEntryMerge"
+          >{{ t('entryMerge.start') }}</button>
+          <button
+            v-else-if="editingAuthor"
+            data-testid="cancel-entry-merge"
+            type="button"
+            class="secondary-button"
+            @click="cancelEntryMerge"
+          >{{ t('entryMerge.cancelMode') }}</button>
         </div>
         <p
-          v-if="editingAuthor && !filterFlat"
+          v-if="editingAuthor && !entryMergeMode && !filterFlat"
           data-testid="author-work-move-hint"
           class="work-move-hint"
         >{{ t('directory.organizeHint') }}</p>
+        <p
+          v-if="entryMergeMode"
+          data-testid="entry-merge-hint"
+          class="entry-merge-hint"
+        >{{ t('entryMerge.selectHint', { count: entryMergeSelection.length }) }}</p>
         <div
-          v-if="authorFilterOptions && authorFilterType
+          v-if="!entryMergeMode && authorFilterOptions && authorFilterType
             && (authorFilterOptions.facets.length > 0 || authorFilterOptions.allTags.length > 0)"
           class="author-filter-wrap"
         >
@@ -1394,14 +1665,25 @@ async function removeFromDirectory(): Promise<void> {
             </article>
           </div>
           <div v-if="visibleWorkCards.length > 0" class="author-card-grid">
-            <article
+            <EntryCard
               v-for="card in visibleWorkCards"
               :key="cardKey(card)"
+              :api="api"
+              :entry="card.work"
+              :note="authorWorkUsageNote(card.work)"
+              :pressed="entryMergeMode
+                ? isEntryMergeSelected(card.work.id)
+                : editingAuthor && !filterFlat
+                  ? draggedWorkId === card.work.id
+                  : undefined"
+              main-class="author-card-main"
               data-author-card
               class="author-card"
               :class="{
                 'drop-target': dropTarget === cardKey(card),
-                'selected-work': editingAuthor && draggedWorkId === card.work.id,
+                'selected-work': entryMergeMode
+                  ? isEntryMergeSelected(card.work.id)
+                  : editingAuthor && draggedWorkId === card.work.id,
               }"
               :data-author-work-id="card.work.id"
               :draggable="editingAuthor && !filterFlat"
@@ -1410,34 +1692,19 @@ async function removeFromDirectory(): Promise<void> {
               @dragenter.prevent="markDropTarget(card)"
               @dragleave="dropTarget === cardKey(card) && (dropTarget = null)"
               @dragover.prevent
-              @drop.prevent="mergeWithWork(card.work.id)"
+              @drop.prevent="groupWorksIntoDirectory(card.work.id)"
+              @open="openOrSelectLooseWork(card.work)"
             >
-              <button
-                type="button"
-                class="author-card-main"
-                :aria-pressed="editingAuthor && !filterFlat ? draggedWorkId === card.work.id : undefined"
-                @click="openOrSelectLooseWork(card.work)"
-              >
-                <img v-if="card.work.coverRef" :src="api.assetUrl(entryCardMediaRef(card.work.coverRef))" :alt="card.work.title" loading="lazy" decoding="async">
-                <span v-else class="cover-placeholder">{{ card.work.title.slice(0, 1).toUpperCase() }}</span>
-                <span class="author-card-meta">
-                  <strong>{{ card.work.title }}</strong>
-                  <small>{{ card.work.type }}</small>
-                  <small
-                    v-if="authorWorkUsageNote(card.work)"
-                    class="author-work-usage-note"
-                    data-testid="author-work-usage-note"
-                  >{{ authorWorkUsageNote(card.work) }}</small>
-                </span>
-              </button>
-              <button
-                v-if="editingAuthor && !filterFlat && draggedWorkId !== null && draggedWorkId !== card.work.id"
-                type="button"
-                class="work-move-target"
-                :data-group-with-work-id="card.work.id"
-                @click="mergeWithWork(card.work.id)"
-              >{{ t('directory.groupWith') }}</button>
-            </article>
+              <template #corner>
+                <button
+                  v-if="editingAuthor && !filterFlat && draggedWorkId !== null && draggedWorkId !== card.work.id"
+                  type="button"
+                  class="work-move-target"
+                  :data-group-with-work-id="card.work.id"
+                  @click="groupWorksIntoDirectory(card.work.id)"
+                >{{ t('directory.groupWith') }}</button>
+              </template>
+            </EntryCard>
           </div>
         </template>
         <nav v-if="pageCount > 1" class="pagination">
@@ -1446,6 +1713,115 @@ async function removeFromDirectory(): Promise<void> {
           <button data-testid="author-next-page" type="button" :disabled="page === pageCount" @click="setWorkPage(page + 1)">{{ t('author.nextPage') }}</button>
         </nav>
       </section>
+
+      <div
+        v-if="entryMergeConfirmationOpen && entryMergeSelection.length === 2"
+        class="entry-merge-overlay"
+        role="presentation"
+      >
+        <section
+          class="entry-merge-dialog"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="t('entryMerge.confirmTitle')"
+          data-testid="entry-merge-confirmation"
+        >
+          <h2>{{ t('entryMerge.confirmTitle') }}</h2>
+          <p class="muted">{{ t('entryMerge.confirmDescription') }}</p>
+
+          <fieldset>
+            <legend>{{ t('entryMerge.chooseKeeper') }}</legend>
+            <label
+              v-for="work in entryMergeSelection"
+              :key="work.id"
+              class="entry-merge-option"
+              :data-merge-keeper-entry-id="work.id"
+            >
+              <input
+                type="radio"
+                name="entryMergeKeeper"
+                :value="work.id"
+                :checked="entryMergeKeepId === work.id"
+                :data-merge-keeper-radio-id="work.id"
+                @change="chooseEntryMergeKeeper(work.id)"
+              >
+              <span class="entry-merge-option-body">
+                <strong>{{ work.title }}</strong>
+                <small
+                  v-for="source in entryMergeSourcesFor(work.id)"
+                  :key="`${source.contentId}:${source.url}`"
+                >{{ source.url }}</small>
+                <small v-if="entryMergeSourcesFor(work.id).length === 0" class="muted">
+                  {{ t('entryMerge.noSource') }}
+                </small>
+                <em v-if="entryMergeKeepId !== null" class="entry-merge-marker">
+                  {{ entryMergeKeepId === work.id ? t('entryMerge.willKeep') : t('entryMerge.willDelete') }}
+                </em>
+              </span>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>{{ t('entryMerge.chooseTitle') }}</legend>
+            <label v-for="work in entryMergeSelection" :key="work.id" class="entry-merge-option">
+              <input
+                type="radio"
+                name="entryMergeTitleSource"
+                :value="work.id"
+                :checked="entryMergeTitleSourceId === work.id"
+                :data-merge-title-source-id="work.id"
+                @change="chooseEntryMergeTitleSource(work.id)"
+              >
+              <span>{{ work.title }}</span>
+            </label>
+            <label class="entry-merge-option entry-merge-title-field">
+              <span class="muted">{{ t('entryMerge.titleOverride') }}</span>
+              <input
+                v-model="entryMergeTitleDraft"
+                type="text"
+                data-testid="entry-merge-title-input"
+                :aria-label="t('entryMerge.titleOverride')"
+              >
+            </label>
+          </fieldset>
+
+          <label class="entry-merge-option">
+            <input v-model="entryMergeCopyTags" type="checkbox" data-testid="entry-merge-copy-tags">
+            <span>{{ t('entryMerge.mergeTags') }}</span>
+          </label>
+
+          <fieldset>
+            <legend>{{ t('entryMerge.sourceUrls') }}</legend>
+            <p v-if="entryMergeAvailableSources().length === 0" class="muted">
+              {{ t('entryMerge.noSources') }}
+            </p>
+            <label
+              v-for="source in entryMergeAvailableSources()"
+              :key="`${source.contentId}:${source.url}`"
+              class="entry-merge-source-option"
+            >
+              <input v-model="entryMergeSelectedUrls" type="checkbox" :value="source.url">
+              <span><strong>{{ source.sourceName }}</strong><small>{{ source.url }}</small></span>
+            </label>
+          </fieldset>
+
+          <p class="entry-merge-warning">
+            {{ t('entryMerge.deleteWarning', { title: entryMergeAbsorbedWork()?.title ?? '' }) }}
+          </p>
+          <div class="entry-merge-actions">
+            <button type="button" class="secondary-button" :disabled="entryMergeSubmitting" @click="entryMergeConfirmationOpen = false">
+              {{ t('entryMerge.back') }}
+            </button>
+            <button
+              type="button"
+              class="primary-button"
+              data-testid="confirm-entry-merge"
+              :disabled="entryMergeSubmitting || entryMergeTitleInvalid"
+              @click="confirmEntryMerge"
+            >{{ entryMergeSubmitting ? t('entryMerge.merging') : t('entryMerge.confirm') }}</button>
+          </div>
+        </section>
+      </div>
     </template>
 
     <template v-else>
@@ -1590,9 +1966,13 @@ async function removeFromDirectory(): Promise<void> {
         v-slot="{ items }"
       >
         <button v-for="author in items" :key="author.id" type="button" class="author-list-card" :data-author-id="author.id" @click="openAuthor(author.id)">
-          <span v-if="author.covers.length" class="author-list-cover">
-            <img v-for="coverRef in author.covers" :key="coverRef" :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="author.name" loading="lazy" decoding="async">
-          </span>
+          <CoverComposition
+            v-if="author.covers.length"
+            variant="author-card"
+            :cover-refs="author.covers"
+            :alt="author.name"
+            :asset-url="api.assetUrl"
+          />
           <span v-else class="author-list-badge">{{ author.name.slice(0, 1).toUpperCase() }}</span>
           <strong>{{ author.name }}</strong>
           <small v-if="author.galleryType" class="author-gallery-badge" data-testid="author-list-gallery">
@@ -1667,8 +2047,6 @@ async function removeFromDirectory(): Promise<void> {
 .author-basics h2 { margin: 0; font-size: clamp(1.6rem, 4vw, 2.4rem); }
 .author-basics p { margin: 0.25rem 0 0; color: var(--text-muted); }
 .author-artwork { width: 7rem; height: 7rem; border-radius: 0.8rem; object-fit: cover; }
-.author-cover-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.15rem; padding: 0; overflow: hidden; background: var(--tag-background); }
-.author-cover-grid img { width: 100%; height: 100%; object-fit: cover; border-radius: 0.15rem; min-width: 0; }
 .author-cover-placeholder { display: grid; place-items: center; color: var(--tag-text); background: var(--tag-background); font-size: 2rem; font-weight: 850; }
 .sort-control { display: flex; align-items: center; gap: 0.4rem; margin-left: auto; color: var(--text-muted); font-size: 0.85rem; }
 .sort-control select { min-height: var(--control-min-height); padding: 0.3rem 0.6rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface); font: inherit; }
@@ -1752,6 +2130,52 @@ async function removeFromDirectory(): Promise<void> {
 .author-card.selected-work { z-index: 1; border-color: var(--accent); box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--accent) 24%, transparent); }
 .author-card-main { display: block; width: 100%; padding: 0; border: 0; color: var(--text-primary); background: transparent; font: inherit; text-align: left; cursor: pointer; }
 .work-move-hint { margin: 0; color: var(--text-muted); font-size: 0.82rem; }
+.entry-merge-hint {
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.65rem;
+  color: var(--text-primary);
+  background: var(--accent-soft);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.entry-merge-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: color-mix(in srgb, #000 58%, transparent);
+}
+.entry-merge-dialog {
+  display: grid;
+  gap: 1rem;
+  width: min(36rem, 100%);
+  max-height: min(44rem, calc(100vh - 2rem));
+  padding: 1.2rem;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.9rem;
+  background: var(--surface);
+  box-shadow: var(--shadow-overlay);
+}
+.entry-merge-dialog h2, .entry-merge-dialog p { margin: 0; }
+.entry-merge-dialog fieldset { display: grid; gap: 0.55rem; margin: 0; padding: 0.8rem; border: 1px solid var(--border-subtle); border-radius: 0.65rem; }
+.entry-merge-dialog legend { padding: 0 0.3rem; font-weight: 750; }
+.entry-merge-option, .entry-merge-source-option { display: flex; align-items: flex-start; gap: 0.55rem; }
+.entry-merge-option-body { display: grid; min-width: 0; gap: 0.2rem; }
+.entry-merge-option-body strong { font-weight: 650; }
+.entry-merge-option-body small { overflow-wrap: anywhere; color: var(--text-muted); }
+.entry-merge-marker { color: var(--text-muted); font-size: 0.78rem; font-style: normal; }
+.entry-merge-option:has(input:checked) .entry-merge-marker { color: var(--accent); font-weight: 650; }
+.entry-merge-title-field { display: grid; gap: 0.3rem; }
+.entry-merge-title-field input { width: 100%; }
+.entry-merge-source-option > span { display: grid; min-width: 0; gap: 0.2rem; }
+.entry-merge-source-option small { overflow-wrap: anywhere; color: var(--text-muted); }
+.entry-merge-warning { padding: 0.7rem; border-radius: 0.55rem; color: #a12626; background: #fff0f0; }
+.entry-merge-actions { display: flex; justify-content: flex-end; gap: 0.55rem; }
 .work-move-target { width: 100%; min-height: 44px; padding: 0.5rem 0.7rem; border: 0; border-top: 1px solid var(--border-subtle); color: var(--accent); background: var(--accent-soft); font: inherit; font-size: 0.78rem; font-weight: 750; cursor: pointer; }
 .work-move-target:hover, .work-move-target:focus-visible { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }
 .author-card-main > img, .cover-placeholder, .directory-cover { width: 100%; height: 8rem; }
@@ -1764,8 +2188,6 @@ async function removeFromDirectory(): Promise<void> {
 .mini-placeholder { display: grid; place-items: center; color: var(--tag-text); background: var(--surface); }
 .author-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: 0.8rem; }
 .author-list-card { display: grid; gap: 0.45rem; padding: 0.6rem; border: 1px solid var(--border-subtle); border-radius: 0.8rem; color: var(--text-primary); background: var(--surface-muted); font: inherit; text-align: left; cursor: pointer; align-content: start; }
-.author-list-cover { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.15rem; width: 100%; aspect-ratio: 3 / 4; overflow: hidden; border-radius: 0.5rem; background: var(--tag-background); }
-.author-list-cover img { width: 100%; height: 100%; object-fit: cover; min-width: 0; }
 .author-list-badge { display: grid; place-items: center; width: 100%; aspect-ratio: 3 / 4; border-radius: 0.5rem; color: var(--tag-text); background: var(--tag-background); font-size: 2rem; font-weight: 850; }
 .author-list-card > strong { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .author-name-alternates { font-size: 0.66rem; font-weight: 400; color: var(--text-muted); opacity: 0.72; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -20,3 +20,5 @@ coverage/
 tools/t3-launcher/bin/
 tools/t3-launcher/obj/
 tools/t3-launcher/dist/
+tools/t3-launcher/**/bin/
+tools/t3-launcher/**/obj/

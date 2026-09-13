@@ -3,11 +3,12 @@ import { computed, onMounted, ref, watch } from 'vue';
 import type { EntryTagUsage, FacetFilterOptions, GallerySummary } from '@t3/shared';
 import type { GalleryApi, GalleryAuthorSummary, GalleryEntrySummary } from './api/gallery.js';
 import EntryCard from './components/EntryCard.vue';
+import CoverComposition from './components/CoverComposition.vue';
 import FacetFilterBar, { type GalleryFacetFilters } from './components/FacetFilterBar.vue';
 import { showNsfw } from './stores/preferences.js';
 import { useI18n } from './i18n.js';
 import { useNavigationMemory } from './navigation-memory.js';
-import { entryCardMediaRef } from './entry-media-stack.js';
+
 
 /**
  * Random recommendation: a clean filter-style page. Works can be drawn with
@@ -337,9 +338,13 @@ onMounted(async () => {
               :data-author-id="author.id"
               @click="emit('open-author', author.id)"
             >
-              <span v-if="author.covers.length" class="author-list-cover">
-                <img v-for="coverRef in author.covers" :key="coverRef" :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="author.name">
-              </span>
+              <CoverComposition
+                v-if="author.covers.length"
+                variant="author-card"
+                :cover-refs="author.covers"
+                :alt="author.name"
+                :asset-url="api.assetUrl"
+              />
               <span v-else class="author-list-badge">{{ author.name.slice(0, 1).toUpperCase() }}</span>
               <strong>{{ author.name }}</strong>
             </button>
@@ -380,8 +385,6 @@ onMounted(async () => {
 .recent-grid-compact { grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.8rem; }
 .author-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: 0.8rem; }
 .author-list-card { display: grid; gap: 0.45rem; padding: 0.6rem; border: 1px solid var(--border-subtle); border-radius: 0.8rem; color: var(--text-primary); background: var(--surface-muted); font: inherit; text-align: left; cursor: pointer; align-content: start; }
-.author-list-cover { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.15rem; width: 100%; aspect-ratio: 3 / 4; overflow: hidden; border-radius: 0.5rem; background: var(--tag-background); }
-.author-list-cover img { width: 100%; height: 100%; object-fit: cover; min-width: 0; }
 .author-list-badge { display: grid; place-items: center; width: 100%; aspect-ratio: 3 / 4; border-radius: 0.5rem; color: var(--tag-text); background: var(--tag-background); font-size: 2rem; font-weight: 850; }
 .random-tag-cloud { display: grid; min-height: 18rem; padding: clamp(2.5rem, 8vh, 5rem) 1rem; place-items: center; }
 .random-tag-single {

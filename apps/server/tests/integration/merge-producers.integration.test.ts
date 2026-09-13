@@ -12,6 +12,10 @@ import {
   executeProducerMerges,
   planProducerMerges,
 } from '../../src/import/merge-producers.js';
+import {
+  createProducerRatingSlot,
+  setProducerRating,
+} from '../../src/repositories/rating-repository.js';
 
 function createWork(database: ReturnType<typeof createMigratedMemoryDatabase>, title: string): EntryRecord {
   return createEntry(database, { title, type: 'comic' });
@@ -114,6 +118,54 @@ describe('merge authors (producers)', () => {
     database.close();
   });
 
+  it('moves the absorbed author rating values and repairs values left by an older run', () => {
+    const database = createMigratedMemoryDatabase();
+    const keeperWork = createWork(database, 'Keeper work');
+    const absorbedWork = createEntry(database, { title: 'Absorbed manga work', type: 'manga' });
+    // Spelled with different casing, so they are the same Author to the merge key.
+    const keeper = createProducer(database, { name: 'banssee' });
+    const absorbed = createProducer(database, { name: 'Banssee' });
+    linkEntryProducer(database, keeperWork.id, keeper.id);
+    linkEntryProducer(database, absorbedWork.id, absorbed.id);
+
+    // Rating slots are shared per Gallery, so an Author's slot lives in the
+    // partition of their dominant Gallery: the keeper's is a comic slot, the
+    // absorbed Author's (manga-dominant) is a manga slot.
+    const keeperSlot = createProducerRatingSlot(database, { producerId: keeper.id, name: '画风精美' });
+    const absorbedSlot = createProducerRatingSlot(database, { producerId: absorbed.id, name: '画风精美' });
+    expect(absorbedSlot.id).not.toBe(keeperSlot.id);
+    setProducerRating(database, { producerId: keeper.id, slotId: keeperSlot.id, stars: 3 });
+    setProducerRating(database, { producerId: absorbed.id, slotId: absorbedSlot.id, stars: 5 });
+    // A row left behind by an earlier merge run: its producer no longer exists,
+    // so it can never be read again and only trips the integrity checks. It is
+    // written with foreign keys off, exactly how the old run left it behind.
+    database.pragma('foreign_keys = OFF');
+    try {
+      database.prepare(`
+        INSERT INTO producer_rating_values (slot_id, producer_id, stars, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      `).run(absorbedSlot.id, 9_999, 4.5);
+    } finally {
+      database.pragma('foreign_keys = ON');
+    }
+
+    runMerges(database);
+
+    expect(producersOf(database)).toEqual([{ id: keeper.id, name: 'banssee' }]);
+    const values = database.prepare(`
+      SELECT slot_id, producer_id, stars FROM producer_rating_values ORDER BY slot_id
+    `).all() as Array<{ slot_id: number; producer_id: number; stars: number }>;
+    // The keeper keeps its own value, the absorbed value moves with the merge,
+    // and the row whose producer was already gone is dropped.
+    expect(values).toEqual([
+      { slot_id: keeperSlot.id, producer_id: keeper.id, stars: 3 },
+      { slot_id: absorbedSlot.id, producer_id: keeper.id, stars: 5 },
+    ]);
+    expect(database.pragma('foreign_key_check')).toEqual([]);
+    expect(inspectDatabase(database).ok).toBe(true);
+    database.close();
+  });
+
   it('merges dictionary aliases into the canonical author, moving non-colliding directories', () => {
     const database = createMigratedMemoryDatabase();
     upsertTaxonomyAlias(database, {
@@ -196,6 +248,83 @@ describe('merge authors (producers)', () => {
     expect(producersOf(database)).toEqual([{ id: katakana.id, name: 'Bob' }]);
     expect(linksOf(database, katakana.id)).toEqual([work.id]);
     expect(inspectDatabase(database).ok).toBe(true);
+    database.close();
+  });
+
+  it('merges an Author whose two spellings differ only by separators', () => {
+    const database = createMigratedMemoryDatabase();
+    const snakeWork = createWork(database, 'Snake work');
+    const spacedWork = createWork(database, 'Spaced work');
+    // The site spelled one person's name two ways; the importer created a row
+    // per spelling and both sit on the same works.
+    const snake = createProducer(database, { name: 'arai_kazuki' });
+    const spaced = createProducer(database, { name: 'Arai Kazuki' });
+    for (const producer of [snake, spaced]) {
+      linkEntryProducer(database, snakeWork.id, producer.id);
+      linkEntryProducer(database, spacedWork.id, producer.id);
+    }
+
+    const plans = planProducerMerges(database);
+    expect(plans).toHaveLength(1);
+    // Equal work counts: the separator-free spelling is the better display name.
+    expect(plans[0]).toMatchObject({
+      canonicalName: null,
+      renamed: false,
+      keeper: { id: spaced.id, name: 'Arai Kazuki' },
+    });
+    expect(plans[0]!.others.map((member) => member.id)).toEqual([snake.id]);
+
+    runMerges(database);
+
+    expect(producersOf(database)).toEqual([{ id: spaced.id, name: 'Arai Kazuki' }]);
+    expect(linksOf(database, spaced.id)).toEqual([snakeWork.id, spacedWork.id]);
+    expect(database.pragma('foreign_key_check')).toEqual([]);
+    expect(inspectDatabase(database).ok).toBe(true);
+    database.close();
+  });
+
+  it('keeps the spelling with more works as the keeper even when it has separators', () => {
+    const database = createMigratedMemoryDatabase();
+    const works = ['One', 'Two', 'Three'].map((title) => createWork(database, title));
+    const snake = createProducer(database, { name: 'arai_kazuki' });
+    const spaced = createProducer(database, { name: 'Arai Kazuki' });
+    linkEntryProducer(database, works[0]!.id, snake.id);
+    linkEntryProducer(database, works[1]!.id, snake.id);
+    linkEntryProducer(database, works[2]!.id, spaced.id);
+
+    const plans = planProducerMerges(database);
+    expect(plans).toHaveLength(1);
+    expect(plans[0]).toMatchObject({
+      renamed: false,
+      keeper: { id: snake.id, name: 'arai_kazuki' },
+    });
+    expect(plans[0]!.others.map((member) => member.id)).toEqual([spaced.id]);
+
+    runMerges(database);
+
+    expect(producersOf(database)).toEqual([{ id: snake.id, name: 'arai_kazuki' }]);
+    expect(linksOf(database, snake.id)).toEqual(works.map((work) => work.id));
+    expect(inspectDatabase(database).ok).toBe(true);
+    database.close();
+  });
+
+  it('still treats names that differ by more than separators as different Authors', () => {
+    const database = createMigratedMemoryDatabase();
+    const first = createWork(database, 'First work');
+    const second = createWork(database, 'Second work');
+    const short = createProducer(database, { name: 'Arai Kazuki' });
+    const suffixed = createProducer(database, { name: 'Arai Kazuki 2' });
+    const other = createProducer(database, { name: 'akira_kazuki' });
+    linkEntryProducer(database, first.id, short.id);
+    linkEntryProducer(database, second.id, suffixed.id);
+    linkEntryProducer(database, second.id, other.id);
+
+    expect(planProducerMerges(database)).toEqual([]);
+    expect(producersOf(database)).toEqual([
+      { id: short.id, name: 'Arai Kazuki' },
+      { id: suffixed.id, name: 'Arai Kazuki 2' },
+      { id: other.id, name: 'akira_kazuki' },
+    ]);
     database.close();
   });
 

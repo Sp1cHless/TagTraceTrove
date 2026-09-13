@@ -89,6 +89,9 @@ const rows = ref<FilterRow[]>([]);
 const ratingRows = ref<RatingRow[]>([]);
 const usageSortField = ref<string>('');
 const sortSlotId = ref<number | undefined>(undefined);
+// Second mode of the same sort control: works without their own value for the
+// selected dimension fall back to their Authors' rating for that dimension.
+const sortApplyAuthorRating = ref(false);
 const starValues: number[] = Array.from({ length: 10 }, (_, index) => (index + 1) / 2);
 const itemInputs = ref<Array<HTMLInputElement | null>>([]);
 const filterError = ref<string | null>(null);
@@ -235,7 +238,11 @@ function ratingFilters(): Pick<GalleryFacetFilters, 'ratingConditions' | 'rating
     }));
   const ratingSort: RatingSort | null = sortSlotId.value === undefined
     ? null
-    : { slotId: sortSlotId.value, direction: 'desc' };
+    : {
+      slotId: sortSlotId.value,
+      direction: 'desc',
+      applyAuthorRating: sortApplyAuthorRating.value,
+    };
   return { ratingConditions, ratingSort };
 }
 
@@ -272,8 +279,21 @@ function chooseRatingStars(row: RatingRow, event: Event): void {
 }
 
 function onRatingSortChange(event: Event): void {
+  // Each dimension has two options: the work's own rating, and the same sort
+  // with the Author rating filling in works that carry none. Encoding the
+  // fallback as an option keeps it inside the sort control instead of adding
+  // another row to a filter bar that is already tight on phones.
   const value = (event.target as HTMLSelectElement).value;
-  sortSlotId.value = value === '' ? undefined : Number(value);
+  if (value === '') {
+    sortSlotId.value = undefined;
+    sortApplyAuthorRating.value = false;
+  } else if (value.endsWith(':author')) {
+    sortSlotId.value = Number(value.slice(0, -':author'.length));
+    sortApplyAuthorRating.value = true;
+  } else {
+    sortSlotId.value = Number(value);
+    sortApplyAuthorRating.value = false;
+  }
   emitRatingFilters();
 }
 
@@ -677,13 +697,19 @@ function onBarPointerDown(event: PointerEvent): void {
           <select
             class="filter-select"
             data-testid="rating-sort-select"
-            :value="sortSlotId ?? ''"
+            :title="t('filter.authorRatingHint')"
+            :value="sortSlotId === undefined ? '' : `${sortSlotId}${sortApplyAuthorRating ? ':author' : ''}`"
             @change="onRatingSortChange"
           >
             <option value="">{{ t('filter.sortNone') }}</option>
-            <option v-for="slot in props.options.ratingSlots" :key="slot.id" :value="slot.id">
-              {{ slot.name }} ↓
-            </option>
+            <template v-for="slot in props.options.ratingSlots" :key="slot.id">
+              <option :value="String(slot.id)">
+                {{ slot.name }} ↓
+              </option>
+              <option :value="`${slot.id}:author`">
+                {{ t('filter.sortByAuthorRating', { name: slot.name }) }}
+              </option>
+            </template>
           </select>
         </label>
       </div>
@@ -929,6 +955,13 @@ function onBarPointerDown(event: PointerEvent): void {
   gap: 0.35rem;
 }
 
+/* A native select sizes itself to its longest option, and rating dimensions are
+   user-named, so the control is capped instead of letting the bar overflow. */
+.rating-sort-control .filter-select {
+  max-width: 11rem;
+  text-overflow: ellipsis;
+}
+
 .filter-tag-chip {
   display: inline-flex;
   align-items: center;
@@ -1035,6 +1068,7 @@ function onBarPointerDown(event: PointerEvent): void {
   .filter-add-actions,
   .filter-sort-actions,
   .rating-sort-control { min-width: 0; width: 100%; }
+  .rating-sort-control .filter-select { max-width: 100%; }
   .filter-action { flex: 1 1 auto; }
   .rating-sort-control { align-items: stretch; flex-direction: column; }
 }

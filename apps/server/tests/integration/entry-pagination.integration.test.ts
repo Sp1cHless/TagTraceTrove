@@ -97,6 +97,38 @@ describe('paged Entry query', () => {
     await expect(query('date-desc', 99, 2)).resolves.toMatchObject({ total: 4, items: [] });
   });
 
+  it('pages one Author across Galleries when no Gallery filter is requested', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const app = createApiApp(database);
+    const author = createProducer(database, { name: 'Cross Gallery Author' });
+    const comic = createEntry(database, { title: 'Comic Work', type: 'comic' });
+    const game = createEntry(database, { title: 'Game Work', type: 'game' });
+    createEntry(database, { title: 'Unrelated', type: 'comic' });
+    linkEntryProducer(database, comic.id, author.id);
+    linkEntryProducer(database, game.id, author.id);
+
+    const response = await app.request('/api/entries/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        authorIds: [author.id],
+        sort: 'type',
+        page: 1,
+        pageSize: 10,
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      total: 2,
+      items: [
+        { id: comic.id, type: 'comic' },
+        { id: game.id, type: 'game' },
+      ],
+    });
+  });
+
   it('combines facet, author, rating, and likes filters before paging', async () => {
     const database = createMigratedMemoryDatabase();
     databases.push(database);

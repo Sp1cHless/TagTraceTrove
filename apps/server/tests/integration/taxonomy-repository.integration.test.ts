@@ -46,6 +46,7 @@ describe('taxonomy repository', () => {
         externalKeyContentType: 'external key',
         fieldMappings: {},
         ignoredFields: [],
+        authorRatings: [],
       });
       const importedId = database.prepare("SELECT id FROM entries WHERE title = 'Later work'").pluck().get() as number;
       expect(listEntryTags(database, importedId)).toMatchObject([{ name: '鲍勃' }]);

@@ -3,17 +3,30 @@
  * Exact/substring matches rank first. Queries of four or more characters also
  * tolerate a small edit distance against individual words, which catches the
  * common one-character typo without adding a search engine dependency.
+ *
+ * `alternateTextsOf` adds extra spellings a match may come from (an author's
+ * recorded aliases, for example) without changing which text the ties are
+ * ordered by: the item is still listed under its own display text.
  */
 export function rankSearchResults<T>(
   items: readonly T[],
   query: string,
   textOf: (item: T) => string,
+  alternateTextsOf?: (item: T) => readonly string[],
 ): T[] {
   const needle = normalizeSearchText(query);
   if (needle === '') return [];
 
+  const scoreOf = (item: T): number | null => {
+    const scores = [
+      matchScore(textOf(item), needle),
+      ...(alternateTextsOf?.(item) ?? []).map((text) => matchScore(text, needle)),
+    ].filter((score): score is number => score !== null);
+    return scores.length === 0 ? null : Math.min(...scores);
+  };
+
   return items
-    .map((item, index) => ({ item, index, score: matchScore(textOf(item), needle) }))
+    .map((item, index) => ({ item, index, score: scoreOf(item) }))
     .filter((row): row is { item: T; index: number; score: number } => row.score !== null)
     .sort((left, right) => (
       left.score - right.score

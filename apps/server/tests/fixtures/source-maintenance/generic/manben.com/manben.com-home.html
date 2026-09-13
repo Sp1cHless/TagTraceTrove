@@ -1,0 +1,1693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+        <title>漫本_原创漫画发行平台_漫画_在线漫画</title>
+        <meta content="漫本提供精品在线漫画阅读、推荐、评论、排行榜和数据分析。漫本是古惑仔官方发行平台，拥有古惑仔全球的电子版权，目前古惑仔已连载到89话。漫本是华人原创漫画发行平台，也是一个在线漫画的阅读平台。" name="Description" />
+        <meta content="漫画,在线漫画,古惑仔" name="keywords" />
+        <link rel="stylesheet" type="text/css" href="https://css122us.cdndm5.com/v202609021720/cartoonupload/css/reset.css" />
+        <link rel="stylesheet" type="text/css" href="https://css122us.cdndm5.com/v202609021720/cartoonupload/css/mStyle.css" />
+        <script src="https://css122us.cdndm5.com/v202609021720/cartoonupload/js/jquery.min.js" type="text/javascript"></script>
+        <script src="https://css122us.cdndm5.com/v202609021720/cartoonupload/js/jquery.cookie.js" type="text/javascript"></script>
+        <script src="https://css122us.cdndm5.com/v202609021720/cartoonupload/js/mIndex.js" type="text/javascript"></script>
+        <script src="https://css122us.cdndm5.com/v202609021720/cartoonupload/js/new/search.js" type="text/javascript"></script>
+        <script type="text/javascript">
+            var cssimgsrc = "https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/";        </script>
+</head>
+<body class="mPage">
+    <!--搜索列表栏-->
+    <div class="searchList" style="top:110px;">
+    </div>
+    <!--提示栏-->
+    <div class="header_tipForm"><div class="container">漫画量庞大，小编们正在抓紧上传中，敬请期待！</div></div>
+    <!--顶部栏-->
+    <div class="header" id="header">
+        <div class="container">
+            <div class="toolBar ib fr">
+                <a href="/login/"><span class="ib" id="Icon_m_index_top_login_btn" onmouseover="indexTopHover(this);" onmouseout="indexTopOut(this);"></span></a>
+                <a href="/register/"><span class="ib" id="Icon_m_index_top_reg_btn" onmouseover="indexTopHover(this);" onmouseout="indexTopOut(this);" style="margin-left:0;"></span></a>
+                <a href="javascript:bookshelfToggle();"><span class="ib" id="Icon_m_header_btn_2" style="position:relative;top:1px;*left:15px;"></span></a>
+            </div>
+            <div class="logo ib fl">
+                <a href="https://www.manben.com/" title="漫画,漫本,原创"><img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_header_logo.png" alt="漫画,漫本,原创"></a>
+            </div>
+            <div class="centerBar ib fl">
+                <span class="searchBar ib">
+                    <input type="text" class="fl" id="searchtxt" value="" onfocus="$('.searchList').show();" onkeyup="searchKeydown(this);">
+                    <a href="javascript:void(0)" id="searchbt">
+                        <span class="ib" id="Icon_m_header_searchBtn"></span>
+                    </a>
+                </span>
+                <span class="keyWords ib">
+                    <a href="/mh-shanhainizhan1/" class="item" title="山海逆战漫画">山海逆战</a>
+                </span>
+                <!--书架栏-->
+                <div class="bookshelf" id="topShelf">
+                    <div class="topBar"></div>
+                    <div class="selectBar">
+                        <a href="javascript:void(0)" onclick="bookshelfClick(this, 2);" class="ib fr active">阅读记录</a>
+                        <a href="javascript:void(0)" onclick="bookshelfClick(this, 1);" class="ib">我的收藏</a>
+                    </div>
+                    <div id="bookshelf_list_1" class="list">
+                        <ul>
+                        </ul>
+                        <div class="noData" id="shelf_collection_noData">
+                            <a href="/login/"><span class="ib" id="Icon_shelf_login_btn"></span></a>
+                            <p>收藏喜欢的漫画，时时追更</p>
+                        </div>                                            </div>
+                    <div id="bookshelf_list_2" class="list" style="display:none;">
+                        <ul>
+                        </ul>
+                        <div class="noData" id="shelf_record_noData">
+                            <img style="display:none;" src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/noData_logo.png">
+                            <p>正在加载中...</p>
+                        </div>
+                        <div class="noData" id="shelf_record_refresh" style="display:none;">
+                            <a href="#"><img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/noData_refresh.png"></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!--导航栏-->
+    <div class="navBar" style="width: 100%;position:relative;">
+        <div class="theme_bak" style=""></div>
+        <div class="container">
+            <a href="http://i.manben.com/" class="btn fr"><span class="ib" id="Icon_m_navBar_uploadBtn"></span></a>
+            <a href="/" class="item ib active">首页</a>
+            <a href="/mh-updated/" class="item ib ">更新</a>
+            <a href="/mh-ranklist/" class="item ib ">排行榜</a>
+            <a href="/mh-list/" class="item ib ">漫画分类</a>
+            <a href="javascript:alertTopShow_1('近期开放，敬请期待！')" class="item ib">漫画专题</a>
+        </div>
+    </div>
+    <!--遮罩层-->
+    <div class="mask"></div>
+    <!--弹出层-->
+    <div class="alertTop"><a href="javascript:alertTopHide();"><span class="ib cross" id="Icon_alert_cross"></span></a><p id="alertTop"></p></div>        <!--弹出层_1-->
+    <div class="alertTop_1"><p id="alertTop_1"></p></div>
+    <!--悬浮层-->
+    <div class="layer">
+        <div class="loginForm">
+            <a href="javascript:maskHide();"><span class="ib cross" id="Icon_login_cross"></span></a>
+            <p>
+                <span class="ib title">用户名</span>
+                <input class="txt" type="text" id="lg_username" name="lg_username" placeholder="请输入常用邮箱" onblur="nullVerify(this, 1);" onkeydown="layerKeyDown(event)">
+            </p>
+            <p>
+                <span class="ib title">密　码</span>
+                <input class="txt" type="password" id="lg_password" name="lg_password" placeholder="请记住您的封印" onblur="nullVerify(this, 2);" onkeydown="layerKeyDown(event)">
+            </p>
+            <p id="codeForm" style="display:none;">
+                <span class="ib title">验证码</span>
+                <input class="txt s" type="text" id="lgcode" name="lgcode" onblur="codeVerify(this);" onkeydown="layerKeyDown(event)">
+                <img class="code" id="code" onclick="imgreload('code');" >
+            </p>
+            <p class="tip p60" style="display:none;" id="errormsg">
+                <span class="ib i" id="Icon_detailPage_tip_logo"></span>
+                <span class="red">密码封印有误</span>
+            </p>
+            <p class="tip p60" id="tip">
+                <span class="gray">* 密码由4-16位字母、数字和字组成</span>
+            </p>
+            <p class="tip">
+                <a href="/register/" class="fr">立即注册</a>
+                <a href="/forgot/" class="fr">忘记密码？</a>
+                <input type="checkbox" id="check">
+                <label class="gray" for="check">下次自动登录</label>
+            </p>
+            <a href="javascript:alertLogin();"><img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/login_btn.png" class="btn" alt="登录"></a>
+            <!--<img class="line" src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/login_other.png">
+            <div class="other">
+                <a href="javascript:void(0)" class="ib"><img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/login_logo_1.png" alt="微博"></a>
+                <a href="javascript:void(0)" class="ib"><img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/login_logo_2.png" alt="微信"></a>
+                <a href="javascript:void(0)" class="ib"><img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/login_logo_3.png" alt="QQ"></a>
+                <a href="javascript:void(0)" class="ib"><img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/login_logo_4.png" alt="豆瓣"></a>
+            </div>-->
+        </div>
+    </div>
+    <!--右侧悬浮栏-->
+    <div class="header_sider">
+        <a href="javascript:void(0);">
+            <div class="btn ib" id="Icon_header_sider_logo_1"></div>
+            <div class="code" id="Icon_header_sider_logo_3"></div>
+        </a>
+        <a class="returnTop" href="javascript:returnTop();">
+            <div class="btn ib" id="Icon_header_sider_logo_2"></div>
+        </a>
+    </div>
+    <div class="banner">
+        <div class="container">
+            <div class="classBar">
+                <a href="/mh-list/" class="btn fr"><span class="ib" id="Icon_m_classBar_btn"></span></a>
+                <span class="words ib">
+                    <a href="/mh-gaoxiao/" onclick="btnClick(this);" class="item" title="搞笑">搞笑</a>
+                    <a href="/mh-qihuan/" onclick="btnClick(this);" class="item" title="奇幻">奇幻</a>
+                    <a href="/mh-rexue/" onclick="btnClick(this);" class="item" title="热血">热血</a>
+                    <a href="/mh-xuanyi/" onclick="btnClick(this);" class="item" title="悬疑">悬疑</a>
+                    <a href="/mh-gedou1/" onclick="btnClick(this);" class="item" title="格斗">格斗</a>
+                    <a href="/mh-kehuan/" onclick="btnClick(this);" class="item" title="科幻">科幻</a>
+                    <a href="/mh-lizhi/" onclick="btnClick(this);" class="item" title="励志">励志</a>
+                    <a href="/mh-xiaoyuan/" onclick="btnClick(this);" class="item" title="校园">校园</a>
+                    <a href="/mh-aiqing/" onclick="btnClick(this);" class="item" title="爱情">爱情</a>
+                    <a href="/mh-meishi/" onclick="btnClick(this);" class="item" title="日常">日常</a>
+                    <a href="/mh-zhanzheng/" onclick="btnClick(this);" class="item" title="战争">战争</a>
+                    <a href="/mh-baihe/" onclick="btnClick(this);" class="item" title="其他">其他</a>
+                    <a href="/mh-hktw/" title="港台漫画" class="item">港台</a>
+                    <a href="/mh-jpkr/" title="日韩漫画" class="item">日韩</a>
+                    <a href="/mh-china/" title="大陆漫画" class="item">大陆</a>
+                    <a href="/mh-euus/" title="欧美漫画" class="item">欧美</a>
+                </span>
+            </div>
+            <div class="rank ib fr">
+                <div class="topBar">
+                    <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_sign.png" class="fr">
+                    <a href="javascript:void(0)" onclick="rankListClick(this, 1);" class="ib active">点击榜</a>
+                    <a href="javascript:void(0)" onclick="rankListClick(this, 2);" class="ib">收藏榜</a>
+                </div>
+                <div class="list" id="rankList_1">
+                    <ul>
+                        <li>
+                            <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                            <span class="ib top top_1 fl">1</span>
+                            <a href="/mh-guhuozai/" class="comic" title="古惑仔系列20  龙头之争">古惑仔系列20  龙头之争</a>
+                        </li>
+                        <li>
+                            <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                            <span class="ib top top_2 fl">2</span>
+                            <a href="/mh-yaoshenji/" class="comic" title="妖神记">妖神记</a>
+                        </li>
+                        <li>
+                            <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                            <span class="ib top top_3 fl">3</span>
+                            <a href="/mh-shanhainizhan1/" class="comic" title="山海逆战">山海逆战</a>
+                        </li>
+                        <li>
+                            <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                            <span class="ib top  fl">4</span>
+                            <a href="/mh-nvzixueyuandenansheng/" class="comic" title="女子学院的男生">女子学院的男生</a>
+                        </li>
+                        <li>
+                            <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                            <span class="ib top  fl">5</span>
+                            <a href="/mh-bloody-girl/" class="comic" title="Bloody Girl">Bloody Girl</a>
+                        </li>
+                        <li>
+                            <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                            <span class="ib top  fl">6</span>
+                            <a href="/mh-yingxiong-wozaojiubudangle/" class="comic" title="英雄再临（英雄？我早就不当了）">英雄再临（英雄？我早就不当了）</a>
+                        </li>
+                        <li>
+                            <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                            <span class="ib top  fl">7</span>
+                            <a href="/mh-lingjianzun/" class="comic" title="灵剑尊">灵剑尊</a>
+                        </li>
+                        <li>
+                            <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                            <span class="ib top  fl">8</span>
+                            <a href="/mh-zaizaokongjian/" class="comic" title="再造空间">再造空间</a>
+                        </li>
+                        <li>
+                            <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                            <span class="ib top  fl">9</span>
+                            <a href="/mh-wudaoduzun/" class="comic" title="武道独尊">武道独尊</a>
+                        </li>
+                        <li>
+                            <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                            <span class="ib top  fl">10</span>
+                            <a href="/mh-wangpaixiaocao/" class="comic" title="王牌校草">王牌校草</a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="list" id="rankList_2">
+                    <ul>
+                            <li>
+                                <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                                <span class="ib top top_1 fl">1</span>
+                                <a href="/mh-yaoshenji/" class="comic" title="妖神记">妖神记</a>
+                            </li>
+                            <li>
+                                <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                                <span class="ib top top_2 fl">2</span>
+                                <a href="/mh-shanhainizhan1/" class="comic" title="山海逆战">山海逆战</a>
+                            </li>
+                            <li>
+                                <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                                <span class="ib top top_3 fl">3</span>
+                                <a href="/mh-bloody-girl/" class="comic" title="Bloody Girl">Bloody Girl</a>
+                            </li>
+                            <li>
+                                <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                                <span class="ib top  fl">4</span>
+                                <a href="/mh-nvzixueyuandenansheng/" class="comic" title="女子学院的男生">女子学院的男生</a>
+                            </li>
+                            <li>
+                                <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                                <span class="ib top  fl">5</span>
+                                <a href="/mh-yingxiong-wozaojiubudangle/" class="comic" title="英雄再临（英雄？我早就不当了）">英雄再临（英雄？我早就不当了）</a>
+                            </li>
+                            <li>
+                                <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                                <span class="ib top  fl">6</span>
+                                <a href="/mh-guhuozai/" class="comic" title="古惑仔系列20  龙头之争">古惑仔系列20  龙头之争</a>
+                            </li>
+                            <li>
+                                <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                                <span class="ib top  fl">7</span>
+                                <a href="/mh-zaizaokongjian/" class="comic" title="再造空间">再造空间</a>
+                            </li>
+                            <li>
+                                <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                                <span class="ib top  fl">8</span>
+                                <a href="/mh-shenhuazhanxian/" class="comic" title="神话战线">神话战线</a>
+                            </li>
+                            <li>
+                                <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                                <span class="ib top  fl">9</span>
+                                <a href="/mh-lingjianzun/" class="comic" title="灵剑尊">灵剑尊</a>
+                            </li>
+                            <li>
+                                <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_banner_same.png" class="same fr">
+                                <span class="ib top  fl">10</span>
+                                <a href="/mh-yinyangzhaijibian/" class="comic" title="阴阳宅急便">阴阳宅急便</a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+            <div class="bannerForm ib">
+                <ul style="position: relative; left: 0px;">
+                    <li class="ib"><a href="/mh-shanhainizhan1/"><img src="https://by218us.cdndm5.com/69/2017/12/4/5f02b26e2a8b42d8.jpg" alt="山海逆战" title="山海逆战"></a></li>
+                    <li class="ib"><a href="/mh-lingjianzun/"><img src="https://by218us.cdndm5.com/69/2017/12/29/4c93a315107e459a.jpg" alt="灵剑尊" title="灵剑尊"></a></li>
+                    <li class="ib"><a href="/mh-meimeixiaoshidediyibaitian/"><img src="https://by218us.cdndm5.com/69/2018/2/26/2401caa297c34afd.jpg" alt="妹妹消失的第一百天" title="妹妹消失的第一百天"></a></li>
+                    <li class="ib"><a href="/mh-yinyangzhaijibian/"><img src="https://by218us.cdndm5.com/3/2016/8/12/81af763a74464993.jpg" alt="阴阳宅急便" title="阴阳宅急便"></a></li>
+                    <li class="ib"><a href="/mh-duyaodailiren1/"><img src="https://by218us.cdndm5.com/69/2017/12/1/e7bca9939dd74711.jpg" alt="渡妖代理人" title="渡妖代理人"></a></li>
+                </ul>
+                <div class="heart">
+                    <span onclick="bannerClick(0)" class="ib active"></span>
+                    <span onclick="bannerClick(1)" class="ib "></span>
+                    <span onclick="bannerClick(2)" class="ib "></span>
+                    <span onclick="bannerClick(3)" class="ib "></span>
+                    <span onclick="bannerClick(4)" class="ib "></span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!--原创精品-->
+    <div class="original">
+        <div class="container" style="overflow:visible;">
+            <div class="topBar">
+                <span class="btn ib fr">
+                    <a href="javascript:originalChangeClick();"><img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_original_top_btn.png" alt="换一批"></a>
+                </span>
+                <span class="logo ib">
+                    <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_original_top_logo.png" alt="原创精品">
+                </span>
+                <span class="title ib">要是错过了，肯定会后悔一辈子的</span>
+            </div>
+            <div class="bookList_1">
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-shanhainizhan1/">
+                                <img class="cover" src="https://mhfm5us.cdndm5.com/34/33991/20230623092826_180x240_24.jpg" alt="山海逆战" title="山海逆战">
+                                <span class="msg op">第1022回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-shanhainizhan1/" title="山海逆战">山海逆战</a></p>
+                    <p class="tip"><a href="/mh-shanhainizhan1/">山海之间无奇不有，更有各...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-yaoshenji/">
+                                <img class="cover" src="https://mhfm8us.cdndm5.com/34/33771/20251023133237_180x240_27.jpg" alt="妖神记" title="妖神记">
+                                <span class="msg op">第530回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-yaoshenji/" title="妖神记">妖神记</a></p>
+                    <p class="tip"><a href="/mh-yaoshenji/">妖神一出，谁与争锋？ 这...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-shaoshuainilaopoyoupaole/">
+                                <img class="cover" src="https://mhfm9us.cdndm5.com/40/39446/20190903112740_180x240.jpg" alt="少帅你老婆又跑了" title="少帅你老婆又跑了">
+                                <span class="msg op">第502回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-shaoshuainilaopoyoupaole/" title="少帅你老婆又跑了">少帅你老婆又跑了</a></p>
+                    <p class="tip"><a href="/mh-shaoshuainilaopoyoupaole/">深藏功与名，白兔少女上演...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-wudaoduzun/">
+                                <img class="cover" src="https://mhfm6us.cdndm5.com/55/54278/20210223151521_180x240_24.jpg" alt="武道独尊" title="武道独尊">
+                                <span class="msg op">第631回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-wudaoduzun/" title="武道独尊">武道独尊</a></p>
+                    <p class="tip"><a href="/mh-wudaoduzun/">【每周三、六中午12点更...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-yinianshiguang/">
+                                <img class="cover" src="https://mhfm9us.cdndm5.com/40/39444/20191108102451_180x240.jpg" alt="一念时光" title="一念时光">
+                                <span class="msg op">第675回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-yinianshiguang/" title="一念时光">一念时光</a></p>
+                    <p class="tip"><a href="/mh-yinianshiguang/">子虚乌有的孩子，将偏执铁...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-nitianjianshen/">
+                                <img class="cover" src="https://mhfm7us.cdndm5.com/50/49953/20200928133720_180x240.jpg" alt="逆天剑神" title="逆天剑神">
+                                <span class="msg op">第629回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-nitianjianshen/" title="逆天剑神">逆天剑神</a></p>
+                    <p class="tip"><a href="/mh-nitianjianshen/">泱泱天道，强者无敌，上古...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-xiandiguilai/">
+                                <img class="cover" src="https://mhfm7us.cdndm5.com/50/49723/20190722092340_180x240.jpg" alt="仙帝归来" title="仙帝归来">
+                                <span class="msg op">第387回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-xiandiguilai/" title="仙帝归来">仙帝归来</a></p>
+                    <p class="tip"><a href="/mh-xiandiguilai/">三年前，云青岩从凡人界意...</a></p>
+                </div>
+                </div>
+                <div class="bookList_1" style="display:none;">
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-yingxiong-wozaojiubudangle/">
+                                <img class="cover" src="https://mhfm6us.cdndm5.com/35/34637/20170803145312_180x240.jpg" alt="英雄再临（英雄？我早就不当了）" title="英雄再临（英雄？我早就不当了）">
+                                <span class="msg op">第488回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-yingxiong-wozaojiubudangle/" title="英雄再临（英雄？我早就不当了）">英雄再临（英雄？我早就不当了）</a></p>
+                    <p class="tip"><a href="/mh-yingxiong-wozaojiubudangle/">伴随着各种各样的危机与绝...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-gaonenglaixi/">
+                                <img class="cover" src="https://mhfm5us.cdndm5.com/78/77676/20220507114229_180x240.jpg" alt="高能来袭" title="高能来袭">
+                                <span class="msg op">第364回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-gaonenglaixi/" title="高能来袭">高能来袭</a></p>
+                    <p class="tip"><a href="/mh-gaonenglaixi/">大灾变百年，一个全新的职...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-lingjianzun/">
+                                <img class="cover" src="https://mhfm6us.cdndm5.com/38/37035/20190729131016_180x240.jpg" alt="灵剑尊" title="灵剑尊">
+                                <span class="msg op">第530回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-lingjianzun/" title="灵剑尊">灵剑尊</a></p>
+                    <p class="tip"><a href="/mh-lingjianzun/">强者遇袭，重返少年时代。...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-wodaichaoshichuandaogudaiyangchengxiang/">
+                                <img class="cover" src="https://mhfm2us.cdndm5.com/91/90003/20250424171459_180x240_21.jpg" alt="我带超市穿到古代养丞相" title="我带超市穿到古代养丞相">
+                                <span class="msg op">第106回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-wodaichaoshichuandaogudaiyangchengxiang/" title="我带超市穿到古代养丞相">我带超市穿到古代养丞相</a></p>
+                    <p class="tip"><a href="/mh-wodaichaoshichuandaogudaiyangchengxiang/">穿书成炮灰下堂妻，罗云绮...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-huoguojiazudibaji/">
+                                <img class="cover" src="https://mhfm2us.cdndm5.com/96/95405/20260409100045_180x240_16.jpg" alt="火锅家族第八季" title="火锅家族第八季">
+                                <span class="msg op">第39回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-huoguojiazudibaji/" title="火锅家族第八季">火锅家族第八季</a></p>
+                    <p class="tip"><a href="/mh-huoguojiazudibaji/"></a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-jinghe--sumingyuanhang/">
+                                <img class="cover" src="https://mhfm5us.cdndm5.com/98/97993/20260827143203_180x240_24.jpg" alt="晶核 ：宿命遠航" title="晶核 ：宿命遠航">
+                                <span class="msg op">暂无章节</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-jinghe--sumingyuanhang/" title="晶核 ：宿命遠航">晶核 ：宿命遠航</a></p>
+                    <p class="tip"><a href="/mh-jinghe--sumingyuanhang/">魔法與機械的浮空大陸——...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-congjintiankaishidangchengzhu/">
+                                <img class="cover" src="https://mhfm3us.cdndm5.com/48/47629/20200103162154_180x240.jpg" alt="从今天开始当城主" title="从今天开始当城主">
+                                <span class="msg op">第558回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-congjintiankaishidangchengzhu/" title="从今天开始当城主">从今天开始当城主</a></p>
+                    <p class="tip"><a href="/mh-congjintiankaishidangchengzhu/">当游戏宅男开启穿越Buf...</a></p>
+                </div>
+                </div>
+                <div class="bookList_1" style="display:none;">
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-wohemeizimendehuangdaoyusheng/">
+                                <img class="cover" src="https://mhfm2us.cdndm5.com/63/62250/20240108161632_180x240.jpg" alt="荒岛余生之时空流浪纪" title="荒岛余生之时空流浪纪">
+                                <span class="msg op">第341回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-wohemeizimendehuangdaoyusheng/" title="荒岛余生之时空流浪纪">荒岛余生之时空流浪纪</a></p>
+                    <p class="tip"><a href="/mh-wohemeizimendehuangdaoyusheng/">远古巨兽，现代人类，未来...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-wodezhanjiannengshengji/">
+                                <img class="cover" src="https://mhfm3us.cdndm5.com/80/79804/20221109145102_180x240_26.jpg" alt="我的战舰能升级" title="我的战舰能升级">
+                                <span class="msg op">第181回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-wodezhanjiannengshengji/" title="我的战舰能升级">我的战舰能升级</a></p>
+                    <p class="tip"><a href="/mh-wodezhanjiannengshengji/">这是一个以战舰为至高武力...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-kaijuyiwanfuwocheng-hongshashenming/">
+                                <img class="cover" src="https://mhfm4us.cdndm5.com/86/85801/20240726091034_180x240.jpg" alt="开局一万俯卧撑：轰杀神明" title="开局一万俯卧撑：轰杀神明">
+                                <span class="msg op">第103回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-kaijuyiwanfuwocheng-hongshashenming/" title="开局一万俯卧撑：轰杀神明">开局一万俯卧撑：轰杀神明</a></p>
+                    <p class="tip"><a href="/mh-kaijuyiwanfuwocheng-hongshashenming/">空间节点降临，秘境、深渊...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-huoguojiazudiqiji/">
+                                <img class="cover" src="https://mhfm5us.cdndm5.com/91/90098/20250428085847_180x240.jpg" alt="火锅家族第七季" title="火锅家族第七季">
+                                <span class="msg op">第106回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-huoguojiazudiqiji/" title="火锅家族第七季">火锅家族第七季</a></p>
+                    <p class="tip"><a href="/mh-huoguojiazudiqiji/">反转的剧情，开脑洞的故事...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-hemen-bucunzaideshensheng-wanquanmanhuaban/">
+                                <img class="cover" src="https://mhfm7us.cdndm5.com/47/46473/20181126090117_180x240.jpg" alt="河门——不存在的神圣（完全漫画版）" title="河门——不存在的神圣（完全漫画版）">
+                                <span class="msg op">第94回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-hemen-bucunzaideshensheng-wanquanmanhuaban/" title="河门——不存在的神圣（完全漫画版）">河门——不存在的神圣（完全漫画版）</a></p>
+                    <p class="tip"><a href="/mh-hemen-bucunzaideshensheng-wanquanmanhuaban/">依据作者本人（北京作协的...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-jishengchong/">
+                                <img class="cover" src="https://mhfm2us.cdndm5.com/39/38806/20200525140010_180x240_12.jpg" alt="寄生虫" title="寄生虫">
+                                <span class="msg op">第88回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-jishengchong/" title="寄生虫">寄生虫</a></p>
+                    <p class="tip"><a href="/mh-jishengchong/">都市传说类型，黑暗世界的...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-zhegexiushilaiziweilai/">
+                                <img class="cover" src="https://mhfm5us.cdndm5.com/60/59389/20230119233220_180x240.jpg" alt="这个修士来自未来" title="这个修士来自未来">
+                                <span class="msg op">第236回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-zhegexiushilaiziweilai/" title="这个修士来自未来">这个修士来自未来</a></p>
+                    <p class="tip"><a href="/mh-zhegexiushilaiziweilai/">异星科技，人类武修，两个...</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!--最近更新-->
+    <div class="series">
+        <div class="container" style="overflow:visible;">
+            <div class="topBar">
+                <span class="btn ib fr">
+                    <a href="/mh-updated/"><img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_series_top_btn.png" alt="更多"></a>
+                </span>
+                <span class="logo ib">
+                    <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_series_top_logo.png" alt="最近更新">
+                </span>
+                <span class="title ib">地球人的节奏怎么那么快~</span>
+            </div>
+            <div class="bookList_1">
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-wodaichaoshichuandaogudaiyangchengxiang/">
+                                <img class="cover" src="https://mhfm2us.cdndm5.com/91/90003/20250424171459_180x240_21.jpg" alt="我带超市穿到古代养丞相" title="我带超市穿到古代养丞相">
+                                <span class="msg op">第106回</span>
+                            </a>
+                        </div>
+                        <img class="new" src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_book_new.png" alt="更新">
+                    </div>
+                    <p class="title"><a href="/mh-wodaichaoshichuandaogudaiyangchengxiang/" title="我带超市穿到古代养丞相">我带超市穿到古代养丞相</a></p>
+                    <p class="tip"><a href="/mh-wodaichaoshichuandaogudaiyangchengxiang/">穿书成炮灰下堂妻，罗云绮...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-yaoshenji/">
+                                <img class="cover" src="https://mhfm8us.cdndm5.com/34/33771/20251023133237_180x240_27.jpg" alt="妖神记" title="妖神记">
+                                <span class="msg op">第530回</span>
+                            </a>
+                        </div>
+                        <img class="new" src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_book_new.png" alt="更新">
+                    </div>
+                    <p class="title"><a href="/mh-yaoshenji/" title="妖神记">妖神记</a></p>
+                    <p class="tip"><a href="/mh-yaoshenji/">妖神一出，谁与争锋？ 这...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-huoguojiazudibaji/">
+                                <img class="cover" src="https://mhfm2us.cdndm5.com/96/95405/20260409100045_180x240_16.jpg" alt="火锅家族第八季" title="火锅家族第八季">
+                                <span class="msg op">第39回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-huoguojiazudibaji/" title="火锅家族第八季">火锅家族第八季</a></p>
+                    <p class="tip"><a href="/mh-huoguojiazudibaji/"></a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-jinghe--sumingyuanhang/">
+                                <img class="cover" src="https://mhfm5us.cdndm5.com/98/97993/20260827143203_180x240_24.jpg" alt="晶核 ：宿命遠航" title="晶核 ：宿命遠航">
+                                <span class="msg op">暂无章节</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-jinghe--sumingyuanhang/" title="晶核 ：宿命遠航">晶核 ：宿命遠航</a></p>
+                    <p class="tip"><a href="/mh-jinghe--sumingyuanhang/">魔法與機械的浮空大陸——...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-congjintiankaishidangchengzhu/">
+                                <img class="cover" src="https://mhfm3us.cdndm5.com/48/47629/20200103162154_180x240.jpg" alt="从今天开始当城主" title="从今天开始当城主">
+                                <span class="msg op">第558回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-congjintiankaishidangchengzhu/" title="从今天开始当城主">从今天开始当城主</a></p>
+                    <p class="tip"><a href="/mh-congjintiankaishidangchengzhu/">当游戏宅男开启穿越Buf...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-wohemeizimendehuangdaoyusheng/">
+                                <img class="cover" src="https://mhfm2us.cdndm5.com/63/62250/20240108161632_180x240.jpg" alt="荒岛余生之时空流浪纪" title="荒岛余生之时空流浪纪">
+                                <span class="msg op">第341回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-wohemeizimendehuangdaoyusheng/" title="荒岛余生之时空流浪纪">荒岛余生之时空流浪纪</a></p>
+                    <p class="tip"><a href="/mh-wohemeizimendehuangdaoyusheng/">远古巨兽，现代人类，未来...</a></p>
+                </div>
+                <div class="item ib">
+                    <div class="bookBak">
+                        <div class="book">
+                            <a href="/mh-wodezhanjiannengshengji/">
+                                <img class="cover" src="https://mhfm3us.cdndm5.com/80/79804/20221109145102_180x240_26.jpg" alt="我的战舰能升级" title="我的战舰能升级">
+                                <span class="msg op">第181回</span>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="title"><a href="/mh-wodezhanjiannengshengji/" title="我的战舰能升级">我的战舰能升级</a></p>
+                    <p class="tip"><a href="/mh-wodezhanjiannengshengji/">这是一个以战舰为至高武力...</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="topic_1">
+        <div class="container" style="overflow:visible;">
+            <div class="rightBar ib fr">
+                <div class="top">
+                    <img onclick="topicRightBarClick(2);" src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_topic_rightBar_top_left.png">
+                    <img onclick="topicRightBarClick(1);" src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_topic_rightBar_top_right.png">
+                </div>
+                <div class="list">
+                    <ul>
+                        <li class="active">
+                            <div class="simple">
+                                <span class="num fr">303,573,343</span>
+                                <span class="fl ib top top_1">1</span>
+                                <a href="/mh-guhuozai/" class="comic" title="古惑仔系列20  龙头之争">古惑仔系列20  龙头之争</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-guhuozai/" title="古惑仔系列20  龙头之争">古惑仔系列20  龙头之争</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                            <a href="/search?title=<%htmlurlencode(牛佬)%>&language=1&f=2" class="avatar">
+                                                牛佬                                            </a>
+                                        </p>
+                                        <p>阅读人次：303,573,343</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-guhuozai/"><img class="img" src="https://mhfm5us.cdndm5.com/1/369/20170731153336_130x174_10.jpg" alt="古惑仔系列20  龙头之争" title="古惑仔系列20  龙头之争"></a>
+                                    <span class="ib top_logo_1" id="Icon_m_topic_rightBar_top_1"></span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">259,701,488</span>
+                                <span class="fl ib top top_2">2</span>
+                                <a href="/mh-yaoshenji/" class="comic" title="妖神记">妖神记</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-yaoshenji/" title="妖神记">妖神记</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                            <a href="/search?title=<%htmlurlencode(踏雪动漫)%>&language=1&f=2" class="avatar">
+                                                踏雪动漫                                            </a>
+                                        </p>
+                                        <p>阅读人次：259,701,488</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-yaoshenji/"><img class="img" src="https://mhfm9us.cdndm5.com/34/33771/20251023133237_130x174_15.jpg" alt="妖神记" title="妖神记"></a>
+                                    <span class="fl ib top top_2 top_logo_1">2</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">168,067,844</span>
+                                <span class="fl ib top top_3">3</span>
+                                <a href="/mh-shanhainizhan1/" class="comic" title="山海逆战">山海逆战</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-shanhainizhan1/" title="山海逆战">山海逆战</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                            <a href="/search?title=<%htmlurlencode(邱福龙)%>&language=1&f=2" class="avatar">
+                                                邱福龙                                            </a>
+                                            <a href="/search?title=<%htmlurlencode(瑛麒动漫)%>&language=1&f=2" class="avatar">
+                                                瑛麒动漫                                            </a>
+                                        </p>
+                                        <p>阅读人次：168,067,844</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-shanhainizhan1/"><img class="img" src="https://mhfm6us.cdndm5.com/34/33991/20230623092826_130x174_14.jpg" alt="山海逆战" title="山海逆战"></a>
+                                    <span class="fl ib top top_3 top_logo_1">3</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">85,646,267</span>
+                                <span class="fl ib top ">4</span>
+                                <a href="/mh-nvzixueyuandenansheng/" class="comic" title="女子学院的男生">女子学院的男生</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-nvzixueyuandenansheng/" title="女子学院的男生">女子学院的男生</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                            <a href="/search?title=<%htmlurlencode(触岛漫画)%>&language=1&f=2" class="avatar">
+                                                触岛漫画                                            </a>
+                                        </p>
+                                        <p>阅读人次：85,646,267</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-nvzixueyuandenansheng/"><img class="img" src="https://mhfm6us.cdndm5.com/37/36975/20200422135555_130x174.jpg" alt="女子学院的男生" title="女子学院的男生"></a>
+                                    <span class="fl ib top top_4 top_logo_1">4</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">72,307,413</span>
+                                <span class="fl ib top ">5</span>
+                                <a href="/mh-bloody-girl/" class="comic" title="Bloody Girl">Bloody Girl</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-bloody-girl/" title="Bloody Girl">Bloody Girl</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                            <a href="/search?title=<%htmlurlencode(牛佬)%>&language=1&f=2" class="avatar">
+                                                牛佬                                            </a>
+                                            <a href="/search?title=<%htmlurlencode(瑛麒动漫)%>&language=1&f=2" class="avatar">
+                                                瑛麒动漫                                            </a>
+                                        </p>
+                                        <p>阅读人次：72,307,413</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-bloody-girl/"><img class="img" src="https://mhfm3us.cdndm5.com/22/21077/20180417222659_130x174_9.jpg" alt="Bloody Girl" title="Bloody Girl"></a>
+                                    <span class="fl ib top top_5 top_logo_1">5</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">57,895,289</span>
+                                <span class="fl ib top ">6</span>
+                                <a href="/mh-yingxiong-wozaojiubudangle/" class="comic" title="英雄再临（英雄？我早就不当了）">英雄再临（英雄？我早就不当了）</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-yingxiong-wozaojiubudangle/" title="英雄再临（英雄？我早就不当了）">英雄再临（英雄？我早就不当了）</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                            <a href="/search?title=<%htmlurlencode(菠萝包轻小说)%>&language=1&f=2" class="avatar">
+                                                菠萝包轻小说                                            </a>
+                                        </p>
+                                        <p>阅读人次：57,895,289</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-yingxiong-wozaojiubudangle/"><img class="img" src="https://mhfm9us.cdndm5.com/35/34637/20170803145312_130x174.jpg" alt="英雄再临（英雄？我早就不当了）" title="英雄再临（英雄？我早就不当了）"></a>
+                                    <span class="fl ib top top_6 top_logo_1">6</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">45,591,977</span>
+                                <span class="fl ib top ">7</span>
+                                <a href="/mh-lingjianzun/" class="comic" title="灵剑尊">灵剑尊</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-lingjianzun/" title="灵剑尊">灵剑尊</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                            <a href="/search?title=<%htmlurlencode(iCiyuan动漫)%>&language=1&f=2" class="avatar">
+                                                iCiyuan动漫                                            </a>
+                                        </p>
+                                        <p>阅读人次：45,591,977</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-lingjianzun/"><img class="img" src="https://mhfm5us.cdndm5.com/38/37035/20190729131016_130x174.jpg" alt="灵剑尊" title="灵剑尊"></a>
+                                    <span class="fl ib top top_7 top_logo_1">7</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">27,737,609</span>
+                                <span class="fl ib top ">8</span>
+                                <a href="/mh-zaizaokongjian/" class="comic" title="再造空间">再造空间</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-zaizaokongjian/" title="再造空间">再造空间</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                            <a href="/search?title=<%htmlurlencode(司徒剑侨)%>&language=1&f=2" class="avatar">
+                                                司徒剑侨                                            </a>
+                                            <a href="/search?title=<%htmlurlencode(瑛麒动漫)%>&language=1&f=2" class="avatar">
+                                                瑛麒动漫                                            </a>
+                                        </p>
+                                        <p>阅读人次：27,737,609</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-zaizaokongjian/"><img class="img" src="https://mhfm5us.cdndm5.com/22/21073/20170908114750_130x174_10.jpg" alt="再造空间" title="再造空间"></a>
+                                    <span class="fl ib top top_8 top_logo_1">8</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">21,623,124</span>
+                                <span class="fl ib top ">9</span>
+                                <a href="/mh-wudaoduzun/" class="comic" title="武道独尊">武道独尊</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-wudaoduzun/" title="武道独尊">武道独尊</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                            <a href="/search?title=<%htmlurlencode(破界互动)%>&language=1&f=2" class="avatar">
+                                                破界互动                                            </a>
+                                        </p>
+                                        <p>阅读人次：21,623,124</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-wudaoduzun/"><img class="img" src="https://mhfm6us.cdndm5.com/55/54278/20210223151521_130x174_14.jpg" alt="武道独尊" title="武道独尊"></a>
+                                    <span class="fl ib top top_9 top_logo_1">9</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">20,000,161</span>
+                                <span class="fl ib top ">10</span>
+                                <a href="/mh-yinyangzhaijibian/" class="comic" title="阴阳宅急便">阴阳宅急便</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-yinyangzhaijibian/" title="阴阳宅急便">阴阳宅急便</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                            <a href="/search?title=<%htmlurlencode(陈汉明)%>&language=1&f=2" class="avatar">
+                                                陈汉明                                            </a>
+                                            <a href="/search?title=<%htmlurlencode(瑛麒动漫)%>&language=1&f=2" class="avatar">
+                                                瑛麒动漫                                            </a>
+                                        </p>
+                                        <p>阅读人次：20,000,161</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-yinyangzhaijibian/"><img class="img" src="https://mhfm7us.cdndm5.com/22/21445/20170816114127_130x174.jpg" alt="阴阳宅急便" title="阴阳宅急便"></a>
+                                    <span class="fl ib top top_10 top_logo_1">10</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">19,534,541</span>
+                                <span class="fl ib top ">11</span>
+                                <a href="/mh-congjintiankaishidangchengzhu/" class="comic" title="从今天开始当城主">从今天开始当城主</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-congjintiankaishidangchengzhu/" title="从今天开始当城主">从今天开始当城主</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                            <a href="/search?title=<%htmlurlencode(青葶动漫)%>&language=1&f=2" class="avatar">
+                                                青葶动漫                                            </a>
+                                        </p>
+                                        <p>阅读人次：19,534,541</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-congjintiankaishidangchengzhu/"><img class="img" src="https://mhfm6us.cdndm5.com/48/47629/20200103162154_130x174.jpg" alt="从今天开始当城主" title="从今天开始当城主"></a>
+                                    <span class="fl ib top top_11 top_logo_1">11</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">16,064,887</span>
+                                <span class="fl ib top ">12</span>
+                                <a href="/mh-wanjiexianzong/" class="comic" title="万界仙踪">万界仙踪</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-wanjiexianzong/" title="万界仙踪">万界仙踪</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                            <a href="/search?title=<%htmlurlencode(踏雪动漫)%>&language=1&f=2" class="avatar">
+                                                踏雪动漫                                            </a>
+                                        </p>
+                                        <p>阅读人次：16,064,887</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-wanjiexianzong/"><img class="img" src="https://mhfm3us.cdndm5.com/40/39886/20180719091549_130x174.jpg" alt="万界仙踪" title="万界仙踪"></a>
+                                    <span class="fl ib top top_12 top_logo_1">12</span>
+                                </div>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                <div class="list active" style="display:none;">
+                    <ul>
+                        <li class="active">
+                            <div class="simple">
+                                <span class="num fr">20,811,766</span>
+                                <span class="fl ib top top_1">1</span>
+                                <a href="/mh-wangpaixiaocao/" class="comic" title="王牌校草">王牌校草</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-wangpaixiaocao/" title="王牌校草">王牌校草</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                               <a href="/search?title=<%htmlurlencode(有鹿文化)%>&language=1&f=2" class="avatar">
+                                                有鹿文化                                            </a>
+                                        </p>
+                                        <p>点击：20,811,766</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-wangpaixiaocao/"><img class="img" src="https://mhfm3us.cdndm5.com/37/36375/20191106112253_130x174.jpg" alt="王牌校草" title="王牌校草"></a>
+                                    <span class="ib top_logo_1" id="Icon_m_topic_rightBar_top_1"></span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">18,561,159</span>
+                                <span class="fl ib top top_2">2</span>
+                                <a href="/mh-shaoshuainilaopoyoupaole/" class="comic" title="少帅你老婆又跑了">少帅你老婆又跑了</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-shaoshuainilaopoyoupaole/" title="少帅你老婆又跑了">少帅你老婆又跑了</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                               <a href="/search?title=<%htmlurlencode(iCiyuan动漫)%>&language=1&f=2" class="avatar">
+                                                iCiyuan动漫                                            </a>
+                                        </p>
+                                        <p>点击：18,561,159</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-shaoshuainilaopoyoupaole/"><img class="img" src="https://mhfm3us.cdndm5.com/40/39446/20190903112740_130x174.jpg" alt="少帅你老婆又跑了" title="少帅你老婆又跑了"></a>
+                                    <span class="fl ib top top_2 top_logo_1">2</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">16,696,756</span>
+                                <span class="fl ib top top_3">3</span>
+                                <a href="/mh-wohetianshiyougeyaohui/" class="comic" title="我和天师有个约会">我和天师有个约会</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-wohetianshiyougeyaohui/" title="我和天师有个约会">我和天师有个约会</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                               <a href="/search?title=<%htmlurlencode(雪晴)%>&language=1&f=2" class="avatar">
+                                                雪晴                                            </a>
+                                            <a href="/search?title=<%htmlurlencode(瑛麒动漫)%>&language=1&f=2" class="avatar">
+                                                瑛麒动漫                                            </a>
+                                        </p>
+                                        <p>点击：16,696,756</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-wohetianshiyougeyaohui/"><img class="img" src="https://mhfm4us.cdndm5.com/22/21074/20171201092038_130x174_14.jpg" alt="我和天师有个约会" title="我和天师有个约会"></a>
+                                    <span class="fl ib top top_3 top_logo_1">3</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">15,107,479</span>
+                                <span class="fl ib top ">4</span>
+                                <a href="/mh-yinianshiguang/" class="comic" title="一念时光">一念时光</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-yinianshiguang/" title="一念时光">一念时光</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                               <a href="/search?title=<%htmlurlencode(iCiyuan动漫)%>&language=1&f=2" class="avatar">
+                                                iCiyuan动漫                                            </a>
+                                        </p>
+                                        <p>点击：15,107,479</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-yinianshiguang/"><img class="img" src="https://mhfm7us.cdndm5.com/40/39444/20191108102451_130x174.jpg" alt="一念时光" title="一念时光"></a>
+                                    <span class="fl ib top top_4 top_logo_1">4</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">10,196,260</span>
+                                <span class="fl ib top ">5</span>
+                                <a href="/mh-kuangnvchongsheng-wankuqihuangfei/" class="comic" title="狂女重生：纨绔七皇妃">狂女重生：纨绔七皇妃</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-kuangnvchongsheng-wankuqihuangfei/" title="狂女重生：纨绔七皇妃">狂女重生：纨绔七皇妃</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                               <a href="/search?title=<%htmlurlencode(崇卓漫画)%>&language=1&f=2" class="avatar">
+                                                崇卓漫画                                            </a>
+                                        </p>
+                                        <p>点击：10,196,260</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-kuangnvchongsheng-wankuqihuangfei/"><img class="img" src="https://mhfm3us.cdndm5.com/45/44371/20200910155243_130x174.jpg" alt="狂女重生：纨绔七皇妃" title="狂女重生：纨绔七皇妃"></a>
+                                    <span class="fl ib top top_5 top_logo_1">5</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">10,140,311</span>
+                                <span class="fl ib top ">6</span>
+                                <a href="/mh-wangyebunengliao/" class="comic" title="王爷不能撩">王爷不能撩</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-wangyebunengliao/" title="王爷不能撩">王爷不能撩</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                               <a href="/search?title=<%htmlurlencode(iCiyuan动漫)%>&language=1&f=2" class="avatar">
+                                                iCiyuan动漫                                            </a>
+                                        </p>
+                                        <p>点击：10,140,311</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-wangyebunengliao/"><img class="img" src="https://mhfm1us.cdndm5.com/45/44325/20180815090038_130x174.jpg" alt="王爷不能撩" title="王爷不能撩"></a>
+                                    <span class="fl ib top top_6 top_logo_1">6</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">9,645,700</span>
+                                <span class="fl ib top ">7</span>
+                                <a href="/mh-xuebagegebiepengwo/" class="comic" title="学霸哥哥别碰我">学霸哥哥别碰我</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-xuebagegebiepengwo/" title="学霸哥哥别碰我">学霸哥哥别碰我</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                               <a href="/search?title=<%htmlurlencode(蜜夏动漫)%>&language=1&f=2" class="avatar">
+                                                蜜夏动漫                                            </a>
+                                        </p>
+                                        <p>点击：9,645,700</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-xuebagegebiepengwo/"><img class="img" src="https://mhfm1us.cdndm5.com/46/45824/20190603102539_130x174.jpg" alt="学霸哥哥别碰我" title="学霸哥哥别碰我"></a>
+                                    <span class="fl ib top top_7 top_logo_1">7</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">8,631,330</span>
+                                <span class="fl ib top ">8</span>
+                                <a href="/mh-feibaolibuhezuo/" class="comic" title="非暴力不合作">非暴力不合作</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-feibaolibuhezuo/" title="非暴力不合作">非暴力不合作</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                               <a href="/search?title=<%htmlurlencode(绯小月©MAGIA)%>&language=1&f=2" class="avatar">
+                                                绯小月©MAGIA                                            </a>
+                                        </p>
+                                        <p>点击：8,631,330</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-feibaolibuhezuo/"><img class="img" src="https://mhfm6us.cdndm5.com/35/34381/20161228134117_130x174.jpg" alt="非暴力不合作" title="非暴力不合作"></a>
+                                    <span class="fl ib top top_8 top_logo_1">8</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">8,576,065</span>
+                                <span class="fl ib top ">9</span>
+                                <a href="/mh-yitaishuangbao-guaigemamidaihuijia/" class="comic" title="拐个妈咪带回家">拐个妈咪带回家</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-yitaishuangbao-guaigemamidaihuijia/" title="拐个妈咪带回家">拐个妈咪带回家</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                               <a href="/search?title=<%htmlurlencode(十二章纹)%>&language=1&f=2" class="avatar">
+                                                十二章纹                                            </a>
+                                        </p>
+                                        <p>点击：8,576,065</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-yitaishuangbao-guaigemamidaihuijia/"><img class="img" src="https://mhfm4us.cdndm5.com/55/54778/20200624152655_130x174.jpg" alt="拐个妈咪带回家" title="拐个妈咪带回家"></a>
+                                    <span class="fl ib top top_9 top_logo_1">9</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">8,214,803</span>
+                                <span class="fl ib top ">10</span>
+                                <a href="/mh-shouxinglaogongyeyeliao/" class="comic" title="心机婚宠">心机婚宠</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-shouxinglaogongyeyeliao/" title="心机婚宠">心机婚宠</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                               <a href="/search?title=<%htmlurlencode(触岛漫画)%>&language=1&f=2" class="avatar">
+                                                触岛漫画                                            </a>
+                                        </p>
+                                        <p>点击：8,214,803</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-shouxinglaogongyeyeliao/"><img class="img" src="https://mhfm4us.cdndm5.com/41/40493/20191108102513_130x174.jpg" alt="心机婚宠" title="心机婚宠"></a>
+                                    <span class="fl ib top top_10 top_logo_1">10</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">5,330,177</span>
+                                <span class="fl ib top ">11</span>
+                                <a href="/mh-jueseyifei/" class="comic" title="绝色医妃">绝色医妃</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-jueseyifei/" title="绝色医妃">绝色医妃</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                               <a href="/search?title=<%htmlurlencode(涂山君)%>&language=1&f=2" class="avatar">
+                                                涂山君                                            </a>
+                                        </p>
+                                        <p>点击：5,330,177</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-jueseyifei/"><img class="img" src="https://mhfm4us.cdndm5.com/50/49911/20191018165008_130x174.jpg" alt="绝色医妃" title="绝色医妃"></a>
+                                    <span class="fl ib top top_11 top_logo_1">11</span>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="">
+                            <div class="simple">
+                                <span class="num fr">4,741,471</span>
+                                <span class="fl ib top ">12</span>
+                                <a href="/mh-fayikuangfei/" class="comic" title="法医狂妃">法医狂妃</a>
+                            </div>
+                            <div class="detail">
+                                <div class="info ib fr">
+                                    <p class="title"><a href="/mh-fayikuangfei/" title="法医狂妃">法医狂妃</a></p>
+                                    <span class="bottom">
+                                        <p>
+                                            作者：                                               <a href="/search?title=<%htmlurlencode(iCiyuan动漫)%>&language=1&f=2" class="avatar">
+                                                iCiyuan动漫                                            </a>
+                                        </p>
+                                        <p>点击：4,741,471</p>
+                                    </span>
+                                </div>
+                                <div class="cover ib">
+                                    <a href="/mh-fayikuangfei/"><img class="img" src="https://mhfm8us.cdndm5.com/43/42854/20181221103335_130x174.jpg" alt="法医狂妃" title="法医狂妃"></a>
+                                    <span class="fl ib top top_12 top_logo_1">12</span>
+                                </div>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <div class="leftBar ib">
+                <div class="topBar">
+                    <span class="ib fr title_1">
+                        <a href="/mh-shaonan/"><img class="btn fr" src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_topic_topBar_btn_1.png" alt="更多"></a>
+                        <span>做我想做的梦，保护我要保护的人！</span>
+                    </span>
+                    <span class="logo">
+                        <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_topic_topBar_logo_1.png" alt="少年漫画">
+                    </span>
+                </div>
+                <div class="bookList_1">
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-zhencaonizhuanshijiedechunanbianjinglingzhu/">
+                                    <img class="cover" src="https://mhfm7us.cdndm5.com/94/93348/20251128140749_180x240_24.jpg" alt="贞操逆转世界的处男边境领主" title="贞操逆转世界的处男边境领主">
+                                    <span class="msg op">暂无章节</span>
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-zhencaonizhuanshijiedechunanbianjinglingzhu/" title="贞操逆转世界的处男边境领主">贞操逆转世界的处男边境领主</a></p>
+                        <p class="tip"><a href="/mh-zhencaonizhuanshijiedechunanbianjinglingzhu/">边境领主法斯特是从现代日...</a></p>
+                    </div>
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-jianqifengyun/">
+                                    <img class="cover" src="https://mhfm8us.cdndm5.com/86/85565/20240528172523_180x240.jpg" alt="剑起风云" title="剑起风云">
+                                    <span class="msg op">第90回</span>
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-jianqifengyun/" title="剑起风云">剑起风云</a></p>
+                        <p class="tip"><a href="/mh-jianqifengyun/">隶属于天风国的顾家，满门...</a></p>
+                    </div>
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-biaozhishaonian/">
+                                    <img class="cover" src="https://mhfm3us.cdndm5.com/82/81633/20221010101346_180x240.jpg" alt="标志少年" title="标志少年">
+                                    <span class="msg op">第8回</span>
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-biaozhishaonian/" title="标志少年">标志少年</a></p>
+                        <p class="tip"><a href="/mh-biaozhishaonian/">几年前，一颗外星导弹袭击...</a></p>
+                    </div>
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-jiuheyancaodeyongbingmigong/">
+                                    <img class="cover" src="https://mhfm1us.cdndm5.com/91/90143/20250430145854_180x240_22.jpg" alt="酒和烟草的佣兵迷宫" title="酒和烟草的佣兵迷宫">
+                                    <span class="msg op">暂无章节</span>
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-jiuheyancaodeyongbingmigong/" title="酒和烟草的佣兵迷宫">酒和烟草的佣兵迷宫</a></p>
+                        <p class="tip"><a href="/mh-jiuheyancaodeyongbingmigong/">迷宫的探险开始啦！</a></p>
+                    </div>
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-tianyuanguilai-wojishitianzai/">
+                                    <img class="cover" src="https://mhfm3us.cdndm5.com/85/84977/20231222151010_180x240.jpg" alt="天渊归来：我即是天灾" title="天渊归来：我即是天灾">
+                                    <span class="msg op">第94回</span>
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-tianyuanguilai-wojishitianzai/" title="天渊归来：我即是天灾">天渊归来：我即是天灾</a></p>
+                        <p class="tip"><a href="/mh-tianyuanguilai-wojishitianzai/">仙帝世家一夜灭族，少主李...</a></p>
+                    </div>
+                </div>
+                <div class="topBar">
+                    <span class="ib fr title_2">
+                        <a href="/mh-shaonv/"><img class="btn fr" src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_topic_topBar_btn_2.png" alt="更多"></a>
+                        <span>被爱不一定是幸福，去爱才是幸福</span>
+                    </span>
+                    <span class="logo">
+                        <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_topic_topBar_logo_2.png" alt="少女漫画">
+                    </span>
+                </div>
+                <div class="bookList_1">
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-leyuandebaocang/">
+                                    <img src="https://mhfm7us.cdndm5.com/60/59023/20200605164643_180x240.jpg" alt="乐园的宝藏" title="乐园的宝藏" class="cover">
+                                    <span class="msg op">第60回</span>
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-leyuandebaocang/" title="乐园的宝藏">乐园的宝藏</a></p>
+                        <p class="tip"><a href="/mh-leyuandebaocang/">外婆在过世前留下遗嘱只要...</a></p>
+                    </div>
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-touhuan/">
+                                    <img src="https://mhfm6us.cdndm5.com/85/84350/20230720164501_180x240.jpg" alt="偷欢" title="偷欢" class="cover">
+                                    <span class="msg op">第120回</span>
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-touhuan/" title="偷欢">偷欢</a></p>
+                        <p class="tip"><a href="/mh-touhuan/">被未婚夫背叛的白葡为了报...</a></p>
+                    </div>
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-weichen/">
+                                    <img src="https://mhfm8us.cdndm5.com/84/83522/20230130113041_180x240.jpg" alt="微尘" title="微尘" class="cover">
+                                    <span class="msg op">第12回</span>
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-weichen/" title="微尘">微尘</a></p>
+                        <p class="tip"><a href="/mh-weichen/">故事讲述了隋朝安义公主杨...</a></p>
+                    </div>
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-huzhashaonv/">
+                                    <img src="https://mhfm2us.cdndm5.com/69/68090/20210412143828_180x240.jpg" alt="胡渣少女" title="胡渣少女" class="cover">
+                                    <span class="msg op">第236回</span>
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-huzhashaonv/" title="胡渣少女">胡渣少女</a></p>
+                        <p class="tip"><a href="/mh-huzhashaonv/">我！胡渣少女，一个脸上有...</a></p>
+                    </div>
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-wodesishendaren/">
+                                    <img src="https://mhfm2us.cdndm5.com/85/84741/20231110092849_180x240.jpg" alt="我的死神大人" title="我的死神大人" class="cover">
+                                    <span class="msg op">第13回</span>
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-wodesishendaren/" title="我的死神大人">我的死神大人</a></p>
+                        <p class="tip"><a href="/mh-wodesishendaren/">“不！不要靠近我！我尊敬...</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="rankListBak">
+    <!--专题栏二-->
+    <div class="topic_2">
+        <div class="container" style="overflow:visible;">
+            <div class="bar">
+                <div class="topBar">
+                    <img src="https://css122us.cdndm5.com/v202609021720/cartoonupload/images/new/m_topic_2_logo_1.png" alt="最新上架">
+                </div>
+                <div class="bookList_1">
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-jinghe--sumingyuanhang/">
+                                    <img class="cover" src="https://mhfm5us.cdndm5.com/98/97993/20260827143203_180x240_24.jpg" alt="晶核 ：宿命遠航" title="晶核 ：宿命遠航">
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-jinghe--sumingyuanhang/" title="晶核 ：宿命遠航">晶核 ：宿命遠航</a></p>
+                        <p class="tip"><a href="/mh-jinghe--sumingyuanhang/">魔法與機械的浮空大陸——...</a></p>
+                    </div>
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-huoguojiazudibaji/">
+                                    <img class="cover" src="https://mhfm2us.cdndm5.com/96/95405/20260409100045_180x240_16.jpg" alt="火锅家族第八季" title="火锅家族第八季">
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-huoguojiazudibaji/" title="火锅家族第八季">火锅家族第八季</a></p>
+                        <p class="tip"><a href="/mh-huoguojiazudibaji/"></a></p>
+                    </div>
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-zhencaonizhuanshijiedechunanbianjinglingzhu/">
+                                    <img class="cover" src="https://mhfm7us.cdndm5.com/94/93348/20251128140749_180x240_24.jpg" alt="贞操逆转世界的处男边境领主" title="贞操逆转世界的处男边境领主">
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-zhencaonizhuanshijiedechunanbianjinglingzhu/" title="贞操逆转世界的处男边境领主">贞操逆转世界的处男边境领主</a></p>
+                        <p class="tip"><a href="/mh-zhencaonizhuanshijiedechunanbianjinglingzhu/">边境领主法斯特是从现代日...</a></p>
+                    </div>
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-beicaiyuanhouhuoyiwanxitong-woduzishengji/">
+                                    <img class="cover" src="https://mhfm1us.cdndm5.com/91/90543/20250531161739_180x240.jpg" alt="被裁员后获亿万系统，我独自升级" title="被裁员后获亿万系统，我独自升级">
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-beicaiyuanhouhuoyiwanxitong-woduzishengji/" title="被裁员后获亿万系统，我独自升级">被裁员后获亿万系统，我独自升级</a></p>
+                        <p class="tip"><a href="/mh-beicaiyuanhouhuoyiwanxitong-woduzishengji/">公司被收购，惨遭“优化”...</a></p>
+                    </div>
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-jiuheyancaodeyongbingmigong/">
+                                    <img class="cover" src="https://mhfm1us.cdndm5.com/91/90143/20250430145854_180x240_22.jpg" alt="酒和烟草的佣兵迷宫" title="酒和烟草的佣兵迷宫">
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-jiuheyancaodeyongbingmigong/" title="酒和烟草的佣兵迷宫">酒和烟草的佣兵迷宫</a></p>
+                        <p class="tip"><a href="/mh-jiuheyancaodeyongbingmigong/">迷宫的探险开始啦！</a></p>
+                    </div>
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-huoguojiazudiqiji/">
+                                    <img class="cover" src="https://mhfm5us.cdndm5.com/91/90098/20250428085847_180x240.jpg" alt="火锅家族第七季" title="火锅家族第七季">
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-huoguojiazudiqiji/" title="火锅家族第七季">火锅家族第七季</a></p>
+                        <p class="tip"><a href="/mh-huoguojiazudiqiji/">反转的剧情，开脑洞的故事...</a></p>
+                    </div>
+                    <div class="item ib">
+                        <div class="bookBak">
+                            <div class="book">
+                                <a href="/mh-wodaichaoshichuandaogudaiyangchengxiang/">
+                                    <img class="cover" src="https://mhfm2us.cdndm5.com/91/90003/20250424171459_180x240_21.jpg" alt="我带超市穿到古代养丞相" title="我带超市穿到古代养丞相">
+                                </a>
+                            </div>
+                        </div>
+                        <p class="title"><a href="/mh-wodaichaoshichuandaogudaiyangchengxiang/" title="我带超市穿到古代养丞相">我带超市穿到古代养丞相</a></p>
+                        <p class="tip"><a href="/mh-wodaichaoshichuandaogudaiyangchengxiang/">穿书成炮灰下堂妻，罗云绮...</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!--总排行榜-->
+    <div class="rankList">
+        <div class="container">
+            <div class="topBar">
+            </div>
+            <div class="list border" id="searchcomiclist">
+                <div class="info ib" id="searchcomiccontent">
+                    <div class="group ib">
+                        <div class="item">
+                            <span class="num ib">1</span>
+                            <a href="/mh-yaoshenji/" title="妖神记" class="comic">妖神记</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">2</span>
+                            <a href="/mh-shanhainizhan1/" title="山海逆战" class="comic">山海逆战</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">3</span>
+                            <a href="/mh-gongjiaonannvbaoxiaomanhua/" title="公交男女爆笑漫画" class="comic">公交男女爆笑漫画</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">4</span>
+                            <a href="/mh-nvzixueyuandenansheng/" title="女子学院的男生" class="comic">女子学院的男生</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">5</span>
+                            <a href="/mh-yujiufenhua/" title="宇久纷华▪战国墨者异传" class="comic">宇久纷华▪战国墨者异传</a>
+                        </div>
+                    </div>
+                    <div class="group ib">
+                        <div class="item">
+                            <span class="num ib">6</span>
+                            <a href="/mh-wudaoduzun/" title="武道独尊" class="comic">武道独尊</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">7</span>
+                            <a href="/mh-lingjianzun/" title="灵剑尊" class="comic">灵剑尊</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">8</span>
+                            <a href="/mh-wodexianggongyoudianduo/" title="开局四个美相公" class="comic">开局四个美相公</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">9</span>
+                            <a href="/mh-jishengchong/" title="寄生虫" class="comic">寄生虫</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">10</span>
+                            <a href="/mh-congjintiankaishidangchengzhu/" title="从今天开始当城主" class="comic">从今天开始当城主</a>
+                        </div>
+                    </div>
+                    <div class="group ib">
+                        <div class="item">
+                            <span class="num ib">11</span>
+                            <a href="/mh-huoguojiazudisanji/" title="火锅家族第三季" class="comic">火锅家族第三季</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">12</span>
+                            <a href="/mh-shaoshuainilaopoyoupaole/" title="少帅你老婆又跑了" class="comic">少帅你老婆又跑了</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">13</span>
+                            <a href="/mh-huzhashaonv/" title="胡渣少女" class="comic">胡渣少女</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">14</span>
+                            <a href="/mh-guhuozai/" title="古惑仔系列20  龙头之争" class="comic">古惑仔系列20  龙头之争</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">15</span>
+                            <a href="/mh-nitianjianshen/" title="逆天剑神" class="comic">逆天剑神</a>
+                        </div>
+                    </div>
+                    <div class="group ib">
+                        <div class="item">
+                            <span class="num ib">16</span>
+                            <a href="/mh-yingxiong-wozaojiubudangle/" title="英雄再临（英雄？我早就不当了）" class="comic">英雄再临（英雄？我早就不当了）</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">17</span>
+                            <a href="/mh-siyangwaixingrendezhuyishixiang/" title="饲养外星人的注意事项" class="comic">饲养外星人的注意事项</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">18</span>
+                            <a href="/mh-nigetuzi/" title="你个兔子" class="comic">你个兔子</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">19</span>
+                            <a href="/mh-chuansuoshikongsanqiannian/" title="穿梭时空三千年" class="comic">穿梭时空三千年</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">20</span>
+                            <a href="/mh-star-idol-xingjiouxiang/" title="STAR IDOL 星際偶像" class="comic">STAR IDOL 星際偶像</a>
+                        </div>
+                    </div>
+                    <div class="group ib">
+                        <div class="item">
+                            <span class="num ib">21</span>
+                            <a href="/mh-xihuandenvshengshigemen/" title="喜欢的女生是哥们" class="comic">喜欢的女生是哥们</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">22</span>
+                            <a href="/mh-niyudaodeyaoguaidushiwo/" title="你遇到的妖怪都是我" class="comic">你遇到的妖怪都是我</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">23</span>
+                            <a href="/mh-wudingshangdehongshaorou/" title="屋顶上的红烧肉" class="comic">屋顶上的红烧肉</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">24</span>
+                            <a href="/mh-xiandiguilai/" title="仙帝归来" class="comic">仙帝归来</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">25</span>
+                            <a href="/mh-yinianshiguang/" title="一念时光" class="comic">一念时光</a>
+                        </div>
+                    </div>
+                    <div class="group ib">
+                        <div class="item">
+                            <span class="num ib">26</span>
+                            <a href="/mh-shishangzuiqiangnanzhujiao/" title="史上最强男主角" class="comic">史上最强男主角</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">27</span>
+                            <a href="/mh-guohun/" title="国魂" class="comic">国魂</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">28</span>
+                            <a href="/mh-kuangnvchongsheng-wankuqihuangfei/" title="狂女重生：纨绔七皇妃" class="comic">狂女重生：纨绔七皇妃</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">29</span>
+                            <a href="/mh-sheshouzuoyangmaoriji/" title="射手座养猫日记" class="comic">射手座养猫日记</a>
+                        </div>
+                        <div class="item">
+                            <span class="num ib">30</span>
+                            <a href="/mh-diliutianmowang/" title="第六天魔王" class="comic">第六天魔王</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+    <!--友情链接-->
+    <div class="linkList">
+        <div class="container">
+            <ul>
+                    <li><a href="https://www.dm5.com/" title="" target="_blank">动漫屋 </a></li>
+                    <li><a href="https://www.1kkk.com/" title="" target="_blank">极速漫画</a></li>
+                    <li><a href="https://www.fmdaxiang.com/" title="" target="_blank">大象FM</a></li>
+                    <li><a href="http://manhua.163.com/" title="" target="_blank">网易漫画</a></li>
+                    <li><a href="http://manhua.weibo.com/" title="" target="_blank">微漫画</a></li>
+                    <li><a href="http://www.ishangman.com/" title="" target="_blank">i尚漫</a></li>
+                    <li><a href="http://www.comicfans.net/" title="" target="_blank">漫友文化</a></li>
+                    <li><a href="http://www.dangniao.com/" title="" target="_blank">斗罗大陆漫画</a></li>
+                    <li><a href="http://www.52tian.net/" title="" target="_blank">动画片大全</a></li>
+                    <li><a href="http://www.daman.cc/" title="" target="_blank">新番动漫</a></li>
+                    <li><a href="http://www.manliancg.com/" title="" target="_blank">漫画培训</a></li>
+                    <li><a href="http://www.kanman.com/" title="" target="_blank">斗罗大陆漫画</a></li>
+                    <li><a href="https://www.kaimanhua.com/" title="" target="_blank">时星流雨漫画</a></li>
+                    <li><a href="http://touken.youzu.com" title="" target="_blank">刀剑乱舞</a></li>
+            </ul>
+        </div>
+    </div>
+<div class="footer">
+    <p><a href="#" target="_blank" title="漫本首页">漫本首页</a> - <a href="/about/" target="_blank" title="关于我们">关于我们</a> - <a href="http://i.manben.com/" target="_blank" title="原创漫画上传">漫画上传</a></p>
+    <p>Copyright (C) 2015-2022 www.manben.com 漫本 All rights reserved</p>
+    <p></p>
+</div>
+    <div style="display:none">
+        <script type="text/javascript">
+   (function () {
+            var ga = document.createElement('script');
+            ga.type = 'text/javascript';
+            ga.async = true;
+            ga.src =('https:' == document.location.protocol ? 'https://' : 'http://') + "w.cnzz.com/c.php?id=1257110519";
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(ga, s);
+        })();//1277928741
+</script> <script type="text/javascript">   
+var _gaq = _gaq || [];
+        _gaq.push(['_setAccount', 'UA-74988581-1']);
+        _gaq.push(['_setDomainName', 'none']);
+        _gaq.push(['_setAllowLinker', true]);
+        _gaq.push(['_trackPageview']);
+
+        (function () {
+            var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+            ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+            var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+        })();
+    </script><script>
+var _hmt = _hmt || [];
+(function() {
+  var hm = document.createElement("script");
+  hm.src = "//hm.baidu.com/hm.js?253610258a8cc83aa31103e3b76afcd0";
+  var s = document.getElementsByTagName("script")[0]; 
+  s.parentNode.insertBefore(hm, s);
+})();
+</script><script type="text/javascript">
+var doubtfuluid=0;
+        (function () {
+            var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+            ga.src ='https://css122us.cdndm5.com/v202609021720/cartoonupload/js/u-fp.min.js';
+            var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+        })();
+    </script>    </div>
+</body>
+</html>

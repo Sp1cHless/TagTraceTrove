@@ -18,8 +18,25 @@ import {
   listGalleries,
   updateEntry,
 } from '../repositories/entry-repository.js';
+import { mergeAuthorEntries } from '../repositories/entry-merge-repository.js';
+import {
+  convertEntryAuthorsToMultiAuthor,
+  MULTI_AUTHOR_PRODUCER_NAME,
+} from '../repositories/entry-multi-author-repository.js';
+import { listEntrySources, listSourceLibrary } from '../repositories/source-library-repository.js';
+import {
+  createRun,
+  getItem,
+  getSourceStatus,
+  getRun,
+  patchItem,
+  setSourceStatus,
+  upsertItem,
+} from '../source-maintenance/repository.js';
+import { buildSyncCapabilities, buildSyncSnapshot, getSyncIdentity, rotateSyncEpoch } from '../sync/sync-service.js';
 import { createFacet, createSection } from '../repositories/layout-repository.js';
 import { assignProducerTag, findProducers } from '../repositories/producer-tag-repository.js';
+import { suggestTags } from '../repositories/suggestion-repository.js';
 import {
   createProducer,
   getAuthorDetail,
@@ -34,6 +51,8 @@ import { commitImportBatch } from '../import/commit.js';
 import {
   createEntryRatingSlot,
   createProducerRatingSlot,
+  createRatingSlot,
+  findRatingSlotId,
   listEntryRatings,
   listProducerRatings,
   setEntryRating,
@@ -163,6 +182,20 @@ export function runDatabaseProbe(): DatabaseProbeResult {
         && database.prepare('SELECT COUNT(*) FROM producer_tags').pluck().get() === 1;
     });
 
+    check('bound strict relation suggestions by vocabulary', () => {
+      const entrySuggestions = suggestTags(database, {
+        vocabulary: 'entry', q: 'character', limit: 20, excludeIds: [], entryType: 'game',
+      });
+      const producerSuggestions = suggestTags(database, {
+        vocabulary: 'producer', q: 'favorite', limit: 20, excludeIds: [],
+      });
+      return entrySuggestions.length === 1
+        && entrySuggestions[0]?.id === assignedTagId
+        && entrySuggestions[0]?.sameContextUsageCount === 1
+        && producerSuggestions.length === 1
+        && producerSuggestions[0]?.name === 'Favorite';
+    });
+
     check('store arbitrary content labels', () => {
       return database.prepare(
         "SELECT COUNT(*) FROM entry_contents WHERE content_type IN ('short review', 'source url')",
@@ -233,6 +266,7 @@ export function runDatabaseProbe(): DatabaseProbeResult {
         externalKeyContentType: 'external key',
         fieldMappings: {},
         ignoredFields: [],
+        authorRatings: [],
       });
       const detail = getEntryDetail(database, result.entries[0]?.entryId ?? 0);
       return result.entryCount === 1
@@ -339,6 +373,43 @@ export function runDatabaseProbe(): DatabaseProbeResult {
         && secondDetail?.ratings.find((row) => row.slotId === authorSlot.id)?.stars === null;
     });
 
+    check('sort by the Author rating when a work has fewer than four Authors', () => {
+      const type = 'probe-author-rating';
+      const entrySlot = createRatingSlot(database, { kind: 'entry', entryType: type, name: 'Quality' });
+      const author = createProducer(database, { name: 'Probe Rated Author' });
+      const ownRating = createEntry(database, { title: 'Probe own rating', type });
+      const inherited = createEntry(database, { title: 'Probe inherited rating', type });
+      const anthology = createEntry(database, { title: 'Probe anthology', type });
+      linkEntryProducer(database, ownRating.id, author.id);
+      linkEntryProducer(database, inherited.id, author.id);
+      // The anthology shares the rated Author and three more: four Authors in
+      // total, so it must never inherit an Author rating.
+      linkEntryProducer(database, anthology.id, author.id);
+      for (const name of ['Probe A', 'Probe B', 'Probe C']) {
+        linkEntryProducer(database, anthology.id, createProducer(database, { name }).id);
+      }
+      const authorSlotId = createProducerRatingSlot(database, { producerId: author.id, name: entrySlot.name }).id;
+      setProducerRating(database, { producerId: author.id, slotId: authorSlotId, stars: 4 });
+      setEntryRating(database, { entryId: ownRating.id, slotId: entrySlot.id, stars: 2 });
+
+      const sortedTitles = (applyAuthorRating: boolean): string[] => queryEntryPage(database, {
+        entryType: type,
+        conditions: [],
+        authorIds: [],
+        ratingConditions: [],
+        ratingSort: { slotId: entrySlot.id, direction: 'desc', applyAuthorRating },
+        usageConditions: [],
+        usageSort: null,
+        sort: 'title-asc',
+        page: 1,
+        pageSize: 10,
+      }).items.map((entry) => entry.title);
+
+      return sortedTitles(false).join('|') === 'Probe own rating|Probe anthology|Probe inherited rating'
+        && sortedTitles(true).join('|') === 'Probe inherited rating|Probe own rating|Probe anthology'
+        && findRatingSlotId(database, 'producer', type, entrySlot.name) === authorSlotId;
+    });
+
     check('track entry views and derive author usage', () => {
       // Entry 1 starts unviewed; each recorded view bumps the count and the
       // timestamp. Author usage is derived from their works' rows.
@@ -436,7 +507,123 @@ export function runDatabaseProbe(): DatabaseProbeResult {
         && page.items[0]?.type === 'game';
     });
 
-    check('database doctor clean', () => inspectDatabase(database).ok);
+    check('derive Sources from manual Content and merge Author works atomically', () => {
+      const section = createSection(database, { entryType: 'merge-probe', name: 'Tags' });
+      const author = createProducer(database, { name: 'Merge Probe Author' });
+      const keep = createEntry(database, { title: 'Kept Probe Work', type: 'merge-probe' });
+      const absorb = createEntry(database, { title: 'Absorbed Probe Work', type: 'merge-probe' });
+      linkEntryProducer(database, keep.id, author.id);
+      linkEntryProducer(database, absorb.id, author.id);
+      assignEntryTag(database, {
+        entryId: absorb.id,
+        facetId: section.defaultFacetId,
+        name: 'Merged Probe Tag',
+      });
+      const manualContent = createEntryContent(database, {
+        entryId: absorb.id,
+        contentType: 'manual custom source field',
+        content: 'Mirror: https://hitomi.la/reader/probe.html',
+      });
+      const selectedSource = listEntrySources(database, absorb.id)[0];
+      if (!selectedSource || selectedSource.contentId !== manualContent.id) return false;
+      mergeAuthorEntries(database, {
+        authorId: author.id,
+        keepEntryId: keep.id,
+        absorbEntryId: absorb.id,
+        copyTags: true,
+        sourceUrls: [selectedSource.url],
+      });
+      const detail = getEntryDetail(database, keep.id);
+      return getEntryDetail(database, absorb.id) === null
+        && detail?.title === 'Kept Probe Work'
+        && detail.sections.some((item) => item.facets.some((facet) => (
+          facet.tags.some((tag) => tag.normalizedName === 'merged probe tag')
+        ))) === true
+        && listEntrySources(database, keep.id)[0]?.sourceKey === 'known:hitomi'
+        && listSourceLibrary(database).some((source) => (
+          source.sourceKey === 'known:hitomi' && source.entryCount >= 1
+        ));
+    });
+
+    check('maintain Source invalidation workflow', () => {
+    const status = setSourceStatus(database, 'known:hitomi', 'invalid', 'probe check');
+    const annotated = listSourceLibrary(database).find((source) => source.sourceKey === 'known:hitomi');
+    const probeEntryId = Number(database.prepare('SELECT id FROM entries ORDER BY id LIMIT 1').pluck().get());
+    const run = createRun(database, {
+      originSourceKey: 'known:hitomi',
+      adapterKey: 'fake',
+      targetOrigin: 'https://probe.example',
+      markOriginInvalid: true,
+      settings: {},
+    });
+    upsertItem(database, run.id, {
+      entryId: probeEntryId,
+      entryTitleSnapshot: String(database.prepare('SELECT title FROM entries WHERE id = ?').pluck().get(probeEntryId)),
+      originUrls: [],
+      candidates: [{
+        url: 'https://probe.example/2',
+        title: 'Probe target',
+        band: 'strong-review',
+        reasons: ['probe fixture'],
+        adapterEvidence: {},
+      }],
+    });
+    patchItem(database, run.id, probeEntryId, { decision: 'accept', selectedUrl: 'https://probe.example/2' });
+    const accepted = getItem(database, run.id, probeEntryId);
+    const counts = getRun(database, run.id)!.counts;
+    const cleared = setSourceStatus(database, 'known:hitomi', 'active', '');
+    return (
+      status.state === 'invalid'
+      && annotated !== undefined
+      && annotated.state === 'invalid'
+      && accepted !== null
+      && accepted.decision === 'accept'
+      && counts.total === 1
+      && counts.processed === 1
+      && cleared.state === 'active'
+      && getSourceStatus(database, 'unknown:none') === null
+    );
+  });
+
+  check('credit a multi-Author Entry to the multi-author Author alone', () => {
+      const anthology = createEntry(database, { title: 'Probe anthology', type: 'multi-author-probe' });
+      const contributor = createProducer(database, { name: 'Probe Contributor' });
+      const established = createProducer(database, { name: 'Probe Established Author' });
+      const establishedWork = createEntry(database, { title: 'Probe established work', type: 'multi-author-probe' });
+      linkEntryProducer(database, anthology.id, contributor.id);
+      linkEntryProducer(database, anthology.id, established.id);
+      linkEntryProducer(database, establishedWork.id, established.id);
+
+      const result = convertEntryAuthorsToMultiAuthor(database, anthology.id);
+      const detail = getEntryDetail(database, anthology.id);
+      const visible = findProducers(database).map((producer) => producer.name);
+      return result.convertedAuthors.length === 2
+        && detail?.producers.length === 1
+        && detail.producers[0]?.name === MULTI_AUTHOR_PRODUCER_NAME
+        && detail.producers[0]?.entryCount === 1
+        // The emptied Author disappears; the one with their own work stays.
+        && !visible.includes('Probe Contributor')
+        && visible.includes('Probe Established Author');
+    });
+
+    check('offline sync identity and atomic snapshot', () => {
+    const capabilities = buildSyncCapabilities(database, 'probe');
+    const identity = getSyncIdentity(database);
+    const first = buildSyncSnapshot(database);
+    const second = buildSyncSnapshot(database);
+    const rotated = rotateSyncEpoch(database);
+    return (
+      capabilities.libraryId === identity.libraryId
+      && capabilities.syncEpoch !== ''
+      && capabilities.snapshotFormatVersion === 1
+      && second.header.snapshotSeq === first.header.snapshotSeq + 1
+      && first.header.checksum.length === 64
+      && rotated !== capabilities.syncEpoch
+      && first.payload.entries.length >= 1
+    );
+  });
+
+  check('database doctor clean', () => inspectDatabase(database).ok);
   } finally {
     database.close();
   }

@@ -76,6 +76,22 @@ function getProducer(database: T3Database, producerId: number): ProducerRecord |
   } : null;
 }
 
+/** Finds a Producer by its canonical displayed name, ignoring case. */
+export function findProducerIdByName(
+  database: T3Database,
+  name: string,
+): number | undefined {
+  const trimmed = name.trim();
+  if (trimmed === '') return undefined;
+  return database.prepare(`
+    SELECT id
+    FROM producers
+    WHERE name = ? COLLATE NOCASE
+    ORDER BY id
+    LIMIT 1
+  `).pluck().get(trimmed) as number | undefined;
+}
+
 export function getAuthorDetail(
   database: T3Database,
   producerId: number,

@@ -545,6 +545,48 @@ interface BuiltFacetFilterQuery {
   orderSql: string;
 }
 
+/**
+ * The value an Entry sorts by when the Author rating is applied: its own value
+ * for the selected dimension, otherwise the highest value among its Authors for
+ * the same-named Author dimension. A work with four or more Authors never
+ * inherits an Author rating, because an anthology has no single Author score.
+ * The returned parameters belong to the ORDER BY clause and must be supplied
+ * once per SQL occurrence.
+ */
+function authorRatingSortValueSql(
+  database: T3Database,
+  entryType: string,
+  slotId: number,
+): { sql: string; parameters: Array<string | number> } {
+  const slotName = listRatingSlots(database, 'entry', entryType)
+    .find((slot) => slot.id === slotId)?.name;
+  if (slotName === undefined) {
+    throw new Error('rating slot not found');
+  }
+  return {
+    sql: `COALESCE(rating_sort.stars, CASE
+          WHEN (
+            SELECT COUNT(*) FROM entry_producers AS author_count
+            WHERE author_count.entry_id = entry.id
+          ) >= 4 THEN NULL
+          ELSE (
+            SELECT MAX(author_value.stars)
+            FROM entry_producers AS author_link
+            JOIN producer_rating_values AS author_value
+              ON author_value.producer_id = author_link.producer_id
+            JOIN rating_slots AS author_slot
+              ON author_slot.id = author_value.slot_id
+            WHERE author_link.entry_id = entry.id
+              AND author_slot.subject_kind = 'producer'
+              AND author_slot.entry_type = ?
+              AND author_slot.name = ?
+              AND author_value.stars IS NOT NULL
+          )
+        END)`,
+    parameters: [entryType, slotName],
+  };
+}
+
 function entryListOrderSql(sort: EntryListSort): string {
   switch (sort) {
     case 'date-desc':
@@ -711,11 +753,21 @@ function buildFacetFilterQuery(
   const ratingSort = input.ratingSort ?? null;
   let ratingSortJoin = '';
   let orderClause = entryListOrderSql(sort);
+  let ratingSortParameters: Array<string | number> = [];
+  let ratingSortOrderParameters: Array<string | number> = [];
   if (ratingSort) {
     if (!entryType) throw new Error('entryType is required for rating sort');
     requireRatingSlot(database, ratingSort.slotId, entryType);
     ratingSortJoin = 'LEFT JOIN entry_rating_values AS rating_sort\n      ON rating_sort.entry_id = entry.id AND rating_sort.slot_id = ?';
-    orderClause = 'ORDER BY (rating_sort.stars IS NULL) ASC, rating_sort.stars DESC, entry.title COLLATE NOCASE, entry.id';
+    ratingSortParameters = [ratingSort.slotId];
+    const sortValue = ratingSort.applyAuthorRating
+      ? authorRatingSortValueSql(database, entryType, ratingSort.slotId)
+      : { sql: 'rating_sort.stars', parameters: [] as Array<string | number> };
+    if (ratingSort.applyAuthorRating) {
+      // The expression appears twice (IS NULL test and the value itself).
+      ratingSortOrderParameters = [...sortValue.parameters, ...sortValue.parameters];
+    }
+    orderClause = `ORDER BY (${sortValue.sql} IS NULL) ASC, ${sortValue.sql} DESC, entry.title COLLATE NOCASE, entry.id`;
   }
 
   // Usage conditions and sort (usage sort wins over the rating sort).
@@ -750,9 +802,10 @@ function buildFacetFilterQuery(
     whereParameters: parameters,
     ratingSortJoin,
     itemParameters: [
-      ...(ratingSort ? [ratingSort.slotId] : []),
+      ...ratingSortParameters,
       ...parameters,
       ...orderParameters,
+      ...ratingSortOrderParameters,
     ],
     orderSql: orderClause,
   };

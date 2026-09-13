@@ -17,7 +17,10 @@ const coverSchema = z.object({
   source_path: z.url().optional(),
 });
 
-const languageSchema = z.object({ code: z.string(), name: z.string() });
+const languageSchema = z.object({
+  code: z.string().nullable().optional(),
+  name: z.string().nullable().optional(),
+});
 const previewImageSchema = z.object({
   local_path: z.string().min(1).optional(),
 });
@@ -83,6 +86,13 @@ export interface SiteProbeLoadOptions {
   preserveRelativeMediaPaths?: boolean;
 }
 
+/** Renders schema issues as `field: reason` pairs so a bad export names its own field. */
+function describeIssues(error: z.ZodError): string {
+  return error.issues
+    .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
+    .join('; ');
+}
+
 function resolveLocalPath(
   exportRoot: string,
   localPath: string,
@@ -134,7 +144,7 @@ function directItemMediaPaths(item: ItemMediaPaths): {
  */
 function excludeLanguageTag(
   names: string[],
-  languageName: string | undefined,
+  languageName: string | null | undefined,
 ): string[] {
   if (!languageName) return names;
   const excluded = languageName.normalize('NFKC').trim().toLocaleLowerCase();
@@ -256,7 +266,7 @@ function adaptHitomiItem(
       characters: item.分类信息.登场人物,
       authors: item.分类信息.作者,
       contentTypes: item.分类信息.作品类型 ?? [],
-      ...(item.language ? { language: [item.language.name] } : {}),
+      ...(item.language?.name ? { language: [item.language.name] } : {}),
     },
     sources: [{ label: item.source_site, url: item.detail_url }],
   };
@@ -322,18 +332,37 @@ export async function loadSiteProbeExport(
 
   const hitomiManifestResult = hitomiManifestSchema.safeParse(rawDocument);
   if (hitomiManifestResult.success) {
-    const entries = await Promise.all(
-      hitomiManifestResult.data.items.map(async (sourceId) => {
-        const itemPath = resolveLocalPath(exportRoot, `items/${sourceId}/metadata.json`, {});
-        const itemDocument: unknown = JSON.parse(await readFile(itemPath, 'utf8'));
-        return adaptHitomiItem(hitomiItemSchema.parse(itemDocument), exportRoot, options);
-      }),
-    );
+    const warnings: string[] = [];
+    const entries: ImportEntry[] = [];
+    for (const sourceId of hitomiManifestResult.data.items) {
+      const relativeItemPath = `items/${sourceId}/metadata.json`;
+      const itemPath = resolveLocalPath(exportRoot, relativeItemPath, {});
+      let itemDocument: unknown;
+      try {
+        itemDocument = JSON.parse(await readFile(itemPath, 'utf8'));
+      } catch (cause) {
+        // A manifest can outlive an item folder (an interrupted extraction
+        // leaves the id behind). One absent work must not block the folder.
+        if ((cause as NodeJS.ErrnoException).code === 'ENOENT') {
+          warnings.push(`Skipped work ${sourceId}: ${relativeItemPath} is missing`);
+          continue;
+        }
+        throw new Error(`Export work ${sourceId} could not be read: ${(cause as Error).message}`);
+      }
+      const parsedItem = hitomiItemSchema.safeParse(itemDocument);
+      if (!parsedItem.success) {
+        throw new Error(
+          `Export work ${sourceId} does not match the hitomi.la export schema: `
+          + describeIssues(parsedItem.error),
+        );
+      }
+      entries.push(adaptHitomiItem(parsedItem.data, exportRoot, options));
+    }
 
     return importBatchSchema.parse({
       source: hitomiManifestResult.data.source_site,
       entries,
-      warnings: [],
+      warnings,
     });
   }
 

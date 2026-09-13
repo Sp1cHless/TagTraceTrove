@@ -1,0 +1,20 @@
+{
+  "site": "hanime1_me",
+  "exports": {
+    "fileCount": 142,
+    "metadataCount": 47,
+    "aggregateSha256": "48ef82a7cfff1d4fb89ab2ee4ea1e93b5c1b89373858cf04d2d369c5f7cbb425"
+  },
+  "artifacts": {
+    "tag_review.csv": {
+      "exists": true,
+      "sha256": "6eab0f40140e491548837a4a78ac77f636c4e9ad3fe19555405eca315aa49776",
+      "size": 22
+    },
+    "taxonomy_dictionary.json": {
+      "exists": true,
+      "sha256": "08f7096ab925af2062b59bf7db7967d61509813afb457e7df1a0d3b8a9992606",
+      "size": 8877
+    }
+  }
+}

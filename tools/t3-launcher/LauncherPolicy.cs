@@ -9,6 +9,73 @@ public readonly record struct LauncherOptions(bool LanEnabled, bool NoBrowser);
 
 public static class LauncherPolicy
 {
+    public static IReadOnlyList<string> NodeCandidates(
+        string repoRoot,
+        string localAppData,
+        string? pathValue)
+    {
+        var candidates = new List<string>
+        {
+            Path.Combine(repoRoot, "tools", "node", "node.exe"),
+            Path.Combine(localAppData, "hermes", "node", "node.exe"),
+        };
+        if (!string.IsNullOrWhiteSpace(pathValue))
+        {
+            candidates.AddRange(pathValue
+                .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(directory => Path.Combine(directory.Trim('"'), "node.exe")));
+        }
+        return candidates.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    public static string? FindCompatibleNode(string repoRoot, string serverDir)
+    {
+        string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        string? pathValue = Environment.GetEnvironmentVariable("PATH");
+        return NodeCandidates(repoRoot, localAppData, pathValue)
+            .FirstOrDefault(candidate => File.Exists(candidate) && CanOpenBetterSqlite(candidate, serverDir));
+    }
+
+    public static void PrependExecutableDirectory(ProcessStartInfo start, string executablePath)
+    {
+        string directory = Path.GetDirectoryName(executablePath)
+            ?? throw new ArgumentException("Executable path has no directory", nameof(executablePath));
+        string currentPath = start.Environment["PATH"] ?? string.Empty;
+        start.Environment["PATH"] = string.IsNullOrEmpty(currentPath)
+            ? directory
+            : directory + Path.PathSeparator + currentPath;
+    }
+
+    private static bool CanOpenBetterSqlite(string nodeExecutable, string serverDir)
+    {
+        try
+        {
+            var start = new ProcessStartInfo
+            {
+                FileName = nodeExecutable,
+                WorkingDirectory = serverDir,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            start.ArgumentList.Add("-e");
+            start.ArgumentList.Add("const Database=require('better-sqlite3');new Database(':memory:').close()");
+            using var process = Process.Start(start);
+            if (process == null) { return false; }
+            if (!process.WaitForExit(5000))
+            {
+                StopProcessTree(process);
+                return false;
+            }
+            return process.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public static LauncherOptions ParseOptions(IEnumerable<string> args)
     {
         var values = args.ToHashSet(StringComparer.OrdinalIgnoreCase);

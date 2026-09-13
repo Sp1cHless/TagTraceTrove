@@ -4,11 +4,11 @@ import type { CollectionKind, CollectionRecordDto } from '@t3/shared';
 import type { GalleryApi } from './api/gallery.js';
 import { showNsfw } from './stores/preferences.js';
 import EntryCard from './components/EntryCard.vue';
+import CoverComposition from './components/CoverComposition.vue';
 import IconButton from './components/IconButton.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
 import { useI18n } from './i18n.js';
 import { useNavigationMemory } from './navigation-memory.js';
-import { entryCardMediaRef } from './entry-media-stack.js';
 
 const props = defineProps<{
   api: GalleryApi;
@@ -310,6 +310,7 @@ const isChildCollection = computed(() => (
 const draggedEntryId = ref<number | null>(null);
 const childDropTargetId = ref<number | null>(null);
 const parentDropActive = ref(false);
+const removingEntryIds = ref(new Set<number>());
 
 function beginEntryDrag(entryId: number): void {
   if (editing.value) draggedEntryId.value = entryId;
@@ -363,7 +364,8 @@ async function moveEntryToCollection(targetId: number): Promise<void> {
 
 async function removeEntryFromActiveCollection(entryId: number): Promise<void> {
   const active = activeCollection.value;
-  if (active === null) return;
+  if (active === null || removingEntryIds.value.has(entryId)) return;
+  removingEntryIds.value.add(entryId);
   if (draggedEntryId.value === entryId) clearDrag();
   error.value = null;
   try {
@@ -371,6 +373,8 @@ async function removeEntryFromActiveCollection(entryId: number): Promise<void> {
     await load();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.createEntry');
+  } finally {
+    removingEntryIds.value.delete(entryId);
   }
 }
 
@@ -443,7 +447,6 @@ async function openRecord(record: CollectionRecordDto): Promise<void> {
   activeCollectionId.value = record.id;
   memberPage.value = 1;
   rememberCollectionNavigationState();
-  editing.value = false;
   clearDrag();
   syncEditFields();
   await loadMembers(false);
@@ -556,7 +559,7 @@ onMounted(load);
 
       <div class="recent-tab-panel" data-testid="collections-panel" role="tabpanel">
         <p v-if="error" class="error-message" role="alert">{{ error }}</p>
-    <p v-else-if="loading" class="muted">{{ t('import.preparing') }}</p>
+    <p v-if="loading" class="muted">{{ t('import.preparing') }}</p>
 
     <template v-else-if="activeCollection">
         <div class="collection-detail" data-testid="collection-detail">
@@ -645,17 +648,12 @@ onMounted(load);
             @drop.prevent="moveEntryToCollection(child.id)"
           >
             <button type="button" class="entry-card-main" :data-collection-id="child.id" @click="openRecord(child)">
-              <span class="directory-cover">
-                <template v-for="coverRef in coversOf(child).slice(0, 3)" :key="coverRef">
-                  <img :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="child.title" loading="lazy" decoding="async">
-                </template>
-                <span
-                  v-for="slot in Math.max(0, 3 - coversOf(child).length)"
-                  :key="'slot-' + slot"
-                  class="mini-placeholder"
-                  aria-hidden="true"
-                />
-              </span>
+              <CoverComposition
+                variant="collection"
+                :cover-refs="coversOf(child)"
+                :alt="child.title"
+                :asset-url="api.assetUrl"
+              />
               <span class="entry-meta">
                 <strong>{{ child.title }}<span v-if="child.nsfw" class="collection-nsfw-mark"> 🔞</span></strong>
                 <small class="entry-usage-note">
@@ -715,6 +713,8 @@ onMounted(load);
                 class="view-later-remove"
                 :data-remove-collection-entry-id="entry.id"
                 :aria-label="t('collections.removeMember')"
+                :aria-busy="removingEntryIds.has(entry.id)"
+                :disabled="removingEntryIds.has(entry.id)"
                 @click.stop="removeEntryFromActiveCollection(entry.id)"
               >×</button>
             </template>
@@ -739,9 +739,13 @@ onMounted(load);
             :data-author-id="producer.id"
             @click="emit('open-author', producer.id)"
           >
-            <span v-if="producer.covers.length" class="author-list-cover">
-              <img v-for="coverRef in producer.covers" :key="coverRef" :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="producer.name" loading="lazy" decoding="async">
-            </span>
+            <CoverComposition
+              v-if="producer.covers.length"
+              variant="author-card"
+              :cover-refs="producer.covers"
+              :alt="producer.name"
+              :asset-url="api.assetUrl"
+            />
             <span v-else class="author-list-badge">{{ producer.name.slice(0, 1).toUpperCase() }}</span>
             <strong>{{ producer.name }}</strong>
           </button>
@@ -776,17 +780,12 @@ onMounted(load);
           @dragend="draggedId = null; dropTargetId = null"
         >
           <button type="button" class="entry-card-main" :data-collection-id="record.id" @click="openRecord(record)">
-            <span class="directory-cover">
-              <template v-for="coverRef in coversOf(record).slice(0, 3)" :key="coverRef">
-                <img :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="record.title" loading="lazy" decoding="async">
-              </template>
-              <span
-                v-for="slot in Math.max(0, 3 - coversOf(record).length)"
-                :key="'slot-' + slot"
-                class="mini-placeholder"
-                aria-hidden="true"
-              />
-            </span>
+            <CoverComposition
+              variant="collection"
+              :cover-refs="coversOf(record)"
+              :alt="record.title"
+              :asset-url="api.assetUrl"
+            />
             <span class="entry-meta">
               <strong>{{ record.title }}<span v-if="record.nsfw" class="collection-nsfw-mark"> 🔞</span></strong>
               <small class="entry-usage-note">
@@ -832,16 +831,17 @@ onMounted(load);
 
 <style scoped>
 .recent-grid-compact { grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.8rem; }
-/* Folder covers mirror the author Directory card: three vertical strips in a
-   fixed-height frame, not a 2x2 square grid. */
-.directory-cover { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.2rem; width: 100%; height: 8rem; padding: 0.45rem; background: color-mix(in srgb, var(--tag-background) 65%, var(--surface)); }
-.directory-cover img { width: 100%; height: 100%; min-width: 0; object-fit: cover; border-radius: 0.35rem; }
-.mini-placeholder { display: grid; place-items: center; width: 100%; height: 100%; min-width: 0; border-radius: 0.35rem; color: var(--tag-text); background: var(--surface); }
 .collection-nsfw-mark { font-size: 0.8rem; }
 .recent-page { display: grid; gap: 1rem; }
 .recent-toolbar { display: flex; align-items: center; gap: 1rem; }
 .recent-toolbar h2 { margin: 0; flex: 1; }
 .recent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.8rem; }
+/* The card shell remains local; shared CoverComposition owns the bounded
+   Author mosaic because sibling scoped styles cannot cross components. */
+.author-list-card { display: grid; gap: 0.45rem; padding: 0.6rem; border: 1px solid var(--border-subtle); border-radius: 0.8rem; color: var(--text-primary); background: var(--surface-muted); font: inherit; text-align: left; cursor: pointer; align-content: start; }
+.author-list-card:hover, .author-list-card:focus-visible { border-color: var(--accent); outline: none; }
+.author-list-badge { display: grid; place-items: center; width: 100%; aspect-ratio: 3 / 4; border-radius: 0.5rem; color: var(--tag-text); background: var(--tag-background); font-size: 2rem; font-weight: 850; }
+.author-list-card > strong { overflow: hidden; font-size: 0.82rem; text-overflow: ellipsis; white-space: nowrap; }
 .entry-card { position: relative; }
 .collection-entry-selected { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent); }
 .collection-organize-hint { margin: 0; padding: 0.6rem 0.75rem; border-radius: var(--radius-control); color: var(--text-muted); background: var(--accent-soft); font-size: 0.78rem; line-height: 1.45; }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
+import { multiAuthorProducerName } from '@t3/shared';
 import type { GalleryApi, GalleryAuthorSummary, GalleryEntrySummary } from './api/gallery.js';
 import {
   type AuthorDetailResponse,
@@ -35,6 +36,7 @@ import { entryCardMediaRef, entryStackLayerStyle, entryStackLayers } from './ent
 import { accent, accentPresets, accentSwatchColors, rowsPerPage, rowsPerPageOptions, showNsfw } from './stores/preferences.js';
 import { useArmableAction } from './armable.js';
 import FacetFilterBar, { type GalleryFacetFilters } from './components/FacetFilterBar.vue';
+import SuggestionInput from './components/SuggestionInput.vue';
 import AppIcon from './components/AppIcon.vue';
 import IconButton from './components/IconButton.vue';
 import LazyCardImage from './components/LazyCardImage.vue';
@@ -202,16 +204,46 @@ const sortedEntries = computed(() => {
 const activeEntry = ref<EntryDetailResponse | null>(null);
 const activeType = ref<string | null>(null);
 const editingEntry = ref(false);
+const entryTitleEditorOpen = ref(false);
+const entryTitleDraft = ref('');
+const entryTitleSaving = ref(false);
+const entryTitleInput = ref<HTMLInputElement | null>(null);
 const creationView = ref<CreationView | null>(null);
 const sectionName = ref('');
 const facetName = ref('');
-const tagName = ref('');
 const draggedTagId = ref<number | null>(null);
 const selectedTagId = ref<number | null>(null);
 const selectedTagFacetId = ref<number | null>(null);
 const sectionEditorOpen = ref(false);
 const facetEditorSectionId = ref<number | null>(null);
 const tagEditorFacetId = ref<number | null>(null);
+// Relation autocomplete: eligibility, ordering and already-bound exclusions
+// are server responsibilities; the editor submits canonical names (select) or
+// the typed text (create) and never auto-submits on blur.
+const entryTagExcludeIds = computed(() => (
+  (activeEntry.value?.sections ?? [])
+    .flatMap((section) => section.facets)
+    .flatMap((facet) => facet.tags.map((tag) => tag.id))
+));
+
+function suggestEntryTags(query: string, excludeIds: number[], signal: AbortSignal) {
+  return props.api.suggestTags({
+    vocabulary: 'entry',
+    q: query,
+    excludeIds,
+    entryType: activeEntry.value?.type ?? undefined,
+    facetId: tagEditorFacetId.value ?? undefined,
+  }, signal);
+}
+
+const linkedAuthorIds = computed(() => (
+  (activeEntry.value?.producers ?? []).map((producer) => producer.id)
+));
+
+function suggestAuthors(query: string, excludeIds: number[], signal: AbortSignal) {
+  return props.api.suggestProducers({ q: query, excludeIds }, signal);
+}
+
 const editingTagId = ref<number | null>(null);
 const editingTagName = ref('');
 const contentEditorOpen = ref(false);
@@ -294,6 +326,15 @@ async function restorePreviousScroll(): Promise<void> {
 const entryCollectionOptions = ref<CollectionMenuOption[]>([]);
 const entryCollectionIds = ref<number[]>([]);
 const entryCollectionMenuOpen = ref(false);
+const entryCollectionRoot = ref<HTMLElement | null>(null);
+function onDocumentPointerDownForEntryCollection(event: PointerEvent): void {
+  if (!entryCollectionMenuOpen.value) return;
+  const root = entryCollectionRoot.value;
+  if (root !== null && event.target instanceof Node && root.contains(event.target)) return;
+  entryCollectionMenuOpen.value = false;
+}
+onMounted(() => document.addEventListener('pointerdown', onDocumentPointerDownForEntryCollection));
+onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerDownForEntryCollection));
 const searchView = ref(false);
 const searchQuery = ref('');
 const searchScope = ref<SearchScope>('entries');
@@ -322,7 +363,10 @@ async function toggleGalleryPartition(gallery: { type: string; nsfw: boolean }):
 const authorEditorOpen = ref(false);
 const newAuthorName = ref('');
 const authorLinkEditorOpen = ref(false);
-const authorSearchQuery = ref('');
+// Best-effort duplicate warning while typing a new Author name; the actual
+// create-and-link action stays independent and authoritative.
+const authorDuplicateNames = ref<string[]>([]);
+let authorDuplicateTimer: ReturnType<typeof setTimeout> | null = null;
 const authorTarget = ref<AuthorLocation | null>(null);
 const authorReturnScrollPositions = ref<number[]>([]);
 const authorRestoreInitialScroll = ref(false);
@@ -416,16 +460,6 @@ const entryBackTarget = computed(() => {
   if ('searchQuery' in entryOrigin.value) return t('search.title');
   return entryOrigin.value.directoryName ?? entryOrigin.value.authorName;
 });
-const availableAuthors = computed(() => {
-  const linkedIds = new Set(activeEntry.value?.producers.map((author) => author.id) ?? []);
-  return authors.value.filter((author) => !linkedIds.has(author.id));
-});
-const filteredAvailableAuthors = computed(() => {
-  const query = authorSearchQuery.value.trim().toLocaleLowerCase();
-  return availableAuthors.value.filter((author) => (
-    query === '' || author.name.toLocaleLowerCase().includes(query)
-  ));
-});
 const { locale, setLocale, t } = useI18n();
 
 function selectLocale(event: Event): void {
@@ -477,7 +511,7 @@ watch(mobileNavigationOpen, (open) => {
 type ReturnTarget = 'recent' | 'viewLater' | 'collections' | 'batch' | 'random';
 
 const returnView = ref<ReturnTarget | null>(null);
-const pendingBatchReview = ref<{ entryType: string; entryIds: number[] } | null>(null);
+const pendingBatchReview = ref<typeof batchReview.value>(null);
 
 function leaveAllViews(keepEntry = false, preserveScrollHistory = false): void {
   if (!preserveScrollHistory) {
@@ -677,7 +711,8 @@ async function toggleEntryCollectionMenu(): Promise<void> {
 
 async function addEntryToCollection(collectionId: number): Promise<void> {
   if (!activeEntry.value) return;
-  entryCollectionMenuOpen.value = false;
+  // Keep the menu open so several collections can be joined in a row; a tap
+  // anywhere outside the menu closes it.
   error.value = null;
   try {
     await props.api.addCollectionEntry(collectionId, activeEntry.value.id);
@@ -685,6 +720,26 @@ async function addEntryToCollection(collectionId: number): Promise<void> {
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.createEntry');
   }
+}
+
+async function removeEntryFromCollection(collectionId: number): Promise<void> {
+  if (!activeEntry.value) return;
+  // Keep the menu open so the ✓ clears in place and several collections can be left in a row.
+  error.value = null;
+  try {
+    await props.api.removeCollectionEntry(collectionId, activeEntry.value.id);
+    entryCollectionIds.value = entryCollectionIds.value.filter((id) => id !== collectionId);
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.createEntry');
+  }
+}
+
+function toggleEntryCollection(collection: CollectionMenuOption): void {
+  if (entryCollectionIds.value.includes(collection.id)) {
+    void removeEntryFromCollection(collection.id);
+    return;
+  }
+  void addEntryToCollection(collection.id);
 }
 
 function applyUsage(usage: { viewCount: number; likeCount: number; lastViewedAt: string | null }): void {
@@ -713,17 +768,52 @@ function isBasicSection(section: { name: string }): boolean {
 }
 
 async function deleteActiveEntry(): Promise<void> {
-  if (!activeEntry.value) return;
+  const deletedEntry = activeEntry.value;
+  if (!deletedEntry) return;
   if (!arm('delete-entry')) return;
   disarm('delete-entry');
   error.value = null;
   try {
-    await props.api.deleteEntry(activeEntry.value.id);
-    await refreshGalleries();
-    if (activeType.value) {
-      await selectGallery(activeType.value);
-    } else {
-      await closeEntry();
+    await props.api.deleteEntry(deletedEntry.id);
+
+    // Preserve the same parent context as the detail Back action. Re-selecting
+    // `activeType` here is wrong for Author/Search origins because those detail
+    // flows keep a backing Gallery loaded while the Entry is open.
+    entries.value = entries.value.filter((entry) => entry.id !== deletedEntry.id);
+    if (entryOrigin.value && 'tagResults' in entryOrigin.value) {
+      const origin = entryOrigin.value.tagResults;
+      const remaining = origin.entries.filter((entry) => entry.id !== deletedEntry.id);
+      entryOrigin.value = {
+        tagResults: {
+          ...origin,
+          entries: remaining,
+          total: Math.max(0, origin.total - (remaining.length === origin.entries.length ? 0 : 1)),
+        },
+      };
+    }
+    if (pendingBatchReview.value) {
+      pendingBatchReview.value = {
+        ...pendingBatchReview.value,
+        entryIds: pendingBatchReview.value.entryIds.filter((id) => id !== deletedEntry.id),
+      };
+    }
+
+    const returnsToGallery = entryOrigin.value === null
+      && returnView.value === null
+      && activeType.value !== null;
+    const refreshes: Array<Promise<unknown>> = [refreshGalleries(), refreshAuthors()];
+    // Gallery is the only parent whose card list remains mounted behind the
+    // detail. Reload it in place; all secondary pages remount and reload in
+    // closeEntry/restoreReturnView.
+    if (returnsToGallery) refreshes.push(loadGalleryEntries());
+    const refreshResults = await Promise.allSettled(refreshes);
+
+    await closeEntry();
+    const refreshFailure = refreshResults.find((result) => result.status === 'rejected');
+    if (refreshFailure?.status === 'rejected') {
+      error.value = refreshFailure.reason instanceof Error
+        ? refreshFailure.reason.message
+        : t('error.loadEntries');
     }
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.deleteEntry');
@@ -739,6 +829,36 @@ const templateNotice = ref<string | null>(null);
 let templateNoticeTimer: number | null = null;
 const tagLayoutBusy = ref(false);
 const tagLayoutNotice = ref<string | null>(null);
+const multiAuthorBusy = ref(false);
+const multiAuthorNotice = ref<string | null>(null);
+let multiAuthorNoticeTimer: number | null = null;
+
+/**
+ * How many Authors the conversion would absorb: every credited Author of the
+ * open work except the multi-author Author itself. A work needs at least two
+ * credited Authors for the action to be meaningful, so single-Author works and
+ * already converted ones hide the button.
+ */
+const convertibleAuthorCount = computed(() => {
+  const producers = activeEntry.value?.producers ?? [];
+  if (producers.length < 2) return 0;
+  return producers.filter((producer) => producer.name !== multiAuthorProducerName).length;
+});
+
+function clearMultiAuthorNotice(): void {
+  if (multiAuthorNoticeTimer !== null) window.clearTimeout(multiAuthorNoticeTimer);
+  multiAuthorNoticeTimer = null;
+  multiAuthorNotice.value = null;
+}
+
+function showMultiAuthorNotice(message: string): void {
+  clearMultiAuthorNotice();
+  multiAuthorNotice.value = message;
+  multiAuthorNoticeTimer = window.setTimeout(() => {
+    multiAuthorNotice.value = null;
+    multiAuthorNoticeTimer = null;
+  }, 4_000);
+}
 
 function clearTemplateNotice(): void {
   if (templateNoticeTimer !== null) window.clearTimeout(templateNoticeTimer);
@@ -759,8 +879,12 @@ watch(activeEntry, () => {
   mediaIndex.value = 0;
   clearTemplateNotice();
   tagLayoutNotice.value = null;
+  clearMultiAuthorNotice();
 }, { flush: 'sync' });
-onUnmounted(clearTemplateNotice);
+onUnmounted(() => {
+  clearTemplateNotice();
+  clearMultiAuthorNotice();
+});
 
 async function saveLayoutTemplate(): Promise<void> {
   if (!activeEntry.value) return;
@@ -823,6 +947,10 @@ async function refreshGalleries(): Promise<void> {
 
 async function refreshAuthors(): Promise<void> {
   authors.value = await props.api.listAuthors();
+}
+
+async function refreshWorksAndAuthors(): Promise<void> {
+  await Promise.all([refreshAuthors(), refreshGalleries()]);
 }
 
 async function selectGallery(
@@ -1134,6 +1262,70 @@ function startEditing(): void {
   resetLayoutEditors();
 }
 
+async function beginEntryTitleEdit(): Promise<void> {
+  if (!editingEntry.value || !activeEntry.value || entryTitleSaving.value) return;
+  entryTitleDraft.value = activeEntry.value.title;
+  entryTitleEditorOpen.value = true;
+  await nextTick();
+  entryTitleInput.value?.focus();
+  entryTitleInput.value?.select();
+}
+
+function cancelEntryTitleEdit(): void {
+  entryTitleEditorOpen.value = false;
+  entryTitleDraft.value = '';
+}
+
+function replaceEntryTitle(
+  items: GalleryEntrySummary[],
+  entryId: number,
+  title: string,
+): GalleryEntrySummary[] {
+  return items.map((item) => item.id === entryId ? { ...item, title } : item);
+}
+
+async function saveEntryTitle(): Promise<void> {
+  if (!entryTitleEditorOpen.value || !activeEntry.value || entryTitleSaving.value) return;
+  const entryId = activeEntry.value.id;
+  const title = entryTitleDraft.value.trim();
+  if (!title) {
+    error.value = t('entry.titleRequired');
+    return;
+  }
+  if (title === activeEntry.value.title) {
+    cancelEntryTitleEdit();
+    return;
+  }
+
+  entryTitleSaving.value = true;
+  error.value = null;
+  try {
+    const updated = await props.api.updateEntry(entryId, { title });
+    if (activeEntry.value?.id !== entryId) return;
+    activeEntry.value = { ...activeEntry.value, title: updated.title };
+    entries.value = replaceEntryTitle(entries.value, entryId, updated.title);
+    if (tagResults.value?.kind === 'entry') {
+      tagResults.value = {
+        ...tagResults.value,
+        entries: replaceEntryTitle(tagResults.value.entries, entryId, updated.title),
+      };
+    }
+    if (entryOrigin.value && 'tagResults' in entryOrigin.value) {
+      entryOrigin.value = {
+        tagResults: {
+          ...entryOrigin.value.tagResults,
+          entries: replaceEntryTitle(entryOrigin.value.tagResults.entries, entryId, updated.title),
+        },
+      };
+    }
+    cancelEntryTitleEdit();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.updateEntry');
+  } finally {
+    entryTitleSaving.value = false;
+  }
+}
+
 async function closeEntry(): Promise<void> {
   if (entryOrigin.value) {
     if ('tagResults' in entryOrigin.value) {
@@ -1354,6 +1546,7 @@ function finishEditing(): void {
 }
 
 function resetLayoutEditors(): void {
+  cancelEntryTitleEdit();
   sectionEditorOpen.value = false;
   facetEditorSectionId.value = null;
   tagEditorFacetId.value = null;
@@ -1366,7 +1559,6 @@ function resetLayoutEditors(): void {
   selectedTagFacetId.value = null;
   sectionName.value = '';
   facetName.value = '';
-  tagName.value = '';
   editingTagName.value = '';
   contentType.value = '';
   contentBody.value = '';
@@ -1375,8 +1567,34 @@ function resetLayoutEditors(): void {
   authorEditorOpen.value = false;
   authorLinkEditorOpen.value = false;
   newAuthorName.value = '';
-  authorSearchQuery.value = '';
+  authorDuplicateNames.value = [];
+  if (authorDuplicateTimer !== null) {
+    clearTimeout(authorDuplicateTimer);
+    authorDuplicateTimer = null;
+  }
 }
+
+watch(newAuthorName, (value) => {
+  if (authorDuplicateTimer !== null) {
+    clearTimeout(authorDuplicateTimer);
+    authorDuplicateTimer = null;
+  }
+  if (!authorEditorOpen.value || value.trim() === '') {
+    authorDuplicateNames.value = [];
+    return;
+  }
+  const query = value.trim();
+  authorDuplicateTimer = setTimeout(async () => {
+    authorDuplicateTimer = null;
+    try {
+      const hits = await props.api.suggestProducers({ q: query, excludeIds: [] });
+      authorDuplicateNames.value = hits.map((hit) => hit.name);
+    } catch {
+      // The warning is best-effort; creation itself stays authoritative.
+      authorDuplicateNames.value = [];
+    }
+  }, 180);
+});
 
 async function createAndLinkAuthor(): Promise<void> {
   if (!activeEntry.value || !newAuthorName.value.trim()) return;
@@ -1387,22 +1605,19 @@ async function createAndLinkAuthor(): Promise<void> {
     await props.api.linkEntryAuthor(entryId, author.id);
     authorEditorOpen.value = false;
     newAuthorName.value = '';
+    authorDuplicateNames.value = [];
     await Promise.all([refreshAuthors(), openEntry(entryId)]);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.createAuthor');
   }
 }
 
-async function linkExistingAuthor(authorId?: number): Promise<void> {
-  const matchedAuthor = authorId === undefined
-    ? filteredAvailableAuthors.value[0]
-    : availableAuthors.value.find((author) => author.id === authorId);
-  if (!activeEntry.value || !matchedAuthor) return;
+async function linkExistingAuthor(authorId: number): Promise<void> {
+  if (!activeEntry.value) return;
   const entryId = activeEntry.value.id;
   error.value = null;
   try {
-    await props.api.linkEntryAuthor(entryId, matchedAuthor.id);
-    authorSearchQuery.value = '';
+    await props.api.linkEntryAuthor(entryId, authorId);
     authorLinkEditorOpen.value = false;
     await openEntry(entryId);
   } catch (cause) {
@@ -1419,6 +1634,25 @@ async function unlinkAuthor(authorId: number): Promise<void> {
     await openEntry(entryId);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.unlinkAuthor');
+  }
+}
+
+async function convertEntryAuthors(): Promise<void> {
+  const entry = activeEntry.value;
+  if (!entry) return;
+  error.value = null;
+  multiAuthorBusy.value = true;
+  try {
+    const result = await props.api.convertEntryAuthors(entry.id);
+    await Promise.all([refreshAuthors(), openEntry(entry.id)]);
+    showMultiAuthorNotice(t('entry.multiAuthorDone', {
+      count: result.convertedAuthors.length,
+      name: result.multiAuthorName,
+    }));
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.convertMultiAuthor');
+  } finally {
+    multiAuthorBusy.value = false;
   }
 }
 
@@ -1580,15 +1814,14 @@ async function moveRatingSlot(slotId: number, direction: -1 | 1): Promise<void> 
   }
 }
 
-async function addEntryTag(facetId: number | null): Promise<void> {
-  if (!activeEntry.value || facetId === null) return;
+async function submitEntryTag(facetId: number, name: string): Promise<void> {
+  if (!activeEntry.value || name.trim() === '') return;
   error.value = null;
   try {
     await props.api.assignEntryTag(activeEntry.value.id, {
       facetId,
-      name: tagName.value,
+      name,
     });
-    tagName.value = '';
     tagEditorFacetId.value = null;
     const entryId = activeEntry.value.id;
     await openEntry(entryId);
@@ -1845,7 +2078,7 @@ async function finishImport(entryType: string, entryIds: number[] = [], viewLate
   if (entryIds.length === 1) {
     await viewEntry(entryIds[0]!);
   } else if (entryIds.length > 1) {
-    batchReview.value = { entryType, entryIds };
+    batchReview.value = { entryType, entryIds, warnings: [], runId: ++batchReviewRunCounter };
   } else {
     await selectGallery(entryType);
   }
@@ -1855,14 +2088,29 @@ async function finishImport(entryType: string, entryIds: number[] = [], viewLate
 // shown as a throwaway gallery group. Everything is already persisted — this
 // view is purely for a quick check. Leaving it (explicit button or switching
 // to any other view) discards the group.
-const batchReview = ref<{ entryType: string; entryIds: number[] } | null>(null);
+const batchReview = ref<{
+  entryType: string;
+  entryIds: number[];
+  warnings: string[];
+  /** Distinct per batch run: the review's page key must not inherit the page a
+   *  longer earlier batch of the same Gallery left in the navigation memory. */
+  runId: number;
+} | null>(null);
+let batchReviewRunCounter = 0;
 
-async function finishBatchImport(entryType: string, entryIds: number[] = [], viewLater = false): Promise<void> {
+async function finishBatchImport(
+  entryType: string,
+  entryIds: number[] = [],
+  viewLater = false,
+  warnings: string[] = [],
+): Promise<void> {
   // The batch "view later" checkbox applies to every committed item.
   if (viewLater) await addEntriesToViewLater(props.api, entryIds);
   if (entryIds.length > 0) {
     creationView.value = null;
-    batchReview.value = { entryType, entryIds };
+    // The review is the only place a commit note survives: the Add Entry page
+    // that produced it unmounts as soon as this view takes over.
+    batchReview.value = { entryType, entryIds, warnings, runId: ++batchReviewRunCounter };
     void refreshGalleries();
     void refreshAuthors();
   }
@@ -1871,11 +2119,13 @@ async function finishBatchImport(entryType: string, entryIds: number[] = [], vie
 async function openBatchReviewEntries(): Promise<GalleryEntrySummary[]> {
   const review = batchReview.value;
   if (!review || review.entryIds.length === 0) return [];
+  // Load by the committed ids alone: they are exact, while filtering by the
+  // Gallery type as well would hide the whole group whenever that spelling
+  // drifts (a typed `comic` that resolved to `Comic`, or a later rename).
   const loaded: GalleryEntrySummary[] = [];
   let page = 1;
   while (true) {
     const result = await props.api.queryEntryPage({
-      entryType: review.entryType,
       conditions: [],
       authorIds: [],
       ratingConditions: [],
@@ -1910,17 +2160,41 @@ function openEntryFromBatchReview(entryId: number): void {
 
 const batchReviewEntries = ref<GalleryEntrySummary[]>([]);
 const batchReviewLoading = ref(false);
+// Filing the run into a Collection outlives the one-time review, which is what a
+// bulk import too large to check in one sitting needs.
+const batchCollectionBusy = ref(false);
+const batchCollectionTitle = ref<string | null>(null);
+const batchCollectionEntryCount = ref(0);
+
+async function saveBatchReviewAsCollection(): Promise<void> {
+  const review = batchReview.value;
+  if (review === null || review.entryIds.length === 0) return;
+  batchCollectionBusy.value = true;
+  error.value = null;
+  try {
+    const collection = await props.api.createTemporaryCollection(review.entryIds);
+    batchCollectionTitle.value = collection.title;
+    batchCollectionEntryCount.value = collection.entryCount;
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.batchCollection');
+  } finally {
+    batchCollectionBusy.value = false;
+  }
+}
 
 watch(batchReview, async (review) => {
   if (!review) {
     batchReviewEntries.value = [];
     return;
   }
+  batchCollectionTitle.value = null;
+  batchCollectionEntryCount.value = 0;
   batchReviewLoading.value = true;
   try {
     batchReviewEntries.value = await openBatchReviewEntries();
-  } catch {
+  } catch (cause) {
     batchReviewEntries.value = [];
+    error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
   } finally {
     batchReviewLoading.value = false;
   }
@@ -2367,13 +2641,45 @@ onUnmounted(() => {
               >
                 {{ t('import.batchReviewComplete') }}
               </button>
+              <button
+                v-if="batchReview.entryIds.length > 0"
+                class="secondary-button"
+                type="button"
+                data-testid="batch-review-save-collection"
+                :disabled="batchCollectionBusy || batchCollectionTitle !== null"
+                @click="saveBatchReviewAsCollection"
+              >
+                {{ batchCollectionBusy
+                  ? t('import.batchCollectionSaving')
+                  : batchCollectionTitle === null
+                    ? t('import.batchCollectionSave')
+                    : t('import.batchCollectionSaved', { name: batchCollectionTitle }) }}
+              </button>
             </div>
           </div>
           <p class="batch-review-notice" data-testid="batch-review-notice" role="status">
             {{ t('import.batchReviewNotice') }}
           </p>
+          <p
+            v-if="batchCollectionTitle !== null"
+            class="batch-review-notice"
+            data-testid="batch-review-collection-notice"
+            role="status"
+          >
+            {{ t('import.batchCollectionNotice', {
+              name: batchCollectionTitle,
+              count: batchCollectionEntryCount,
+            }) }}
+          </p>
+          <ul
+            v-if="batchReview.warnings.length > 0"
+            class="import-warnings"
+            data-testid="batch-review-warnings"
+          >
+            <li v-for="warning in batchReview.warnings" :key="warning">{{ warning }}</li>
+          </ul>
           <p v-if="batchReviewLoading" class="muted">{{ t('import.preparing') }}</p>
-          <PagedCardGrid v-else :items="batchReviewEntries" :page-key="`batch:${batchReview.entryType}`" v-slot="{ items }">
+          <PagedCardGrid v-else :items="batchReviewEntries" :page-key="`batch:${batchReview.entryType}:${batchReview.runId}`" v-slot="{ items }">
             <article
               v-for="entry in items"
               :key="entry.id"
@@ -2426,6 +2732,7 @@ onUnmounted(() => {
           @open-tag="openAuthorTag"
           @back="restoreAuthorTagResults"
           @authors-changed="refreshAuthors"
+          @works-changed="refreshWorksAndAuthors"
         />
         <article
           v-else-if="activeEntry"
@@ -2508,7 +2815,7 @@ onUnmounted(() => {
                 </span>
                 <span class="icon-tooltip" aria-hidden="true">{{ t('a11y.likeEntry') }}</span>
               </button>
-              <div class="add-to-collection" data-testid="entry-add-to-collection">
+              <div ref="entryCollectionRoot" class="add-to-collection" data-testid="entry-add-to-collection">
                 <IconButton
                   icon="folder-plus"
                   :label="t('a11y.addToCollection')"
@@ -2531,10 +2838,14 @@ onUnmounted(() => {
                     v-for="collection in entryCollectionOptions"
                     :key="collection.id"
                     type="button"
-                    role="menuitem"
+                    role="menuitemcheckbox"
                     class="add-to-collection-option"
-                    :disabled="entryCollectionIds.includes(collection.id)"
-                    @click="addEntryToCollection(collection.id)"
+                    :class="{ 'is-member': entryCollectionIds.includes(collection.id) }"
+                    :aria-checked="entryCollectionIds.includes(collection.id)"
+                    :title="entryCollectionIds.includes(collection.id)
+                      ? t('collections.leaveHint')
+                      : t('collections.joinHint')"
+                    @click="toggleEntryCollection(collection)"
                   >
                     {{ entryCollectionIds.includes(collection.id) ? '✓ ' : '' }}{{ collection.title }}
                   </button>
@@ -2553,12 +2864,35 @@ onUnmounted(() => {
           <p v-if="templateNotice" class="template-notice" data-testid="template-notice" role="status">
             {{ templateNotice }}
           </p>
+          <p v-if="multiAuthorNotice" class="template-notice" data-testid="multi-author-notice" role="status">
+            {{ multiAuthorNotice }}
+          </p>
           <p v-if="tagLayoutNotice" class="template-notice" data-testid="tag-layout-notice" role="status">
             {{ tagLayoutNotice }}
           </p>
           <p class="eyebrow">{{ activeEntry.type }}</p>
           <div class="detail-heading">
-            <h2>{{ activeEntry.title }}</h2>
+            <input
+              v-if="entryTitleEditorOpen"
+              ref="entryTitleInput"
+              v-model="entryTitleDraft"
+              data-testid="entry-title-input"
+              class="entry-title-input"
+              type="text"
+              required
+              :disabled="entryTitleSaving"
+              :aria-label="t('entry.title')"
+              @keydown.enter.prevent="saveEntryTitle"
+              @keydown.escape.prevent="cancelEntryTitleEdit"
+              @blur="saveEntryTitle"
+            >
+            <h2
+              v-else
+              data-testid="entry-title"
+              :class="{ 'editable-entry-title': editingEntry }"
+              :title="editingEntry ? t('entry.renameHint') : undefined"
+              @dblclick="beginEntryTitleEdit"
+            >{{ activeEntry.title }}</h2>
             <span
               class="detail-usage-stats"
               data-testid="entry-usage-stats"
@@ -2655,8 +2989,15 @@ onUnmounted(() => {
                   @blur="newAuthorName.trim() && createAndLinkAuthor()"
                 >
               </form>
+              <p
+                v-if="editingEntry && authorEditorOpen && authorDuplicateNames.length > 0"
+                data-testid="create-author-duplicate-warning"
+                class="author-duplicate-warning"
+              >
+                {{ t('author.duplicateWarning', { names: authorDuplicateNames.join(', ') }) }}
+              </p>
               <button
-                v-if="editingEntry && availableAuthors.length > 0 && !authorLinkEditorOpen"
+                v-if="editingEntry && !authorLinkEditorOpen"
                 data-testid="link-entry-author"
                 type="button"
                 class="add-button add-tag-button"
@@ -2664,35 +3005,32 @@ onUnmounted(() => {
               >
                 {{ t('author.linkExisting') }}
               </button>
+              <button
+                v-if="editingEntry && convertibleAuthorCount > 0"
+                data-testid="convert-multi-author"
+                type="button"
+                class="add-button add-tag-button"
+                :disabled="multiAuthorBusy"
+                :title="t('entry.multiAuthorHint', { name: multiAuthorProducerName })"
+                @click="convertEntryAuthors"
+              >
+                {{ t('entry.multiAuthor', { count: convertibleAuthorCount }) }}
+              </button>
             </div>
             <div
-              v-if="editingEntry && availableAuthors.length > 0 && authorLinkEditorOpen"
+              v-if="editingEntry && authorLinkEditorOpen"
               data-testid="link-existing-author-form"
               class="compact-editor author-link-editor"
             >
-              <input
-                v-model="authorSearchQuery"
+              <SuggestionInput
+                mode="id-only"
                 name="existingAuthorName"
-                :size="inlineInputSize(authorSearchQuery)"
-                autocomplete="off"
+                :provider="suggestAuthors"
+                :exclude-ids="linkedAuthorIds"
+                :aria-label="t('author.chooseExisting')"
                 :placeholder="t('author.chooseExisting')"
-                @keydown.enter.prevent="linkExistingAuthor()"
-                @blur="authorSearchQuery.trim() && linkExistingAuthor()"
-              >
-              <div data-testid="author-suggestions" class="author-suggestions">
-                <button
-                  v-for="author in filteredAvailableAuthors"
-                  :key="author.id"
-                  type="button"
-                  @mousedown.prevent
-                  @click="linkExistingAuthor(author.id)"
-                >
-                  {{ author.name }}
-                </button>
-                <span v-if="filteredAvailableAuthors.length === 0" class="muted">
-                  {{ t('author.noMatches') }}
-                </span>
-              </div>
+                @select="(suggestion) => linkExistingAuthor(suggestion.id)"
+              />
             </div>
           </section>
 
@@ -2840,17 +3178,19 @@ onUnmounted(() => {
                         v-else-if="editingEntry"
                         class="compact-editor tag-editor"
                         :data-create-tag-facet-id="facet.id"
-                        @submit.prevent="addEntryTag(facet.id)"
+                        @submit.prevent
                       >
-                        <input
-                          v-model="tagName"
+                        <SuggestionInput
+                          mode="creatable-text"
                           name="tagName"
-                          :size="inlineInputSize(tagName)"
-                          required
-                          autocomplete="off"
+                          commit-on-blur
+                          :provider="suggestEntryTags"
+                          :exclude-ids="entryTagExcludeIds"
+                          :aria-label="t('tag.namePlaceholder')"
                           :placeholder="t('tag.namePlaceholder')"
-                          @blur="tagName.trim() && addEntryTag(facet.id)"
-                        >
+                          @select="(suggestion) => submitEntryTag(facet.id, suggestion.name)"
+                          @submit-text="(text) => submitEntryTag(facet.id, text)"
+                        />
                       </form>
                     </div>
                     <button
@@ -2914,17 +3254,19 @@ onUnmounted(() => {
                     v-else
                     class="compact-editor tag-editor"
                     :data-create-tag-facet-id="emptyUnnamedFacetId(section)"
-                    @submit.prevent="addEntryTag(emptyUnnamedFacetId(section))"
+                    @submit.prevent
                   >
-                    <input
-                      v-model="tagName"
+                    <SuggestionInput
+                      mode="creatable-text"
                       name="tagName"
-                      :size="inlineInputSize(tagName)"
-                      required
-                      autocomplete="off"
+                      commit-on-blur
+                      :provider="suggestEntryTags"
+                      :exclude-ids="entryTagExcludeIds"
+                      :aria-label="t('tag.namePlaceholder')"
                       :placeholder="t('tag.namePlaceholder')"
-                      @blur="tagName.trim() && addEntryTag(emptyUnnamedFacetId(section))"
-                    >
+                      @select="(suggestion) => submitEntryTag(emptyUnnamedFacetId(section)!, suggestion.name)"
+                      @submit-text="(text) => submitEntryTag(emptyUnnamedFacetId(section)!, text)"
+                    />
                   </form>
                 </div>
               </div>
@@ -3523,10 +3865,7 @@ h2 { margin-bottom: 0; }
 .compact-editor input { min-width: 0; max-width: 100%; flex: 0 1 auto; padding: 0.46rem 0.58rem; border: 1px solid var(--border-subtle); border-radius: 0.52rem; color: var(--text-primary); background: var(--surface); font: inherit; font-size: 0.8rem; }
 .compact-editor input:focus { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 18%, transparent); }
 .author-link-editor { position: relative; display: inline-grid; margin-top: 0.45rem; }
-.author-suggestions { position: absolute; z-index: 5; top: calc(100% + 0.25rem); left: 0; display: grid; min-width: 100%; max-height: 12rem; overflow-y: auto; padding: 0.25rem; border: 1px solid var(--border-subtle); border-radius: 0.55rem; background: var(--surface); box-shadow: 0 0.65rem 1.5rem rgb(15 23 42 / 12%); }
-.author-suggestions button { padding: 0.45rem 0.55rem; border: 0; border-radius: 0.4rem; color: var(--text-primary); background: transparent; font: inherit; text-align: left; cursor: pointer; }
-.author-suggestions button:hover, .author-suggestions button:focus-visible { color: var(--accent); background: var(--surface-muted); outline: none; }
-.author-suggestions .muted { padding: 0.45rem 0.55rem; white-space: nowrap; }
+.author-duplicate-warning { margin: 0.3rem 0 0; color: var(--text-muted); font-size: 0.8rem; }
 .compact-submit { padding: 0.46rem 0.62rem; }
 .tag-editor { min-width: 0; }
 .content-item { padding: 0.75rem; border-radius: 0.65rem; background: var(--surface-muted); }
@@ -3558,6 +3897,16 @@ h2 { margin-bottom: 0; }
 .content-link { display: inline-block; margin: 0.35rem 0 0; color: var(--accent); overflow-wrap: anywhere; }
 .detail-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
 .detail-heading h2 { font-size: var(--font-size-page-title); font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; }
+.editable-entry-title { cursor: text; }
+.entry-title-input {
+  min-width: 0;
+  flex: 1;
+  font: inherit;
+  font-size: var(--font-size-page-title);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
 .detail-usage-stats { display: inline-flex; align-items: baseline; gap: 0.8rem; flex-shrink: 0; color: var(--text-muted); font-size: 0.82rem; white-space: nowrap; }
 .detail-usage-count { font-weight: 700; color: var(--text-primary); }
 .entry-usage-note { color: var(--text-muted); }

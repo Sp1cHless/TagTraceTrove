@@ -47,6 +47,12 @@ export interface ListAuthorFilterOptionsInput {
   includeNsfw?: boolean;
 }
 
+const HAS_LINKED_ENTRY_SQL = `EXISTS (
+  SELECT 1
+  FROM entry_producers AS visible_relation
+  WHERE visible_relation.producer_id = producer.id
+)`;
+
 /**
  * The Entry type with the most works for one Producer — the Author's home
  * Gallery badge. Tie-breaks by type name for stability.
@@ -225,6 +231,7 @@ export function searchProducersByName(
   const rows = database.prepare(`
     SELECT producer.id, producer.name
     FROM producers AS producer
+    WHERE ${HAS_LINKED_ENTRY_SQL}
     ORDER BY producer.name COLLATE NOCASE, producer.id
   `).all() as Array<{ id: number; name: string }>;
   const coverStatement = database.prepare(`
@@ -267,7 +274,7 @@ export function findProducers(
 ): ProducerSummary[] {
   const ownTagIds = [...new Set(input.ownTagIds ?? [])];
   const relatedEntryTagIds = [...new Set(input.relatedEntryTagIds ?? [])];
-  const clauses: string[] = [];
+  const clauses: string[] = [HAS_LINKED_ENTRY_SQL];
   const values: number[] = [];
 
   if (ownTagIds.length > 0) {
@@ -339,11 +346,27 @@ export function queryProducerPage(
   database: T3Database,
   input: ProducerPageQueryRequest,
 ): ProducerPageResponse {
-  const baseClauses: string[] = [];
+  const baseClauses: string[] = [HAS_LINKED_ENTRY_SQL];
   const baseParameters: Array<string | number> = [];
   const ownTagIds = [...new Set(input.ownTagIds)];
   const relatedEntryTagIds = [...new Set(input.relatedEntryTagIds)];
   const producerIds = [...new Set(input.producerIds ?? [])];
+  // Alias spellings grouped by the author name they resolve to. Loaded once per
+  // query; rows whose canonical is still empty (dictionary placeholders) carry
+  // no author and are skipped.
+  const alternatesByProducer = new Map<string, string[]>();
+  if (input.searchQuery) {
+    for (const row of database.prepare(`
+      SELECT normalized_canonical, alias_name
+      FROM taxonomy_aliases
+      WHERE vocabulary = 'producer' AND normalized_canonical <> ''
+      ORDER BY alias_name COLLATE NOCASE
+    `).all() as Array<{ normalized_canonical: string; alias_name: string }>) {
+      const names = alternatesByProducer.get(row.normalized_canonical) ?? [];
+      names.push(row.alias_name);
+      alternatesByProducer.set(row.normalized_canonical, names);
+    }
+  }
   const searchIds = input.searchQuery
     ? rankSearchResults(
       database.prepare(`
@@ -353,6 +376,10 @@ export function queryProducerPage(
       `).all() as Array<{ id: number; name: string }>,
       input.searchQuery,
       (producer) => producer.name,
+      // An author's recorded alias spellings are part of who that author is, so
+      // searching `ishikei` must find 石恵 even though no producer carries that
+      // name.
+      (producer) => alternatesByProducer.get(normalizeTag(producer.name)) ?? [],
     ).map((producer) => producer.id)
     : null;
   if (searchIds !== null && searchIds.length === 0) {

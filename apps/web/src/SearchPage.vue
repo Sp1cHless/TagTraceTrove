@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import type { SearchScope, TagSearchHit } from '@t3/shared';
+import { normalizeTag, type SearchScope, type TagSearchHit } from '@t3/shared';
 import type {
   GalleryApi,
   GalleryAuthorSummary,
@@ -48,6 +48,33 @@ const visibleEntries = computed(() => entries.value.filter((entry) => (
   showNsfw.value || !hiddenTypes.value.has(entry.type)
 )));
 const visibleAuthors = computed(() => authors.value.filter((author) => showNsfw.value || !author.nsfw));
+
+// An author is found through the alias spellings recorded for them, so the card
+// shows those spellings: otherwise a search for `ishikei` would look like it
+// matched a card named 石恵 for no reason.
+const authorAlternates = ref<Map<string, string[]>>(new Map());
+
+function alternatesFor(name: string): string {
+  return (authorAlternates.value.get(normalizeTag(name)) ?? []).join(' / ');
+}
+
+async function loadAuthorAlternates(): Promise<void> {
+  try {
+    const aliases = await props.api.listTaxonomyAliases('producer');
+    const map = new Map<string, string[]>();
+    for (const alias of aliases) {
+      // Placeholder rows (imported name, canonical not filled yet) belong to no
+      // author and must not appear anywhere.
+      if (alias.normalizedCanonical === '') continue;
+      const names = map.get(alias.normalizedCanonical) ?? [];
+      if (!names.includes(alias.alias)) names.push(alias.alias);
+      map.set(alias.normalizedCanonical, names);
+    }
+    authorAlternates.value = map;
+  } catch {
+    authorAlternates.value = new Map();
+  }
+}
 const resultCount = computed(() => {
   if (scope.value === 'entries') return entryTotal.value;
   if (scope.value === 'tags') return tags.value.length;
@@ -149,6 +176,7 @@ watch(showNsfw, () => {
   if (query.value.trim()) void runSearch();
 });
 onMounted(() => {
+  void loadAuthorAlternates();
   if (query.value.trim()) void runSearch(false);
 });
 </script>
@@ -254,7 +282,15 @@ onMounted(() => {
           <span v-else class="search-author-covers">
             <img v-for="cover in author.covers.slice(0, 4)" :key="cover" :src="api.assetUrl(entryCardMediaRef(cover))" :alt="author.name" loading="lazy" decoding="async">
           </span>
-          <span class="search-meta"><strong>{{ author.name }}</strong><small v-if="author.galleryType">{{ author.galleryType }}</small></span>
+          <span class="search-meta">
+            <strong>{{ author.name }}</strong>
+            <small v-if="author.galleryType">{{ author.galleryType }}</small>
+            <small
+              v-if="alternatesFor(author.name)"
+              class="author-name-alternates"
+              :data-testid="`search-result-author-alternates-${author.id}`"
+            >{{ alternatesFor(author.name) }}</small>
+          </span>
         </button>
       </article>
     </PagedCardGrid>
@@ -290,6 +326,7 @@ onMounted(() => {
 .search-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.8rem; }
 .search-card { overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 0.8rem; background: var(--surface-muted); }
 .search-card:hover, .search-card:focus-within { border-color: var(--accent); transform: translateY(-1px); }
+.author-name-alternates { font-size: 0.66rem; font-weight: 400; color: var(--text-muted); opacity: 0.72; }
 .search-card-main { display: block; width: 100%; padding: 0; border: 0; color: var(--text-primary); background: transparent; font: inherit; text-align: left; cursor: pointer; }
 .search-entry-stack { position: relative; aspect-ratio: 4 / 3; overflow: hidden; isolation: isolate; perspective: 28rem; perspective-origin: 50% 50%; transform-style: preserve-3d; }
 .search-entry-image { position: absolute; display: block; box-sizing: border-box; border: 1px solid var(--border-subtle); box-shadow: 0 0.2rem 0.5rem rgb(15 23 42 / 18%); transform-style: preserve-3d; }

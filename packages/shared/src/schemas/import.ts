@@ -52,6 +52,17 @@ const importFieldMappingSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
+/**
+ * One Author rating recorded during a review. `name` is the Author name as it
+ * appears in an entry's `authors` field; `slotName` is the rating dimension,
+ * which mirrors the import Gallery's Entry rating slots by name.
+ */
+export const importAuthorRatingSchema = z.strictObject({
+  name: z.string().trim().min(1),
+  slotName: z.string().trim().min(1),
+  stars: z.number().min(0.5).max(5).multipleOf(0.5),
+});
+
 export const importCommitMappingSchema = z.strictObject({
   entryType: z.string().trim().min(1),
   canonicalTagFacetId: z.number().int().positive(),
@@ -63,6 +74,10 @@ export const importCommitMappingSchema = z.strictObject({
     .refine((fields) => new Set(fields).size === fields.length, {
       message: 'Ignored fields must be unique',
     })
+    .default([]),
+  authorRatings: z.array(importAuthorRatingSchema)
+    .refine((ratings) => new Set(ratings.map((rating) => `${rating.name}\u0000${rating.slotName}`)).size
+      === ratings.length, { message: 'An Author and rating dimension pair must be unique' })
     .default([]),
 }).refine(
   (mapping) => mapping.ignoredFields.every((field) => !(field in mapping.fieldMappings)),
@@ -91,10 +106,15 @@ export const importCommitResultSchema = z.strictObject({
     externalKey: z.string().optional(),
   })),
   entryCount: z.number().int().nonnegative(),
+  skippedExistingEntryCount: z.number().int().nonnegative(),
   createdProducerCount: z.number().int().nonnegative(),
   producerLinkCount: z.number().int().nonnegative(),
   tagAssignmentCount: z.number().int().nonnegative(),
   contentCount: z.number().int().nonnegative(),
+  authorRatingCount: z.number().int().nonnegative(),
+  // Non-fatal source quirks resolved while committing; empty when nothing was
+  // skipped (e.g. one tag name arriving for two Facets of the same Entry).
+  warnings: z.array(z.string()),
 });
 
 export type ImportTag = z.infer<typeof importTagSchema>;
@@ -102,6 +122,7 @@ export type ImportSource = z.infer<typeof importSourceSchema>;
 export type ImportEntry = z.infer<typeof importEntrySchema>;
 export type ImportBatch = z.infer<typeof importBatchSchema>;
 export type ImportFieldMapping = z.infer<typeof importFieldMappingSchema>;
+export type ImportAuthorRating = z.infer<typeof importAuthorRatingSchema>;
 export type ImportCommitMapping = z.infer<typeof importCommitMappingSchema>;
 export type ImportPreview = z.infer<typeof importPreviewSchema>;
 export type ImportCommitResult = z.infer<typeof importCommitResultSchema>;

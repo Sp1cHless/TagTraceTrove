@@ -1,0 +1,20 @@
+{
+  "site": "18comic_vip",
+  "exports": {
+    "fileCount": 1383,
+    "metadataCount": 230,
+    "aggregateSha256": "757c2d8f335c956510efc426f2c612685523fbf78e3213f18be7c00f407664fc"
+  },
+  "artifacts": {
+    "tag_review.csv": {
+      "exists": true,
+      "sha256": "22cadfc5da4dcd8ddb1274debc38a88b85a666c52b63b3e82642d1d65c2e6228",
+      "size": 6840
+    },
+    "taxonomy_dictionary.json": {
+      "exists": true,
+      "sha256": "605b453c291f21f333c60dc8c31c7d03a9e7170831eb6e679cc6df7a8844d1f4",
+      "size": 15969
+    }
+  }
+}

@@ -61,6 +61,7 @@ describe('producer repository', () => {
           occupation: null,
           artworkRef: null,
           content: null,
+          entryCount: 1,
         },
       ]);
 

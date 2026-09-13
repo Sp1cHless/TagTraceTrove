@@ -57,6 +57,277 @@ describe('Entry HTTP routes', () => {
     });
   });
 
+  it('merges two works for one Author and exposes their derived Sources', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const assetRoot = await mkdtemp(join(tmpdir(), 't3-merge-assets-'));
+    temporaryDirectories.push(assetRoot);
+    const app = createApiApp(database, { assetRoot });
+    const author = createProducer(database, { name: 'Same Author' });
+    const keep = createEntry(database, { title: 'Preferred title', type: 'comic' });
+    const absorb = createEntry(database, { title: 'Alternate title', type: 'comic' });
+    linkEntryProducer(database, keep.id, author.id);
+    linkEntryProducer(database, absorb.id, author.id);
+    const absorbedAssetDirectory = join(assetRoot, 'entries', String(absorb.id));
+    await mkdir(absorbedAssetDirectory, { recursive: true });
+    await writeFile(join(absorbedAssetDirectory, 'cover.png'), 'absorbed');
+    createEntryContent(database, {
+      entryId: absorb.id,
+      contentType: 'manual source',
+      content: 'Mirror: https://hitomi.la/reader/123.html',
+    });
+    createEntryContent(database, {
+      entryId: keep.id,
+      contentType: 'oversized source-like text',
+      content: `https://example.com/${'a'.repeat(4_100)}`,
+    });
+
+    const oversizedResponse = await app.request(`/api/entries/${keep.id}/sources`);
+    expect(oversizedResponse.status).toBe(200);
+    await expect(oversizedResponse.json()).resolves.toEqual([]);
+
+    const sourceResponse = await app.request(`/api/entries/${absorb.id}/sources`);
+    expect(sourceResponse.status).toBe(200);
+    await expect(sourceResponse.json()).resolves.toEqual([
+      expect.objectContaining({ sourceKey: 'known:hitomi', url: 'https://hitomi.la/reader/123.html' }),
+    ]);
+
+    const invalidMergeResponse = await app.request('/api/entries/merge', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        authorId: author.id,
+        keepEntryId: keep.id,
+        absorbEntryId: absorb.id,
+        copyTags: true,
+        sourceUrls: ['mailto:user@example.com'],
+      }),
+    });
+    expect(invalidMergeResponse.status).toBe(400);
+    expect((await app.request(`/api/entries/${absorb.id}`)).status).toBe(200);
+
+    for (const invalidCase of [
+      { keepEntryId: keep.id, absorbEntryId: keep.id, sourceUrls: [], status: 400 },
+      { keepEntryId: keep.id, absorbEntryId: 999_999, sourceUrls: [], status: 404 },
+      {
+        keepEntryId: keep.id,
+        absorbEntryId: absorb.id,
+        sourceUrls: ['https://example.test/not-owned'],
+        status: 409,
+      },
+    ]) {
+      const invalidResponse = await app.request('/api/entries/merge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          authorId: author.id,
+          keepEntryId: invalidCase.keepEntryId,
+          absorbEntryId: invalidCase.absorbEntryId,
+          copyTags: true,
+          sourceUrls: invalidCase.sourceUrls,
+        }),
+      });
+      expect(invalidResponse.status).toBe(invalidCase.status);
+      expect((await app.request(`/api/entries/${absorb.id}`)).status).toBe(200);
+    }
+
+    const mergeResponse = await app.request('/api/entries/merge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        authorId: author.id,
+        keepEntryId: keep.id,
+        absorbEntryId: absorb.id,
+        copyTags: true,
+        sourceUrls: ['https://hitomi.la/reader/123.html'],
+      }),
+    });
+    expect(mergeResponse.status).toBe(200);
+    await expect(mergeResponse.json()).resolves.toMatchObject({
+      keptEntryId: keep.id,
+      absorbedEntryId: absorb.id,
+      copiedSourceCount: 1,
+      mediaCleanupFailed: false,
+    });
+    expect((await app.request(`/api/entries/${absorb.id}`)).status).toBe(404);
+    await expect(readFile(join(absorbedAssetDirectory, 'cover.png'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+
+  });
+
+  it('converts single-work Authors of one Entry into a shared multi-author Author', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const app = createApiApp(database);
+    const anthology = createEntry(database, { title: 'Anthology', type: 'comic' });
+    const contributor = createProducer(database, { name: 'Contributor' });
+    const established = createProducer(database, { name: 'Established Author' });
+    const establishedWork = createEntry(database, { title: 'Established work', type: 'comic' });
+    linkEntryProducer(database, anthology.id, contributor.id);
+    linkEntryProducer(database, anthology.id, established.id);
+    linkEntryProducer(database, establishedWork.id, established.id);
+
+    const conversionResponse = await app.request(`/api/entries/${anthology.id}/multi-author`, {
+      method: 'POST',
+    });
+    expect(conversionResponse.status).toBe(200);
+    const conversion = await conversionResponse.json() as {
+      multiAuthorId: number;
+      multiAuthorName: string;
+      convertedAuthors: Array<{ name: string }>;
+    };
+    expect(conversion.multiAuthorName).toBe('multiple author');
+    // Every Author is absorbed, whether or not they have other works.
+    expect(conversion.convertedAuthors).toEqual([
+      { id: contributor.id, name: 'Contributor' },
+      { id: established.id, name: 'Established Author' },
+    ]);
+
+    const detailResponse = await app.request(`/api/entries/${anthology.id}`);
+    await expect(detailResponse.json()).resolves.toMatchObject({
+      producers: [{ id: conversion.multiAuthorId, name: 'multiple author', entryCount: 1 }],
+    });
+    // The single-work Author is stored but no longer discoverable; the Author
+    // with another work stays visible without this anthology.
+    const authorPageResponse = await app.request('/api/producers/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ page: 1, pageSize: 50 }),
+    });
+    const authorPage = await authorPageResponse.json() as { items: Array<{ name: string }> };
+    const authorNames = authorPage.items.map((item) => item.name);
+    expect(authorNames).toContain('Established Author');
+    expect(authorNames).not.toContain('Contributor');
+
+    const repeatResponse = await app.request(`/api/entries/${anthology.id}/multi-author`, { method: 'POST' });
+    expect(repeatResponse.status).toBe(200);
+    await expect(repeatResponse.json()).resolves.toMatchObject({ convertedAuthors: [] });
+    const soloAuthor = createProducer(database, { name: 'Solo Author' });
+    const soloWork = createEntry(database, { title: 'Solo work', type: 'comic' });
+    linkEntryProducer(database, soloWork.id, soloAuthor.id);
+    const soloResponse = await app.request(`/api/entries/${soloWork.id}/multi-author`, { method: 'POST' });
+    expect(soloResponse.status).toBe(409);
+    expect((await app.request('/api/entries/999999/multi-author', { method: 'POST' })).status).toBe(404);
+  });
+
+  it('plans and applies title shortening from the reviewed list', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const app = createApiApp(database);
+    const target = createEntry(database, { title: 'Hyakudaku no Tou | 百濁之塔 -壹-', type: 'comic' });
+    const korean = createEntry(database, { title: 'Yuuka (Gym Uniform) | 유우카', type: 'comic' });
+    const ambiguous = createEntry(database, { title: 'Nagareboshi | Shooting Star', type: 'comic' });
+    const untouched = createEntry(database, { title: 'Artist || akchu', type: 'comic' });
+
+    const planResponse = await app.request('/api/entries/titles/plan', { method: 'POST' });
+    expect(planResponse.status).toBe(200);
+    const plan = await planResponse.json() as {
+      candidates: Array<{
+        entryId: number;
+        title: string;
+        keepFront: string;
+        keepBack: string;
+        suggested: 'front' | 'back' | null;
+      }>;
+    };
+    expect(plan.candidates).toEqual([
+      {
+        entryId: target.id,
+        title: 'Hyakudaku no Tou | 百濁之塔 -壹-',
+        keepFront: 'Hyakudaku no Tou',
+        keepBack: '百濁之塔 -壹-',
+        suggested: 'back',
+      },
+      {
+        entryId: korean.id,
+        title: 'Yuuka (Gym Uniform) | 유우카',
+        keepFront: 'Yuuka (Gym Uniform)',
+        keepBack: '유우카',
+        suggested: 'front',
+      },
+      {
+        entryId: ambiguous.id,
+        title: 'Nagareboshi | Shooting Star',
+        keepFront: 'Nagareboshi',
+        keepBack: 'Shooting Star',
+        suggested: null,
+      },
+    ]);
+    expect(plan.candidates.map((candidate) => candidate.entryId)).not.toContain(untouched.id);
+
+    // The review sends exactly the sides it chose; the undecided one is omitted.
+    const applyBody = JSON.stringify({
+      changes: [
+        { entryId: target.id, title: 'Hyakudaku no Tou | 百濁之塔 -壹-', shortenedTitle: '百濁之塔 -壹-' },
+        { entryId: korean.id, title: 'Yuuka (Gym Uniform) | 유우카', shortenedTitle: 'Yuuka (Gym Uniform)' },
+      ],
+    });
+    const applyResponse = await app.request('/api/entries/titles/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: applyBody,
+    });
+    expect(applyResponse.status).toBe(200);
+    // In-memory databases have no file to back up.
+    await expect(applyResponse.json()).resolves.toEqual({
+      shortenedCount: 2,
+      skippedCount: 0,
+      backupPath: null,
+    });
+    const targetResponse = await app.request(`/api/entries/${target.id}`);
+    await expect(targetResponse.json()).resolves.toMatchObject({ title: '百濁之塔 -壹-' });
+    const koreanResponse = await app.request(`/api/entries/${korean.id}`);
+    await expect(koreanResponse.json()).resolves.toMatchObject({ title: 'Yuuka (Gym Uniform)' });
+
+    const repeatResponse = await app.request('/api/entries/titles/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: applyBody,
+    });
+    await expect(repeatResponse.json()).resolves.toMatchObject({
+      shortenedCount: 0,
+      skippedCount: 2,
+    });
+    const ambiguousResponse = await app.request(`/api/entries/${ambiguous.id}`);
+    await expect(ambiguousResponse.json()).resolves.toMatchObject({
+      title: 'Nagareboshi | Shooting Star',
+    });
+  });
+
+  it('reports media cleanup failure without turning a committed Entry merge into an HTTP failure', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const container = await mkdtemp(join(tmpdir(), 't3-merge-cleanup-'));
+    temporaryDirectories.push(container);
+    const invalidAssetRoot = `${container}\0blocked`;
+    const app = createApiApp(database, { assetRoot: invalidAssetRoot });
+    const author = createProducer(database, { name: 'Cleanup Author' });
+    const keep = createEntry(database, { title: 'Keep', type: 'comic' });
+    const absorb = createEntry(database, { title: 'Absorb', type: 'comic' });
+    linkEntryProducer(database, keep.id, author.id);
+    linkEntryProducer(database, absorb.id, author.id);
+
+    const response = await app.request('/api/entries/merge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        authorId: author.id,
+        keepEntryId: keep.id,
+        absorbEntryId: absorb.id,
+        copyTags: true,
+        sourceUrls: [],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      absorbedEntryId: absorb.id,
+      mediaCleanupFailed: true,
+    });
+    expect((await app.request(`/api/entries/${absorb.id}`)).status).toBe(404);
+  });
+
   it('stores uploaded Entry media under the managed asset root', async () => {
     const database = createMigratedMemoryDatabase();
     databases.push(database);
@@ -186,24 +457,111 @@ describe('Entry HTTP routes', () => {
     const preview = await previewResponse.json() as { batch: unknown; entryCount: number };
     expect(preview.entryCount).toBe(1);
 
+    const commitBody = JSON.stringify({
+      batch: preview.batch,
+      mapping: {
+        entryType: 'comic',
+        canonicalTagFacetId: section.defaultFacetId,
+        sourceContentType: 'source url',
+        externalKeyContentType: 'external key',
+        fieldMappings: {},
+        ignoredFields: ['works', 'characters', 'authors'],
+      },
+    });
     const commitResponse = await app.request('/api/imports/commit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        batch: preview.batch,
-        mapping: {
-          entryType: 'comic',
-          canonicalTagFacetId: section.defaultFacetId,
-          sourceContentType: 'source url',
-          externalKeyContentType: 'external key',
-          fieldMappings: {},
-          ignoredFields: ['works', 'characters', 'authors'],
-        },
-      }),
+      body: commitBody,
     });
     expect(commitResponse.status).toBe(201);
-    await expect(commitResponse.json()).resolves.toMatchObject({ entryCount: 1 });
+    await expect(commitResponse.json()).resolves.toMatchObject({
+      entryCount: 1,
+      skippedExistingEntryCount: 0,
+    });
     expect(database.prepare('SELECT title FROM entries').pluck().get()).toBe('Imported work');
+
+    const repeatedResponse = await app.request('/api/imports/commit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: commitBody,
+    });
+    expect(repeatedResponse.status).toBe(201);
+    await expect(repeatedResponse.json()).resolves.toMatchObject({
+      entries: [],
+      entryCount: 0,
+      skippedExistingEntryCount: 1,
+    });
+    expect(database.prepare('SELECT COUNT(*) FROM entries').pluck().get()).toBe(1);
+  });
+
+  it('reports which export work broke a Hitomi folder preview instead of a bare invalid request', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const app = createApiApp(database);
+    const manifest = { source_site: 'hitomi.la', artist: 'Example Artist', items: [] as string[] };
+
+    async function preview(
+      works: Record<string, unknown>,
+      manifestItems = Object.keys(works),
+    ): Promise<Response> {
+      const body = new FormData();
+      body.set('rootPath', 'metadata.json');
+      body.append('paths', 'metadata.json');
+      body.append('files', new File(
+        [JSON.stringify({ ...manifest, items: manifestItems })],
+        'metadata.json',
+        { type: 'application/json' },
+      ));
+      for (const [sourceId, document] of Object.entries(works)) {
+        const path = `items/${sourceId}/metadata.json`;
+        body.append('paths', path);
+        body.append('files', new File([JSON.stringify(document)], path, {
+          type: 'application/json',
+        }));
+      }
+      return app.request('/api/imports/site-probe/preview', { method: 'POST', body });
+    }
+
+    const hitomiWork = (sourceId: string, title: string): Record<string, unknown> => ({
+      source_site: 'hitomi.la',
+      source_id: sourceId,
+      title,
+      detail_url: `https://hitomi.la/example-${sourceId}.html`,
+      分类信息: { 作品: [], 登场人物: [], 分类标签: [], 作者: ['Example Artist'] },
+      language: { code: null, name: null },
+    });
+
+    // Unknown language is tolerated, so the folder previews with the work.
+    const tolerantResponse = await preview({ 5: hitomiWork('5', 'Unknown language') });
+    expect(tolerantResponse.status).toBe(200);
+    await expect(tolerantResponse.json()).resolves.toMatchObject({
+      entryCount: 1,
+      warnings: [],
+    });
+
+    // A manifest id with no uploaded file is skipped and reported.
+    const skippedResponse = await preview(
+      { 5: hitomiWork('5', 'Present work') },
+      ['5', '6'],
+    );
+    expect(skippedResponse.status).toBe(200);
+    await expect(skippedResponse.json()).resolves.toMatchObject({
+      entryCount: 1,
+      warnings: ['Skipped work 6: items/6/metadata.json is missing'],
+    });
+
+    // A genuinely malformed work names itself and its field.
+    const invalidResponse = await preview({
+      5: hitomiWork('5', 'Present work'),
+      6: hitomiWork('6', '   '),
+    });
+    expect(invalidResponse.status).toBe(400);
+    await expect(invalidResponse.json()).resolves.toMatchObject({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: expect.stringContaining('Export work 6 does not match the hitomi.la export schema: title'),
+      },
+    });
   });
 
   it('derives Galleries from the type values of existing Entries', async () => {

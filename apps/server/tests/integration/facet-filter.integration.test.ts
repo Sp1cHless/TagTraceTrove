@@ -12,7 +12,12 @@ import {
   createProducer,
   linkEntryProducer,
 } from '../../src/repositories/producer-repository.js';
-import { createRatingSlot, setEntryRating } from '../../src/repositories/rating-repository.js';
+import {
+  createProducerRatingSlot,
+  createRatingSlot,
+  setEntryRating,
+  setProducerRating,
+} from '../../src/repositories/rating-repository.js';
 
 type TestDatabase = ReturnType<typeof createMigratedMemoryDatabase>;
 
@@ -436,6 +441,76 @@ describe('Facet filter HTTP routes', () => {
     // Options surface the shared slots for the filter UI.
     expect(listFacetFilterOptions(database, 'comic').ratingSlots)
       .toEqual([{ id: slot.id, name: 'Quality', sortOrder: 0 }]);
+  });
+
+  it('falls back to the Author rating only when the work has fewer than four Authors', () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const entrySlot = createRatingSlot(database, { kind: 'entry', entryType: 'comic', name: 'Quality' });
+    const setAuthorRating = (authorId: number, stars: number | null) => {
+      const slot = createProducerRatingSlot(database, { producerId: authorId, name: 'Quality' });
+      setProducerRating(database, { producerId: authorId, slotId: slot.id, stars });
+    };
+    const soloAuthor = createProducer(database, { name: 'Solo Author' });
+    const generousAuthor = createProducer(database, { name: 'Generous Author' });
+    const mildAuthor = createProducer(database, { name: 'Mild Author' });
+    const fourthAuthor = createProducer(database, { name: 'Fourth Author' });
+
+    const ownFive = createEntry(database, { title: 'Own Five', type: 'comic' }).id;
+    const authorFour = createEntry(database, { title: 'Author Four', type: 'comic' }).id;
+    const ownThree = createEntry(database, { title: 'Own Three', type: 'comic' }).id;
+    const nothing = createEntry(database, { title: 'Nothing Rated', type: 'comic' }).id;
+    const anthology = createEntry(database, { title: 'Big Anthology', type: 'comic' }).id;
+    for (const [entryId, authorId] of [
+      [ownFive, soloAuthor.id],
+      [authorFour, generousAuthor.id],
+      [ownThree, mildAuthor.id],
+      [nothing, soloAuthor.id],
+    ] as const) {
+      linkEntryProducer(database, entryId, authorId);
+    }
+    // Four Authors: an anthology never inherits an Author rating.
+    for (const author of [soloAuthor, generousAuthor, mildAuthor, fourthAuthor]) {
+      linkEntryProducer(database, anthology, author.id);
+    }
+    // Authors need works before they can carry a rating at all.
+    setAuthorRating(soloAuthor.id, 2);
+    setAuthorRating(generousAuthor.id, 4);
+    setAuthorRating(mildAuthor.id, 5);
+    setEntryRating(database, { entryId: ownFive, slotId: entrySlot.id, stars: 5 });
+    setEntryRating(database, { entryId: ownThree, slotId: entrySlot.id, stars: 3 });
+
+    const sorted = (applyAuthorRating: boolean) => findEntriesByFacetFilters(database, {
+      entryType: 'comic',
+      conditions: [],
+      authorIds: [],
+      ratingConditions: [],
+      ratingSort: { slotId: entrySlot.id, direction: 'desc', applyAuthorRating },
+    }).map((entry) => entry.title);
+
+    // Without the fallback only own ratings count.
+    expect(sorted(false)).toEqual(['Own Five', 'Own Three', 'Author Four', 'Big Anthology', 'Nothing Rated']);
+    // With it: own ratings win, missing ones use the Author, four-Author works stay unrated.
+    expect(sorted(true)).toEqual([
+      'Own Five',
+      'Author Four',
+      'Own Three',
+      'Nothing Rated',
+      'Big Anthology',
+    ]);
+
+    // The filter stays entry-only: an Author-rated work is still "unrated".
+    expect(findEntriesByFacetFilters(database, {
+      entryType: 'comic',
+      conditions: [],
+      authorIds: [],
+      ratingConditions: [{ slotId: entrySlot.id, operator: 'unrated', stars: null }],
+      ratingSort: null,
+    }).map((entry) => entry.title)).toEqual([
+      'Author Four',
+      'Big Anthology',
+      'Nothing Rated',
+    ]);
   });
 
   it('rejects rating conditions pointing at a foreign Gallery', async () => {

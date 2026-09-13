@@ -20,6 +20,22 @@ export function entryStackLayers(entry: EntryStackMedia): string[] {
 }
 
 export function entryStackLayerStyle(index: number, count: number): Record<string, string> {
+  if (count <= 1) {
+    return {
+      left: '0%',
+      top: '0%',
+      width: '100%',
+      height: '100%',
+      maxWidth: '100%',
+      objectFit: 'contain',
+      background: 'transparent',
+      transform: 'none',
+      transformOrigin: '50% 50%',
+      backfaceVisibility: 'hidden',
+      zIndex: '1',
+    };
+  }
+
   const visibleCount = Math.max(1, Math.min(count, MAX_VISIBLE_LAYERS));
   const layerIndex = Math.max(0, Math.min(index, visibleCount - 1));
   const totalSpread = visibleCount > 1 ? Math.min(34, (visibleCount - 1) * 17) : 0;

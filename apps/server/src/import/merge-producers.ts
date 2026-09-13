@@ -5,11 +5,16 @@ import type { T3Database } from '../database/connection.js';
  * One-shot maintenance tooling to merge duplicate / dictionary-equivalent
  * author (producer) rows, used by `merge-producers-cli.ts`.
  *
- * Two merge rules:
+ * Three merge rules:
  * 1. Identical names — producers whose normalized name (NFKC, trimmed,
  *    collapsed whitespace, lowercased — see `normalizeTag`) is the same are
  *    the same person and are merged into one row.
- * 2. Dictionary aliases — producer names that resolve through the 'producer'
+ * 2. Separator spellings — sites spell one person several ways, so `_`, `-`,
+ *    and `.` count as whitespace when grouping: `arai_kazuki` and
+ *    `Arai Kazuki` are one Author. This looser key is local to merge detection;
+ *    `normalizeTag` keeps its stricter meaning for tag dedupe, import field
+ *    keys, and dictionary lookups.
+ * 3. Dictionary aliases — producer names that resolve through the 'producer'
  *    taxonomy vocabulary to a different canonical name ('bob' -> '鲍勃') are
  *    merged under (and renamed to) that canonical name, whatever language the
  *    alias spelling is in.
@@ -39,6 +44,7 @@ export interface ProducerMergeExecution {
   deletedProducers: number;
   worksRelinked: number;
   tagsRelinked: number;
+  ratingsRelinked: number;
   directoriesMoved: number;
   directoriesMerged: number;
   membershipsMoved: number;
@@ -54,6 +60,16 @@ interface ProducerRow {
 
 function displayName(value: string): string {
   return value.normalize('NFKC').trim().replace(/\s+/gu, ' ');
+}
+
+/** Grouping key for merge detection: separators behave like whitespace. */
+function mergeKey(value: string): string {
+  return normalizeTag(value.replace(/[_.-]+/gu, ' '));
+}
+
+/** 0 for a display-friendly spelling, 1 when it still carries separators. */
+function separatorRank(value: string): number {
+  return /[_.-]/u.test(value) ? 1 : 0;
 }
 
 export function resolveProducerCanonical(
@@ -110,7 +126,7 @@ export function planProducerMerges(database: T3Database): ProducerMergePlan[] {
 
   for (const producer of producers) {
     const canonical = resolveProducerCanonical(aliases, producer.name);
-    const normalizedCanonical = normalizeTag(canonical);
+    const normalizedCanonical = mergeKey(canonical);
     const mapped = normalizeTag(canonical) !== normalizeTag(producer.name);
     const accumulator = groups.get(normalizedCanonical) ?? {
       mapped: false,
@@ -139,7 +155,12 @@ export function planProducerMerges(database: T3Database): ProducerMergePlan[] {
       ? undefined
       : accumulator.members.find((member) => member.name === canonicalName);
     const sorted = [...accumulator.members].sort((a, b) => (
-      (b.workCount - a.workCount) || (a.id - b.id)
+      (b.workCount - a.workCount)
+      // With equal work counts the separator-free spelling is the better
+      // display name, so a merge of `arai_kazuki` and `Arai Kazuki` keeps the
+      // latter instead of whichever row happens to be older.
+      || (separatorRank(a.name) - separatorRank(b.name))
+      || (a.id - b.id)
     ));
     const keeper = exact ?? sorted[0]!;
     const renamed = canonicalName !== null && keeper.name !== canonicalName;
@@ -174,12 +195,21 @@ export function executeProducerMerges(
   const executions: ProducerMergeExecution[] = [];
 
   database.transaction(() => {
+    // Values left behind by an earlier run that deleted their producer (before
+    // the absorption above existed) can never be shown or edited again; they
+    // only trip `foreign_key_check`. Dropping them is the repair.
+    database.prepare(`
+      DELETE FROM producer_rating_values
+      WHERE producer_id NOT IN (SELECT id FROM producers)
+    `).run();
+
     for (const plan of plans) {
       const { keeper, others, canonicalName, renamed } = plan;
       const execution: ProducerMergeExecution = {
         deletedProducers: 0,
         worksRelinked: 0,
         tagsRelinked: 0,
+        ratingsRelinked: 0,
         directoriesMoved: 0,
         directoriesMerged: 0,
         membershipsMoved: 0,
@@ -279,6 +309,23 @@ export function executeProducerMerges(
         ).get() as { changes: number };
         execution.tagsRelinked += tagsRelinked.changes;
         database.prepare('DELETE FROM producer_tag_assignments WHERE producer_id = ?').run(other.id);
+
+        // Author rating values move the same way. The keeper's own value wins a
+        // slot both rows rated, and an absorbed value fills only slots the
+        // keeper never rated; leaving them behind would both lose the rating
+        // and dangle a foreign key at the deleted producer.
+        const absorbRatings = database.prepare(`
+          INSERT OR IGNORE INTO producer_rating_values (slot_id, producer_id, stars, updated_at)
+          SELECT slot_id, ?, stars, updated_at
+          FROM producer_rating_values
+          WHERE producer_id = ?
+        `);
+        absorbRatings.run(keeper.id, other.id);
+        const ratingsRelinked = database.prepare(
+          'SELECT changes() AS changes',
+        ).get() as { changes: number };
+        execution.ratingsRelinked += ratingsRelinked.changes;
+        database.prepare('DELETE FROM producer_rating_values WHERE producer_id = ?').run(other.id);
 
         database.prepare('DELETE FROM producers WHERE id = ?').run(other.id);
         execution.deletedProducers += 1;

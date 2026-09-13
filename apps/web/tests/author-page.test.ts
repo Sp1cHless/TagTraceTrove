@@ -13,7 +13,8 @@ function createAuthorApi() {
     id: index + 1,
     title: `Work ${index + 1}`,
     type: 'manga',
-    coverRef: index < 4 ? `cover-${index + 1}.webp` : null,
+    coverRef: index < 5 ? `cover-${index + 1}.webp` : null,
+    previewRefs: index === 0 || index === 4 ? [`preview-${index + 1}.webp`] : [],
     viewCount: index === 4 ? 12 : 0,
     likeCount: 0,
     lastViewedAt: index === 4 ? '2026-09-03T12:00:00.000Z' : null,
@@ -75,6 +76,27 @@ function createAuthorApi() {
     directory = { ...directory, ...input };
     return directory;
   });
+  const listEntrySources = vi.fn(async (entryId: number) => [{
+    entryId,
+    contentId: entryId + 100,
+    sourceKey: entryId === 5 ? 'known:hitomi' : 'known:18comic',
+    sourceName: entryId === 5 ? 'Hitomi' : '18comic',
+    host: entryId === 5 ? 'hitomi.la' : '18comic.vip',
+    url: entryId === 5
+      ? 'https://hitomi.la/reader/5.html'
+      : `https://18comic.vip/album/${entryId}/`,
+  }]);
+  const mergeAuthorEntries = vi.fn(async (input: Parameters<GalleryApi['mergeAuthorEntries']>[0]) => {
+    looseEntries = looseEntries.filter((work) => work.id !== input.absorbEntryId);
+    return {
+      keptEntryId: input.keepEntryId,
+      absorbedEntryId: input.absorbEntryId,
+      copiedTagCount: input.copyTags ? 1 : 0,
+      copiedSourceCount: input.sourceUrls.length,
+      sources: [],
+      mediaCleanupFailed: false,
+    };
+  });
   const api = {
     assetUrl: (path: string) => path,
     getAuthor,
@@ -82,6 +104,8 @@ function createAuthorApi() {
     moveEntryToAuthorDirectory,
     removeEntryFromAuthorDirectory,
     updateAuthorDirectory,
+    listEntrySources,
+    mergeAuthorEntries,
     updateAuthor: vi.fn(async () => ({
       id: 3,
       name: 'Example Author',
@@ -131,6 +155,8 @@ function createAuthorApi() {
     moveEntryToAuthorDirectory,
     removeEntryFromAuthorDirectory,
     updateAuthorDirectory,
+    listEntrySources,
+    mergeAuthorEntries,
     createAuthorRatingSlot,
     setAuthorRating,
   };
@@ -148,6 +174,57 @@ async function openAuthor(api: GalleryApi) {
 
 describe('AuthorPage', () => {
   beforeEach(() => setLocale('en'));
+
+  it('lets a single work fill both Author list and detail cover mosaics', async () => {
+    const { api } = createAuthorApi();
+    const summary = {
+      id: 3,
+      name: 'Example Author',
+      covers: ['only-cover.webp'],
+      galleryType: 'manga',
+      viewCount: 0,
+      likeCount: 0,
+      lastViewedAt: null,
+      nsfw: false,
+    };
+    api.queryProducerPage = vi.fn(async (input) => ({
+      items: [summary],
+      total: 1,
+      page: input.page,
+      pageSize: input.pageSize,
+    }));
+    api.getAuthor = vi.fn(async () => ({
+      id: 3,
+      name: 'Example Author',
+      occupation: 'Artist',
+      artworkRef: null,
+      content: null,
+      tags: [],
+      looseEntries: [],
+      looseEntryCount: 0,
+      directories: [],
+      ratings: [],
+      galleryType: 'manga',
+      workTypes: ['manga'],
+      workCoverRefs: ['only-cover.webp'],
+      usage: { viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false },
+    }));
+
+    const wrapper = mount(AuthorPage, { props: { api, authors: [summary] } });
+    await flushPromises();
+
+    const listCover = wrapper.get('[data-author-id="3"] .author-list-cover');
+    expect(listCover.attributes('data-cover-count')).toBe('1');
+    expect((listCover.element as HTMLElement).style.gridTemplateColumns)
+      .toBe('repeat(1, minmax(0, 1fr))');
+
+    await wrapper.get('[data-author-id="3"]').trigger('click');
+    await flushPromises();
+    const detailCover = wrapper.get('.author-cover-grid');
+    expect(detailCover.attributes('data-cover-count')).toBe('1');
+    expect((detailCover.element as HTMLElement).style.gridTemplateColumns)
+      .toBe('repeat(1, minmax(0, 1fr))');
+  });
 
   it('shows uniform colored usage mode buttons with a clear pressed state', async () => {
     const { api } = createAuthorApi();
@@ -295,6 +372,47 @@ describe('AuthorPage', () => {
     expect(wrapper.get('[data-testid="author-mode-most-liked"]').classes()).toContain('recent-mode-active');
   });
 
+  it('leaves a collection straight from the Author detail menu when it is already joined', async () => {
+    const { api } = createAuthorApi();
+    const collection = {
+      id: 7,
+      kind: 'producer' as const,
+      title: 'Favourite authors',
+      description: '',
+      nsfw: false,
+      sortOrder: 0,
+      children: [],
+      entries: [],
+      producers: [],
+    };
+    let memberIds = [collection.id];
+    const addCollectionProducer = vi.fn(async () => undefined);
+    const removeCollectionProducer = vi.fn(async () => {
+      memberIds = memberIds.filter((id) => id !== collection.id);
+    });
+    api.listCollections = vi.fn(async () => [collection]);
+    api.listCollectionsForProducer = vi.fn(async () => memberIds);
+    api.addCollectionProducer = addCollectionProducer;
+    api.removeCollectionProducer = removeCollectionProducer;
+
+    const wrapper = await openAuthor(api);
+    await wrapper.get('[data-testid="author-add-to-collection"] button').trigger('click');
+    await flushPromises();
+
+    const option = wrapper.get('[data-testid="author-add-to-collection"] .add-to-collection-option');
+    expect(option.text()).toContain('✓ Favourite authors');
+    expect(option.attributes('aria-checked')).toBe('true');
+    expect(option.attributes('disabled')).toBeUndefined();
+
+    await option.trigger('click');
+    await flushPromises();
+
+    expect(removeCollectionProducer).toHaveBeenCalledWith(collection.id, 3);
+    expect(addCollectionProducer).not.toHaveBeenCalled();
+    expect(option.text()).not.toContain('✓');
+    expect(option.attributes('aria-checked')).toBe('false');
+  });
+
   it('keeps Author information, Tags, and Content in one board and paginates works by 26', async () => {
     const { api } = createAuthorApi();
     const wrapper = await openAuthor(api);
@@ -306,15 +424,76 @@ describe('AuthorPage', () => {
     expect(board.text()).toContain('Important author note');
     expect(board.find('[data-section-id]').exists()).toBe(false);
     expect(board.text()).not.toContain('Facet');
-    // 1 always-visible Directory card + 26 loose works on page one.
-    expect(wrapper.findAll('[data-author-card]').length).toBe(27);
-    expect(wrapper.findAll('[data-author-work-id]').length).toBe(26);
-
-    await wrapper.get('[data-testid="author-next-page"]').trigger('click');
-    expect(wrapper.findAll('[data-author-card]').length).toBe(5);
-    expect(wrapper.findAll('[data-author-work-id]').length).toBe(4);
+    // 1 always-visible Directory card + one screen-fitted page of loose works:
+    // 6 grid columns × the rows-per-page preference = 30, so every loose work
+    // fits and no page bar appears.
+    expect(wrapper.findAll('[data-author-card]').length).toBe(31);
+    expect(wrapper.findAll('[data-author-work-id]').length).toBe(30);
+    expect(wrapper.find('[data-testid="author-next-page"]').exists()).toBe(false);
     // The Directory stays visible on every page.
     expect(wrapper.findAll('[data-author-directory-id]').length).toBe(1);
+  });
+
+  it('requests the page size the Author works grid can actually show', async () => {
+    const { api } = createAuthorApi();
+    // 40 loose works: two screen-fitted pages of 30 + 10.
+    const works = Array.from({ length: 40 }, (_, index) => ({
+      id: 100 + index,
+      title: `Extra Work ${index + 1}`,
+      type: 'manga',
+      coverRef: null,
+      previewRef: null,
+      previewRefs: [],
+      uploadDate: null,
+      pageCount: null,
+      viewCount: 0,
+      likeCount: 0,
+      lastViewedAt: null,
+    }));
+    const requestedPageSizes: number[] = [];
+    api.queryEntryPage = vi.fn(async (input: Parameters<GalleryApi['queryEntryPage']>[0]) => {
+      if (input.looseForProducerId === undefined) {
+        return { items: [], total: 0, page: input.page, pageSize: input.pageSize };
+      }
+      requestedPageSizes.push(input.pageSize);
+      const offset = (input.page - 1) * input.pageSize;
+      return {
+        items: works.slice(offset, offset + input.pageSize),
+        total: works.length,
+        page: input.page,
+        pageSize: input.pageSize,
+      };
+    });
+    const wrapper = await openAuthor(api);
+
+    // 30 = 6 columns × 5 rows, not a fixed 26.
+    expect(requestedPageSizes).toContain(30);
+    expect(wrapper.findAll('[data-author-work-id]').length).toBe(30);
+
+    await wrapper.get('[data-testid="author-next-page"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('[data-author-work-id]').length).toBe(10);
+  });
+
+  it('renders loose Author works with the shared Gallery cover and Preview stack', async () => {
+    const { api } = createAuthorApi();
+    const wrapper = await openAuthor(api);
+
+    const work = wrapper.get('[data-author-work-id="5"]');
+    expect(work.attributes('data-testid')).toBe('shared-entry-card');
+    expect(work.findAll('.entry-stack-image')).toHaveLength(2);
+  });
+
+  it('renders works inside an Author Directory with the shared Gallery media stack', async () => {
+    const { api } = createAuthorApi();
+    const wrapper = await openAuthor(api);
+
+    await wrapper.get('[data-author-directory-id="5"] [data-directory-open]').trigger('click');
+    await flushPromises();
+
+    const work = wrapper.get('[data-directory-work-id="1"]');
+    expect(work.attributes('data-testid')).toBe('shared-entry-card');
+    expect(work.findAll('.entry-stack-image')).toHaveLength(2);
   });
 
   it('creates a Directory by dropping one work on another and moves work onto a Directory', async () => {
@@ -375,6 +554,99 @@ describe('AuthorPage', () => {
     await wrapper.get('[data-testid="start-author-editing"]').trigger('click');
     expect(wrapper.find('[data-move-work-to-directory-id]').exists()).toBe(false);
     expect(wrapper.get('[data-author-work-id="8"] .author-card-main').attributes('aria-pressed')).toBe('false');
+  });
+
+  it('keeps work merging separate from Directory editing and confirms the title, Tags, and Sources', async () => {
+    const { api, createAuthorDirectory, listEntrySources, mergeAuthorEntries } = createAuthorApi();
+    const wrapper = await openAuthor(api);
+    await wrapper.get('[data-testid="author-sort"]').setValue('date-asc');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="start-entry-merge"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="start-author-editing"]').trigger('click');
+    expect(wrapper.get('[data-testid="start-entry-merge"]').text()).toContain('Merge works');
+    await wrapper.get('[data-testid="start-entry-merge"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="entry-merge-hint"]').text()).toContain('Select two works');
+    await wrapper.get('[data-author-work-id="5"] .author-card-main').trigger('click');
+    await wrapper.get('[data-author-work-id="6"] .author-card-main').trigger('click');
+    await flushPromises();
+
+    expect(createAuthorDirectory).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-group-with-work-id]').exists()).toBe(false);
+    expect(listEntrySources).toHaveBeenCalledWith(5);
+    expect(listEntrySources).toHaveBeenCalledWith(6);
+    const dialog = wrapper.get('[data-testid="entry-merge-confirmation"]');
+    expect(dialog.text()).toContain('Work 5');
+    expect(dialog.text()).toContain('Work 6');
+    expect(dialog.text()).toContain('Merge Tags');
+    // 主体按来源网址区分，并标出哪一条会被删除
+    const keeperOptions = dialog.findAll('[data-merge-keeper-entry-id]');
+    expect(keeperOptions).toHaveLength(2);
+    expect(keeperOptions[0]!.text()).toContain('https://hitomi.la/reader/5.html');
+    expect(keeperOptions[1]!.text()).toContain('https://18comic.vip/album/6/');
+    expect(keeperOptions[0]!.text()).toContain('Will be kept');
+    expect(keeperOptions[1]!.text()).toContain('Will be deleted');
+
+    await dialog.get('[data-merge-keeper-radio-id="6"]').setValue(true);
+    await flushPromises();
+    expect(dialog.text()).toContain('https://hitomi.la/reader/5.html');
+    expect(keeperOptions[0]!.text()).toContain('Will be deleted');
+    expect(keeperOptions[1]!.text()).toContain('Will be kept');
+
+    // 标题默认跟随主体，可以改选另一条（将被删除的那条）的标题
+    const titleInput = dialog.get('[data-testid="entry-merge-title-input"]');
+    expect((titleInput.element as HTMLInputElement).value).toBe('Work 6');
+    await dialog.get('[data-merge-title-source-id="5"]').setValue(true);
+    await flushPromises();
+    expect((titleInput.element as HTMLInputElement).value).toBe('Work 5');
+    // 选完后仍可自行改写
+    await titleInput.setValue('Merged title win');
+    await flushPromises();
+
+    await dialog.get('[data-testid="confirm-entry-merge"]').trigger('click');
+    await flushPromises();
+
+    expect(mergeAuthorEntries).toHaveBeenCalledWith({
+      authorId: 3,
+      keepEntryId: 6,
+      absorbEntryId: 5,
+      copyTags: true,
+      title: 'Merged title win',
+      sourceUrls: ['https://hitomi.la/reader/5.html'],
+    });
+    expect(wrapper.find('[data-testid="entry-merge-confirmation"]').exists()).toBe(false);
+    expect(wrapper.find('[data-author-work-id="5"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="start-entry-merge"]').exists()).toBe(true);
+    expect(wrapper.emitted('works-changed')).toHaveLength(1);
+  });
+
+  it('ignores a stale Source response after merge mode is cancelled', async () => {
+    const { api, listEntrySources } = createAuthorApi();
+    const sourceResolvers: Array<(sources: []) => void> = [];
+    listEntrySources.mockImplementation(() => new Promise((resolve) => {
+      sourceResolvers.push(resolve);
+    }));
+    const wrapper = await openAuthor(api);
+
+    await wrapper.get('[data-testid="start-author-editing"]').trigger('click');
+    await wrapper.get('[data-testid="start-entry-merge"]').trigger('click');
+    await flushPromises();
+    const workButtons = wrapper.findAll('[data-author-work-id] .author-card-main');
+    await workButtons[0]!.trigger('click');
+    const secondSelection = workButtons[1]!.trigger('click');
+    await Promise.resolve();
+    expect(sourceResolvers).toHaveLength(2);
+
+    await wrapper.get('[data-testid="cancel-entry-merge"]').trigger('click');
+    sourceResolvers.forEach((resolve) => resolve([]));
+    await secondSelection;
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="entry-merge-confirmation"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="cancel-entry-merge"]').exists()).toBe(false);
+    expect(wrapper.find('.error-message').exists()).toBe(false);
   });
 
   it('moves a Directory member back to loose works through touch selection', async () => {
@@ -571,7 +843,7 @@ describe('AuthorPage', () => {
       usageConditions: [],
       usageSort: null,
       page: 1,
-      pageSize: 26,
+      pageSize: 30,
     }));
 
     // The filter UNFOLDS directories: no pinned row — loose works and
@@ -629,12 +901,12 @@ describe('AuthorPage', () => {
 
     expect(filterWorks).toHaveBeenCalled();
     expect(wrapper.findAll('[data-author-work-id]')[0]!.attributes('data-author-work-id')).toBe('5');
-    expect(wrapper.get('[data-author-work-id="5"] [data-testid="author-work-usage-note"]').text())
+    expect(wrapper.get('[data-author-work-id="5"] [data-testid="shared-card-note"]').text())
       .toContain('12 views');
 
     await wrapper.get('[data-testid="usage-sort-select"]').setValue('lastViewed');
     await flushPromises();
-    expect(wrapper.get('[data-author-work-id="5"] [data-testid="author-work-usage-note"]').text())
+    expect(wrapper.get('[data-author-work-id="5"] [data-testid="shared-card-note"]').text())
       .toContain('2026-09-03');
   });
 

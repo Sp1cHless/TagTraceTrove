@@ -51,6 +51,7 @@ describe('formal gallery templates (real SQL + files)', () => {
       externalKeyContentType: 'external key',
       fieldMappings: {},
       ignoredFields: [],
+      authorRatings: [],
     });
     const importedId = result.entries[0]!.entryId;
 

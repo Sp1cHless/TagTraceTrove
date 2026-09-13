@@ -5,6 +5,8 @@ import type { AddressInfo } from 'node:net';
 import { serve, type ServerType } from '@hono/node-server';
 import { openDatabase, type T3Database } from '../database/connection.js';
 import { applyAllMigrations } from '../database/migrations.js';
+import { markRunningRunsPaused } from '../source-maintenance/job-manager.js';
+import { defaultCatalogProviders } from '../source-maintenance/catalogs/index.js';
 import { createApiApp } from './app.js';
 
 export interface StartApiServerOptions {
@@ -41,6 +43,9 @@ export async function startApiServer(options: StartApiServerOptions): Promise<Ap
   const database = openDatabase(options.databasePath);
   try {
     applyAllMigrations(database);
+    // A run that was mid-flight when the process exited becomes 'paused';
+    // the user must explicitly Resume it (plan §17).
+    markRunningRunsPaused(database);
   } catch (error) {
     database.close();
     throw error;
@@ -49,6 +54,7 @@ export async function startApiServer(options: StartApiServerOptions): Promise<Ap
   const app = createApiApp(database, {
     assetRoot: join(dirname(options.databasePath), 'assets'),
     databasePath: options.databasePath,
+    catalogProviders: defaultCatalogProviders(),
     ...(options.staticRoot ? { staticRoot: options.staticRoot } : {}),
   });
   const server = serve({ fetch: app.fetch, hostname, port });

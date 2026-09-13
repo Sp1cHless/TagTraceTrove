@@ -24,6 +24,31 @@ Assert(lanStart.Environment["T3_HOST"] == "0.0.0.0", "LAN mode must bind all int
 Assert(lanStart.Environment["T3_ENABLE_LAN"] == "true", "LAN mode must explicitly grant LAN permission");
 Assert(lanStart.Environment["T3_OPEN_BROWSER"] == "0", "server must not open a second browser");
 
+string fakeRoot = Path.Combine("C:\\", "repo");
+string fakeLocalAppData = Path.Combine("C:\\", "Users", "test", "AppData", "Local");
+var nodeCandidates = LauncherPolicy.NodeCandidates(
+    fakeRoot,
+    fakeLocalAppData,
+    string.Join(Path.PathSeparator, Path.Combine("C:\\", "Program Files", "nodejs")));
+Assert(
+    nodeCandidates.Take(3).SequenceEqual([
+        Path.Combine(fakeRoot, "tools", "node", "node.exe"),
+        Path.Combine(fakeLocalAppData, "hermes", "node", "node.exe"),
+        Path.Combine("C:\\", "Program Files", "nodejs", "node.exe"),
+    ]),
+    "launcher must prefer project/Hermes Node before the system PATH runtime");
+
+var nodeStart = new ProcessStartInfo();
+nodeStart.Environment["PATH"] = Path.Combine("C:\\", "Program Files", "nodejs");
+LauncherPolicy.PrependExecutableDirectory(
+    nodeStart,
+    Path.Combine(fakeLocalAppData, "hermes", "node", "node.exe"));
+Assert(
+    nodeStart.Environment["PATH"]!.StartsWith(
+        Path.Combine(fakeLocalAppData, "hermes", "node") + Path.PathSeparator,
+        StringComparison.OrdinalIgnoreCase),
+    "selected compatible Node must take precedence for tsx.cmd and npm.cmd");
+
 var addresses = LauncherPolicy.MobileUrls(
     [IPAddress.Parse("192.168.1.20"), IPAddress.Parse("8.8.8.8"), IPAddress.Parse("10.0.0.4"), IPAddress.Parse("192.168.1.20")],
     8765);
