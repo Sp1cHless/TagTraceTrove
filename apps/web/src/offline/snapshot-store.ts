@@ -1,4 +1,4 @@
-import type { SyncSnapshot } from '@t3/shared';
+import { syncSnapshotSchema, type SyncSnapshot } from '@t3/shared';
 
 /**
  * Offline snapshot store (plan §24.2/§24.3), web-first with an injectable
@@ -102,7 +102,23 @@ export async function applySnapshot(
   snapshot: SyncSnapshot,
   options: ApplyOptions,
 ): Promise<ApplyResult> {
-  const identity = identityOf(snapshot);
+  const parsed = syncSnapshotSchema.safeParse(snapshot);
+  if (!parsed.success) {
+    return { ok: false, failure: { reason: 'parse', detail: parsed.error.issues[0]?.message ?? 'Invalid snapshot' } };
+  }
+  const validated = parsed.data;
+  const { counts } = validated.header;
+  const actualCounts = {
+    entries: validated.payload.entries.length,
+    producers: validated.payload.producers.length,
+    entryContents: validated.payload.entryContents.length,
+    entryTags: validated.payload.entryTags.length,
+    collections: validated.payload.collections.length,
+  };
+  if (Object.entries(actualCounts).some(([key, value]) => counts[key as keyof typeof counts] !== value)) {
+    return { ok: false, failure: { reason: 'parse', detail: 'Snapshot counts do not match its payload' } };
+  }
+  const identity = identityOf(validated);
 
   // Fail closed on identity mismatches: wrong library or a rotated epoch
   // means the client cannot reconcile; a resnapshot is required.
@@ -115,8 +131,8 @@ export async function applySnapshot(
   if (options.currentSnapshotSeq !== undefined && identity.snapshotSeq <= options.currentSnapshotSeq) {
     return { ok: false, failure: { reason: 'stale-snapshot', detail: String(identity.snapshotSeq) } };
   }
-  if (!(await verifyChecksum(snapshot, snapshot.header.checksum))) {
-    return { ok: false, failure: { reason: 'checksum-mismatch', detail: snapshot.header.checksum } };
+  if (!(await verifyChecksum(validated, validated.header.checksum))) {
+    return { ok: false, failure: { reason: 'checksum-mismatch', detail: validated.header.checksum } };
   }
 
   const previousActive = await options.store.readMeta(ACTIVE_GENERATION_KEY);
@@ -125,21 +141,37 @@ export async function applySnapshot(
   const generationId = Math.max(0, ...existingIds) + 1;
 
   try {
-    await options.store.writeGeneration(generationId, JSON.stringify(snapshot));
+    await options.store.writeGeneration(generationId, JSON.stringify(validated));
   } catch (cause) {
     return { ok: false, failure: { reason: 'quota', detail: cause instanceof Error ? cause.message : String(cause) } };
   }
 
   // Atomic switch: the pointer move is the last write; anything failing
   // before it leaves the previous generation active and untouched.
-  await options.store.writeMeta(ACTIVE_GENERATION_KEY, String(generationId));
+  try {
+    await options.store.writeMeta(ACTIVE_GENERATION_KEY, String(generationId));
+  } catch (cause) {
+    try {
+      await options.store.deleteGeneration(generationId);
+    } catch {
+      // An unreferenced staged generation is safe and can be pruned later.
+    }
+    return {
+      ok: false,
+      failure: { reason: 'quota', detail: cause instanceof Error ? cause.message : String(cause) },
+    };
+  }
 
   // Keep one older generation for fallback; prune the rest.
   const pruned: number[] = [];
   for (const id of existingIds) {
     if (id !== Number(previousActive) && id !== generationId) {
-      await options.store.deleteGeneration(id);
-      pruned.push(id);
+      try {
+        await options.store.deleteGeneration(id);
+        pruned.push(id);
+      } catch {
+        // Cleanup is best-effort after the new active pointer is committed.
+      }
     }
   }
   return {
@@ -164,7 +196,8 @@ export async function readActiveSnapshot(
   const raw = await store.readGeneration(generationId);
   if (raw === null) return null;
   try {
-    return { generationId, snapshot: JSON.parse(raw) as SyncSnapshot };
+    const parsed = syncSnapshotSchema.safeParse(JSON.parse(raw) as unknown);
+    return parsed.success ? { generationId, snapshot: parsed.data } : null;
   } catch {
     return null;
   }

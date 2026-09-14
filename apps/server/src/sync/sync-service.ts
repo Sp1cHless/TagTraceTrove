@@ -76,7 +76,7 @@ interface RawRows {
   [key: string]: unknown[];
 }
 
-function readPayload(database: T3Database): SyncSnapshotPayload {
+function readPayload(database: T3Database, media: 'none' | 'thumbnails'): SyncSnapshotPayload {
   const payload: RawRows = {};
   const read = (key: string, sql: string): void => {
     payload[key] = database.prepare(sql).all() as unknown[];
@@ -115,6 +115,12 @@ function readPayload(database: T3Database): SyncSnapshotPayload {
     SELECT producer_id AS producerId, tag_id AS tagId
     FROM producer_tag_assignments ORDER BY producer_id, tag_id
   `);
+  read('taxonomyAliases', `
+    SELECT id, vocabulary, partition, alias_name AS aliasName,
+           normalized_alias AS normalizedAlias, canonical_name AS canonicalName,
+           normalized_canonical AS normalizedCanonical
+    FROM taxonomy_aliases ORDER BY vocabulary, partition, normalized_alias, id
+  `);
   read('entryContents', `
     SELECT id, entry_id AS entryId, content_type AS contentType, content, sort_order AS sortOrder
     FROM entry_contents ORDER BY entry_id, sort_order, id
@@ -136,10 +142,16 @@ function readPayload(database: T3Database): SyncSnapshotPayload {
     FROM collections ORDER BY id
   `);
   read('collectionMembers', `
-    SELECT collection_id AS collectionId, entry_id AS entryId, NULL AS producerId, 0 AS position
+    SELECT collection_id AS collectionId, entry_id AS entryId, NULL AS producerId,
+           ROW_NUMBER() OVER (
+             PARTITION BY collection_id ORDER BY created_at, entry_id
+           ) - 1 AS position
     FROM collection_entries
     UNION ALL
-    SELECT collection_id AS collectionId, NULL AS entryId, producer_id AS producerId, 0 AS position
+    SELECT collection_id AS collectionId, NULL AS entryId, producer_id AS producerId,
+           ROW_NUMBER() OVER (
+             PARTITION BY collection_id ORDER BY created_at, producer_id
+           ) - 1 AS position
     FROM collection_producers
     ORDER BY collectionId, position
   `);
@@ -148,8 +160,9 @@ function readPayload(database: T3Database): SyncSnapshotPayload {
     FROM author_directories ORDER BY id
   `);
   read('authorDirectoryEntries', `
-    SELECT directory_id AS directoryId, producer_id AS producerId, entry_id AS entryId
-    FROM author_directory_entries ORDER BY directory_id, entry_id
+    SELECT directory_id AS directoryId, producer_id AS producerId, entry_id AS entryId,
+           sort_order AS sortOrder
+    FROM author_directory_entries ORDER BY directory_id, sort_order, entry_id
   `);
   read('entryUsage', `
     SELECT entry_id AS entryId, view_count AS viewCount, like_count AS likeCount, last_viewed_at AS lastViewedAt
@@ -164,20 +177,15 @@ function readPayload(database: T3Database): SyncSnapshotPayload {
   read('gallerySettings', `
     SELECT entry_type AS entryType, nsfw FROM gallery_settings ORDER BY entry_type
   `);
-  read('mediaRefs', `
-    SELECT DISTINCT ref FROM (
-      SELECT cover_ref AS ref FROM entries WHERE cover_ref IS NOT NULL
-      UNION
-      SELECT preview_ref AS ref FROM entries WHERE preview_ref IS NOT NULL
-      UNION
-      SELECT artwork_ref AS ref FROM producers WHERE artwork_ref IS NOT NULL
-    ) ORDER BY ref
-  `);
+  payload.mediaRefs = [];
 
-  const entries = (payload.entries as Array<Record<string, unknown>>).map((row) => {
-    let previewRefs: unknown = [];
+  const entries: Array<Record<string, unknown> & { previewRefs: unknown[] }> = (
+    payload.entries as Array<Record<string, unknown>>
+  ).map((row) => {
+    let previewRefs: unknown[] = [];
     try {
-      previewRefs = JSON.parse(String(row.previewRefs ?? '[]')) as unknown;
+      const parsed = JSON.parse(String(row.previewRefs ?? '[]')) as unknown;
+      if (Array.isArray(parsed)) previewRefs = parsed;
     } catch {
       previewRefs = [];
     }
@@ -201,7 +209,10 @@ function readPayload(database: T3Database): SyncSnapshotPayload {
     return member;
   });
 
-  const mediaRefs = (payload.mediaRefs as Array<{ ref: string }>).map((row) => row.ref);
+  const mediaRefs = media === 'none' ? [] : [...new Set([
+    ...entries.flatMap((entry) => [entry.coverRef, entry.previewRef, ...(entry.previewRefs as unknown[])]),
+    ...(payload.producers as Array<Record<string, unknown>>).map((producer) => producer.artworkRef),
+  ].filter((ref): ref is string => typeof ref === 'string' && ref.length > 0))].sort();
 
   return syncSnapshotPayloadSchema.parse({
     ...payload,
@@ -220,7 +231,10 @@ function checksumOf(headerWithoutChecksum: { [key: string]: unknown }, payload: 
   return hash.digest('hex');
 }
 
-export function buildSyncSnapshot(database: T3Database): SyncSnapshot {
+export function buildSyncSnapshot(
+  database: T3Database,
+  options: { media?: 'none' | 'thumbnails' } = {},
+): SyncSnapshot {
   const tx = database.transaction((): SyncSnapshot => {
     ensureSyncMetadata(database);
     const metadata = database.prepare(`
@@ -234,7 +248,7 @@ export function buildSyncSnapshot(database: T3Database): SyncSnapshot {
     `).run();
     const snapshotSeq = metadata.snapshot_seq + 1;
 
-    const payload = readPayload(database);
+    const payload = readPayload(database, options.media ?? 'none');
     const counts = {
       entries: payload.entries.length,
       producers: payload.producers.length,

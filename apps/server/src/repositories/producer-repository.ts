@@ -1,3 +1,4 @@
+import { normalizeTag } from '@t3/shared';
 import type { T3Database } from '../database/connection.js';
 import {
   listAuthorDirectories,
@@ -7,6 +8,7 @@ import {
 import { listProducerTags, galleryTypeForProducer, type ProducerTagAssignment } from './producer-tag-repository.js';
 import { listProducerRatings, type RatingRowRecord } from './rating-repository.js';
 import { getProducerUsage } from './usage-repository.js';
+import { resolveTaxonomyName } from './taxonomy-repository.js';
 
 export interface ProducerRecord {
   id: number;
@@ -237,6 +239,79 @@ export function linkEntryProducer(
     VALUES (?, ?)
     ON CONFLICT(entry_id, producer_id) DO NOTHING
   `).run(entryId, producerId);
+}
+
+export interface LinkedEntryAuthor {
+  entryId: number;
+  producerId: number;
+  producerName: string;
+  /** true when no existing author matched and a new one had to be created. */
+  created: boolean;
+  /** The typed spelling when it resolved through the author dictionary. */
+  matchedAlias?: string;
+}
+
+/** Display form of a typed author name: NFKC, trimmed, single spaces, and the
+ * original casing kept so the stored name reads the way the user typed it. */
+function authorDisplayForm(value: string): string {
+  return value.normalize('NFKC').trim().replace(/\s+/gu, ' ');
+}
+
+/** Finds an existing Producer by its normalized name (NFKC, lower, collapsed
+ * whitespace), so "Yuki", "yuki" and "YUki " all resolve to one author. */
+function findProducerIdByNormalizedName(database: T3Database, name: string): number | undefined {
+  const normalized = normalizeTag(name);
+  if (normalized === '') return undefined;
+  const rows = database.prepare('SELECT id, name FROM producers ORDER BY id').all() as Array<{
+    id: number;
+    name: string;
+  }>;
+  return rows.find((row) => normalizeTag(row.name) === normalized)?.id;
+}
+
+/**
+ * "Save author" that never duplicates: the typed name is resolved against
+ * existing Authors (exact name, then the author dictionary's alias graph) and
+ * the match is linked; only a genuinely new name creates a Producer. This is
+ * what the Entry editor's "+ Author" and "Link Author" both end up doing, so
+ * a name that already exists can no longer spawn a second author row.
+ */
+export function linkOrCreateEntryAuthor(
+  database: T3Database,
+  entryId: number,
+  rawName: string,
+): LinkedEntryAuthor {
+  const name = authorDisplayForm(rawName);
+  if (name === '') throw new Error('Author name cannot be empty');
+
+  const canonical = resolveTaxonomyName(database, 'producer', name);
+  const candidates = canonical === name ? [name] : [name, canonical];
+
+  for (const candidate of candidates) {
+    const existingId = findProducerIdByName(database, candidate)
+      ?? findProducerIdByNormalizedName(database, candidate);
+    if (existingId !== undefined) {
+      linkEntryProducer(database, entryId, existingId);
+      const producer = getProducer(database, existingId) as ProducerRecord;
+      return {
+        entryId,
+        producerId: existingId,
+        producerName: producer.name,
+        created: false,
+        ...(canonical === name ? {} : { matchedAlias: name }),
+      };
+    }
+  }
+
+  const created = createProducer(database, { name: canonical });
+  linkEntryProducer(database, entryId, created.id);
+  return {
+    entryId,
+    producerId: created.id,
+    producerName: created.name,
+    created: true,
+    ...(canonical === name ? {} : { matchedAlias: name }),
+  };
 }
 
 export function unlinkEntryProducer(

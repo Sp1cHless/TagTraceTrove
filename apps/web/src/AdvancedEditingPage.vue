@@ -703,7 +703,7 @@ watch(tab, (value) => {
         {{ t('taxonomy.noUnmatched') }}
       </p>
 
-      <div :key="tagMergeFormKey" class="alias-form tag-merge-form" data-testid="tag-merge-form">
+      <div :key="tagMergeFormKey" class="tag-merge-panel" data-testid="tag-merge-form">
         <h4>{{ t('tagMerge.title') }}</h4>
         <p class="muted">{{ t('tagMerge.hint') }}</p>
         <div class="tag-merge-row">
@@ -1141,11 +1141,21 @@ watch(tab, (value) => {
   font-weight: 400;
 }
 .alias-arrow { text-align: center; color: var(--text-muted); }
-.tag-merge-form h4 { margin: 0; }
-.tag-merge-form .muted { margin: 0; }
+/* Tag merge has its own panel: .alias-form is a multi-column grid on wide
+   screens (alias → canonical → save), which would scatter this module's rows. */
+.tag-merge-panel {
+  display: grid;
+  gap: 0.7rem;
+  justify-items: stretch;
+  padding: 1rem;
+  border-radius: 14px;
+  background: var(--surface-muted);
+}
+.tag-merge-panel h4 { margin: 0; }
+.tag-merge-panel .muted { margin: 0; font-size: 0.78rem; line-height: 1.5; }
 .tag-merge-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .tag-merge-label { flex: 0 0 5.5rem; color: var(--text-muted); font-size: 0.78rem; font-weight: 700; }
-.tag-merge-apply { justify-self: start; }
+.tag-merge-apply { justify-self: start; width: fit-content; }
 .primary-button { padding: 0.5rem 0.8rem; border: 1px solid var(--accent); border-radius: 0.55rem; color: white; background: var(--accent); font: inherit; cursor: pointer; }
 .primary-button:disabled { opacity: 0.55; cursor: default; }
 .secondary-button { padding: 0.5rem 0.8rem; border: 1px solid var(--border-subtle); border-radius: 0.55rem; color: var(--text-primary); background: var(--surface); font: inherit; cursor: pointer; }

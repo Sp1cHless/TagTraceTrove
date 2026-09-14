@@ -180,6 +180,16 @@ function onBlur(): void {
       return;
     }
   }
+  if (!composing.value && props.mode === 'id-only' && rawQuery.value.trim() !== '') {
+    // id-only editors (Author link, Tag merge) need a real record, but the user
+    // should not have to pick from the dropdown: typing the full name and then
+    // clicking away resolves it whenever the text matches a candidate exactly.
+    const exact = exactMatch();
+    if (exact !== null) {
+      choose(exact);
+      return;
+    }
+  }
   // Otherwise blur only closes; committing is an explicit Enter or click.
   focused.value = false;
 }
@@ -211,6 +221,17 @@ function choose(suggestion: RelationSuggestion): void {
   afterChoice();
 }
 
+/** Exact match by normalized canonical name or alias — only a full-string hit
+ * counts, so Enter can never link a guessed neighbour. */
+function exactMatch(): RelationSuggestion | null {
+  const query = activeQuery.value;
+  if (query === '') return null;
+  return suggestions.value.find((suggestion) => (
+    normalizeTag(suggestion.name) === query
+    || (suggestion.matchedAlias !== undefined && normalizeTag(suggestion.matchedAlias) === query)
+  )) ?? null;
+}
+
 function onEnter(event: KeyboardEvent): void {
   event.preventDefault();
   if (composing.value) return;
@@ -219,6 +240,15 @@ function onEnter(event: KeyboardEvent): void {
     if (highlighted) {
       choose(highlighted);
       return;
+    }
+    // id-only editors (Author link): typing the full existing name and
+    // pressing Enter links that exact author instead of doing nothing.
+    if (props.mode === 'id-only') {
+      const exact = exactMatch();
+      if (exact !== null) {
+        choose(exact);
+        return;
+      }
     }
   }
   if (props.mode !== 'creatable-text') return;

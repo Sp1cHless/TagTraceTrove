@@ -1155,3 +1155,20 @@ export const tagMergeResponseSchema = z.strictObject({
 
 export type TagMergeRequest = z.infer<typeof tagMergeRequestSchema>;
 export type TagMergeResponse = z.infer<typeof tagMergeResponseSchema>;
+
+/** "Save author" resolves the typed name against existing Authors first and
+ * links the match; only a genuinely new name creates a Producer. */
+export const linkEntryAuthorByNameRequestSchema = z.strictObject({
+  name: z.string().trim().min(1).max(200),
+});
+
+export const linkEntryAuthorByNameResponseSchema = z.strictObject({
+  entryId: apiIdSchema,
+  producerId: apiIdSchema,
+  producerName: z.string().trim().min(1).max(200),
+  created: z.boolean(),
+  matchedAlias: z.string().trim().min(1).max(200).optional(),
+});
+
+export type LinkEntryAuthorByNameRequest = z.infer<typeof linkEntryAuthorByNameRequestSchema>;
+export type LinkEntryAuthorByNameResponse = z.infer<typeof linkEntryAuthorByNameResponseSchema>;

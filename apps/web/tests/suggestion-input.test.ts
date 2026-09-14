@@ -200,6 +200,61 @@ describe('SuggestionInput', () => {
     expect(wrapper.emitted('select')).toBeUndefined();
   });
 
+  it('selects an exact match on Enter in id-only mode (typing the full name links it)', async () => {
+    const { wrapper, input, pending } = await mountHarness({ mode: 'id-only' });
+    await typeAndSettle(input, 'yuki');
+    pending[0]!.resolve([makeSuggestion(4, 'yuki'), makeSuggestion(5, 'yukino')]);
+    await sleep(APPLY_MS);
+    // 没有任何高亮,但输入与候选完全一致 -> 直接选中
+    await input.trigger('keydown.enter');
+    expect(wrapper.emitted('select')).toEqual([[{
+      id: 4, name: 'yuki', sameContextUsageCount: 0, totalUsageCount: 0,
+    }]]);
+    expect(wrapper.emitted('submit-text')).toBeUndefined();
+  });
+
+  it('does not select on Enter in id-only mode when nothing matches exactly', async () => {
+    const { wrapper, input, pending } = await mountHarness({ mode: 'id-only' });
+    await typeAndSettle(input, 'yuki');
+    pending[0]!.resolve([makeSuggestion(5, 'yukino')]);
+    await sleep(APPLY_MS);
+    await input.trigger('keydown.enter');
+    expect(wrapper.emitted('select')).toBeUndefined();
+    expect(wrapper.emitted('submit-text')).toBeUndefined();
+  });
+
+  it('resolves an exact match on blur in id-only mode (type the name and click away)', async () => {
+    const { wrapper, input, pending } = await mountHarness({ mode: 'id-only' });
+    await typeAndSettle(input, 'yuki');
+    pending[0]!.resolve([makeSuggestion(4, 'yuki'), makeSuggestion(5, 'yukino')]);
+    await sleep(APPLY_MS);
+    await input.trigger('blur');
+    expect(wrapper.emitted('select')).toEqual([[{
+      id: 4, name: 'yuki', sameContextUsageCount: 0, totalUsageCount: 0,
+    }]]);
+    expect(wrapper.emitted('submit-text')).toBeUndefined();
+  });
+
+  it('does not resolve on blur when the typed text is not an exact match', async () => {
+    const { wrapper, input, pending } = await mountHarness({ mode: 'id-only' });
+    await typeAndSettle(input, 'yuk');
+    pending[0]!.resolve([makeSuggestion(5, 'yukino')]);
+    await sleep(APPLY_MS);
+    await input.trigger('blur');
+    expect(wrapper.emitted('select')).toBeUndefined();
+  });
+
+  it('selects on Enter through a matched alias in id-only mode', async () => {
+    const { wrapper, input, pending } = await mountHarness({ mode: 'id-only' });
+    await typeAndSettle(input, 'yuki');
+    pending[0]!.resolve([makeSuggestion(7, '雪', 'yuki')]);
+    await sleep(APPLY_MS);
+    await input.trigger('keydown.enter');
+    expect(wrapper.emitted('select')).toEqual([[{
+      id: 7, name: '雪', matchedAlias: 'yuki', sameContextUsageCount: 0, totalUsageCount: 0,
+    }]]);
+  });
+
   it('moves the highlight with arrows without wrapping past the ends', async () => {
     const { wrapper, input, pending } = await mountHarness({ mode: 'id-only' });
     await typeAndSettle(input, '校');

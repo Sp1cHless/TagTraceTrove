@@ -18,7 +18,7 @@ function makeSnapshot(overrides: Partial<SyncSnapshot['header']> = {}): SyncSnap
     generatedAt: '2026-09-13T00:00:00Z',
     sqliteSchemaVersion: 15,
     snapshotFormatVersion: 1,
-    counts: { entries: 1, producers: 0, entryContents: 0, entryTags: 0, collections: 0 },
+    counts: { entries: 0, producers: 0, entryContents: 0, entryTags: 0, collections: 0 },
     ...overrides,
   };
   const { checksum, ...rest } = header;
@@ -87,6 +87,19 @@ describe('snapshot store rules', () => {
     expect(await verifyChecksum(snapshot, snapshot.header.checksum)).toBe(false);
   });
 
+  it('rejects a schema-valid checksum whose declared counts do not match the payload', async () => {
+    const store = createMemorySnapshotStore();
+    const snapshot = makeSnapshot({
+      counts: { entries: 1, producers: 0, entryContents: 0, entryTags: 0, collections: 0 },
+    });
+    await stampChecksum(snapshot);
+
+    const result = await applySnapshot(snapshot, { store });
+
+    expect(result).toMatchObject({ ok: false, failure: { reason: 'parse' } });
+    expect(await store.listGenerationIds()).toEqual([]);
+  });
+
   it('writes a new generation and atomically switches the active pointer', async () => {
     const store = createMemorySnapshotStore();
     const first = makeSnapshot();
@@ -126,5 +139,27 @@ describe('snapshot store rules', () => {
     // The old pointer and generation survive untouched.
     expect(await store.readMeta(ACTIVE_GENERATION_KEY)).toBe('1');
     expect(await store.readGeneration(1)).toBe('{"header":{},"payload":{}}');
+  });
+
+  it('keeps the previous generation active when switching the pointer fails', async () => {
+    const store = createMemorySnapshotStore();
+    await store.writeGeneration(1, '{"header":{},"payload":{}}');
+    await store.writeMeta(ACTIVE_GENERATION_KEY, '1');
+    const failing: typeof store = {
+      ...store,
+      async writeMeta(key, value) {
+        if (key === ACTIVE_GENERATION_KEY && value === '2') throw new Error('quota exceeded');
+        await store.writeMeta(key, value);
+      },
+    };
+    const second = makeSnapshot({ snapshotSeq: 2 });
+    await stampChecksum(second);
+
+    const result = await applySnapshot(second, { store: failing });
+
+    expect(result).toMatchObject({ ok: false, failure: { reason: 'quota' } });
+    expect(await store.readMeta(ACTIVE_GENERATION_KEY)).toBe('1');
+    expect(await store.readGeneration(1)).toBe('{"header":{},"payload":{}}');
+    expect(await store.readGeneration(2)).toBeNull();
   });
 });

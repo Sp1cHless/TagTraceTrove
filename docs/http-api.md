@@ -186,7 +186,7 @@ Entry and Author search submit `searchQuery` to their bounded page endpoints; on
 
 ```text
 GET /api/sync/capabilities
-GET /api/sync/snapshot
+GET /api/sync/snapshot?media=none|thumbnails
 ```
 
 `capabilities` answers `libraryId`, `syncEpoch`, `sqliteSchemaVersion`,
@@ -195,11 +195,16 @@ GET /api/sync/snapshot
 (migration 015, lazily seeded); a backup restore rotates only `sync_epoch`
 so a restored sequence can never be mistaken for a live continuation.
 
-`snapshot` captures every read-model table plus a media-ref manifest inside
+`snapshot` captures every read-model table inside
 ONE immediate SQLite transaction together with the monotonic `snapshot_seq`
 bump, and ships counts and a `sha256(JSON(header) + JSON(payload))` checksum.
-The service worker never caches it — the client stores it as an IndexedDB
-generation.
+`media=none` returns an empty media manifest; `media=thumbnails` returns a
+stable deduplicated manifest covering Entry covers, the legacy preview,
+every secondary preview, and Producer artwork. The service worker never
+caches the snapshot response — Settings installs it as an IndexedDB
+generation and prefetches the manifest separately. Restore applies any
+missing migrations, preserves `libraryId`, and rotates `syncEpoch` before
+the restored database is exposed to clients.
 
 ### Source maintenance
 

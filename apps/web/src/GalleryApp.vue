@@ -41,7 +41,10 @@ import AppIcon from './components/AppIcon.vue';
 import IconButton from './components/IconButton.vue';
 import LazyCardImage from './components/LazyCardImage.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
+import OfflineLibrarySettings from './components/OfflineLibrarySettings.vue';
 import { supportedLocales, useI18n, type Locale } from './i18n.js';
+import { createMemorySnapshotStore, type SnapshotStore } from './offline/snapshot-store.js';
+import type { OfflineApiState } from './offline/offline-api.js';
 
 import { createNavigationMemory, navigationMemoryKey } from './navigation-memory.js';
 
@@ -78,7 +81,10 @@ type TagResults = EntryTagResults | AuthorTagResults;
 type SearchOrigin = { searchQuery: string; searchScope: SearchScope };
 type EntryOrigin = AuthorLocation | { tagResults: EntryTagResults } | SearchOrigin;
 type CreationView = 'entry' | 'author';
-const props = defineProps<{ api: GalleryApi }>();
+const props = defineProps<{ api: GalleryApi; offlineStore?: SnapshotStore; offlineState?: OfflineApiState }>();
+// main.ts always supplies IndexedDB. The in-memory fallback keeps component
+// fixtures and embedders deterministic without touching browser storage.
+const offlineStore = props.offlineStore ?? createMemorySnapshotStore();
 const navigationMemory = createNavigationMemory();
 provide(navigationMemoryKey, navigationMemory);
 const galleries = ref<GallerySummary[]>([]);
@@ -1601,12 +1607,16 @@ async function createAndLinkAuthor(): Promise<void> {
   const entryId = activeEntry.value.id;
   error.value = null;
   try {
-    const author = await props.api.createAuthor({ name: newAuthorName.value });
-    await props.api.linkEntryAuthor(entryId, author.id);
+    // One call resolves-or-creates: a name that already exists (directly or
+    // through an author-dictionary alias) is linked instead of duplicated.
+    const result = await props.api.linkEntryAuthorByName(entryId, newAuthorName.value.trim());
     authorEditorOpen.value = false;
     newAuthorName.value = '';
     authorDuplicateNames.value = [];
     await Promise.all([refreshAuthors(), openEntry(entryId)]);
+    if (!result.created) {
+      showMultiAuthorNotice(t('author.linkedExisting', { name: result.producerName }));
+    }
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.createAuthor');
   }
@@ -2319,6 +2329,7 @@ onUnmounted(() => {
               />
             </span>
           </label>
+          <OfflineLibrarySettings :api="api" :store="offlineStore" />
           <button
             data-testid="advanced-entry"
             class="advanced-entry"
@@ -2331,6 +2342,15 @@ onUnmounted(() => {
         </section>
       </div>
     </header>
+
+    <div
+      v-if="props.offlineState?.mode === 'offline'"
+      class="offline-mode-banner"
+      data-testid="offline-mode-banner"
+      role="status"
+    >
+      {{ t('offline.modeBanner') }}
+    </div>
 
     <main class="app-layout">
       <button
@@ -2911,11 +2931,11 @@ onUnmounted(() => {
           </div>
 
           <div v-if="mediaSlides.length > 0" class="entry-media-viewer">
-            <img
+            <LazyCardImage
               class="entry-media-image"
               :src="api.assetUrl(mediaSlides[mediaIndex] ?? '')"
               :alt="activeEntry.title"
-            >
+            />
             <button
               v-if="mediaIndex > 0"
               class="media-nav media-prev"
@@ -3752,6 +3772,7 @@ h2 { margin-bottom: 0; }
 .advanced-entry { display: grid; gap: 0.15rem; width: 100%; margin-top: 0.9rem; padding: 0.65rem 0.7rem; border: 1px solid var(--border-subtle); border-radius: 0.6rem; color: var(--text-primary); background: var(--surface-muted); font: inherit; text-align: left; cursor: pointer; }
 .advanced-entry small { color: var(--text-muted); font-weight: 400; font-size: 0.72rem; }
 .advanced-entry:hover, .advanced-entry:focus-visible { border-color: var(--accent); outline: none; }
+.offline-mode-banner { margin: 0 0 0.75rem; padding: 0.65rem 0.85rem; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border-subtle)); border-radius: var(--radius-control); color: var(--text-primary); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); font-size: 0.84rem; }
 
 .app-layout { display: grid; grid-template-columns: 18rem minmax(0, 1fr); gap: 1rem; }
 .sidebar,

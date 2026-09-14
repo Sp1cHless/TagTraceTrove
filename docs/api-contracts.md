@@ -64,11 +64,12 @@ Offline sync contracts (`schemas/sync.ts`) are strict end to end: the
 capabilities response is a closed object, the snapshot header carries the
 identity pair (`libraryId`, `syncEpoch`), the monotonic `snapshotSeq`,
 schema/format versions, bounded counts and the checksum, and the payload is
-a closed set of read-model row arrays (entries, producers, tag vocabularies
-and groups, contents, ratings, collections, directories, usage, View later,
-Gallery partitions, media refs). Clients verify the checksum before atomically
-switching their active IndexedDB generation and fail closed on library or
-epoch mismatches.
+a closed set of read-model row arrays (entries, producers, tag vocabularies,
+groups and aliases, contents, ratings, ordered collections and directories,
+usage, View later, Gallery partitions, media refs). Clients schema-parse the
+payload, verify declared counts and checksum, then atomically switch their
+active IndexedDB generation; library mismatches fail closed and an epoch
+change requires a full replacement snapshot.
 
 Source maintenance contracts are strict as well: run creation requires an
 origin source key, a registered adapter key and an explicit

@@ -29,8 +29,19 @@ function seed(database: T3Database): void {
     sortOrder: 0,
   });
   setGalleryPartition(database, 'game', true);
-  database.prepare('UPDATE entries SET cover_ref = ? WHERE title = ?')
-    .run('assets/game/endfield/cover.jpg', 'Endfield');
+  database.prepare(`
+    UPDATE entries
+    SET cover_ref = ?, preview_ref = ?, preview_refs = ?
+    WHERE title = ?
+  `).run(
+    'assets/game/endfield/cover.jpg',
+    'assets/game/endfield/preview.jpg',
+    JSON.stringify([
+      'assets/game/endfield/page-1.jpg',
+      'assets/game/endfield/page-2.jpg',
+    ]),
+    'Endfield',
+  );
 }
 
 describe('offline sync service and routes', () => {
@@ -56,7 +67,7 @@ describe('offline sync service and routes', () => {
     seed(database);
     const app = createApiApp(database);
 
-    const firstResponse = await app.request('/api/sync/snapshot');
+    const firstResponse = await app.request('/api/sync/snapshot?media=thumbnails');
     expect(firstResponse.status).toBe(200);
     const first = syncSnapshotSchema.parse(await firstResponse.json());
     expect(first.header.snapshotSeq).toBe(1);
@@ -66,18 +77,77 @@ describe('offline sync service and routes', () => {
     expect(first.payload.entries[0]).toMatchObject({ title: 'Endfield', type: 'game' });
     expect(first.payload.entryContents[0]).toMatchObject({ contentType: 'Source URL' });
     expect(first.payload.gallerySettings).toEqual([{ entryType: 'game', nsfw: true }]);
-    expect(first.payload.mediaRefs).toContain('assets/game/endfield/cover.jpg');
+    expect(first.payload.mediaRefs).toEqual([
+      'assets/game/endfield/cover.jpg',
+      'assets/game/endfield/page-1.jpg',
+      'assets/game/endfield/page-2.jpg',
+      'assets/game/endfield/preview.jpg',
+    ]);
 
     // Unchanged data → identical payload bytes, but a bumped snapshot seq.
-    const second = syncSnapshotSchema.parse(await (await app.request('/api/sync/snapshot')).json());
+    const second = syncSnapshotSchema.parse(await (await app.request('/api/sync/snapshot?media=thumbnails')).json());
     expect(second.header.snapshotSeq).toBe(2);
     expect(second.payload).toEqual(first.payload);
 
     // A write between snapshots is visible in the next generation.
     createEntry(database, { title: 'Hades II', type: 'game' });
-    const third = syncSnapshotSchema.parse(await (await app.request('/api/sync/snapshot')).json());
+    const third = syncSnapshotSchema.parse(await (await app.request('/api/sync/snapshot?media=thumbnails')).json());
     expect(third.header.snapshotSeq).toBe(3);
     expect(third.header.counts.entries).toBe(2);
+
+    const metadataOnly = syncSnapshotSchema.parse(
+      await (await app.request('/api/sync/snapshot?media=none')).json(),
+    );
+    expect(metadataOnly.payload.mediaRefs).toEqual([]);
+  });
+
+  it('preserves offline browse ordering and taxonomy alias rows', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    seed(database);
+    const second = createEntry(database, { title: 'Endfield II', type: 'game' });
+    const producer = database.prepare(`SELECT id FROM producers WHERE name = 'Hypergryph'`).get() as { id: number };
+    linkEntryProducer(database, second.id, producer.id);
+    const directoryId = Number(database.prepare(`
+      INSERT INTO author_directories (producer_id, title, sort_order) VALUES (?, 'Main', 0)
+    `).run(producer.id).lastInsertRowid);
+    database.prepare(`
+      INSERT INTO author_directory_entries (directory_id, producer_id, entry_id, sort_order)
+      VALUES (?, ?, ?, 7)
+    `).run(directoryId, producer.id, second.id);
+    const collectionId = Number(database.prepare(`
+      INSERT INTO collections (kind, title) VALUES ('entry', 'Series')
+    `).run().lastInsertRowid);
+    database.prepare(`
+      INSERT INTO collection_entries (collection_id, entry_id, created_at)
+      VALUES (?, ?, '2026-01-01T00:00:00Z'), (?, ?, '2026-01-02T00:00:00Z')
+    `).run(collectionId, second.id, collectionId, 1);
+    database.prepare(`
+      INSERT INTO taxonomy_aliases (
+        vocabulary, partition, alias_name, normalized_alias,
+        canonical_name, normalized_canonical
+      ) VALUES ('producer', 'authors', 'HG', 'hg', 'Hypergryph', 'hypergryph')
+    `).run();
+
+    const app = createApiApp(database);
+    const snapshot = await (await app.request('/api/sync/snapshot?media=none')).json() as {
+      payload: {
+        authorDirectoryEntries: Array<{ entryId: number; sortOrder?: number }>;
+        collectionMembers: Array<{ entryId?: number; position: number }>;
+        taxonomyAliases?: Array<{ aliasName: string; canonicalName: string }>;
+      };
+    };
+
+    expect(snapshot.payload.authorDirectoryEntries).toContainEqual(expect.objectContaining({
+      entryId: second.id,
+      sortOrder: 7,
+    }));
+    expect(snapshot.payload.collectionMembers.map((member) => [member.entryId, member.position]))
+      .toEqual([[second.id, 0], [1, 1]]);
+    expect(snapshot.payload.taxonomyAliases).toContainEqual(expect.objectContaining({
+      aliasName: 'HG',
+      canonicalName: 'Hypergryph',
+    }));
   });
 
   it('rotates the sync epoch on restore so stale clients resnapshot', async () => {

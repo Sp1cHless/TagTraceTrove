@@ -125,20 +125,74 @@ commit service re-validates everything, backs up the database, then appends
 new `Source URL` Contents and the optional group annotation in a single
 transaction; old URLs are never replaced or deleted.
 
-Offline readiness (C phase) starts with the PWA foundation and the
-read-only snapshot. `apps/web/src/sw/service-worker.ts` holds the pure
-routing policy plus the worker glue: versioned app shell, navigation
-fallback, cache-first immutable hashed assets and thumbnails, network-first
-`/api/sync/capabilities`, and a hard rule that mutations and business
-snapshots are never cached (the snapshot lives in IndexedDB generations via
-`offline/snapshot-store.ts`, which switches `activeGeneration` only after
-checksum verification and keeps the previous generation as fallback). The
-build emits the worker to `dist/sw.js` with a vite closeBundle step. The
-`sync/` server module seeds the `sync_metadata` singleton lazily, rotates
-`syncEpoch` on restore, and captures `snapshot_seq` and all read-model rows
-inside one immediate transaction so a snapshot always matches its sequence.
-C2/C3 (outbox, change journal, offline mutations) stay open; nothing in the
-UI assumes them yet.
+Offline readiness (C phase) now has a working PWA shell and a read-only
+snapshot path. `apps/web/src/sw/service-worker.ts` owns transport only: the
+build injects the generated hashed JS/CSS URLs into the install precache,
+navigation uses `/index.html` as its fallback without overwriting that key
+with manifest responses, mutable thumbnail resolvers are network-first, and
+immutable thumbnail files are cache-first. Mutations and business snapshots
+are never put in the service-worker shell cache. The verified snapshot lives
+in the real `t3-offline` IndexedDB database (`snapshotGenerations` plus
+`meta` stores); `activeGeneration` moves only after checksum/schema/count
+validation, pointer-write failure leaves the previous generation active, and
+old-generation cleanup is best effort.
+
+Settings exposes an explicit Download/Update offline-library action. It
+requests `media=thumbnails`, installs the metadata generation, and best-effort
+prefetches the deterministic media manifest into a durable media cache. The
+online Gallery API remains authoritative; when supported core reads fail, a
+small offline repository derives Gallery, Entry, Author, facet, Collection,
+usage and View-later DTOs from the active snapshot. A visible banner marks
+that fallback, while every mutation still fails closed online. The `sync/`
+server module captures `snapshot_seq` and read-model rows inside one immediate
+transaction. Restore migrates old backups before preserving `libraryId` and
+rotating `syncEpoch`. C2/C3 (outbox, change journal, operation replay,
+conflict UI and offline mutations) remain intentionally open.
+
+The first localhost manual acceptance pass on 2026-09-13 proved the shell,
+IndexedDB snapshot, Gallery/Entry/Collection fallback, Entry detail Content and
+return-to-online path, but also established that the first C1 slice was not
+parity: download/update was slow, every offline navigation repeated an online
+timeout and reparsed the snapshot, Entry/Collection detail waited several
+seconds, covers were often absent, and Author/Tag surfaces were incomplete.
+
+C1.1 now keeps supported reads snapshot-first after the first transport failure,
+caches the parsed active generation in memory, and returns to online-first after
+a successful sync-capability or snapshot request. It adds snapshot adapters for
+Author pages and filters, Author View Later, Random Authors/Tags, Tag search,
+producer Collections, taxonomy aliases and author-scoped Entry filters. Offline
+media is cached under both the resolver/immutable URL and the original media URL,
+and the Service Worker recognizes all managed `/api/assets/` routes, including
+Producer artwork. Collection projection also reapplies the whole-Gallery SFW
+boundary. A second localhost acceptance pass on 2026-09-14 confirmed that
+snapshot navigation and the other read surfaces were fast, while covers remained
+absent because a large media preload could be interrupted after metadata became
+active and every Update retried mutable thumbnail resolvers from the beginning.
+Media preload is now resumable: a resolver is skipped only when both its cached
+redirect and immutable target exist, while new or `updatedAt`-changed Entry media
+is revalidated. Settings reports processed/total progress so metadata readiness
+is not mistaken for media completion. Pending or failed stacked card images also
+hide their alt text and reset visibility on error, preventing several broken-image
+titles from rendering on top of one another. A later acceptance check showed
+`0 new / 11920 present / 0 failed`, proving the cache itself was complete. The
+remaining mismatch was that API reads treat HTTP 502/503/504 as desktop-service
+unavailability, while media `networkFirst` previously fell back only when
+`fetch()` threw. Service Worker v4 now serves cached resolver and managed-asset
+responses for those unavailable statuses while preserving authoritative 4xx
+responses. Because later manual testing still showed missing covers despite a
+complete media cache and the v4 transport fallback, read-only media components
+also have an application-level cache path: cached media is resolved before a network request,
+using a cached thumbnail redirect from Cache Storage, its immutable response,
+and a blob URL. The lookup begins before viewport intersection,
+so a page's local thumbnails are prepared in parallel instead of waiting for
+serial network errors. A reference-counted 256-entry session LRU reuses both the
+object URL and successful-load state across component remounts; Update and Clear
+invalidate the registry so changed or deleted media cannot remain visible. This
+covers Gallery, Search, Author, View Later, Collection compositions and Entry
+detail without depending on the current page being controlled by the Service
+Worker. The initial complete media download can still take time in a large
+library; durable background transfer and restore rollback hardening remain
+separate follow-up work.
 
 `packages/shared/src/schemas/api.ts` and `packages/shared/src/schemas/suggestions.ts` define the strict Zod request, path, query, response, and error contracts used by both server and web code. The pure `search/suggestions.ts` policy keeps Relation eligibility separate from ranking. These boundaries mirror repository DTOs without exposing SQLite names. Empty update bodies, blank required labels, non-positive IDs, duplicate reorder IDs, duplicate filter IDs, blank suggestion queries, and suggestion limits above 20 are rejected before repository calls.
 

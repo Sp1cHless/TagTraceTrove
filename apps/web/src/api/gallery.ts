@@ -325,6 +325,13 @@ export interface GalleryApi {
   createAuthor(input: CreateProducerRequest): Promise<ProducerRecordDto>;
   updateAuthor(authorId: number, input: UpdateProducerRequest): Promise<ProducerRecordDto>;
   linkEntryAuthor(entryId: number, authorId: number): Promise<void>;
+  linkEntryAuthorByName(entryId: number, name: string): Promise<{
+    entryId: number;
+    producerId: number;
+    producerName: string;
+    created: boolean;
+    matchedAlias?: string;
+  }>;
   unlinkEntryAuthor(entryId: number, authorId: number): Promise<void>;
   deleteAuthor(authorId: number): Promise<void>;
   assignAuthorTag(authorId: number, name: string): Promise<void>;
@@ -572,7 +579,7 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
       return syncCapabilitiesSchema.parse(await client.request('sync/capabilities'));
     },
     async fetchSyncSnapshot() {
-      return syncSnapshotSchema.parse(await client.request('sync/snapshot'));
+      return syncSnapshotSchema.parse(await client.request('sync/snapshot?media=thumbnails'));
     },
     async probeSourceTarget(homepage) {
       let response: { ok: boolean; adapterKey?: string; displayName?: string; origin?: string; reason?: string; detail?: string };
@@ -877,6 +884,12 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
     },
     async linkEntryAuthor(entryId, authorId) {
       await client.request(`entries/${entryId}/producers/${authorId}`, { method: 'PUT' });
+    },
+    async linkEntryAuthorByName(entryId, name) {
+      return client.request(`entries/${entryId}/producers/link-by-name`, {
+        method: 'POST',
+        body: { name },
+      }) as Promise<{ entryId: number; producerId: number; producerName: string; created: boolean; matchedAlias?: string }>;
     },
     async unlinkEntryAuthor(entryId, authorId) {
       await client.request(`entries/${entryId}/producers/${authorId}`, { method: 'DELETE' });

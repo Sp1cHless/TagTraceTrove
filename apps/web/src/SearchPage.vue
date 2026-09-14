@@ -8,6 +8,7 @@ import type {
 } from './api/gallery.js';
 import { entryCardMediaRef, entryStackLayerStyle, entryStackLayers } from './entry-media-stack.js';
 import PagedCardGrid from './components/PagedCardGrid.vue';
+import LazyCardImage from './components/LazyCardImage.vue';
 import { showNsfw } from './stores/preferences.js';
 import { useI18n } from './i18n.js';
 import { useNavigationMemory } from './navigation-memory.js';
@@ -243,7 +244,7 @@ onMounted(() => {
           @click="emit('open-entry', entry, query.trim(), scope)"
         >
           <div class="search-entry-stack">
-            <img
+            <LazyCardImage
               v-for="(mediaRef, index) in entryStackLayers(entry)"
               :key="`${mediaRef}-${index}`"
               class="search-entry-image"
@@ -252,7 +253,7 @@ onMounted(() => {
               :alt="entry.title"
               loading="lazy"
               decoding="async"
-            >
+            />
             <span v-if="entryStackLayers(entry).length === 0" class="search-placeholder">{{ entry.title.slice(0, 1).toUpperCase() }}</span>
             <span v-if="entry.likeCount > 0" class="search-like">👍 {{ entry.likeCount }}</span>
           </div>
@@ -280,7 +281,7 @@ onMounted(() => {
         >
           <span v-if="author.covers.length === 0" class="search-placeholder">{{ author.name.slice(0, 1).toUpperCase() }}</span>
           <span v-else class="search-author-covers">
-            <img v-for="cover in author.covers.slice(0, 4)" :key="cover" :src="api.assetUrl(entryCardMediaRef(cover))" :alt="author.name" loading="lazy" decoding="async">
+            <LazyCardImage v-for="cover in author.covers.slice(0, 4)" :key="cover" :src="api.assetUrl(entryCardMediaRef(cover))" :alt="author.name" loading="lazy" decoding="async" />
           </span>
           <span class="search-meta">
             <strong>{{ author.name }}</strong>

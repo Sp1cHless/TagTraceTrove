@@ -20,6 +20,7 @@ import SuggestionInput from './components/SuggestionInput.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
 import EntryCard from './components/EntryCard.vue';
 import CoverComposition from './components/CoverComposition.vue';
+import LazyCardImage from './components/LazyCardImage.vue';
 import { rowsPerPage, showNsfw } from './stores/preferences.js';
 import { flattenCollectionOptions, type CollectionMenuOption } from './collection-tree.js';
 import type { CollectionRecordDto } from '@t3/shared';
@@ -1374,7 +1375,7 @@ async function removeFromDirectory(): Promise<void> {
         </form>
         <div v-else class="author-basics">
           <template v-if="activeAuthor.artworkRef">
-            <img :src="api.assetUrl(activeAuthor.artworkRef)" :alt="activeAuthor.name" class="author-artwork">
+            <LazyCardImage :src="api.assetUrl(activeAuthor.artworkRef)" :alt="activeAuthor.name" class="author-artwork" />
           </template>
           <CoverComposition
             v-else-if="authorCoverCovers.length"
@@ -1649,7 +1650,7 @@ async function removeFromDirectory(): Promise<void> {
               >
                 <span class="directory-cover">
                   <template v-for="work in card.directory.entries.slice(0, 3)" :key="work.id">
-                    <img v-if="work.coverRef" :src="api.assetUrl(entryCardMediaRef(work.coverRef))" :alt="work.title" loading="lazy" decoding="async">
+                    <LazyCardImage v-if="work.coverRef" :src="api.assetUrl(entryCardMediaRef(work.coverRef))" :alt="work.title" loading="lazy" decoding="async" />
                     <span v-else class="mini-placeholder">{{ work.title.slice(0, 1) }}</span>
                   </template>
                 </span>

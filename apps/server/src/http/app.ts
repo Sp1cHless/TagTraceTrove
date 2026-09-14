@@ -73,6 +73,8 @@ import {
   producerSummarySchema,
   producerTagAssignmentSchema,
 
+  linkEntryAuthorByNameRequestSchema,
+  linkEntryAuthorByNameResponseSchema,
   renameEntryTagRequestSchema,
   tagMergeRequestSchema,
   tagMergeResponseSchema,
@@ -272,6 +274,7 @@ import {
   upsertTaxonomyAlias,
 } from '../repositories/taxonomy-repository.js';
 import { suggestProducers, suggestTags } from '../repositories/suggestion-repository.js';
+import { linkOrCreateEntryAuthor } from '../repositories/producer-repository.js';
 import { mergeTag } from '../repositories/tag-merge-repository.js';
 import {
   createRun,
@@ -674,6 +677,19 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
   app.get('/api/suggestions/producers', (context) => {
     const input = producerSuggestionQuerySchema.parse(context.req.query());
     return context.json(relationSuggestionResponseSchema.parse(suggestProducers(database, input)));
+  });
+
+  // "Save author": resolve the typed name to an existing Author (name or
+  // dictionary alias) and link it; create only when nothing matches. This is
+  // what stops a re-typed name from spawning a duplicate author row.
+  app.post('/api/entries/:entryId/producers/link-by-name', async (context) => {
+    const { entryId } = entryIdParamsSchema.parse(context.req.param());
+    const input = await parseJson(context.req.raw, linkEntryAuthorByNameRequestSchema);
+    if (!getEntryDetail(database, entryId)) {
+      return context.json(errorPayload('NOT_FOUND', 'Entry not found'), 404);
+    }
+    const result = linkOrCreateEntryAuthor(database, entryId, input.name);
+    return context.json(linkEntryAuthorByNameResponseSchema.parse(result));
   });
 
   app.post('/api/tags/merge', async (context) => {
@@ -1366,12 +1382,7 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
   app.get('/api/sync/snapshot', (context) => {
     const { media } = z.object({ media: z.enum(['none', 'thumbnails']).optional().default('none') })
       .parse(context.req.query());
-    const snapshot = buildSyncSnapshot(database);
-    if (media === 'none') {
-      // The full snapshot stays available; the media manifest is only
-      // meaningful for clients planning thumbnail downloads.
-      return context.json(syncSnapshotSchema.parse(snapshot));
-    }
+    const snapshot = buildSyncSnapshot(database, { media });
     return context.json(syncSnapshotSchema.parse(snapshot));
   });
 

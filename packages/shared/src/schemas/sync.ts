@@ -97,6 +97,16 @@ export const syncProducerTagAssignmentRowSchema = z.strictObject({
   tagId: apiIdSchema,
 });
 
+export const syncTaxonomyAliasRowSchema = z.strictObject({
+  id: apiIdSchema,
+  vocabulary: z.enum(['entry', 'producer']),
+  partition: z.string(),
+  aliasName: z.string(),
+  normalizedAlias: z.string(),
+  canonicalName: z.string(),
+  normalizedCanonical: z.string(),
+});
+
 export const syncEntryContentRowSchema = z.strictObject({
   id: apiIdSchema,
   entryId: apiIdSchema,
@@ -135,12 +145,18 @@ export const syncCollectionRowSchema = z.strictObject({
   sortOrder: z.number().int(),
 });
 
-export const syncCollectionMemberRowSchema = z.strictObject({
-  collectionId: apiIdSchema,
-  entryId: apiIdSchema.optional(),
-  producerId: apiIdSchema.optional(),
-  position: z.number().int(),
-});
+export const syncCollectionMemberRowSchema = z.union([
+  z.strictObject({
+    collectionId: apiIdSchema,
+    entryId: apiIdSchema,
+    position: z.number().int().nonnegative(),
+  }),
+  z.strictObject({
+    collectionId: apiIdSchema,
+    producerId: apiIdSchema,
+    position: z.number().int().nonnegative(),
+  }),
+]);
 
 export const syncAuthorDirectoryRowSchema = z.strictObject({
   id: apiIdSchema,
@@ -154,6 +170,7 @@ export const syncAuthorDirectoryEntryRowSchema = z.strictObject({
   directoryId: apiIdSchema,
   producerId: apiIdSchema,
   entryId: apiIdSchema,
+  sortOrder: z.number().int(),
 });
 
 export const syncUsageRowSchema = z.strictObject({
@@ -182,6 +199,7 @@ export const syncSnapshotPayloadSchema = z.strictObject({
   entryTags: z.array(syncEntryTagRowSchema),
   producerTags: z.array(syncProducerTagRowSchema),
   producerTagAssignments: z.array(syncProducerTagAssignmentRowSchema),
+  taxonomyAliases: z.array(syncTaxonomyAliasRowSchema).optional(),
   entryContents: z.array(syncEntryContentRowSchema),
   ratingSlots: z.array(syncRatingSlotRowSchema),
   entryRatingValues: z.array(syncEntryRatingValueRowSchema),

@@ -4,6 +4,7 @@ import type { GalleryApi, GalleryAuthorSummary, GalleryEntrySummary } from './ap
 import AppIcon from './components/AppIcon.vue';
 import EntryCard from './components/EntryCard.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
+import LazyCardImage from './components/LazyCardImage.vue';
 import { useI18n } from './i18n.js';
 import { shuffledCopy } from './random-sort.js';
 import { useNavigationMemory } from './navigation-memory.js';
@@ -370,7 +371,7 @@ async function removeAuthor(authorId: number): Promise<void> {
         <article v-for="author in items" :key="author.id" class="author-card" :data-view-later-author-id="author.id">
           <button type="button" class="author-card-main" @click="emit('open-author', author.id)">
             <span v-if="author.covers.length" class="author-cover-grid">
-              <img v-for="coverRef in author.covers.slice(0, 4)" :key="coverRef" :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="author.name" loading="lazy" decoding="async">
+              <LazyCardImage v-for="coverRef in author.covers.slice(0, 4)" :key="coverRef" :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="author.name" loading="lazy" decoding="async" />
             </span>
             <span v-else class="author-placeholder">{{ author.name.slice(0, 1).toUpperCase() }}</span>
             <span class="author-card-meta">

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { entryCardMediaRef } from '../entry-media-stack.js';
+import LazyCardImage from './LazyCardImage.vue';
 
 type CoverCompositionVariant = 'author-card' | 'author-detail' | 'collection';
 
@@ -41,14 +42,14 @@ const gridStyle = computed(() => ({
     :style="gridStyle"
     :aria-label="alt"
   >
-    <img
+    <LazyCardImage
       v-for="coverRef in visibleCoverRefs"
       :key="coverRef"
       :src="assetUrl(entryCardMediaRef(coverRef))"
       :alt="alt"
       :loading="variant === 'author-detail' ? 'eager' : 'lazy'"
       decoding="async"
-    >
+    />
     <span
       v-if="visibleCoverRefs.length === 0 && variant === 'collection'"
       class="cover-composition-placeholder mini-placeholder"

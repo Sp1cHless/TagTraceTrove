@@ -6,6 +6,7 @@ import { createLibraryBackup, restoreLibraryBackup } from '../../src/database/ba
 import { createTempFileDatabase, type TempFileDatabase } from '../../src/database/testing.js';
 import { applyAllMigrations } from '../../src/database/migrations.js';
 import { openDatabase } from '../../src/database/connection.js';
+import { getSyncIdentity, rotateSyncEpoch } from '../../src/sync/sync-service.js';
 
 interface Fixture {
   temp: TempFileDatabase;
@@ -79,6 +80,66 @@ describe('library backup', () => {
 });
 
 describe('library restore', () => {
+  it('preserves the library identity but rotates the sync epoch after restore', async () => {
+    const fixture = makeFixture();
+    insertEntry(fixture.temp, 'Work A');
+    const backedUpIdentity = getSyncIdentity(fixture.temp.database);
+    const backup = await createLibraryBackup({
+      databasePath: fixture.temp.path,
+      dataDir: fixture.dataDir,
+    });
+
+    const liveEpoch = rotateSyncEpoch(fixture.temp.database);
+    expect(liveEpoch).not.toBe(backedUpIdentity.syncEpoch);
+    fixture.temp.database.close();
+
+    await restoreLibraryBackup({
+      backupDir: backup.backupDir,
+      databasePath: fixture.temp.path,
+      dataDir: fixture.dataDir,
+    });
+
+    const restored = openDatabase(fixture.temp.path);
+    try {
+      const restoredIdentity = getSyncIdentity(restored);
+      expect(restoredIdentity.libraryId).toBe(backedUpIdentity.libraryId);
+      expect(restoredIdentity.syncEpoch).not.toBe(backedUpIdentity.syncEpoch);
+      expect(restoredIdentity.syncEpoch).not.toBe(liveEpoch);
+    } finally {
+      restored.close();
+    }
+  });
+
+  it('migrates a pre-sync backup before creating its new sync epoch', async () => {
+    const fixture = makeFixture();
+    insertEntry(fixture.temp, 'Legacy Work');
+    fixture.temp.database.exec(`
+      DROP TABLE sync_metadata;
+      DELETE FROM schema_migrations WHERE version = 15;
+    `);
+    const backup = await createLibraryBackup({
+      databasePath: fixture.temp.path,
+      dataDir: fixture.dataDir,
+    });
+    fixture.temp.database.close();
+
+    await restoreLibraryBackup({
+      backupDir: backup.backupDir,
+      databasePath: fixture.temp.path,
+      dataDir: fixture.dataDir,
+    });
+
+    const restored = openDatabase(fixture.temp.path);
+    try {
+      const version = restored.prepare('SELECT MAX(version) AS version FROM schema_migrations')
+        .get() as { version: number };
+      expect(version.version).toBe(15);
+      expect(getSyncIdentity(restored).syncEpoch).toMatch(/^[0-9a-f-]{36}$/u);
+    } finally {
+      restored.close();
+    }
+  });
+
   it('rolls the database and assets back to the backup point, keeping a pre-restore snapshot', async () => {
     const fixture = makeFixture();
     insertEntry(fixture.temp, 'Work A');

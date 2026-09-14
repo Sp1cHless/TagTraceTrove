@@ -3,6 +3,8 @@ import { dirname, join, resolve } from 'node:path';
 import Database from 'better-sqlite3';
 import { openDatabase } from './connection.js';
 import { inspectDatabase } from './doctor.js';
+import { applyAllMigrations } from './migrations.js';
+import { rotateSyncEpoch } from '../sync/sync-service.js';
 
 /**
  * Whole-library backup/restore. A backup is a self-contained directory
@@ -196,6 +198,26 @@ export async function restoreLibraryBackup(options: LibraryRestoreOptions): Prom
   mkdirSync(dirname(databasePath), { recursive: true });
   cpSync(backupDatabase, databasePath);
 
+  // Gate 3 runs before touching the live asset tree. Legacy backups are
+  // upgraded first so migration 015 can create sync_metadata; rotating the
+  // epoch here also ensures a later asset-copy failure cannot leave a
+  // runnable rewound database with its backed-up epoch.
+  const restored = openDatabase(databasePath);
+  let doctorOk = false;
+  let doctorIssues: string[] = [];
+  try {
+    applyAllMigrations(restored);
+    rotateSyncEpoch(restored);
+    const result = inspectDatabase(restored);
+    doctorOk = result.ok;
+    doctorIssues = result.issues;
+  } finally {
+    restored.close();
+  }
+  if (!doctorOk) {
+    throw new Error(`Restore completed but the restored database failed integrity checks:\n${doctorIssues.join('\n')}\nPre-restore snapshot: ${preRestoreSnapshot ?? '(none)'}`);
+  }
+
   if (existsSync(assetRoot) || existsSync(join(backupDir, 'assets'))) {
     moveAside(assetRoot, preRestoreTag);
   }
@@ -204,21 +226,6 @@ export async function restoreLibraryBackup(options: LibraryRestoreOptions): Prom
     cpSync(backupAssets, assetRoot, { recursive: true });
   }
 
-  // Gate 3: the restored database must open and pass the doctor.
-  const restored = openDatabase(databasePath);
-  let doctorOk = false;
-  let doctorIssues: string[] = [];
-  try {
-    const result = inspectDatabase(restored);
-    doctorOk = result.ok;
-    doctorIssues = result.issues;
-  } finally {
-    restored.close();
-  }
-
-  if (!doctorOk) {
-    throw new Error(`Restore completed but the restored database failed integrity checks:\n${doctorIssues.join('\n')}\nPre-restore snapshot: ${preRestoreSnapshot ?? '(none)'}`);
-  }
 
   return {
     backupDir,

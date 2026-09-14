@@ -873,6 +873,23 @@ function createMemoryApi(options: {
       Object.assign(author, input);
       return author;
     },
+    async linkEntryAuthorByName(entryId: number, name: string) {
+      // 与服务端同语义:同名(或别名)已存在则关联既有作者,不新建。
+      const normalized = name.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase();
+      const existing = authors.find((author) => (
+        author.name.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase() === normalized
+      ));
+      if (existing) {
+        const list = linkedAuthorIds.get(entryId) ?? [];
+        if (!list.includes(existing.id)) list.push(existing.id);
+        linkedAuthorIds.set(entryId, list);
+        return { entryId, producerId: existing.id, producerName: existing.name, created: false };
+      }
+      const createdProducer = { id: 900 + authors.length, name, occupation: null, artworkRef: null, content: null };
+      authors.push(createdProducer);
+      linkedAuthorIds.set(entryId, [...(linkedAuthorIds.get(entryId) ?? []), createdProducer.id]);
+      return { entryId, producerId: createdProducer.id, producerName: name, created: true };
+    },
     async linkEntryAuthor(entryId, authorId) {
       linkedAuthorIds.set(entryId, [...new Set([...(linkedAuthorIds.get(entryId) ?? []), authorId])]);
     },
@@ -1057,6 +1074,17 @@ describe('GalleryApp', () => {
     setLocale('en');
   });
 
+  it('shows when reads are served from the offline snapshot', () => {
+    const wrapper = mount(GalleryApp, {
+      props: {
+        api: createMemoryApi(),
+        offlineState: { mode: 'offline', lastFallbackAt: '2026-09-13T00:00:00Z' },
+      },
+    });
+
+    expect(wrapper.get('[data-testid="offline-mode-banner"]').text()).toContain('offline copy');
+  });
+
   it('opens Settings and switches all UI copy between English and Chinese', async () => {
     const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
     await flushPromises();
@@ -1064,6 +1092,7 @@ describe('GalleryApp', () => {
     expect(wrapper.get('h1').text()).toBe('Galleries');
     await wrapper.get('[data-testid="settings-button"]').trigger('click');
     expect(wrapper.get('[data-testid="settings-panel"]').text()).toContain('Language');
+    expect(wrapper.get('[data-testid="offline-settings"]').text()).toContain('Offline library');
 
     await wrapper.get('[data-testid="language-select"]').setValue('zh-CN');
 
@@ -2486,6 +2515,26 @@ describe('GalleryApp', () => {
     await second.trigger('blur');
     await flushPromises();
     expect(wrapper.get('[data-facet-id="11"]').text()).toContain('女忍');
+  });
+
+  it('links the existing Author instead of creating a duplicate when the name matches', async () => {
+    const api = createMemoryApi({ withUnlinkedAuthor: true });
+    const createAuthor = vi.spyOn(api, 'createAuthor');
+    const linkByName = vi.spyOn(api, 'linkEntryAuthorByName');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    await wrapper.get('[data-testid="add-entry-author"]').trigger('click');
+    // 「Guest Artist」是库里已有作者(未关联到这个 Entry);大小写不同也应命中
+    await wrapper.get('[name="authorName"]').setValue('guest artist');
+    await wrapper.get('[name="authorName"]').trigger('keydown.enter');
+    await flushPromises();
+
+    expect(linkByName).toHaveBeenCalledWith(1, 'guest artist');
+    // 走的是"解析或创建"这一条路径,不再先建后链
+    expect(createAuthor).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-testid="entry-detail"]').text()).toContain('Guest Artist');
   });
 
   it('warns when a new Author name matches an existing Author or alias', async () => {
