@@ -288,6 +288,27 @@ export function executeProducerMerges(
         ).get() as { changes: number };
         execution.membershipsMoved += membershipsMoved.changes;
 
+        // Curated memberships move the same way. A Collection keeps its own
+        // folder either way, and the keeper lands at the end of the View later
+        // list unless it is already saved, because a position may never repeat.
+        database.prepare(`
+          INSERT OR IGNORE INTO collection_producers (collection_id, producer_id, created_at)
+          SELECT collection_id, ?, created_at FROM collection_producers WHERE producer_id = ?
+        `).run(keeper.id, other.id);
+        database.prepare('DELETE FROM collection_producers WHERE producer_id = ?').run(other.id);
+        const currentlySaved = database.prepare(
+          'SELECT COUNT(*) FROM view_later_producers WHERE producer_id = ?',
+        ).pluck();
+        if (currentlySaved.get(other.id) !== 0 && currentlySaved.get(keeper.id) === 0) {
+          const nextPosition = database.prepare(
+            'SELECT COALESCE(MAX(position), -1) + 1 FROM view_later_producers',
+          ).pluck().get() as number;
+          database.prepare(
+            'INSERT INTO view_later_producers (producer_id, position) VALUES (?, ?)',
+          ).run(keeper.id, nextPosition);
+        }
+        database.prepare('DELETE FROM view_later_producers WHERE producer_id = ?').run(other.id);
+
         const absorbEntryLinks = database.prepare(`
           INSERT OR IGNORE INTO entry_producers (entry_id, producer_id)
           SELECT entry_id, ? FROM entry_producers WHERE producer_id = ?

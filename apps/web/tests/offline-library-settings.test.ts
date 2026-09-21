@@ -8,22 +8,22 @@ import { createMemorySnapshotStore, readActiveSnapshot } from '../src/offline/sn
 import { setLocale } from '../src/i18n.js';
 
 const capabilities: SyncCapabilities = {
-  libraryId: 'library-1', syncEpoch: 'epoch-1', sqliteSchemaVersion: 15,
-  snapshotFormatVersion: 1, syncProtocolVersion: 1, serverBuild: 'test',
-  featureFlags: { readOnlySnapshot: true, offlineMutations: false },
+  libraryId: 'library-1', syncEpoch: 'epoch-1', sqliteSchemaVersion: 21,
+  snapshotFormatVersion: 2, syncProtocolVersion: 1, serverBuild: 'test',
+  featureFlags: { readOnlySnapshot: true, offlineMutations: true, offlineEntryUpdate: true },
 };
 
 async function makeSnapshot(mediaRefs: string[] = []): Promise<SyncSnapshot> {
   const value: SyncSnapshot = {
     header: {
-      libraryId: 'library-1', syncEpoch: 'epoch-1', snapshotSeq: 1,
-      generatedAt: '2026-09-13T00:00:00.000Z', sqliteSchemaVersion: 15,
-      snapshotFormatVersion: 1,
+      libraryId: 'library-1', syncEpoch: 'epoch-1', snapshotSeq: 1, changeSeq: 0,
+      generatedAt: '2026-09-13T00:00:00.000Z', sqliteSchemaVersion: 21,
+      snapshotFormatVersion: 2,
       counts: { entries: 1, producers: 0, entryContents: 0, entryTags: 0, collections: 0 },
       checksum: '',
     },
     payload: {
-      entries: [{ id: 1, title: 'Endfield', type: 'game', coverRef: mediaRefs[0] ?? null, previewRef: null, previewRefs: [], pageCount: null, uploadDate: null, createdAt: '2026-09-13', updatedAt: '2026-09-13' }],
+      entries: [{ id: 1, syncUid: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', syncVersion: 1, title: 'Endfield', type: 'game', coverRef: mediaRefs[0] ?? null, previewRef: null, previewRefs: [], pageCount: null, uploadDate: null, createdAt: '2026-09-13', updatedAt: '2026-09-13' }],
       producers: [], entryProducers: [], tags: [], tagGroups: [], entryTags: [], producerTags: [],
       producerTagAssignments: [], entryContents: [], ratingSlots: [], entryRatingValues: [], producerRatingValues: [],
       collections: [], collectionMembers: [], authorDirectories: [], authorDirectoryEntries: [], entryUsage: [],

@@ -116,18 +116,39 @@ export function assignProducerTag(
   })();
 }
 
+/**
+ * The Producer vocabulary of the same rule: a Tag no Author carries is residue
+ * and goes with its last assignment.
+ */
+export function pruneUnusedProducerTags(database: T3Database, tagIds: number[]): number {
+  const unique = [...new Set(tagIds)];
+  if (unique.length === 0) return 0;
+  const placeholders = unique.map(() => '?').join(', ');
+  const result = database.prepare(`
+    DELETE FROM producer_tags
+    WHERE id IN (${placeholders})
+      AND NOT EXISTS (
+        SELECT 1 FROM producer_tag_assignments WHERE producer_tag_assignments.tag_id = producer_tags.id
+      )
+  `).run(...unique);
+  return result.changes;
+}
+
 export function removeProducerTag(
   database: T3Database,
   producerId: number,
   tagId: number,
 ): void {
-  const result = database.prepare(`
-    DELETE FROM producer_tag_assignments
-    WHERE producer_id = ? AND tag_id = ?
-  `).run(producerId, tagId);
-  if (result.changes === 0) {
-    throw new Error('producer tag assignment not found');
-  }
+  database.transaction(() => {
+    const result = database.prepare(`
+      DELETE FROM producer_tag_assignments
+      WHERE producer_id = ? AND tag_id = ?
+    `).run(producerId, tagId);
+    if (result.changes === 0) {
+      throw new Error('producer tag assignment not found');
+    }
+    pruneUnusedProducerTags(database, [tagId]);
+  })();
 }
 
 export function renameProducerTag(

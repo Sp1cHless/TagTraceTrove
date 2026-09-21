@@ -56,6 +56,10 @@ A Producer has a single simple `content` field for its important short review/no
 
 ## Ratings
 
+A **Tag indexes works** the same way an Author credits them: the last assignment going away deletes the Tag row (`pruneUnusedTags` / `pruneUnusedProducerTags`; `020_prune_unused_tags.sql` clears the rows already in that state, 255 of them in the reference library — mistyped names and names whose last use was removed). Tags are only offered while something carries them, so a removed typo cannot come back from the autocomplete, and the vocabulary cannot grow without bound. The Tag alias dictionary is name data with no foreign key to `tags`, so it is untouched and re-creates the row from a later import.
+
+An **Author holds works**, and every import carries the Author information with the work it belongs to, so an Author that holds none is residue rather than content. Deleting or merging an Entry never deletes its Author, so the last work leaving an Author removes the Author with it (`pruneWorklessProducers`; `018_prune_workless_authors.sql` cleans up the rows already in that state): unlinking an Entry's last Author, deleting the Entry, and an Author merge that leaves a keeper blank all run the same rule. The one deliberate exception is an Author created by hand that never held a work at all — that one waits for its first work instead of disappearing. Author alias groups are unaffected either way: `taxonomy_aliases` maps names to names with no reference to this table, so a spelling that used to be its own row keeps resolving to its canonical Author after that row is gone.
+
 A rating is one line of **name + stars**. Slot names (`rating_slots`) are fully templated per subject kind and Gallery: `subject_kind = 'entry'` slots are shared by every Entry of `entries.type`; `subject_kind = 'producer'` slots are partitioned by the Author's dominant Gallery (derived from their works, never stored), so creating a slot from any Author's edit mode automatically applies it to every same-dominant-Gallery Author — there is no apply button on the author side. Stars are 0.5–5 in half steps; `stars IS NULL` means the slot exists on the card but is unrated and is never treated as zero. Values live in `entry_rating_values` / `producer_rating_values` (one row per slot+subject); slot `sort_order` is shared per Gallery/partition as part of the template. The immutable migration is `006_rating_slots.sql`.
 
 An Author's rating dimensions mirror the Gallery's Entry rating dimensions by name: recording an Author rating from an import creates the `producer` slot carrying the same name as the Entry slot inside the Author's dominant-Gallery partition, so the two sides describe the same dimension without a synchronized table. Because those dimensions are separate slot rows per kind, entry-side tooling never assumes a shared `slotId`. One place crosses kinds by name: the rating sort's `applyAuthorRating` mode falls back to the Author value for the same-named dimension when a work carries none of its own, using the highest Author value and only for works with fewer than four Authors. Rating **filters** stay entry-only, so a work that borrows an Author rating still counts as unrated there.
@@ -143,11 +147,124 @@ prefetches the deterministic media manifest into a durable media cache. The
 online Gallery API remains authoritative; when supported core reads fail, a
 small offline repository derives Gallery, Entry, Author, facet, Collection,
 usage and View-later DTOs from the active snapshot. A visible banner marks
-that fallback, while every mutation still fails closed online. The `sync/`
+that fallback. Entry title/date/page-count edits, View/Like events, Entry View
+later desired-state changes, and the bounded manual Entry composer create flow
+are the offline mutation allowlist; every other mutation still fails closed
+online. The `sync/`
 server module captures `snapshot_seq` and read-model rows inside one immediate
 transaction. Restore migrates old backups before preserving `libraryId` and
-rotating `syncEpoch`. C2/C3 (outbox, change journal, operation replay,
-conflict UI and offline mutations) remain intentionally open.
+rotating `syncEpoch`.
+
+The first C2 infrastructure slice upgraded `t3-offline` from schema version 1
+to 2 and added an independent `outbox` object store. C3 upgrades it to version 3
+and adds a separate `mediaOutbox`; the create operation and its cover/preview
+Blobs are inserted in one cross-store transaction. Pending operation envelopes
+carry a client-generated stable `opId`, client/library/epoch identity, entity
+identity and operation kind, `baseVersion`/`baseValues`, JSON payload and client
+creation time. The store assigns a separate auto-increment insertion sequence,
+so replay order does not depend on clock precision. Retrying an identical
+`opId` is a local no-op; reusing it with different content fails closed. The v1
+upgrade preserves active snapshot data, while snapshot generation pruning and
+Clear Offline Library leave queued operations and staged media untouched.
+
+Migration 16 adds the server-side C2 foundation for the first writable resource
+allowlist only: Entries and Entry Contents receive immutable UUID transport
+identities and monotonic resource versions. SQLite triggers journal their
+create/update/delete lifecycle in `sync_changes` and retain deletion cursors in
+`sync_tombstones`; because the triggers participate in the caller's transaction,
+failed mutations cannot leave ghost journal records. `sync_operation_receipts`
+is the durable idempotency store for the later replay handler. Existing rows are
+backfilled before triggers are installed, preserving business data without
+inventing historical changes. Database Doctor checks the new identities and
+unique indexes when the v16 columns are present.
+
+Snapshot format v2 includes Entry/Content `syncUid` and `syncVersion`, plus an
+atomic `changeSeq` high-water mark. The shared parser keeps these additions
+optional so persisted format-v1 generations remain readable after an app
+upgrade. `POST /api/sync/replay` accepts strict `entry.update`, `entry.create`,
+`entry.usage`, and `entry.view-later.set` operations.
+Receipt lookup/hash validation, base-value conflict checks, the Entry mutation,
+trigger-maintained journal write and receipt insert share one SQLite transaction.
+An exact retry returns the stored result; an `opId` collision or stale edited
+field fails closed. The browser projects queued edits over the immutable snapshot,
+preserves replay order per Entry while allowing independent Entries past a blocked
+one, and removes applied operations only after a snapshot whose `snapshotSeq`
+advances and whose `changeSeq` covers every acknowledged `serverSeq`. Refresh or
+freshness failure retains those operations for exact retry. Pending/conflict/failed
+status persists, and a queued envelope the running build can no longer express is
+marked failed instead of being sent or dropped, without stopping unrelated Entries
+from syncing. The three counts are disjoint and every non-zero category renders
+together. The banner's discard action removes each blocked conflict/failed edit
+and every later queued operation for that same Entry in one IndexedDB transaction,
+because those intents carry base values and predicted revisions derived from the
+blocker. Earlier receipt retries and unrelated Entries remain queued.
+For `entry.create`, the client-generated Entry UUID is permanent, `baseVersion`
+is zero, and SQLite creates the numeric ID. Metadata, the selected ratings and
+initial View Later membership commit with the operation receipt in one
+transaction. The server never deduplicates by title. The offline composer only
+accepts a Gallery already present in the installed snapshot and does not invent
+a numeric route for the temporary `local:<uuid>` identity. Pending creates are
+exposed to global title search through a separate local projection and render as
+non-clickable “Pending sync” cards; they never receive a fake numeric ID.
+Detailed template editing remains online-only, so the template-ready action keeps
+the composer open with a connection requirement instead of enqueuing and falling
+to Home when the server is unavailable.
+
+Offline View and Like are unique events: the stable operation ID is the event
+identity, so a lost response can never increment an aggregate twice. A pending
+event overlays the snapshot usage count immediately; replay updates `entry_usage`
+and touches the owning Entry revision/journal in the same transaction as its
+receipt. Entry View later is an explicit `{ present: boolean }` desired state,
+never a toggle. Consecutive add/remove operations predict the shared Entry
+revision in insertion order, project membership locally, and converge without
+reversing state on retry. Online membership changes advance the same revision;
+a stale non-convergent replay becomes a visible conflict. Both features are
+capability-gated for compatibility with older servers. The v7 Android candidate
+also retires PWA Service Workers from the Capacitor shell and removes only stale
+`t3-shell-*` caches; this fixed APK upgrades that had continued executing an old
+Web bundle while preserving IndexedDB, Outbox, staged media and offline media.
+Real-device acceptance on 2026-09-21 confirmed offline View, Like and Entry View
+later optimistic behavior plus successful reconnect replay. Together with the
+earlier accepted offline manual Entry/media flow, C0, this C2 slice and the
+implemented C3 slice remain `VALIDATED`; runtime diagnostics stay available for
+future evidence collection.
+
+Existing Entry ratings use `entry.rating.set { slotUid, stars }`, where `stars`
+is a final nullable half-step value rather than a delta. Migration 024 gives every
+rating slot a permanent immutable `sync_uid`; the numeric HTTP/UI `slotId` remains
+local database identity and is never trusted as the offline operation identity.
+Rating operations share
+the owning Entry revision chain with scalar edits, usage and View Later. The web
+projection applies pending desired values immediately. Replay treats an already
+matching value as convergent, auto-merges across unrelated Entry revision changes
+when the slot value still matches `baseValues`, and emits a visible conflict when
+that value changed. A removed or wrong-Gallery slot becomes an explicit
+`invalid-rating` failure rather than a guessed write. Rating value, Entry revision,
+journal row and receipt are one SQLite transaction; the normal online rating path
+advances the same revision. The `offlineEntryRating` capability prevents a new
+client from queuing this operation against an older server. Automated acceptance
+is complete; Android real-device acceptance starts with the v8 candidate.
+
+Cover and preview bytes remain outside SQLite but use a separate idempotent C3
+transport. Migration 022 stores durable media receipts; migration 023 records
+which Entry UUIDs came from successful offline create replay.
+`PUT /api/sync/media/:uploadId`
+rejects existing online Entries, then validates the actual SHA-256, MIME and
+image dimensions, promotes one deterministic file plus thumbnail, and updates
+the Entry reference together with the upload receipt.
+An exact upload retry returns the stored result; another request body under the
+same ID, or an attempt to replace an occupied media slot, fails closed. C3 is
+deliberately limited to one cover and one preview (`ordinal = 0`). Metadata replay
+runs before dependent media; neither operation IDs nor upload IDs change after a
+lost response. Applied rows and Blobs are removed locally only after a newer
+authoritative snapshot covers the largest acknowledged server sequence. A hard
+media validation failure leaves a discardable failed media row while the created
+Entry itself can still reconcile from SQLite.
+
+Entry Content mutations, Author View later, Collections, delete, merge, Import
+and all other high-risk mutations remain online-only.
+Initial ratings/View Later embedded in `entry.create` remain part of C3. No
+change-feed endpoint is exposed yet.
 
 The first localhost manual acceptance pass on 2026-09-13 proved the shell,
 IndexedDB snapshot, Gallery/Entry/Collection fallback, Entry detail Content and
@@ -198,11 +315,17 @@ separate follow-up work.
 
 Tag-filter query IDs support comma-separated HTTP values and preserve the repository semantics above. Complete Entry responses preserve the real Section → Facet → Tag hierarchy, including unnamed Facets. See `docs/api-contracts.md`.
 
+Every view carries a fixed pair of floating controls in the lower-right corner: Back above scroll-to-top. The top bar scrolls out of sight on a long page, so Back has to stay reachable from any view — Home, a Gallery grid, an Entry, an Author, Collections, Random, View later. The floating arrow runs the exact same `navigateBackFromTopBar` action and disabled state as the top-bar arrow (disabled on Home, where the top-bar one is too) rather than a second back implementation, so the two can never disagree; the scroll-to-top half smooth-scrolls the current view to the top. The pair belongs to the app shell, not to one page.
+
 `apps/server/src/http/app.ts` exposes these contracts through a thin Hono layer. `apps/server/src/http/server.ts` owns startup, migration application, and database shutdown for the localhost process. See `docs/http-api.md`.
 
 Canonical website exports persist only through `apps/server/src/import/commit.ts`. A shared reviewed mapping selects the Entry type, Facets, Producer decisions, Content labels, and ignored candidate fields. The new portion of a batch uses one transaction, preserves provenance as Content, skips already-persisted clean Source URLs, rejects duplicate Source URLs inside the incoming manifest, and rejects unreviewed Producer matching. Post-commit local media is matched back to created Entries by `externalKey`, so skipped records cannot shift Cover/Preview files onto the wrong Entry. See `docs/import-commit.md`.
 
-`AddEntryPage.vue` reviews an export before commit. Its review section renders a template preview card — the target Gallery's Section → Facet rows carrying the Tag values each reviewed field mapping will produce, plus linked authors and mapped Content — recomputed live as mappings change. When the target template owns a `Type` Facet, a manual content-type input (per import and batch-wide) accepts a value for sites whose exports omit it (e.g. hitomi); the value merges into every Entry's `contentTypes` field and is committed as a Tag under that Facet. The input and its suggestion list are hidden when the template has no `Type` Facet.
+An import files every work the run carried into its temporary review, including the ones the library already had: the commit reports them as `existingEntryIds`, both the plain folder import and the batch path hand them to the review, the review marks those cards "Already in the library" and states how many there were, and saving the run's Collection files both halves — which of them was new is not what the Collection is recording, the folder a work appeared in is.
+
+The manual composer on `AddEntryPage.vue` stays a plain cover-and-fields form: it can either create the Entry outright, or hand it to detailed editing through one secondary button under the Gallery field, which reads "Template ready — open detailed editing" for an existing Gallery and "New Gallery — create its template" for a type that does not exist yet. Either way it creates the work with what is filled in and opens that work's own editor, because the template is the Gallery's shared structure and that is the surface that shows it — the creation page never invents a second, Entry-local notion of structure. A new Gallery starts from the bare Entry, and to stop the first work of a Gallery from quietly keeping its structure private, clicking Done on a work whose Gallery has no Sections yet — and which is that Gallery's only work — raises a modal: apply this work's Sections and Facets to the whole Gallery, or not now. Applying does exactly what the toolbar's `Save as template` does.
+
+`AddEntryPage.vue` also reviews an export before commit. Its review section renders a template preview card — the target Gallery's Section → Facet rows carrying the Tag values each reviewed field mapping will produce, plus linked authors and mapped Content — recomputed live as mappings change. When the target template owns a `Type` Facet, a manual content-type input (per import and batch-wide) accepts a value for sites whose exports omit it (e.g. hitomi); the value merges into every Entry's `contentTypes` field and is committed as a Tag under that Facet. The input and its suggestion list are hidden when the template has no `Type` Facet.
 
 ## UI localization
 
@@ -222,11 +345,17 @@ Entry- and Author-scope search use the bounded `POST /api/entries/query` and `PO
 
 ## Gallery partitions (SFW / NSFW)
 
-`gallery_settings` (`009_gallery_partitions.sql`) marks a whole Entry type (Gallery) SFW or NSFW — individual Entries are never partitioned, and the default is SFW. Author partitioning is derived (any work in an NSFW Gallery makes the Author NSFW) and flips instantly with the Gallery switch. The client's Show NSFW preference (localStorage `t3.showNsfw`, toggled in Settings) is a global visibility boundary: it hides NSFW Galleries from the sidebar and Recently viewed tabs, NSFW Authors, NSFW members/covers/counts inside Collections, and NSFW Works/Authors/Tags from Random pick. Search routes use their `includeNsfw` contract so tags used only by NSFW Galleries do not leak through visibility filters. Turning Show NSFW off while Random results are visible clears that deal immediately.
+`gallery_settings` (`009_gallery_partitions.sql`) marks a whole Entry type (Gallery) SFW or NSFW — individual Entries are never partitioned, and the default is SFW. Author partitioning is derived (any work in an NSFW Gallery makes the Author NSFW) and flips instantly with the Gallery switch. The client's Show NSFW preference (localStorage `t3.showNsfw`, toggled in Settings) is a global visibility boundary: it hides NSFW Galleries from the sidebar and Recently viewed tabs, NSFW Authors, NSFW members/covers/counts inside Collections, and NSFW Works/Authors/Tags from Random pick. View later is inside the same boundary: because its saved lists are not partitioned themselves, its Entries page reloads with the current preference and drops both the NSFW works and their Gallery tab. Every one of these surfaces reads the stored partition flag or the server's `includeNsfw` answer — never the Gallery type name. The sidebar's Author and View later numbers come from the single `GET /api/navigation-counts` interface, which answers the same question for all of them under one boundary, instead of each surface counting its own raw list; the endpoint is the one place that knows an Author is NSFW when any of their works is, so the numbers cannot drift from what those pages list. Search routes and Tag relation suggestions use their `includeNsfw` contract so tags used only by NSFW Galleries do not leak through visibility filters. For a Tag input the boundary follows the **subject being edited**, not the browser-wide switch: an Entry editor offers only the vocabulary its own Gallery's partition can show (a work in an SFW Gallery never sees a tag only NSFW Galleries use, even while NSFW Galleries are visible elsewhere), and an Author editor follows that Author's derived partition. The global dictionary editor (Advanced editing) stays on the Show NSFW switch, because it manages the vocabulary itself rather than one subject. A Gallery that does not exist yet is its own partition and starts SFW: nothing about a new type is inherited from the Galleries already in the library. Turning Show NSFW off while Random results are visible clears that deal immediately.
 
 ## Collections
 
-Collections (`010_collections.sql`) are user-curated folders — the lightweight "put these together" layer, deliberately without facets, templates, or filtering of their own. Two kinds exist, fixed at creation: `entry` collections (may nest child folders exactly one level deep) and `producer` collections (flat). The collection tree is compact: each node returns filtered counts and at most three cover-preview members. Opening a node pages members independently through the Entry or Producer query contract. A folder-level NSFW switch hides the entire folder regardless of its members' own states; SFW mode also filters NSFW members from previews, counts, and pages. Membership (`collection_entries` / `collection_producers`) is idempotent linking; removal only unlinks.
+Collections (`010_collections.sql`, Gallery scope added by `017_collection_gallery_scope.sql`) are user-curated folders — the lightweight "put these together" layer, deliberately without facets, templates, or filtering of their own. Two kinds exist, fixed at creation: `entry` collections (may nest child folders exactly one level deep) and `producer` collections (flat). The collection tree is compact: each node returns filtered counts and at most three cover-preview members. Opening a node pages members independently through the Entry or Producer query contract. A folder-level NSFW switch hides the entire folder regardless of its members' own states; SFW mode also filters NSFW members from previews, counts, and pages. A folder's edit view can also put one Tag on every work it holds (child folders included) through `POST /api/collections/:collectionId/tags`, which reuses each Gallery's own placement rule for that name and reports how many works were tagged, already carried it, or could not take it because their Gallery has no structure yet. Membership (`collection_entries` / `collection_producers`) is idempotent linking; removal only unlinks.
+
+The add-to-collection menu on a work offers the folders curated onto **that work's own Gallery page** (child folders included), plus the unfiled ones, which sit on no page and therefore stay usable from anywhere; a folder the work is already in stays listed even if it belongs to another page, so an existing membership can still be seen and left again. Producer folders are unaffected — they are never Gallery-scoped, so an Author's menu keeps offering all of them.
+
+Entry folders are curated onto one **Gallery page**: `collections.gallery_type` names it. The Collections page is ONE flat row of pages — every Gallery, then "Unfiled" when such folders exist, then Authors last — so there is no Works/Authors level above the Galleries. Hiding an NSFW Gallery in SFW mode therefore takes its page and its folders with it, which is the point of the scope: a folder full of NSFW works no longer outlives the works it shows. When every Gallery page is hidden, Authors is the only page left and the page list hands over to it. Folders whose members span Galleries, or that have no members yet, stay unfiled (`gallery_type` is NULL) and appear on their own "Unfiled" page, which no Gallery partition can hide; the migration backfills existing folders from their members and gives nested folders their parent's page. A new folder is created on the page it was started from, and a nested folder can never leave its parent's page, so a page's folder list is stable. Producer folders keep no scope at all: an Author's Gallery is derived from works and would move as the library grows.
+
+Page switching never renders the other kind's folders: the page row and the folder list read only rows loaded for the page's own kind, and a late response for a page the user already left is dropped.
 
 In the UI, `CollectionsPage.vue` is a permanent sidebar entry (below View later) with Works/Authors tabs in the shared connected-tab style; edit mode creates, deletes, and drag-reorders folders, and folder covers are built from the first member covers. Inside an entry collection, edit mode offers `+ New subfolder` — child folders render above the members as folder cards, opening one navigates in without leaving the current Edit mode, and its back button returns to the parent folder rather than the list. Normal-mode member clicks open Entry detail; Edit-mode clicks select the member for organization instead, and a separate 44px removal control deletes only the active folder's `collection_entries` link. Pending removals are deduplicated, and a failed removal keeps the member grid visible with an inline error. Entry detail pages and the Author information board carry a persistent short 📁+ button that opens an add-to-collection menu (freshly fetched on open; already-joined folders show ✓ and are disabled). The same add-to menu pattern applies to entry cards' detail toolbar.
 

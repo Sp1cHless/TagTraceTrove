@@ -173,9 +173,13 @@ export function assignEntryTag(
       WHERE normalized_name = ?
     `).get(normalizedName) as TagRow;
 
+    // One Entry carries a tag once. Re-adding it lands it on the Facet it was
+    // just typed into — the same outcome as moving it — instead of hitting the
+    // primary key and answering the caller with a conflict it cannot act on.
     database.prepare(`
       INSERT INTO entry_tags (entry_id, tag_id, facet_id)
       VALUES (?, ?, ?)
+      ON CONFLICT(entry_id, tag_id) DO UPDATE SET facet_id = excluded.facet_id
     `).run(input.entryId, tag.id, input.facetId);
 
     return {
@@ -244,14 +248,35 @@ export function renameEntryTag(
   })();
 }
 
-export function removeEntryTag(database: T3Database, entryId: number, tagId: number): void {
+/**
+ * A Tag exists to index works. The last assignment going away takes the row with
+ * it, so a mistyped name cannot come back from the autocomplete and the
+ * vocabulary cannot grow without bound. A named set is passed rather than a
+ * table sweep, so unrelated Tags are never touched.
+ */
+export function pruneUnusedTags(database: T3Database, tagIds: number[]): number {
+  const unique = [...new Set(tagIds)];
+  if (unique.length === 0) return 0;
+  const placeholders = unique.map(() => '?').join(', ');
   const result = database.prepare(`
-    DELETE FROM entry_tags
-    WHERE entry_id = ? AND tag_id = ?
-  `).run(entryId, tagId);
-  if (result.changes === 0) {
-    throw new Error('entry tag assignment not found');
-  }
+    DELETE FROM tags
+    WHERE id IN (${placeholders})
+      AND NOT EXISTS (SELECT 1 FROM entry_tags WHERE entry_tags.tag_id = tags.id)
+  `).run(...unique);
+  return result.changes;
+}
+
+export function removeEntryTag(database: T3Database, entryId: number, tagId: number): void {
+  database.transaction(() => {
+    const result = database.prepare(`
+      DELETE FROM entry_tags
+      WHERE entry_id = ? AND tag_id = ?
+    `).run(entryId, tagId);
+    if (result.changes === 0) {
+      throw new Error('entry tag assignment not found');
+    }
+    pruneUnusedTags(database, [tagId]);
+  })();
 }
 
 export function listEntryTags(

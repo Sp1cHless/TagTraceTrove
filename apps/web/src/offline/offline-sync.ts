@@ -9,7 +9,7 @@ import {
 } from './snapshot-store.js';
 
 const SUPPORTED_SYNC_PROTOCOL_VERSION = 1;
-const SUPPORTED_SNAPSHOT_FORMAT_VERSION = 1;
+const SUPPORTED_SNAPSHOT_FORMAT_VERSION = 2;
 
 export interface OfflineSyncApi {
   getSyncCapabilities(): Promise<SyncCapabilities>;

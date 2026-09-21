@@ -33,6 +33,7 @@ import {
   sourceMaintenanceRunRecordSchema,
   sourceStatusPatchSchema,
   sourceLibraryRecordSchema,
+  syncReplayOperationSchema,
 } from '../src/index.js';
 
 describe('entry API contracts', () => {
@@ -203,6 +204,7 @@ describe('import rating contracts', () => {
       entries: [],
       entryCount: 0,
       skippedExistingEntryCount: 0,
+    existingEntryIds: [],
       createdProducerCount: 0,
       producerLinkCount: 0,
       tagAssignmentCount: 0,
@@ -430,6 +432,121 @@ describe('source maintenance API contracts', () => {
       skippedCount: 0,
       unresolvedCount: 0,
       originMarkedInvalid: true,
+    }).success).toBe(false);
+  });
+});
+
+describe('offline usage event contract', () => {
+  const base = {
+    opId: '11111111-1111-4111-8111-111111111111',
+    clientId: 'android-client',
+    libraryId: '22222222-2222-4222-8222-222222222222',
+    syncEpoch: 'epoch-1',
+    entityKind: 'entry' as const,
+    entityUid: '33333333-3333-4333-8333-333333333333',
+    operationKind: 'entry.usage' as const,
+    baseVersion: 0,
+    baseValues: {},
+    clientCreatedAt: '2026-09-20T12:00:00.000Z',
+  };
+
+  it.each(['view', 'like'] as const)('accepts one idempotent %s event', (event) => {
+    expect(syncReplayOperationSchema.parse({ ...base, payload: { event } })).toMatchObject({
+      operationKind: 'entry.usage',
+      baseVersion: 0,
+      payload: { event },
+    });
+  });
+
+  it('rejects aggregate replacement and conflicting usage envelopes', () => {
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, payload: { event: 'view', viewCount: 99 },
+    }).success).toBe(false);
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, baseVersion: 3, payload: { event: 'like' },
+    }).success).toBe(false);
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, payload: { event: 'unlike' },
+    }).success).toBe(false);
+  });
+});
+
+describe('offline View later desired-state contract', () => {
+  const base = {
+    opId: '51515151-5151-4151-8151-515151515151',
+    clientId: 'android-client',
+    libraryId: '22222222-2222-4222-8222-222222222222',
+    syncEpoch: 'epoch-1',
+    entityKind: 'entry' as const,
+    entityUid: '33333333-3333-4333-8333-333333333333',
+    operationKind: 'entry.view-later.set' as const,
+    baseVersion: 4,
+    baseValues: { present: false },
+    payload: { present: true },
+    clientCreatedAt: '2026-09-20T12:00:00.000Z',
+  };
+
+  it('accepts an explicit membership transition', () => {
+    expect(syncReplayOperationSchema.parse(base)).toMatchObject({
+      operationKind: 'entry.view-later.set',
+      baseVersion: 4,
+      baseValues: { present: false },
+      payload: { present: true },
+    });
+  });
+
+  it('rejects a no-op or toggle-shaped payload', () => {
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, payload: { present: false },
+    }).success).toBe(false);
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, payload: { toggle: true },
+    }).success).toBe(false);
+  });
+});
+
+describe('offline Entry rating desired-state contract', () => {
+  const slotUid = '71717171-7171-4171-8171-717171717171';
+  const base = {
+    opId: '61616161-6161-4161-8161-616161616161',
+    clientId: 'android-client',
+    libraryId: '22222222-2222-4222-8222-222222222222',
+    syncEpoch: 'epoch-1',
+    entityKind: 'entry' as const,
+    entityUid: '33333333-3333-4333-8333-333333333333',
+    operationKind: 'entry.rating.set' as const,
+    baseVersion: 4,
+    baseValues: { slotUid, stars: null },
+    payload: { slotUid, stars: 4.5 },
+    clientCreatedAt: '2026-09-21T12:00:00.000Z',
+  };
+
+  it('accepts one explicit final value for an existing slot', () => {
+    expect(syncReplayOperationSchema.parse(base)).toMatchObject({
+      operationKind: 'entry.rating.set',
+      baseVersion: 4,
+      baseValues: { slotUid, stars: null },
+      payload: { slotUid, stars: 4.5 },
+    });
+    expect(syncReplayOperationSchema.safeParse({
+      ...base,
+      baseValues: { slotUid, stars: 4.5 },
+      payload: { slotUid, stars: null },
+    }).success).toBe(true);
+  });
+
+  it('rejects no-op, slot changes, invalid half steps, and toggle-shaped payloads', () => {
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, baseValues: { slotUid, stars: 4.5 },
+    }).success).toBe(false);
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, payload: { slotUid: '72727272-7272-4272-8272-727272727272', stars: 4.5 },
+    }).success).toBe(false);
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, payload: { slotUid, stars: 4.3 },
+    }).success).toBe(false);
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, payload: { slotUid, delta: 0.5 },
     }).success).toBe(false);
   });
 });

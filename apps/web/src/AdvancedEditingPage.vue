@@ -16,6 +16,7 @@ import type {
   UpsertTaxonomyAliasRequest,
 } from '@t3/shared';
 import type { GalleryApi } from './api/gallery.js';
+import { showNsfw } from './stores/preferences.js';
 import { useI18n } from './i18n.js';
 import { parseTaxonomyDictionary } from './taxonomy-dictionary.js';
 import SuggestionInput from './components/SuggestionInput.vue';
@@ -294,8 +295,54 @@ const tagMergeNotice = ref('');
 const tagMergeError = ref<string | null>(null);
 const tagMergeFormKey = ref(0);
 
+// Tag delete: the merge's counterpart for a tag that should not be in the
+// collection at all. Same Entry-vocabulary scope as the merge above and the same
+// arm-then-confirm, because this also destroys data — except that a merge keeps a
+// name alive and a delete does not, so the confirmation states the count of uses
+// that go with it.
+const deletePick = ref<TagMergePick | null>(null);
+const tagDeleteBusy = ref(false);
+const tagDeleteNotice = ref('');
+const tagDeleteError = ref<string | null>(null);
+const tagDeleteFormKey = ref(0);
+
+function pickDeleteTag(suggestion: TagMergePick): void {
+  deletePick.value = { id: suggestion.id, name: suggestion.name };
+}
+
+function removeDeletePick(): void {
+  deletePick.value = null;
+}
+
+async function applyTagDelete(): Promise<void> {
+  if (deletePick.value === null) return;
+  if (!arm('delete-tag')) return;
+  disarm('delete-tag');
+  tagDeleteBusy.value = true;
+  tagDeleteError.value = null;
+  tagDeleteNotice.value = '';
+  const name = deletePick.value.name;
+  try {
+    const result = await props.api.deleteTag({ vocabulary: 'entry', tagId: deletePick.value.id });
+    tagDeleteNotice.value = t('tagDelete.done', { tag: result.tagName, n: result.removedAssignments });
+    deletePick.value = null;
+    tagDeleteFormKey.value += 1;
+    // The dictionary view is keyed by name, so a deleted tag must not linger there.
+    await loadAliases();
+  } catch (cause) {
+    tagDeleteError.value = cause instanceof Error ? cause.message : t('tagDelete.error', { tag: name });
+  } finally {
+    tagDeleteBusy.value = false;
+  }
+}
+
 function suggestEntryTagsForMerge(query: string, excludeIds: number[], signal: AbortSignal) {
-  return props.api.suggestTags({ vocabulary: 'entry', q: query, excludeIds }, signal);
+  return props.api.suggestTags({
+    vocabulary: 'entry',
+    q: query,
+    excludeIds,
+    includeNsfw: String(showNsfw.value) as 'true' | 'false',
+  }, signal);
 }
 
 function pickMergeKept(suggestion: RelationSuggestion): void {
@@ -781,6 +828,60 @@ watch(tab, (value) => {
           role="status"
         >
           {{ tagMergeNotice }}
+        </p>
+      </div>
+
+      <div :key="tagDeleteFormKey" class="tag-merge-panel" data-testid="tag-delete-form">
+        <h4>{{ t('tagDelete.title') }}</h4>
+        <p class="muted">{{ t('tagDelete.hint') }}</p>
+        <div class="tag-merge-row">
+          <span class="tag-merge-label">{{ t('tagDelete.pick') }}</span>
+          <span v-if="deletePick !== null" class="author-alias-chip" data-testid="tag-delete-pick">
+            {{ deletePick.name }}
+            <button
+              type="button"
+              class="remove-tag-button"
+              :aria-label="t('tag.removeSelection')"
+              data-testid="tag-delete-pick-remove"
+              @click="removeDeletePick"
+            >×</button>
+          </span>
+          <SuggestionInput
+            v-else
+            mode="id-only"
+            name="tagDeletePick"
+            :provider="suggestEntryTagsForMerge"
+            :exclude-ids="[]"
+            :aria-label="t('tagDelete.pick')"
+            :placeholder="t('suggestion.searchPlaceholder')"
+            @select="pickDeleteTag"
+          />
+        </div>
+        <button
+          type="button"
+          class="primary-button tag-merge-apply"
+          :class="{ 'armable-armed': armedKey === 'delete-tag' }"
+          :disabled="tagDeleteBusy || deletePick === null"
+          data-testid="tag-delete-apply"
+          @click="applyTagDelete"
+        >
+          {{ armedKey === 'delete-tag' ? t('tagDelete.applyConfirm') : t('tagDelete.apply') }}
+        </button>
+        <p
+          v-if="tagDeleteError"
+          class="merge-integrity merge-integrity-fail"
+          data-testid="tag-delete-error"
+          role="alert"
+        >
+          {{ tagDeleteError }}
+        </p>
+        <p
+          v-if="tagDeleteNotice"
+          class="merge-integrity merge-integrity-pass"
+          data-testid="tag-delete-notice"
+          role="status"
+        >
+          {{ tagDeleteNotice }}
         </p>
       </div>
     </section>

@@ -937,6 +937,8 @@ IndexedDB 适合存大量结构化数据和 Blob。[24] Background Sync 在部�
 
 ## 23. Phase C0 — 移动外壳与连接方式决策
 
+实施状态（2026-09-21）：`VALIDATED`。Capacitor Android 真机已通过私网配对、JSON 与媒体加载、约 13,000-record IndexedDB snapshot、断服后约 30 秒切换离线、离线浏览/搜索/Random、Source 外链立即交给系统浏览器、offline Entry create/media durable Outbox、View/Like unique events、Entry View later desired state，以及服务器恢复后的自动 capability probe/replay。v7 还修复了 APK 升级后旧 PWA Service Worker/app-shell 继续接管 WebView 的问题：native shell 不再注册 PWA worker，只清除 `t3-shell-*` 并保留 IndexedDB/Outbox/media。该 verdict 验证薄壳和现有 C2/C3 slices，不代表正式发布：QR、稳定签名、protocol mismatch UX、app-specific TLS/pinning，以及 Rating/Content/Author View later 等剩余 allowlist 继续后置。详细证据见 `spikes/001-android-webview-shell/README.md`。
+
 ### 23.1 当前推荐：WebView 薄壳，而不是重写原生 App
 
 当前暂定方案：
@@ -1203,6 +1205,16 @@ optional numeric-ID mapping
 - Content append 和 scalar update；reorder/delete 不允许。
 - View later 的显式 add/remove desired state。
 - like/view 使用 unique event/delta，而不是覆盖 aggregate count。
+
+实施状态（2026-09-21）：Entry scalar、unique View/Like event、Entry View later
+desired state 与 offline Entry create/media 已实现并通过 Android 真机离线与恢复
+同步验收。Rating final value 已实现 capability-gated desired-state operation、
+optimistic overlay、shared Entry revision、transactional replay/receipt 与显式
+conflict；migration 024 为 rating slot 回填不可变 `sync_uid`，避免 SQLite numeric
+ID 删除后复用把旧 Outbox operation 写入新 slot。该切片等待 v8 Android 真机
+验收；Content 和 Author View later 仍按本 allowlist 后续推进。usage、rating 与
+membership replay 都复用 stable `opId` receipt、Entry revision/journal、snapshot
+freshness gate；不增加 Android 专用业务模型。
 
 初期 online-only：
 

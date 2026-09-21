@@ -98,14 +98,38 @@ const filterError = ref<string | null>(null);
 const filterSurfaceOpen = ref(false);
 let errorTimer: ReturnType<typeof setTimeout> | undefined;
 
+/**
+ * Rebuild the bar from the filters it was handed. The Gallery view unmounts this
+ * component while an Entry is open, and Random/Author remount it too, so a fresh
+ * mount has to restore the rows the model still describes instead of starting
+ * blank while the filter keeps applying to the results.
+ */
+function hydrateFromModel(filters: GalleryFacetFilters): void {
+  const tagRows: FilterRow[] = filters.conditions.map((condition) => ({
+    ...freshRow(),
+    facetId: condition.facetId,
+    tagIds: [...condition.tagIds],
+  }));
+  const authorRows: FilterRow[] = filters.authorIds.length === 0
+    ? []
+    : [{ ...freshRow(), mode: 'author' as const, authorIds: [...filters.authorIds] }];
+  const hydrated = [...tagRows, ...authorRows];
+  rows.value = hydrated.length === 0 ? [freshRow()] : hydrated;
+  ratingRows.value = filters.ratingConditions.map((condition) => ({
+    slotId: condition.slotId,
+    operator: condition.operator,
+    stars: condition.stars ?? 3,
+  }));
+  sortSlotId.value = filters.ratingSort?.slotId;
+  sortApplyAuthorRating.value = filters.ratingSort?.applyAuthorRating ?? false;
+  usageSortField.value = filters.usageSort?.field ?? '';
+}
+
 // Switching the active gallery resets the whole bar; edits inside the bar are
 // the component's own state and are never overwritten from outside.
 watch(() => props.options.entryType, () => {
   filterSurfaceOpen.value = false;
-  rows.value = [freshRow()];
-  ratingRows.value = [];
-  usageSortField.value = '';
-  sortSlotId.value = undefined;
+  hydrateFromModel(props.modelValue);
 }, { immediate: true });
 
 // An external reset (e.g. re-entering the same gallery after a delete) clears

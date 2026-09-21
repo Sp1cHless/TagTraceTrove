@@ -344,6 +344,81 @@ describe('loadSiteProbeExport', () => {
       /Export work 5 does not match the hitomi\.la export schema: title/u,
     );
   });
+
+  it('imports a Level 0 work from a site that has no schema of its own', async () => {
+    const { metadataPath } = await writeMetadata({
+      schema_version: 1,
+      source_site: 'manwa.me',
+      source_id: 'book_104722',
+      title: 'CALL-铃响-',
+      detail_url: 'https://manwa.me/book/104722',
+      cover: {
+        local_path: 'items/book_104722/cover/cover.jpg',
+        url: 'https://mwappimgs.cc/static/upload2/book/id/104722/cover_1.jpg',
+      },
+    });
+
+    const batch = await loadSiteProbeExport(metadataPath, { preserveRelativeMediaPaths: true });
+
+    expect(batch.source).toBe('manwa.me');
+    expect(batch.warnings).toEqual([]);
+    expect(batch.entries).toEqual([{
+      externalKey: 'manwa.me:book_104722',
+      title: 'CALL-铃响-',
+      // The `items/<source_id>/` prefix is stripped and the rest resolved against
+      // the document's own folder — which is why the cover sits beside it.
+      cover: 'cover/cover.jpg',
+      tags: [],
+      sources: [{ label: 'manwa.me', url: 'https://manwa.me/book/104722' }],
+    }]);
+    // Nothing invented for the fields Level 0 cannot read: an empty 分类信息 would
+    // become a tag review full of nothing.
+    expect(batch.entries[0]?.fields).toBeUndefined();
+  });
+
+  it('resolves a Level 0 cover to an absolute path when the media travels with the export', async () => {
+    const { directory, metadataPath } = await writeMetadata({
+      source_site: 'manwa.me',
+      source_id: 'book_104722',
+      title: 'CALL-铃响-',
+      detail_url: 'https://manwa.me/book/104722',
+      cover: { local_path: 'items/book_104722/cover/cover.jpg' },
+    });
+
+    const batch = await loadSiteProbeExport(metadataPath);
+
+    // The document sits at `<root>/items/book_104722/metadata.json`, so the
+    // prefix `items/book_104722/` comes off and `cover/cover.jpg` resolves beside
+    // it — the same place the Level 0 writer puts the file.
+    expect(batch.entries[0]?.cover).toBe(join(directory, 'cover/cover.jpg'));
+  });
+
+  it('still refuses a known site whose export stopped matching its own schema', async () => {
+    // The fallback must not become a way for an 18comic export to import with its
+    // tags silently emptied.
+    const { metadataPath } = await writeMetadata({
+      source_site: '18comic.vip',
+      source_id: '42',
+      title: 'Example comic',
+      detail_url: 'https://18comic.vip/album/42/',
+    });
+
+    await expect(loadSiteProbeExport(metadataPath)).rejects.toThrow(
+      'Unsupported site_probe export format',
+    );
+  });
+
+  it('refuses a document that names no work', async () => {
+    const { metadataPath } = await writeMetadata({
+      source_site: 'manwa.me',
+      title: 'No source_id',
+      detail_url: 'https://manwa.me/book/104722',
+    });
+
+    await expect(loadSiteProbeExport(metadataPath)).rejects.toThrow(
+      'Unsupported site_probe export format',
+    );
+  });
 });
 
 describe('createImportPreview', () => {

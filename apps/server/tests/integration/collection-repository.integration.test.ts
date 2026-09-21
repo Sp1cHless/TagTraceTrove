@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMigratedMemoryDatabase } from '../../src/database/testing.js';
 import { createApiApp } from '../../src/http/app.js';
+import { assignEntryTag, listEntryTags } from '../../src/repositories/entry-tag-repository.js';
+import { createFacet, createSection } from '../../src/repositories/layout-repository.js';
 import { createEntry } from '../../src/repositories/entry-repository.js';
 import { createProducer } from '../../src/repositories/producer-repository.js';
 import {
   addCollectionEntry,
+  addCommonTagToCollection,
   addCollectionProducer,
   createCollection,
   createCollectionFromEntries,
@@ -206,5 +209,54 @@ describe('collections (real SQL)', () => {
     expect(database.prepare('SELECT id FROM entries WHERE id = ?').get(work.id))
       .toEqual({ id: work.id });
 
+  });
+
+  it('puts one tag on every work a folder holds, child folders included', () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const section = createSection(database, { entryType: 'comic', name: 'Basic' });
+    const named = createFacet(database, { sectionId: section.id, name: 'Genre' });
+    const first = createEntry(database, { title: 'First', type: 'comic' });
+    const second = createEntry(database, { title: 'Second', type: 'comic' });
+    const nested = createEntry(database, { title: 'Nested', type: 'comic' });
+    // An Entry whose Gallery has no structure yet cannot hold a tag.
+    const loose = createEntry(database, { title: 'Loose', type: 'unstructured' });
+    const parent = createCollection(database, { kind: 'entry', title: 'Shelf' });
+    const child = createCollection(database, { kind: 'entry', title: 'Nested shelf', parentId: parent.id });
+    addCollectionEntry(database, parent.id, first.id);
+    addCollectionEntry(database, parent.id, second.id);
+    addCollectionEntry(database, parent.id, loose.id);
+    addCollectionEntry(database, child.id, nested.id);
+
+    const applied = addCommonTagToCollection(database, parent.id, '  Winter  ');
+    expect(applied.tagId).not.toBeNull();
+    expect(applied).toMatchObject({ entriesAffected: 3, alreadyPresent: 0, skipped: 1 });
+    for (const entryId of [first.id, second.id, nested.id]) {
+      expect(listEntryTags(database, entryId)).toEqual([
+        expect.objectContaining({ name: 'Winter', facetId: section.defaultFacetId }),
+      ]);
+    }
+    expect(listEntryTags(database, loose.id)).toEqual([]);
+
+    // The name is trimmed, and a second run only reports what was already there.
+    const again = addCommonTagToCollection(database, parent.id, 'Winter');
+    expect(again).toMatchObject({ entriesAffected: 0, alreadyPresent: 3, skipped: 1 });
+
+    // A name this Gallery already places in a named Facet lands there for every
+    // work the folder holds, instead of the default (empty-named) Facet.
+    const anchor = createEntry(database, { title: 'Anchor', type: 'comic' });
+    assignEntryTag(database, { entryId: anchor.id, facetId: named.id, name: 'Summer' });
+    const extra = createEntry(database, { title: 'Extra', type: 'comic' });
+    addCollectionEntry(database, child.id, extra.id);
+    const placed = addCommonTagToCollection(database, parent.id, 'Summer');
+    // Four members can hold it, the unstructured one still cannot.
+    expect(placed).toMatchObject({ entriesAffected: 4, alreadyPresent: 0, skipped: 1 });
+    expect(listEntryTags(database, extra.id)[0]?.facetId).toBe(named.id);
+    expect(database.prepare(`
+      SELECT DISTINCT assignment.facet_id
+      FROM entry_tags AS assignment
+      JOIN tags AS tag ON tag.id = assignment.tag_id
+      WHERE tag.name = 'Summer'
+    `).pluck().all()).toEqual([named.id]);
   });
 });

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createMigratedMemoryDatabase } from '../../src/database/testing.js';
 import { createApiApp } from '../../src/http/app.js';
 import { createEntry, deleteEntry } from '../../src/repositories/entry-repository.js';
+import { setGalleryPartition } from '../../src/repositories/partition-repository.js';
 import { createProducer, deleteProducer } from '../../src/repositories/producer-repository.js';
 import {
   addViewLaterEntry,
@@ -112,5 +113,45 @@ describe('shared View later (real SQL)', () => {
 
     const missing = await app.request('/api/view-later/999', { method: 'PUT' });
     expect(missing.status).toBe(404);
+  });
+
+  it('partitions the saved Entry ids by the Gallery SFW/NSFW flag', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const safe = createEntry(database, { title: 'Safe Work', type: 'comic' });
+    const adult = createEntry(database, { title: 'Adult Work', type: 'doujin' });
+    setGalleryPartition(database, 'doujin', true);
+    const app = createApiApp(database);
+    const savedIds = [safe.id, adult.id];
+
+    const query = async (includeNsfw: boolean) => {
+      const response = await app.request('/api/entries/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conditions: [],
+          authorIds: [],
+          ratingConditions: [],
+          ratingSort: null,
+          usageConditions: [],
+          usageSort: null,
+          entryIds: savedIds,
+          includeNsfw,
+          sort: 'source-order',
+          page: 1,
+          pageSize: 100,
+        }),
+      });
+      expect(response.status).toBe(200);
+      return response.json() as Promise<{ items: Array<{ title: string }>; total: number }>;
+    };
+
+    const sfwPage = await query(false);
+    expect(sfwPage.items.map((item) => item.title)).toEqual(['Safe Work']);
+    expect(sfwPage.total).toBe(1);
+
+    const fullPage = await query(true);
+    expect(fullPage.items.map((item) => item.title)).toEqual(['Safe Work', 'Adult Work']);
+    expect(fullPage.total).toBe(2);
   });
 });

@@ -1,0 +1,8 @@
+node_modules/
+.android-sdk/
+web-dist/
+android/.gradle/
+android/build/
+android/app/build/
+*.zip
+*.apk

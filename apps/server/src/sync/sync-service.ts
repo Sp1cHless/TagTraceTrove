@@ -13,7 +13,7 @@ import { applyAllMigrations } from '../database/migrations.js';
  * the rows it ships with.
  */
 
-export const SNAPSHOT_FORMAT_VERSION = 1;
+export const SNAPSHOT_FORMAT_VERSION = 2;
 export const SYNC_PROTOCOL_VERSION = 1;
 
 interface SyncMetadataRow {
@@ -67,7 +67,13 @@ export function buildSyncCapabilities(database: T3Database, serverBuild: string)
     serverBuild,
     featureFlags: {
       readOnlySnapshot: true,
-      offlineMutations: false,
+      offlineMutations: true,
+      offlineEntryUpdate: true,
+      offlineEntryCreate: true,
+      offlineMediaUpload: true,
+      offlineUsageEvents: true,
+      offlineEntryViewLater: true,
+      offlineEntryRating: true,
     },
   };
 }
@@ -83,7 +89,8 @@ function readPayload(database: T3Database, media: 'none' | 'thumbnails'): SyncSn
   };
 
   read('entries', `
-    SELECT id, title, type, cover_ref AS coverRef, preview_ref AS previewRef,
+    SELECT id, sync_uid AS syncUid, sync_version AS syncVersion,
+           title, type, cover_ref AS coverRef, preview_ref AS previewRef,
            preview_refs AS previewRefs, page_count AS pageCount, upload_date AS uploadDate,
            created_at AS createdAt, updated_at AS updatedAt
     FROM entries ORDER BY id
@@ -122,11 +129,13 @@ function readPayload(database: T3Database, media: 'none' | 'thumbnails'): SyncSn
     FROM taxonomy_aliases ORDER BY vocabulary, partition, normalized_alias, id
   `);
   read('entryContents', `
-    SELECT id, entry_id AS entryId, content_type AS contentType, content, sort_order AS sortOrder
+    SELECT id, entry_id AS entryId, sync_uid AS syncUid, sync_version AS syncVersion,
+           content_type AS contentType, content, sort_order AS sortOrder
     FROM entry_contents ORDER BY entry_id, sort_order, id
   `);
   read('ratingSlots', `
-    SELECT id, subject_kind AS subjectKind, entry_type AS entryType, name, sort_order AS sortOrder
+    SELECT id, sync_uid AS syncUid, subject_kind AS subjectKind, entry_type AS entryType,
+           name, sort_order AS sortOrder
     FROM rating_slots ORDER BY subject_kind, entry_type, sort_order, id
   `);
   read('entryRatingValues', `
@@ -138,7 +147,8 @@ function readPayload(database: T3Database, media: 'none' | 'thumbnails'): SyncSn
     FROM producer_rating_values ORDER BY slot_id, producer_id
   `);
   read('collections', `
-    SELECT id, kind, title, description, nsfw, parent_id AS parentId, sort_order AS sortOrder
+    SELECT id, kind, title, description, nsfw, parent_id AS parentId, sort_order AS sortOrder,
+           gallery_type AS galleryType
     FROM collections ORDER BY id
   `);
   read('collectionMembers', `
@@ -247,6 +257,9 @@ export function buildSyncSnapshot(
       UPDATE sync_metadata SET snapshot_seq = snapshot_seq + 1 WHERE id = 1
     `).run();
     const snapshotSeq = metadata.snapshot_seq + 1;
+    const changeSeq = database.prepare(`
+      SELECT COALESCE(MAX(seq), 0) FROM sync_changes
+    `).pluck().get() as number;
 
     const payload = readPayload(database, options.media ?? 'none');
     const counts = {
@@ -260,6 +273,7 @@ export function buildSyncSnapshot(
       libraryId: metadata.library_id,
       syncEpoch: metadata.sync_epoch,
       snapshotSeq,
+      changeSeq,
       generatedAt: new Date().toISOString(),
       sqliteSchemaVersion: applyAllMigrations(database).currentVersion,
       snapshotFormatVersion: SNAPSHOT_FORMAT_VERSION,

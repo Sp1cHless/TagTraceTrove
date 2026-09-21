@@ -5,6 +5,7 @@ import type {
   GalleryApi,
   GalleryAuthorSummary,
   GalleryEntrySummary,
+  PendingOfflineEntryCreate,
 } from './api/gallery.js';
 import { entryCardMediaRef, entryStackLayerStyle, entryStackLayers } from './entry-media-stack.js';
 import PagedCardGrid from './components/PagedCardGrid.vue';
@@ -31,6 +32,7 @@ const navigationMemory = useNavigationMemory();
 const query = ref(props.initialQuery);
 const scope = ref<SearchScope>(props.initialScope);
 const entries = ref<GalleryEntrySummary[]>([]);
+const pendingEntries = ref<PendingOfflineEntryCreate[]>([]);
 const entryTotal = ref(0);
 const entryPage = ref(navigationMemory.pages.get(`search:entries:${props.initialQuery.trim()}`) ?? 1);
 const entryPageSize = ref(30);
@@ -77,7 +79,7 @@ async function loadAuthorAlternates(): Promise<void> {
   }
 }
 const resultCount = computed(() => {
-  if (scope.value === 'entries') return entryTotal.value;
+  if (scope.value === 'entries') return entryTotal.value + pendingEntries.value.length;
   if (scope.value === 'tags') return tags.value.length;
   return authorTotal.value;
 });
@@ -88,6 +90,7 @@ async function runSearch(resetPage = true): Promise<void> {
   error.value = null;
   if (!nextQuery) {
     entries.value = [];
+    pendingEntries.value = [];
     tags.value = [];
     authors.value = [];
     entryTotal.value = 0;
@@ -102,21 +105,31 @@ async function runSearch(resetPage = true): Promise<void> {
   loading.value = true;
   try {
     if (scope.value === 'entries') {
-      const result = await props.api.queryEntryPage({
-        conditions: [],
-        authorIds: [],
-        ratingConditions: [],
-        ratingSort: null,
-        usageConditions: [],
-        usageSort: null,
-        searchQuery: nextQuery,
-        excludeEntryTypes: showNsfw.value ? [] : props.nsfwEntryTypes,
-        sort: 'title-asc',
-        page: entryPage.value,
-        pageSize: entryPageSize.value,
-      });
+      const [result, localCreates] = await Promise.all([
+        props.api.queryEntryPage({
+          conditions: [],
+          authorIds: [],
+          ratingConditions: [],
+          ratingSort: null,
+          usageConditions: [],
+          usageSort: null,
+          searchQuery: nextQuery,
+          excludeEntryTypes: showNsfw.value ? [] : props.nsfwEntryTypes,
+          sort: 'title-asc',
+          page: entryPage.value,
+          pageSize: entryPageSize.value,
+        }),
+        props.api.listPendingOfflineEntryCreates?.() ?? Promise.resolve([]),
+      ]);
       entries.value = result.items;
       entryTotal.value = result.total;
+      const normalizedQuery = nextQuery.toLocaleLowerCase();
+      pendingEntries.value = entryPage.value === 1
+        ? localCreates.filter((entry) => (
+          entry.title.toLocaleLowerCase().includes(normalizedQuery)
+          && (showNsfw.value || !hiddenTypes.value.has(entry.type))
+        ))
+        : [];
     } else if (scope.value === 'tags') tags.value = await props.api.searchTags(nextQuery, showNsfw.value);
     else {
       const result = await props.api.queryProducerPage({
@@ -226,41 +239,65 @@ onMounted(() => {
       {{ t('search.count', { count: resultCount }) }}
     </p>
 
-    <PagedCardGrid
-      v-if="scope === 'entries' && visibleEntries.length"
-      :items="visibleEntries"
-      :page-key="`search:entries:${query.trim()}`"
-      :total-items="entryTotal"
-      :external-page="entryPage"
-      @update:page="changeEntryPage"
-      @update:page-size="changeEntryPageSize"
-      v-slot="{ items }"
+    <div
+      v-if="scope === 'entries' && (pendingEntries.length || visibleEntries.length)"
+      class="search-entry-results"
     >
-      <article v-for="entry in items" :key="entry.id" class="search-card">
-        <button
-          type="button"
-          class="search-card-main"
-          :data-testid="`search-result-entry-${entry.id}`"
-          @click="emit('open-entry', entry, query.trim(), scope)"
+      <div v-if="pendingEntries.length" class="search-card-grid" data-testid="search-pending-entries">
+        <article
+          v-for="entry in pendingEntries"
+          :key="entry.localKey"
+          class="search-card search-card--pending"
+          :data-testid="`search-pending-entry-${entry.localKey}`"
         >
-          <div class="search-entry-stack">
-            <LazyCardImage
-              v-for="(mediaRef, index) in entryStackLayers(entry)"
-              :key="`${mediaRef}-${index}`"
-              class="search-entry-image"
-              :src="api.assetUrl(entryCardMediaRef(mediaRef))"
-              :style="entryStackLayerStyle(index, entryStackLayers(entry).length)"
-              :alt="entry.title"
-              loading="lazy"
-              decoding="async"
-            />
-            <span v-if="entryStackLayers(entry).length === 0" class="search-placeholder">{{ entry.title.slice(0, 1).toUpperCase() }}</span>
-            <span v-if="entry.likeCount > 0" class="search-like">👍 {{ entry.likeCount }}</span>
+          <div class="search-card-main">
+            <div class="search-entry-stack">
+              <span class="search-placeholder">{{ entry.title.slice(0, 1).toUpperCase() }}</span>
+            </div>
+            <span class="search-meta">
+              <strong>{{ entry.title }}</strong>
+              <small>{{ entry.type }} · {{ t('search.pendingSync') }}</small>
+            </span>
           </div>
-          <span class="search-meta"><strong>{{ entry.title }}</strong><small>{{ entry.type }}</small></span>
-        </button>
-      </article>
-    </PagedCardGrid>
+        </article>
+      </div>
+
+      <PagedCardGrid
+        v-if="visibleEntries.length"
+        :items="visibleEntries"
+        :page-key="`search:entries:${query.trim()}`"
+        :total-items="entryTotal"
+        :external-page="entryPage"
+        @update:page="changeEntryPage"
+        @update:page-size="changeEntryPageSize"
+        v-slot="{ items }"
+      >
+        <article v-for="entry in items" :key="entry.id" class="search-card">
+          <button
+            type="button"
+            class="search-card-main"
+            :data-testid="`search-result-entry-${entry.id}`"
+            @click="emit('open-entry', entry, query.trim(), scope)"
+          >
+            <div class="search-entry-stack">
+              <LazyCardImage
+                v-for="(mediaRef, index) in entryStackLayers(entry)"
+                :key="`${mediaRef}-${index}`"
+                class="search-entry-image"
+                :src="api.assetUrl(entryCardMediaRef(mediaRef))"
+                :style="entryStackLayerStyle(index, entryStackLayers(entry).length)"
+                :alt="entry.title"
+                loading="lazy"
+                decoding="async"
+              />
+              <span v-if="entryStackLayers(entry).length === 0" class="search-placeholder">{{ entry.title.slice(0, 1).toUpperCase() }}</span>
+              <span v-if="entry.likeCount > 0" class="search-like">👍 {{ entry.likeCount }}</span>
+            </div>
+            <span class="search-meta"><strong>{{ entry.title }}</strong><small>{{ entry.type }}</small></span>
+          </button>
+        </article>
+      </PagedCardGrid>
+    </div>
 
     <PagedCardGrid
       v-else-if="scope === 'producers' && visibleAuthors.length"
@@ -324,9 +361,13 @@ onMounted(() => {
 .search-scope { padding: 0.55rem 0.8rem; border: 0; border-bottom: 2px solid transparent; color: var(--text-muted); background: transparent; font: inherit; cursor: pointer; }
 .search-scope.active { border-bottom-color: var(--accent); color: var(--accent); font-weight: 750; }
 .search-count { margin: 0; color: var(--text-muted); font-size: 0.8rem; }
+.search-entry-results { display: grid; gap: 1rem; }
 .search-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.8rem; }
 .search-card { overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 0.8rem; background: var(--surface-muted); }
 .search-card:hover, .search-card:focus-within { border-color: var(--accent); transform: translateY(-1px); }
+.search-card--pending { border-style: dashed; }
+.search-card--pending:hover { border-color: var(--border-subtle); transform: none; }
+.search-card--pending .search-card-main { cursor: default; }
 .author-name-alternates { font-size: 0.66rem; font-weight: 400; color: var(--text-muted); opacity: 0.72; }
 .search-card-main { display: block; width: 100%; padding: 0; border: 0; color: var(--text-primary); background: transparent; font: inherit; text-align: left; cursor: pointer; }
 .search-entry-stack { position: relative; aspect-ratio: 4 / 3; overflow: hidden; isolation: isolate; perspective: 28rem; perspective-origin: 50% 50%; transform-style: preserve-3d; }

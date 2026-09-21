@@ -8,7 +8,7 @@ import {
 import { createSection } from '../../src/repositories/layout-repository.js';
 import { createProducer, linkEntryProducer } from '../../src/repositories/producer-repository.js';
 import { assignProducerTag } from '../../src/repositories/producer-tag-repository.js';
-import { mergeTag, TagMergeError } from '../../src/repositories/tag-merge-repository.js';
+import { deleteTag, mergeTag, TagMergeError } from '../../src/repositories/tag-merge-repository.js';
 
 describe('tag merge repository', () => {
   it('re-points every assignment to the kept tag and deletes the merged tags', () => {
@@ -168,5 +168,90 @@ describe('tag merge repository', () => {
     } finally {
       database.close();
     }
+  });
+});
+
+describe('deleteTag', () => {
+  const setup = () => {
+    const database = createMigratedMemoryDatabase();
+    const section = createSection(database, { entryType: 'comic', name: '分类' });
+    // Tags attach to real works: a fresh database has no Entries, so every test
+    // creates the ones it assigns to.
+    const first = createEntry(database, { title: 'First', type: 'comic' });
+    const second = createEntry(database, { title: 'Second', type: 'comic' });
+    return { database, section, first, second };
+  };
+
+  it('removes the tag and every assignment of it, leaving other tags alone', () => {
+    const { database, section, first, second } = setup();
+    const doomed = assignEntryTag(database, {
+      entryId: first.id, facetId: section.defaultFacetId, name: 'Doomed',
+    });
+    const kept = assignEntryTag(database, {
+      entryId: first.id, facetId: section.defaultFacetId, name: 'Kept',
+    });
+    // The second work carries both as well, so a delete that only reached one work
+    // would be caught here.
+    assignEntryTag(database, { entryId: second.id, facetId: section.defaultFacetId, name: 'Doomed' });
+    assignEntryTag(database, { entryId: second.id, facetId: section.defaultFacetId, name: 'Kept' });
+
+    const result = deleteTag(database, { vocabulary: 'entry', tagId: doomed.tagId });
+
+    expect(result).toEqual({
+      tagId: doomed.tagId,
+      tagName: 'Doomed',
+      removedAssignments: 2,
+      deletedTags: 1,
+    });
+    expect(database.prepare('SELECT DISTINCT tag_id FROM entry_tags').pluck().all())
+      .toEqual([kept.tagId]);
+    expect(database.prepare('SELECT COUNT(*) FROM entry_tags').pluck().get()).toBe(2);
+    expect(database.prepare('SELECT id FROM tags ORDER BY id').pluck().all())
+      .toEqual([kept.tagId]);
+    expect(database.pragma('foreign_key_check')).toEqual([]);
+    database.close();
+  });
+
+  it('refuses a tag that does not exist instead of reporting success', () => {
+    const { database } = setup();
+    expect(() => deleteTag(database, { vocabulary: 'entry', tagId: 4242 }))
+      .toThrow(/does not exist/u);
+    database.close();
+  });
+
+  it('deletes in the Author vocabulary without touching the Entry one', () => {
+    const { database, section, first } = setup();
+    const entryTag = assignEntryTag(database, {
+      entryId: first.id, facetId: section.defaultFacetId, name: 'Shared spelling',
+    });
+    const producer = createProducer(database, { name: 'Someone' });
+    const producerTag = assignProducerTag(database, {
+      producerId: producer.id, name: 'Shared spelling',
+    });
+
+    const result = deleteTag(database, { vocabulary: 'producer', tagId: producerTag.tagId });
+
+    expect(result.removedAssignments).toBe(1);
+    // The two vocabularies are independent, so an Entry tag of the same spelling
+    // must survive an Author-side delete.
+    expect(database.prepare('SELECT id FROM producer_tags').pluck().all()).toEqual([]);
+    expect(database.prepare('SELECT tag_id FROM entry_tags').pluck().all()).toEqual([entryTag.tagId]);
+    database.close();
+  });
+
+  it('rolls back when the delete fails part-way', () => {
+    const { database, section, first } = setup();
+    const doomed = assignEntryTag(database, {
+      entryId: first.id, facetId: section.defaultFacetId, name: 'Doomed',
+    });
+
+    expect(() => deleteTag(database, { vocabulary: 'entry', tagId: doomed.tagId }, {
+      injectFailure: () => { throw new Error('injected'); },
+    })).toThrow(/injected/u);
+
+    // The tag and its assignment are both still there: nothing partial survived.
+    expect(database.prepare('SELECT COUNT(*) FROM tags').pluck().get()).toBe(1);
+    expect(database.prepare('SELECT COUNT(*) FROM entry_tags').pluck().get()).toBe(1);
+    database.close();
   });
 });

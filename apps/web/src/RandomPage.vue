@@ -110,6 +110,7 @@ async function dealWorks(): Promise<void> {
       ...(selectedType.value === '' ? {} : { entryType: selectedType.value }),
       ...selectedFilters,
       sort: 'random',
+      randomSeed: Math.floor(Math.random() * 2_147_483_648),
       page: 1,
       pageSize: RANDOM_PAGE_SIZE,
     });

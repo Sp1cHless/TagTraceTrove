@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
 import { flushPromises, mount } from '@vue/test-utils';
-import type { CollectionRecordDto } from '@t3/shared';
+import type { CollectionRecordDto, GallerySummary } from '@t3/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CollectionsPage from '../src/CollectionsPage.vue';
 import type { GalleryApi } from '../src/api/gallery.js';
 import { setLocale } from '../src/i18n.js';
+import { showNsfw } from '../src/stores/preferences.js';
 
 function entry(id: number, title: string) {
   return { id, title, type: 'manga', coverRef: null, previewRefs: [] };
@@ -24,6 +25,7 @@ function collection(
     description: '',
     nsfw: false,
     sortOrder: id,
+    galleryType: null,
     children,
     entries,
     producers: [],
@@ -320,6 +322,7 @@ describe('CollectionsPage touch organization', () => {
       description: '',
       nsfw: false,
       sortOrder: 0,
+      galleryType: null,
       children: [],
       entries: [],
       producers: [],
@@ -356,5 +359,259 @@ describe('CollectionsPage touch organization', () => {
     expect(cover.attributes('data-cover-count')).toBe('2');
     expect((cover.element as HTMLElement).style.gridTemplateColumns)
       .toBe('repeat(2, minmax(0, 1fr))');
+  });
+});
+
+function gallery(type: string, nsfw: boolean): GallerySummary {
+  return { type, entryCount: 1, nsfw };
+}
+
+function scopedCollection(id: number, title: string, galleryType: string | null): CollectionRecordDto {
+  return { ...collection(id, title), galleryType };
+}
+
+function createScopedApi(galleryList: GallerySummary[]) {
+  const records = [
+    scopedCollection(1, 'Comic shelf', 'Comic'),
+    scopedCollection(2, 'Hentai shelf', 'Hentai'),
+    scopedCollection(3, 'Loose shelf', null),
+  ];
+  const authorRecords = [{ ...collection(9, 'Author shelf'), kind: 'producer' as const }];
+  const createCollection = vi.fn(async (input: { kind: 'entry' | 'producer'; title: string; galleryType?: string }) => ({
+    ...collection(90, input.title),
+    kind: input.kind,
+    galleryType: input.galleryType ?? null,
+  }));
+  const api = {
+    assetUrl: (path: string) => path,
+    listCollections: vi.fn(async (kind: 'entry' | 'producer') => (kind === 'entry' ? records : authorRecords)),
+    listGalleries: vi.fn(async () => galleryList),
+    listAuthors: vi.fn(async () => []),
+    queryEntryPage: vi.fn(async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize })),
+    queryProducerPage: vi.fn(async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize })),
+    createCollection,
+    addCollectionEntry: vi.fn(async () => undefined),
+    removeCollectionEntry: vi.fn(async () => undefined),
+    deleteEntry: vi.fn(async () => undefined),
+    reorderCollections: vi.fn(async () => undefined),
+  } as unknown as GalleryApi;
+  return { api, createCollection };
+}
+
+function listedTitles(wrapper: ReturnType<typeof mount>): string[] {
+  return wrapper.findAll('[data-collection-id] strong').map((title) => title.text());
+}
+
+describe('CollectionsPage Gallery pages', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    showNsfw.value = false;
+    setLocale('en');
+  });
+
+  it('lists only the folders curated into the active Gallery page', async () => {
+    showNsfw.value = true;
+    const { api } = createScopedApi([gallery('Comic', true), gallery('Hentai', true)]);
+    const wrapper = mount(CollectionsPage, { props: { api } });
+    await flushPromises();
+
+    // One flat row: every Gallery page plus Authors, and no Works level.
+    expect(wrapper.findAll('[data-testid="collections-page-tabs"] .recent-tab').map((tab) => tab.text()))
+      .toEqual(['Comic', 'Hentai', 'Unfiled', 'Authors']);
+    expect(wrapper.find('[data-testid="collections-page-tabs"] [data-testid="collections-kind-producer"]').exists())
+      .toBe(true);
+    expect(wrapper.get('[data-collection-gallery-tab="Comic"]').attributes('aria-selected')).toBe('true');
+    expect(listedTitles(wrapper)).toEqual(['Comic shelf']);
+
+    await wrapper.get('[data-collection-gallery-tab="Hentai"]').trigger('click');
+    await flushPromises();
+    expect(listedTitles(wrapper)).toEqual(['Hentai shelf']);
+
+    // Folders that were never filed live on their own page, not on a Gallery's.
+    await wrapper.get('[data-collection-gallery-tab="__unfiled__"]').trigger('click');
+    await flushPromises();
+    expect(listedTitles(wrapper)).toEqual(['Loose shelf']);
+  });
+
+  it('drops an NSFW Gallery page and its folders in SFW mode', async () => {
+    const { api } = createScopedApi([gallery('Comic', true), gallery('Hentai', true)]);
+    const wrapper = mount(CollectionsPage, { props: { api } });
+    await flushPromises();
+
+    expect(wrapper.find('[data-collection-gallery-tab="Comic"]').exists()).toBe(false);
+    expect(wrapper.find('[data-collection-gallery-tab="Hentai"]').exists()).toBe(false);
+    expect(wrapper.get('[data-collection-gallery-tab="__unfiled__"]').attributes('aria-selected')).toBe('true');
+    expect(listedTitles(wrapper)).toEqual(['Loose shelf']);
+
+    // Turning NSFW back on offers the Gallery pages again without moving the
+    // folder list the user was already looking at.
+    showNsfw.value = true;
+    await flushPromises();
+    expect(wrapper.find('[data-collection-gallery-tab="Comic"]').exists()).toBe(true);
+    expect(listedTitles(wrapper)).toEqual(['Loose shelf']);
+
+    await wrapper.get('[data-collection-gallery-tab="Comic"]').trigger('click');
+    await flushPromises();
+    expect(listedTitles(wrapper)).toEqual(['Comic shelf']);
+  });
+
+  it('falls back to the Authors page when every Gallery page is hidden', async () => {
+    const records = [
+      scopedCollection(1, 'Comic shelf', 'Comic'),
+      scopedCollection(2, 'Hentai shelf', 'Hentai'),
+    ];
+    const authorFolder = { ...collection(9, 'Author shelf'), kind: 'producer' as const };
+    const api = {
+      assetUrl: (path: string) => path,
+      listCollections: vi.fn(async (kind: 'entry' | 'producer') => (kind === 'entry' ? records : [authorFolder])),
+      listGalleries: vi.fn(async () => [gallery('Comic', true), gallery('Hentai', true)]),
+      queryEntryPage: vi.fn(async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize })),
+      queryProducerPage: vi.fn(async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize })),
+    } as unknown as GalleryApi;
+    const wrapper = mount(CollectionsPage, { props: { api } });
+    await flushPromises();
+
+    // With no entry page left to show, Authors is the only reachable page — the
+    // NSFW folders are gone rather than listed on a page nobody can see.
+    expect(wrapper.get('[data-testid="collections-page-tabs"] [data-testid="collections-kind-producer"]')
+      .attributes('aria-selected')).toBe('true');
+    expect(wrapper.find('[data-collection-gallery-tab="Comic"]').exists()).toBe(false);
+    expect(listedTitles(wrapper)).toEqual(['Author shelf']);
+  });
+
+  it('adds one tag to every work of the open folder from the edit toolbar', async () => {
+    showNsfw.value = true;
+    const addCollectionTag = vi.fn(async () => ({
+      tagId: 7, entriesAffected: 3, alreadyPresent: 1, skipped: 0,
+    }));
+    const api = {
+      assetUrl: (path: string) => path,
+      listCollections: vi.fn(async (kind: 'entry' | 'producer') => (kind === 'entry' ? [
+        { ...collection(1, 'Shelf', [entry(101, 'Work')]), galleryType: 'Comic' },
+      ] : [])),
+      listGalleries: vi.fn(async () => [gallery('Comic', true)]),
+      queryEntryPage: vi.fn(async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize })),
+      queryProducerPage: vi.fn(async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize })),
+      addCollectionTag,
+    } as unknown as GalleryApi;
+    const wrapper = mount(CollectionsPage, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-collection-id="1"]').trigger('click');
+    await flushPromises();
+
+    // The control belongs to edit mode and sits next to the SFW switch.
+    expect(wrapper.find('[data-testid="collection-common-tag-toggle"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="collections-edit-toggle"]').trigger('click');
+    await flushPromises();
+    const toggle = wrapper.get('[data-testid="collection-common-tag-toggle"]');
+    expect(toggle.text()).toBe('Add common tag');
+    expect(toggle.element.nextElementSibling?.getAttribute('data-testid'))
+      .toBe('collection-nsfw-toggle');
+
+    await toggle.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="collection-common-tag-submit"]').attributes('disabled'))
+      .toBeDefined();
+    await wrapper.get('[data-testid="collection-common-tag-input"]').setValue('Winter');
+    // The form submits on Enter as well; the confirm button is its submit.
+    await wrapper.get('[data-testid="collection-common-tag-form"]').trigger('submit');
+    await flushPromises();
+
+    expect(addCollectionTag).toHaveBeenCalledWith(1, 'Winter');
+    expect(wrapper.get('[data-testid="collection-common-tag-result"]').text())
+      .toBe('Tagged 3 works (1 already had it, 0 skipped).');
+    expect(wrapper.find('[data-testid="collection-common-tag-form"]').exists()).toBe(false);
+  });
+
+  it('asks twice before deleting a folder that holds something, once when it is empty', async () => {
+    showNsfw.value = true;
+    const deleteCollection = vi.fn(async () => undefined);
+    const api = {
+      assetUrl: (path: string) => path,
+      listCollections: vi.fn(async (kind: 'entry' | 'producer') => (kind === 'entry' ? [
+        { ...collection(1, 'Full shelf', [entry(101, 'Work')]), galleryType: 'Comic' },
+        { ...collection(2, 'Empty shelf'), galleryType: 'Comic' },
+      ] : [])),
+      listGalleries: vi.fn(async () => [gallery('Comic', true)]),
+      queryEntryPage: vi.fn(async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize })),
+      queryProducerPage: vi.fn(async (input) => ({ items: [], total: 0, page: input.page, pageSize: input.pageSize })),
+      deleteCollection,
+    } as unknown as GalleryApi;
+    const wrapper = mount(CollectionsPage, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="collections-edit-toggle"]').trigger('click');
+    await flushPromises();
+
+    // A folder with a work in it arms first and says so.
+    const full = wrapper.get('[data-testid="delete-collection-1"]');
+    await full.trigger('click');
+    expect(deleteCollection).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-testid="delete-collection-1"]').text()).toBe('Confirm');
+    expect(wrapper.get('[data-testid="delete-collection-1"]').attributes('aria-label'))
+      .toBe('Delete “Full shelf” and everything in it?');
+
+    await wrapper.get('[data-testid="delete-collection-1"]').trigger('click');
+    await flushPromises();
+    expect(deleteCollection).toHaveBeenCalledWith(1);
+
+    // An empty folder has nothing to protect and goes on the first tap.
+    await wrapper.get('[data-testid="delete-collection-2"]').trigger('click');
+    await flushPromises();
+    expect(deleteCollection).toHaveBeenCalledWith(2);
+  });
+
+  it('never flashes the other kind of folder, or a fabricated Unfiled page, while switching', async () => {
+    showNsfw.value = true;
+    const { api } = createScopedApi([gallery('Comic', true), gallery('Hentai', true)]);
+    const wrapper = mount(CollectionsPage, { props: { api } });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="collections-kind-producer"]').trigger('click');
+    await flushPromises();
+    // Author folders carry no Gallery, so they must not conjure an Unfiled page.
+    expect(wrapper.find('[data-collection-gallery-tab="__unfiled__"]').exists()).toBe(false);
+    expect(listedTitles(wrapper)).toEqual(['Author shelf']);
+
+    await wrapper.get('[data-collection-gallery-tab="Comic"]').trigger('click');
+    // The panel must not keep rendering Author folders while the entry list loads.
+    expect(wrapper.get('[data-testid="collections-panel"]').text()).not.toContain('Author shelf');
+    await flushPromises();
+    expect(listedTitles(wrapper)).toEqual(['Comic shelf']);
+  });
+
+  it('creates a folder on the Gallery page it was started from', async () => {
+    showNsfw.value = true;
+    const { api, createCollection } = createScopedApi([gallery('Comic', true), gallery('Hentai', true)]);
+    const wrapper = mount(CollectionsPage, { props: { api } });
+    await flushPromises();
+
+    // Switching pages leaves edit mode, so the create row is re-entered each time.
+    const createOn = async (tab: string | null, title: string) => {
+      if (tab !== null) {
+        await wrapper.get(`[data-collection-gallery-tab="${tab}"]`).trigger('click');
+        await flushPromises();
+      }
+      if (!wrapper.find('[data-testid="new-collection-title"]').exists()) {
+        await wrapper.get('[data-testid="collections-edit-toggle"]').trigger('click');
+        await flushPromises();
+      }
+      await wrapper.get('[data-testid="new-collection-title"]').setValue(title);
+      await wrapper.get('[data-testid="create-collection"]').trigger('click');
+      await flushPromises();
+    };
+
+    await createOn('Comic', 'New comic shelf');
+    expect(createCollection).toHaveBeenCalledWith({
+      kind: 'entry', title: 'New comic shelf', galleryType: 'Comic',
+    });
+
+    await createOn('Hentai', 'New hentai shelf');
+    expect(createCollection).toHaveBeenCalledWith({
+      kind: 'entry', title: 'New hentai shelf', galleryType: 'Hentai',
+    });
+
+    // The unfiled page keeps its folders Gallery-less.
+    await createOn('__unfiled__', 'New loose shelf');
+    expect(createCollection).toHaveBeenCalledWith({ kind: 'entry', title: 'New loose shelf' });
   });
 });

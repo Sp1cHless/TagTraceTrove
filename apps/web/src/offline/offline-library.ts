@@ -578,6 +578,7 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
         description: collection.description,
         nsfw: collection.nsfw,
         sortOrder: collection.sortOrder,
+        galleryType: collection.galleryType ?? null,
         children: rows.filter((candidate) => candidate.parentId === collection.id)
           .sort((left, right) => left.sortOrder - right.sortOrder || left.id - right.id)
           .map(build),

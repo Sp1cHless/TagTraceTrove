@@ -30,8 +30,24 @@ export const importEntrySchema = z.object({
   body: z.string().optional(),
 });
 
+/**
+ * Which site listing a batch was harvested from. The site itself is
+ * `importBatch.source`, so an origin only has to name the listing: an artist
+ * slug, a collection/album id, a search term. It is optional because a hand-made
+ * manifest belongs to no tracked listing, and the crawl cursor it feeds is
+ * simply not recorded for such a batch.
+ */
+export const importBatchOriginSchema = z.strictObject({
+  kind: z.enum(['artist', 'folder', 'work', 'search']),
+  /** Site-native identifier of the listing, stable across runs. */
+  ref: z.string().trim().min(1),
+  displayName: z.string().trim().min(1).optional(),
+  url: httpUrlSchema.optional(),
+});
+
 export const importBatchSchema = z.object({
   source: z.string().trim().min(1),
+  origin: importBatchOriginSchema.optional(),
   entries: z.array(importEntrySchema),
   warnings: z.array(z.string()).default([]),
 });
@@ -107,6 +123,8 @@ export const importCommitResultSchema = z.strictObject({
   })),
   entryCount: z.number().int().nonnegative(),
   skippedExistingEntryCount: z.number().int().nonnegative(),
+  /** The works those skipped source URLs already belong to, in batch order. */
+  existingEntryIds: z.array(z.number().int().positive()),
   createdProducerCount: z.number().int().nonnegative(),
   producerLinkCount: z.number().int().nonnegative(),
   tagAssignmentCount: z.number().int().nonnegative(),
@@ -120,6 +138,7 @@ export const importCommitResultSchema = z.strictObject({
 export type ImportTag = z.infer<typeof importTagSchema>;
 export type ImportSource = z.infer<typeof importSourceSchema>;
 export type ImportEntry = z.infer<typeof importEntrySchema>;
+export type ImportBatchOrigin = z.infer<typeof importBatchOriginSchema>;
 export type ImportBatch = z.infer<typeof importBatchSchema>;
 export type ImportFieldMapping = z.infer<typeof importFieldMappingSchema>;
 export type ImportAuthorRating = z.infer<typeof importAuthorRatingSchema>;

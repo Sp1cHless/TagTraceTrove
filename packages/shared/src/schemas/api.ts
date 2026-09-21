@@ -348,6 +348,22 @@ export const ratingSlotsQuerySchema = z.strictObject({
   entryType: requiredTextSchema,
 });
 
+/**
+ * The sidebar's numbers under the current SFW/NSFW boundary. One interface owns
+ * them so no surface re-derives "is this Author / saved work visible".
+ */
+export const navigationCountsQuerySchema = z.strictObject({
+  includeNsfw: z.enum(['true', 'false']).optional(),
+});
+
+export const navigationCountsSchema = z.strictObject({
+  authors: z.number().int().nonnegative(),
+  viewLaterEntries: z.number().int().nonnegative(),
+  viewLaterAuthors: z.number().int().nonnegative(),
+});
+
+export type NavigationCounts = z.infer<typeof navigationCountsSchema>;
+
 export const collectionKindSchema = z.enum(['entry', 'producer']);
 
 export const collectionEntryMemberSchema = z.strictObject({
@@ -371,6 +387,8 @@ export interface CollectionRecordDto {
   description: string;
   nsfw: boolean;
   sortOrder: number;
+  /** Entry folders only: the Gallery page this folder is curated under; null = not filed yet. */
+  galleryType: string | null;
   children: CollectionRecordDto[];
   entries: Array<{ id: number; title: string; type: string; coverRef: string | null; previewRefs: string[] }>;
   producers: Array<{ id: number; name: string; covers: string[] }>;
@@ -385,6 +403,7 @@ export const collectionRecordSchema: z.ZodType<CollectionRecordDto> = z.lazy(() 
   description: z.string(),
   nsfw: z.boolean(),
   sortOrder: sortOrderSchema,
+  galleryType: requiredTextSchema.nullable(),
   children: z.array(collectionRecordSchema),
   entries: z.array(collectionEntryMemberSchema),
   producers: z.array(collectionProducerMemberSchema),
@@ -397,6 +416,7 @@ export const createCollectionRequestSchema = z.strictObject({
   title: requiredTextSchema,
   description: z.string().optional(),
   parentId: apiIdSchema.optional(),
+  galleryType: requiredTextSchema.optional(),
 });
 
 /**
@@ -413,6 +433,18 @@ export const temporaryCollectionResponseSchema = z.strictObject({
   collectionId: apiIdSchema,
   title: requiredTextSchema,
   entryCount: z.number().int().nonnegative(),
+});
+
+/** One tag on every work a Collection folder holds, child folders included. */
+export const addCollectionTagRequestSchema = z.strictObject({
+  name: requiredTextSchema,
+});
+
+export const addCollectionTagResponseSchema = z.strictObject({
+  tagId: apiIdSchema.nullable(),
+  entriesAffected: z.number().int().nonnegative(),
+  alreadyPresent: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
 });
 
 export const updateCollectionRequestSchema = z.strictObject({
@@ -1155,6 +1187,22 @@ export const tagMergeResponseSchema = z.strictObject({
 
 export type TagMergeRequest = z.infer<typeof tagMergeRequestSchema>;
 export type TagMergeResponse = z.infer<typeof tagMergeResponseSchema>;
+
+/** Deleting a tag removes it and every assignment of it, in one vocabulary. */
+export const tagDeleteRequestSchema = z.strictObject({
+  vocabulary: z.enum(['entry', 'producer']),
+  tagId: apiIdSchema,
+});
+
+export const tagDeleteResponseSchema = z.strictObject({
+  tagId: apiIdSchema,
+  tagName: z.string().trim().min(1).max(200),
+  removedAssignments: z.number().int().nonnegative(),
+  deletedTags: z.number().int().nonnegative(),
+});
+
+export type TagDeleteRequest = z.infer<typeof tagDeleteRequestSchema>;
+export type TagDeleteResponse = z.infer<typeof tagDeleteResponseSchema>;
 
 /** "Save author" resolves the typed name against existing Authors first and
  * links the match; only a genuinely new name creates a Producer. */

@@ -399,7 +399,10 @@ internal static class Program
         while (DateTime.UtcNow < deadline)
         {
             if (IsPortOpen()) { return true; }
-            Thread.Sleep(500);
+            // The server boots on its own process; keep this one answering the
+            // tray so a slow start never looks like a hang.
+            Application.DoEvents();
+            Thread.Sleep(250);
         }
         return IsPortOpen();
     }
@@ -421,14 +424,27 @@ internal static class Program
     private static void OpenBrowser()
     {
         if (_noBrowser) { return; }
-        try
+        // Handing the URL to the shell can block for as long as a cold browser
+        // needs to start up, and it never returns if Windows decides to ask which
+        // app should handle it. The windowless `start` command owns the launch on
+        // its own thread instead, so the tray never waits on a browser.
+        Task.Run(() =>
         {
-            Process.Start(new ProcessStartInfo { FileName = LocalUrl, UseShellExecute = true });
-        }
-        catch
-        {
-            // No default browser; the URL remains visible in the tray UI.
-        }
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = "/c start \"\" \"" + LocalUrl + "\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                })?.Dispose();
+            }
+            catch
+            {
+                // No default browser; the URL remains visible in the tray UI.
+            }
+        });
     }
 
     private static void Notify(string text)

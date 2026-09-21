@@ -15,10 +15,13 @@ export interface ManualEntryDraft {
   title: string;
   type: string;
   uploadDate: string | null;
+  pageCount: number | null;
   coverFile: File | null;
   previewFile: File | null;
   ratings: ManualEntryDraftRating[];
   viewLater: boolean;
+  /** The template buttons hand the Entry straight to detailed editing. */
+  openInEditor?: boolean;
 }
 
 const props = defineProps<{
@@ -30,13 +33,27 @@ const props = defineProps<{
 const emit = defineEmits<{
   back: [];
   submit: [draft: ManualEntryDraft];
-  imported: [entryType: string, entryIds: number[], viewLater: boolean];
-  batchImported: [entryType: string, entryIds: number[], viewLater: boolean, warnings: string[]];
+  imported: [
+    entryType: string,
+    entryIds: number[],
+    viewLater: boolean,
+    /** Works this export carried but did not create, because the library had them. */
+    existingEntryIds: number[],
+  ];
+  batchImported: [
+    entryType: string,
+    entryIds: number[],
+    viewLater: boolean,
+    warnings: string[],
+    /** Works this run carried but did not create, because the library had them. */
+    existingEntryIds: number[],
+  ];
 }>();
 const { t } = useI18n();
 const title = ref('');
 const type = ref(props.galleryTypes[0] ?? '');
 const uploadDate = ref('');
+const pageCount = ref('');
 const coverFile = ref<File | null>(null);
 const previewFile = ref<File | null>(null);
 const coverPreview = ref<string | null>(null);
@@ -47,6 +64,14 @@ const importType = ref(props.galleryTypes[0] ?? '');
 const importLayout = ref<Awaited<ReturnType<GalleryApi['listLayout']>>>([]);
 const manualContentType = ref('');
 const manualViewLater = ref(false);
+// The composer stays a plain cover + fields form: the Gallery template is edited
+// on the Entry itself, where the structure it applies to is visible. This only
+// decides what the secondary button offers.
+const entryTypeExists = computed(() => props.galleryTypes.includes(type.value.trim()));
+const isNewGallery = computed(() => {
+  const candidate = type.value.trim();
+  return candidate !== '' && !entryTypeExists.value;
+});
 const importViewLater = ref(false);
 const committedImportEntryIds: number[] = [];
 const manualRatingSlots = ref<RatingSlotDto[]>([]);
@@ -636,7 +661,13 @@ async function commitFolderImport(): Promise<void> {
     const committedIds = result.entries.map((record) => record.entryId);
     committedImportEntryIds.splice(0, committedImportEntryIds.length, ...committedIds);
     importResult.value = t('import.completed', { count: result.entryCount });
-    emit('imported', importType.value.trim(), committedImportEntryIds, importViewLater.value);
+    emit(
+      'imported',
+      importType.value.trim(),
+      committedImportEntryIds,
+      importViewLater.value,
+      result.existingEntryIds,
+    );
   } catch (cause) {
     importError.value = cause instanceof Error ? cause.message : t('import.commitError');
   } finally {
@@ -694,6 +725,9 @@ async function runBatchImport(): Promise<void> {
   if (!itemType) return;
   const folderItems = itemsByFolder(batchImportFiles.value);
   const committedEntryIds: number[] = [];
+  // A work the run found already imported is still part of what this folder
+  // holds, and the folder it came from says something the work did not.
+  const existingEntryIds: number[] = [];
   if (folderItems.length === 0) {
     batchResult.value = t('import.batchEmpty');
     return;
@@ -711,6 +745,7 @@ async function runBatchImport(): Promise<void> {
       await loadImportPreview(item.files, itemType);
       const result = await commitCurrentImport();
       for (const record of result.entries) committedEntryIds.push(record.entryId);
+      existingEntryIds.push(...result.existingEntryIds);
       // A commit that created producers means new author names entered the DB.
       // Refresh the local author list so later items by the same author
       // auto-link to that producer instead of creating duplicates.
@@ -736,10 +771,20 @@ async function runBatchImport(): Promise<void> {
   importResult.value = null;
   importError.value = null;
   batchResult.value = t('import.batchDone', { success: succeedCount, failed: failedCount });
+  if (existingEntryIds.length > 0) {
+    batchWarnings.push(t('import.batchDuplicates', { count: existingEntryIds.length }));
+  }
   // Emit the type the commits actually used, not the raw text the user typed:
   // the batch review loads its cards by that type, and a typed `comic` resolves
   // to the stored `Comic`, so passing the raw text would show an empty group.
-  emit('batchImported', importType.value.trim(), committedEntryIds, batchViewLater.value, batchWarnings);
+  emit(
+    'batchImported',
+    importType.value.trim(),
+    committedEntryIds,
+    batchViewLater.value,
+    batchWarnings,
+    existingEntryIds,
+  );
 }
 
 async function loadManualRatingSlots(): Promise<void> {
@@ -748,18 +793,32 @@ async function loadManualRatingSlots(): Promise<void> {
   await loadRatingSlots(resolvedType, 'manual');
 }
 
-function submit(): void {
-  emit('submit', {
+function manualDraft(): ManualEntryDraft {
+  return {
     title: title.value.trim(),
     type: type.value.trim(),
     uploadDate: uploadDate.value || null,
+    pageCount: pageCount.value === '' ? null : Number(pageCount.value),
     coverFile: coverFile.value,
     previewFile: previewFile.value,
     ratings: Object.entries(manualRatings.value)
       .map(([slotId, stars]) => ({ slotId: Number(slotId), stars }))
       .filter((rating) => rating.stars !== null),
     viewLater: manualViewLater.value,
-  });
+  };
+}
+
+function submit(): void {
+  emit('submit', manualDraft());
+}
+
+/**
+ * The template path: create the work with what is filled in and open it in edit
+ * mode. An existing Gallery applies its template by itself; a new one starts
+ * from the bare Entry, where the template can be built and applied from there.
+ */
+function submitWithTemplate(): void {
+  emit('submit', { ...manualDraft(), openInEditor: true });
 }
 
 onBeforeUnmount(() => {
@@ -813,7 +872,20 @@ onBeforeUnmount(() => {
             <option v-for="galleryType in galleryTypes" :key="galleryType" :value="galleryType" />
           </datalist>
         </label>
+        <div class="template-action-row">
+          <button
+            type="button"
+            class="secondary-button"
+            data-testid="create-with-template"
+            :disabled="submitting || title.trim() === '' || type.trim() === ''"
+            @click="submitWithTemplate"
+          >
+            {{ isNewGallery ? t('entry.templateNewGalleryAction') : t('entry.templateExistingAction') }}
+          </button>
+          <span class="muted">{{ t('entry.templateHint') }}</span>
+        </div>
         <label>{{ t('entry.uploadDate') }}<input v-model="uploadDate" name="uploadDate" type="date"></label>
+        <label>{{ t('entry.pageCount') }}<input v-model="pageCount" name="pageCount" type="number" min="1" step="1"></label>
         <div v-if="manualRatingSlots.length > 0" data-testid="manual-entry-ratings" class="rating-select-list">
           <strong class="rating-select-title">{{ t('rating.title') }}</strong>
           <label v-for="slot in manualRatingSlots" :key="slot.id" class="rating-select-row">
@@ -1140,6 +1212,8 @@ onBeforeUnmount(() => {
 .batch-progress-card progress { width: 100%; }
 .browse-label { color: var(--accent); text-decoration: underline; }
 .template-preview { display: grid; gap: .5rem; padding: 1rem; border-radius: 14px; background: var(--surface-muted); }
+.template-action-row { display: grid; gap: .35rem; justify-items: start; }
+.template-action-row .secondary-button { max-width: 100%; text-align: left; }
 .template-preview h4 { margin: 0; }
 .preview-card { display: grid; gap: .8rem; padding: 1rem; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface); }
 .preview-card-head { display: flex; align-items: flex-start; gap: 0.8rem; }

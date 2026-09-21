@@ -10,16 +10,21 @@ function requireEntry(database: T3Database, entryId: number): void {
   }
 }
 
-function insertViewLaterEntry(database: T3Database, entryId: number): void {
+function touchEntrySyncVersion(database: T3Database, entryId: number): void {
+  database.prepare('UPDATE entries SET updated_at = updated_at WHERE id = ?').run(entryId);
+}
+
+function insertViewLaterEntry(database: T3Database, entryId: number): boolean {
   requireEntry(database, entryId);
   const nextPosition = database.prepare(
     'SELECT COALESCE(MAX(position), -1) + 1 FROM view_later_entries',
   ).pluck().get() as number;
-  database.prepare(`
+  const result = database.prepare(`
     INSERT INTO view_later_entries (entry_id, position)
     VALUES (?, ?)
     ON CONFLICT (entry_id) DO NOTHING
   `).run(entryId, nextPosition);
+  return result.changes > 0;
 }
 
 export function listViewLaterEntryIds(database: T3Database): number[] {
@@ -30,9 +35,17 @@ export function listViewLaterEntryIds(database: T3Database): number[] {
   `).pluck().all() as number[];
 }
 
-export function addViewLaterEntry(database: T3Database, entryId: number): number[] {
-  insertViewLaterEntry(database, entryId);
-  return listViewLaterEntryIds(database);
+export function addViewLaterEntry(
+  database: T3Database,
+  entryId: number,
+  journalChange = true,
+): number[] {
+  return database.transaction(() => {
+    if (insertViewLaterEntry(database, entryId) && journalChange) {
+      touchEntrySyncVersion(database, entryId);
+    }
+    return listViewLaterEntryIds(database);
+  })();
 }
 
 export function mergeViewLaterEntries(database: T3Database, entryIds: number[]): number[] {
@@ -41,15 +54,20 @@ export function mergeViewLaterEntries(database: T3Database, entryIds: number[]):
       // Legacy localStorage can retain an id after its Entry was deleted.
       // A migration merge keeps every surviving membership instead of failing
       // the whole import because one stale browser-local id no longer exists.
-      if (entryExists(database, entryId)) insertViewLaterEntry(database, entryId);
+      if (entryExists(database, entryId) && insertViewLaterEntry(database, entryId)) {
+        touchEntrySyncVersion(database, entryId);
+      }
     }
   })();
   return listViewLaterEntryIds(database);
 }
 
 export function removeViewLaterEntry(database: T3Database, entryId: number): number[] {
-  database.prepare('DELETE FROM view_later_entries WHERE entry_id = ?').run(entryId);
-  return listViewLaterEntryIds(database);
+  return database.transaction(() => {
+    const result = database.prepare('DELETE FROM view_later_entries WHERE entry_id = ?').run(entryId);
+    if (result.changes > 0 && entryExists(database, entryId)) touchEntrySyncVersion(database, entryId);
+    return listViewLaterEntryIds(database);
+  })();
 }
 
 function requireProducer(database: T3Database, producerId: number): void {

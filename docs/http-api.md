@@ -149,6 +149,14 @@ DELETE /api/view-later/producers/:producerId
 
 Two independent SQLite-backed lists (Entries and Producers/Authors) are authoritative for every desktop/mobile browser connected to the library. GET and every mutation return `{ entryIds: number[], producerIds: number[] }` in insertion order. PUT adds one existing subject idempotently; DELETE removes membership without deleting the subject; deleting an Entry or Author cascades its membership. Merge accepts `{ entryIds }`, appends surviving missing legacy Entry memberships without replacing server state, and ignores stale ids from deleted Entries. The web client merges `t3.view-later` once, removes that localStorage key only after success, then refreshes both lists on startup, View later entry, and window focus. No WebSocket/SSE is required: clients may be briefly stale but converge on the next pull.
 
+### Navigation counts
+
+```text
+GET /api/navigation-counts?includeNsfw=true|false
+```
+
+One interface answers the sidebar's visibility-aware numbers: `{ authors, viewLaterEntries, viewLaterAuthors }`. `authors` counts the same universe the Authors page can list, so an Author holding no work at all is never counted; with `includeNsfw=false` an Author additionally counts only when none of their works sits in an NSFW Gallery (the same derived rule as `/api/producers`). A saved work or Author counts only when the current boundary can actually show it, so a saved subject whose row is gone is not counted. Gallery rows and their counts keep coming from `/api/galleries`, which already omits NSFW Galleries in SFW mode. The web client refreshes these numbers on startup, when Show NSFW is toggled, and whenever either View later list changes.
+
 ### Collections
 
 ```text
@@ -159,6 +167,7 @@ DELETE /api/collections/:collectionId
 PUT    /api/collections/:collectionId/nsfw
 POST   /api/collections/temporary
 PUT    /api/collections/order
+POST   /api/collections/:collectionId/tags
 PUT    /api/collections/:collectionId/entries/:entryId
 DELETE /api/collections/:collectionId/entries/:entryId
 PUT    /api/collections/:collectionId/producers/:producerId
@@ -167,12 +176,22 @@ GET    /api/collections/for-entry/:entryId
 GET    /api/collections/for-producer/:producerId
 ```
 
+A commit answers `existingEntryIds` (the works those source URLs already belong to) alongside `skippedExistingEntryCount`: the works whose source URL the library already had. They are not created again, but the caller can still record that this run carried them, which is what the batch review does — a work appearing in another folder is itself information.
+
 `POST /api/collections/temporary` takes `{ entryIds }` and files that whole batch into a new Collection named `临时`, then `临时2`, `临时3`, … (the server picks the first free name), returning `{ collectionId, title, entryCount }` in one transaction. It exists because the batch review after an import is one-time while a bulk import can be too large to check in one sitting; ids that no longer exist are skipped instead of failing the save.
 Collections are user-curated folders of Entries or Producers (internal name unchanged: Entry/Producer). `kind` is fixed at creation (`entry` or `producer`); entry collections may nest child folders exactly one level deep, producer collections stay flat. The folder-level NSFW switch (`PUT .../nsfw`) hides the whole folder regardless of the members' own states. `PUT /api/collections/order` persists one kind's visible order; membership routes are idempotent links, and removal only unlinks. The web directory calls `GET /api/collections?...&compact=true&includeNsfw=...`: each folder carries filtered member counts and at most three member previews for its cover. Opening a folder pages Entry members through `/api/entries/query` or Author members through `/api/producers/query` with `collectionId`; it never downloads complete embedded member arrays. The `for-entry` / `for-producer` queries return the collections a subject already belongs to (drives the ✓-marked add-to-collection menus on detail pages).
 
+`POST /api/collections/:collectionId/tags` with `{ name }` puts one Tag on every work that folder holds — its child folders' works included — and answers `{ tagId, entriesAffected, alreadyPresent, skipped }`. Each work keeps the placement that its own Gallery already uses for that Tag name (the majority facet rule the import uses), and an unseen name lands in the Gallery's default empty-named Facet, so a bulk add never scatters one Tag across Facets of the same Gallery. A work whose Gallery has no structure yet is reported as `skipped` instead of failing the request, and a second run reports `alreadyPresent` rather than duplicating anything.
+
+Every Collection record carries `galleryType` (migration 017). On an entry folder it names the Gallery page the folder is curated under, and `null` means it is not filed on any Gallery page; a producer folder is always `null`, because an Author has no Gallery of its own. `POST /api/collections` accepts an optional `galleryType` for `kind: "entry"`; a nested folder always inherits its parent's page and rejects a different one, and asking for a Gallery on a producer folder is refused. `POST /api/collections/temporary` files an imported batch by its members' Entry type, staying unfiled only when the batch spans Galleries. The scope is a name, not a foreign key: `db:doctor` reports a folder whose Gallery no longer exists in the library, since no page would list it.
+
+The `snapshot` payload ships `collections[].galleryType` so the offline projection groups folders the same way; rows written before the column read as unfiled.
+
 ### Gallery template files
 
-`POST /api/entries/:entryId/template/apply` and `POST /api/entries/:entryId/tag-layout/apply` not only mutate the database — each successful call also rewrites that Gallery's canonical template files under `<dataDir>/templates/`: `<type>.template.json` (Section → Facet structure) and `<type>.tag-layout.json` (every tag's facet placement, refreshed whenever a placement is applied). `GET /api/templates` lists per-Gallery summaries (structure dimensions, tag→facet assignments, both file paths, existence flags) for the Advanced editing "Gallery templates" tab. Import (`commitImportBatch`, single and batch) consults the same data: each imported tag is placed by the majority facet of that tag inside the target Gallery, so steady-state imports land in the template's facet layout without manual re-sorting; only never-seen tags fall back to the default location.
+`POST /api/entries/:entryId/template/apply` and `POST /api/entries/:entryId/tag-layout/apply` not only mutate the database — each successful call also rewrites that Gallery's canonical template files under `<dataDir>/templates/`: `<type>.template.json` (Section → Facet structure) and `<type>.tag-layout.json` (every tag's facet placement, refreshed whenever a placement is applied). `GET /api/templates` lists per-Gallery summaries (structure dimensions, tag→facet assignments, both file paths, existence flags) for the Advanced editing "Gallery templates" tab. An import run that found some of its works already in the library (either the plain folder import or the batch path) files both sets into the temporary Collection: the ones it created and the ones it matched. The batch review says how many were already present instead of dropping them silently.
+
+Import (`commitImportBatch`, single and batch) consults the same data: each imported tag is placed by the majority facet of that tag inside the target Gallery, so steady-state imports land in the template's facet layout without manual re-sorting; only never-seen tags fall back to the default location.
 
 ### Global search
 
@@ -182,18 +201,23 @@ GET    /api/search/tags?q=...&includeNsfw=false
 
 Entry and Author search submit `searchQuery` to their bounded page endpoints; only Tag search retains a dedicated GET route. Search text is trimmed and limited to 200 characters. Tag search accepts `includeNsfw=true|false`; with `false`, tags used only by NSFW Galleries are omitted and shared-tag counts include only SFW usage. Entry and Author results reuse their normal card summaries and server totals. Tag hits return `{ tagId, name, normalizedName, entryCount }` and open the existing cross-Gallery Tag results view.
 
-### Offline sync (read-only)
+### Offline sync
 
 ```text
-GET /api/sync/capabilities
-GET /api/sync/snapshot?media=none|thumbnails
+GET  /api/sync/capabilities
+GET  /api/sync/snapshot?media=none|thumbnails
+POST /api/sync/replay
+PUT  /api/sync/media/:uploadId
 ```
 
 `capabilities` answers `libraryId`, `syncEpoch`, `sqliteSchemaVersion`,
 `snapshotFormatVersion`, `syncProtocolVersion`, `serverBuild` and
-`featureFlags`. The library identity lives in the `sync_metadata` singleton
-(migration 015, lazily seeded); a backup restore rotates only `sync_epoch`
-so a restored sequence can never be mistaken for a live continuation.
+`featureFlags` (`readOnlySnapshot`, `offlineMutations`, `offlineEntryUpdate`,
+`offlineEntryCreate`, `offlineMediaUpload` — all currently true). The library
+identity lives in the `sync_metadata`
+singleton (migration 015, lazily seeded); a backup restore rotates only
+`sync_epoch` so a restored sequence can never be mistaken for a live
+continuation.
 
 `snapshot` captures every read-model table inside
 ONE immediate SQLite transaction together with the monotonic `snapshot_seq`
@@ -205,6 +229,66 @@ caches the snapshot response — Settings installs it as an IndexedDB
 generation and prefetches the manifest separately. Restore applies any
 missing migrations, preserves `libraryId`, and rotates `syncEpoch` before
 the restored database is exposed to clients.
+
+Snapshot format v2 (migration 016) adds `changeSeq` — the `MAX(seq)` of the
+change journal at capture time — plus an immutable `syncUid` and a monotonic
+`syncVersion` on every Entry and Entry Content row. The shared parser keeps the
+three additions optional, so an IndexedDB generation persisted at format v1
+stays readable after an app upgrade.
+
+`replay` accepts one operation per request from two allowlisted kinds. An
+`entry.update` is a scalar patch over `title`, `uploadDate` and `pageCount`; its
+`baseValues` keys
+must match the `payload` keys exactly, and the payload must change at least one
+field. `libraryId`/`syncEpoch` mismatches answer `resnapshot-required`
+(`library-mismatch` / `epoch-mismatch`) and never mutate anything. Receipt
+lookup and hash validation, the optimistic conflict check, the Entry write, the
+trigger-maintained change-journal row and the receipt insert share one SQLite
+transaction, so a failed mutation cannot leave a ghost journal record. Statuses
+are `applied` (`resourceVersion`, `serverSeq`), `conflict` (`currentVersion`,
+`currentValues`, `serverSeq`) when the Entry advanced past `baseVersion` and the
+patched fields also changed on the server, and `failed` (`entity-not-found`,
+`operation-id-collision`) for a deleted Entry or a reused `opId`.
+
+An `entry.create` carries a permanent client-generated `entityUid`,
+`baseVersion: 0`, an empty `baseValues`, and a bounded payload of
+`title`, existing Gallery `type`, nullable `uploadDate`/`pageCount`, selected
+existing Entry rating slots, and initial View Later membership. Entry metadata,
+rating values, View Later membership, the journal row and operation receipt all
+commit in one SQLite transaction. The response adds the server numeric
+`entityId`; title equality is never an identity or deduplication rule.
+
+Idempotency is keyed on `opId` + canonical request hash: an exact retry returns
+the stored result verbatim — `applied` with its ORIGINAL `resourceVersion` and
+`serverSeq`, even after later writes advanced the journal — so a lost response
+can be retried safely. Reusing an `opId` with different content answers
+`operation-id-collision`. Receipts, journal rows and tombstones live in SQLite,
+so they survive a server restart; only the epoch rotates on restore, which is
+what forces a stale client to resnapshot.
+
+Standalone Ratings and View Later mutation, Entry Content mutation, usage events,
+Collections, delete, merge, Import and every other high-risk mutation remain
+online-only. Only initial ratings/View Later embedded in `entry.create` are
+offline-enabled. There is no change-feed endpoint
+yet: the client pulls a whole new snapshot after replay and removes an outbox
+operation only once that snapshot's `changeSeq` covers the acknowledged
+`serverSeq`.
+
+`PUT /api/sync/media/:uploadId` is multipart form data with a JSON `metadata`
+part and one `file` part. Metadata contains `{ libraryId, syncEpoch, entryUid,
+kind: cover|preview, ordinal: 0, mimeType, byteLength, sha256 }`. Identity is
+checked before receipt lookup so pre-Restore staged media cannot cross the rotated
+epoch. The endpoint is restricted to one
+cover and one preview for an Entry registered by successful `entry.create`
+replay; existing online Entries cannot use this endpoint. It refuses replacement of an
+occupied slot. It verifies the actual byte length, SHA-256, image magic/MIME and
+bounded dimensions before staging; path names are server-derived. File promotion,
+the Entry reference/version update, journal sequence and migration 022 upload
+receipt share the replay boundary, with promoted files cleaned if SQLite aborts.
+Migration 023 restricts the endpoint to offline-created Entry UUIDs.
+An exact `uploadId`+request hash retry returns the original result; reuse with
+different metadata/content returns 409. The browser keeps each Blob and stable
+upload ID until a fresh snapshot covers the largest acknowledged media sequence.
 
 ### Source maintenance
 
@@ -240,11 +324,11 @@ zero writes.
 ### Relation suggestions
 
 ```text
-GET    /api/suggestions/tags?vocabulary=entry|producer&q=...&limit=20&excludeIds=1,2&entryType=...&facetId=...
+GET    /api/suggestions/tags?vocabulary=entry|producer&q=...&limit=20&excludeIds=1,2&entryType=...&facetId=...&includeNsfw=true|false
 GET    /api/suggestions/producers?q=...&limit=20&excludeIds=1,2
 ```
 
-These read-only endpoints are intentionally separate from global search and bounded page queries. `q` is required after trimming (maximum 200 characters), `limit` is 1–20, and at most 100 unique positive exclusion IDs are accepted. A candidate is eligible only when its canonical normalized name or an allowed normalized alias contains the complete normalized query; popularity never admits an otherwise ineligible candidate. Ranking then prefers canonical exact/prefix/word-boundary/substring matches, followed by the equivalent alias classes, context usage, total usage, normalized name, and numeric ID. Entry Tag aliases use only the Entry vocabulary; Producer Tag aliases exclude the `authors` partition; Author identity suggestions use only that partition and include Authors with no linked works. Responses are strict lightweight `{ id, name, matchedAlias?, sameContextUsageCount, totalUsageCount }[]` arrays capped at 20. No database migration or write is involved.
+These read-only endpoints are intentionally separate from global search and bounded page queries. `q` is required after trimming (maximum 200 characters), `limit` is 1–20, and at most 100 unique positive exclusion IDs are accepted. A candidate is eligible only when its canonical normalized name or an allowed normalized alias contains the complete normalized query; popularity never admits an otherwise ineligible candidate. Ranking then prefers canonical exact/prefix/word-boundary/substring matches, followed by the equivalent alias classes, context usage, total usage, normalized name, and numeric ID. Entry Tag aliases use only the Entry vocabulary; Producer Tag aliases exclude the `authors` partition; Author identity suggestions use only that partition and include Authors with no linked works. `includeNsfw=false` puts Tag suggestions inside the same visibility boundary as everything else: a tag whose every assignment sits in an NSFW Gallery (or, for the Producer vocabulary, on an Author whose works are all in NSFW Galleries) is not offered — the rule the Tag search already applied. A tag nothing carries is never offered at all, in either mode. Clients pass `false` for a subject whose own partition is SFW (the Entry editor uses its Gallery, the Author editor the Author's derived state) and the Show NSFW switch only where no single subject is being edited. Responses are strict lightweight `{ id, name, matchedAlias?, sameContextUsageCount, totalUsageCount }[]` arrays capped at 20. No database migration or write is involved.
 
 ### Entry Tags and Content
 

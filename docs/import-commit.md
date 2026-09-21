@@ -4,13 +4,13 @@
 
 ## Safety model
 
-- The new portion of a batch commits in one SQLite transaction. Any invalid mapping, missing reviewed Producer match, constraint failure, or duplicate Source URL inside the incoming manifest rolls back all new writes.
+- The new portion of a batch commits in one SQLite transaction. Any invalid mapping, missing reviewed Producer match, constraint failure, duplicate Source URL, or repeated site work id inside the incoming manifest rolls back all new writes.
 - Candidate `fields` are never guessed. Every field present in the batch must appear in `fieldMappings` or `ignoredFields`.
 - Existing Producers are linked only through explicit `existingProducerIds` entries supplied by the user.
 - `createUnmatched: true` explicitly permits new Producers for source values that have no reviewed match. The service never automatically matches an existing Producer by name.
 - Canonical Tags and mapped Tag fields require explicit Facet IDs belonging to the selected Entry type.
-- Re-imports are idempotent by clean Source URL: Entries whose Source URL already exists are skipped, while new Entries in the same author manifest still commit. Duplicate Source URLs inside one incoming manifest are rejected as malformed input.
-- Each new Entry retains provenance as exactly one clean Source URL Content row; external keys and raw source/body payloads remain transient import metadata.
+- Re-imports are idempotent by clean Source URL and by the retained site work id behind it: an Entry whose Source URL already exists is skipped, and a work the library already holds under the same site id is skipped even when the site has re-spelled its URL. New Entries in the same author manifest still commit.
+- Each new Entry retains provenance as exactly one clean Source URL Content row. Raw source/body payloads stay out of Content, but a `site:workId` external key is no longer purely transient: its site id is filed into `site_works` (see *Sites, work ids, and update cursors*) as the work's durable identity.
 
 ## Mapping shape
 
@@ -85,6 +85,41 @@ pnpm import:commit <canonical.json> <mapping.json> <database-path> --commit
 
 The command applies outstanding immutable migrations, validates both JSON documents, commits once, and prints only the created IDs and aggregate counts. Omitting `--commit` performs no database write.
 
+## Sites, work ids, and update cursors
+
+A site_probe export folder is deleted once its works are in, so nothing on disk remembers what a folder or author already contained. The library remembers instead, in two tables added by `021_site_crawl_state.sql`:
+
+- `site_works` — one row per `(site, workId)`, pointing at the Entry the work became. This is the "have we already ingested hitomi work 3220586?" map. It is what lets a later run skip works whose export file no longer exists, and it survives the source re-spelling its own URLs.
+- `site_crawl_sources` — one row per crawled listing (`artist`, `folder`, `work`, or `search`), carrying `last_seen_source_id` / `last_seen_work_date` / `last_seen_order_key`: the newest work already held for that listing. The next run reads the cursor and re-lists only what sorts after it, instead of walking the whole folder again.
+
+Work identity is global per site while the cursor is per listing, because one work legitimately arrives from several listings (an artist folder and a collection folder both list it). Neither table joins the sync allowlist: they describe the local crawl, not the curated library.
+
+A batch declares which listing it came from through an optional `origin`, and the export declares it in snake_case beside `source_site`:
+
+```json
+{
+  "source_site": "hitomi.la",
+  "origin": { "kind": "folder", "ref": "folder-42", "display_name": "Folder 42" },
+  "items": ["3220586", "3220587"]
+}
+```
+
+The site itself is `batch.source`, so an origin only names the listing. It is optional: a hand-made manifest belongs to no tracked listing, so it leaves work ids but records no cursor. When an origin is present the commit files every work it carried — newly created **and** already held — under its site id, and advances that listing's cursor. Filing the skip path too means re-running one export over an existing library backfills ids for works imported before this table existed.
+
+Cursor order is a single comparable string built from `(workDate, workId)`: the date when the source published one, padded numeric ids so `9` sorts before `10`. It only ever moves forward, so a re-crawl that returns nothing new, or an older page fetched out of order, cannot pull it back. A work the site published without a date sorts before every dated work, so an undated row can never advance a cursor past real dated works; a listing that mixes the two falls back to the exact membership check below.
+
+The crawler reads and reports this through one command, which prints JSON on stdout and applies outstanding migrations first:
+
+```text
+pnpm import:cursor status --site hitomi.la --kind folder --ref folder-42 [--db <path>]
+pnpm import:cursor filter --site hitomi.la (--ids 100,120 | --ids-file folder.json) [--db <path>]
+pnpm import:cursor list   [--site hitomi.la] [--db <path>]
+pnpm import:cursor set    --site hitomi.la --kind artist --ref some-artist \
+                          [--source-id 3220586] [--work-date 2026-08-01] --commit
+```
+
+`filter` is the exact answer for a site whose ids carry no usable order: list the folder, ask, and fetch only the ids it reports as `unknown`. Its `--ids-file` accepts a bare JSON array, a hitomi-shaped `{"items": [...]}` manifest, or one id per line. Only `set` writes, and it requires `--commit`; the others never modify the library. `--db` defaults to `apps/server/.data/library.db` under the repo root.
+
 ## Web workflow
 
 The Add Entry page accepts either a complete `site_probe` manifest root or a directly selected single-item folder from any supported adapter (`hitomi.la`, `18comic.vip`, or `hanime1.me`). For direct item folders, canonical media paths such as `items/<id>/cover/...` and `items/<id>/previews/...` are relativized to `cover/...` and `previews/...`; unrelated files such as `raw.html`, diagnostics, and source-specific auxiliary metadata do not participate in parsing. The folder is read recursively and its relative paths (`webkitRelativePath`) are preserved; local cover and preview image files are uploaded to the created Entries after the database transaction succeeds.
@@ -97,4 +132,4 @@ The review never rates individual works. Bulk imports cannot judge every work, a
 
 When an imported Entry's meta carries no series information (and nothing was entered), the commit auto-assigns an `Original` tag under the Gallery's `Series` facet (matched by normalized facet name); Entries that do carry a series tag are untouched, and Galleries without a Series facet are skipped.
 
-Every imported Entry stores exactly one Content row, a clean `Source URL` equal to the source `detail_url`. External keys, raw source objects, bodies, and mapped field Content are no longer written as Content. Re-import detection is keyed only by that clean Source URL: existing Entries are left untouched and reported through `skippedExistingEntryCount`; normalized titles are not identities. Because skipped records make response indexes diverge from manifest indexes, post-commit media matching uses `externalKey`, never array position.
+Every imported Entry stores exactly one Content row, a clean `Source URL` equal to the source `detail_url`. Raw source objects, bodies, and mapped field Content are no longer written as Content. Re-import detection is keyed by that clean Source URL first and by the retained site work id in `site_works` second: existing Entries are left untouched and reported through `skippedExistingEntryCount`; normalized titles are not identities. Because skipped records make response indexes diverge from manifest indexes, post-commit media matching uses `externalKey`, never array position.

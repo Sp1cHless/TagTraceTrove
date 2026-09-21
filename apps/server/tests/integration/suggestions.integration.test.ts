@@ -6,10 +6,54 @@ import { createEntry } from '../../src/repositories/entry-repository.js';
 import { createSection } from '../../src/repositories/layout-repository.js';
 import { createProducer, linkEntryProducer } from '../../src/repositories/producer-repository.js';
 import { assignProducerTag } from '../../src/repositories/producer-tag-repository.js';
+import { setGalleryPartition } from '../../src/repositories/partition-repository.js';
 import { suggestProducers, suggestTags } from '../../src/repositories/suggestion-repository.js';
 import { upsertTaxonomyAlias } from '../../src/repositories/taxonomy-repository.js';
 
 describe('relation suggestion repository', () => {
+  it('offers no tag that only NSFW Galleries use while Show NSFW is off', async () => {
+    const database = createMigratedMemoryDatabase();
+    try {
+      const safeSection = createSection(database, { entryType: 'comic', name: 'Basic' });
+      const adultSection = createSection(database, { entryType: 'hentai', name: 'Basic' });
+      const safeWork = createEntry(database, { title: 'Safe', type: 'comic' });
+      const adultWork = createEntry(database, { title: 'Adult', type: 'hentai' });
+      assignEntryTag(database, {
+        entryId: safeWork.id, facetId: safeSection.defaultFacetId, name: 'Shared tag',
+      });
+      assignEntryTag(database, {
+        entryId: adultWork.id, facetId: adultSection.defaultFacetId, name: 'Shared tag',
+      });
+      assignEntryTag(database, {
+        entryId: adultWork.id, facetId: adultSection.defaultFacetId, name: 'Adult only tag',
+      });
+      setGalleryPartition(database, 'hentai', true);
+
+      const sfw = suggestTags(database, {
+        vocabulary: 'entry', q: 'tag', limit: 20, excludeIds: [], includeNsfw: 'false',
+      });
+      // A tag both Galleries use stays; one only the NSFW Gallery uses does not.
+      expect(sfw.map((hit) => hit.name)).toEqual(['Shared tag']);
+      expect(sfw[0]?.totalUsageCount).toBe(2);
+
+      const everything = suggestTags(database, {
+        vocabulary: 'entry', q: 'tag', limit: 20, excludeIds: [], includeNsfw: 'true',
+      });
+      expect(everything.map((hit) => hit.name)).toEqual(['Shared tag', 'Adult only tag']);
+
+      // The route carries the same flag, so the client's SFW mode is the boundary.
+      const app = createApiApp(database);
+      const response = await app.request(
+        '/api/suggestions/tags?vocabulary=entry&q=tag&includeNsfw=false',
+      );
+      expect(response.status).toBe(200);
+      expect((await response.json() as Array<{ name: string }>).map((hit) => hit.name))
+        .toEqual(['Shared tag']);
+    } finally {
+      database.close();
+    }
+  });
+
   it('keeps Entry and Producer Tag vocabularies separate and never admits fuzzy leakage', () => {
     const database = createMigratedMemoryDatabase();
     try {

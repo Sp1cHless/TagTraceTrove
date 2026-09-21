@@ -1,6 +1,10 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createMigratedMemoryDatabase } from '../../src/database/testing.js';
 import { commitImportBatch } from '../../src/import/commit.js';
+import { loadSiteProbeExport } from '../../src/import/site-probe.js';
 import { createEntry, getEntryDetail } from '../../src/repositories/entry-repository.js';
 import { createFacet, createSection } from '../../src/repositories/layout-repository.js';
 import { createProducer, linkEntryProducer } from '../../src/repositories/producer-repository.js';
@@ -56,6 +60,7 @@ describe('commitImportBatch', () => {
       entries: [{ entryId: 1, externalKey: 'example.test:42', title: 'Example comic' }],
       entryCount: 1,
       skippedExistingEntryCount: 0,
+      existingEntryIds: [],
       createdProducerCount: 1,
       producerLinkCount: 1,
       tagAssignmentCount: 2,
@@ -228,7 +233,7 @@ describe('commitImportBatch', () => {
       authorRatings: [],
     };
 
-    commitImportBatch(database, {
+    const first = commitImportBatch(database, {
       source: 'example.test',
       warnings: [],
       entries: [{
@@ -237,6 +242,7 @@ describe('commitImportBatch', () => {
         sources: [{ label: 'example.test', url: 'https://example.test/items/42' }],
       }],
     }, mapping);
+    const firstEntryId = first.entries[0]!.entryId;
 
     const result = commitImportBatch(database, {
       source: 'example.test',
@@ -257,6 +263,9 @@ describe('commitImportBatch', () => {
 
     expect(result.entryCount).toBe(1);
     expect(result.skippedExistingEntryCount).toBe(1);
+    // The run still names the work that URL belongs to, so a caller can record
+    // that this folder carried it.
+    expect(result.existingEntryIds).toEqual([firstEntryId]);
     expect(result.entries).toEqual([{
       entryId: expect.any(Number),
       title: 'New work',
@@ -569,5 +578,54 @@ describe('commitImportBatch', () => {
     );
     expect(database.prepare('SELECT COUNT(*) FROM entries').pluck().get()).toBe(0);
     database.close();
+  });
+
+  it('commits a Level 0 export from a site that has no adapter', async () => {
+    const database = createMigratedMemoryDatabase();
+    const section = createSection(database, { entryType: 'comic', name: '分类' });
+    const directory = await mkdtemp(join(tmpdir(), 't3-level0-'));
+    const metadataPath = join(directory, 'metadata.json');
+    // Exactly what the Level 0 writer produces: the two fields it can read, and
+    // no 分类信息 at all rather than an empty one.
+    await writeFile(metadataPath, JSON.stringify({
+      schema_version: 1,
+      source_site: 'manwa.me',
+      source_id: 'book_104722',
+      title: 'CALL-铃响-',
+      detail_url: 'https://manwa.me/book/104722',
+      cover: { local_path: 'items/book_104722/cover/cover.jpg' },
+    }), 'utf8');
+
+    try {
+      const batch = await loadSiteProbeExport(metadataPath);
+      const result = commitImportBatch(database, batch, {
+        entryType: 'comic',
+        canonicalTagFacetId: section.defaultFacetId,
+        sourceContentType: 'source url',
+        externalKeyContentType: 'external key',
+        fieldMappings: {},
+        ignoredFields: [],
+        authorRatings: [],
+      });
+
+      expect(result.entries).toEqual([
+        { entryId: 1, externalKey: 'manwa.me:book_104722', title: 'CALL-铃响-' },
+      ]);
+      // No tags invented for a page that declared none.
+      expect(result.tagAssignmentCount).toBe(0);
+      expect(result.warnings).toEqual([]);
+
+      // The identity the next import of this work dedupes on. It is the part of a
+      // Level 0 export that has to survive, because the id is derived rather than
+      // read from the site.
+      expect(database.prepare(
+        'SELECT source_site, source_id, entry_id FROM site_works',
+      ).all()).toEqual([
+        { source_site: 'manwa.me', source_id: 'book_104722', entry_id: 1 },
+      ]);
+    } finally {
+      await rm(directory, { recursive: true });
+      database.close();
+    }
   });
 });

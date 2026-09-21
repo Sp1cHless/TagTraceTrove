@@ -1,0 +1,14 @@
+{
+  "appId": "com.speechless666.t3.spike",
+  "appName": "T3 C0 Spike",
+  "webDir": "web-dist",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

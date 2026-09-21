@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import type { CollectionKind, CollectionRecordDto } from '@t3/shared';
+import type { CollectionKind, CollectionRecordDto, GallerySummary } from '@t3/shared';
 import type { GalleryApi } from './api/gallery.js';
 import { showNsfw } from './stores/preferences.js';
 import EntryCard from './components/EntryCard.vue';
 import CoverComposition from './components/CoverComposition.vue';
 import IconButton from './components/IconButton.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
+import { useArmableAction } from './armable.js';
 import { useI18n } from './i18n.js';
 import { useNavigationMemory } from './navigation-memory.js';
 
@@ -22,16 +23,35 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const navigationMemory = useNavigationMemory();
+/**
+ * One flat page row: every Gallery page plus the Authors page. Entry folders are
+ * curated onto a Gallery page; `null` on the entry kind is the unfiled list.
+ * `undefined` gallery means no entry page has been picked yet.
+ */
+type CollectionPageTab =
+  | { kind: 'entry'; gallery: string | null | undefined }
+  | { kind: 'producer'; gallery: undefined };
+
 const savedState = navigationMemory.states.get('collections') as {
   kind?: CollectionKind;
+  gallery?: string | null;
   activeCollectionId?: number | null;
   returnScrollPositions?: number[];
   memberPage?: number;
   memberPageSize?: number;
 } | undefined;
 
-const kind = ref<CollectionKind>(savedState?.kind ?? 'entry');
+const activePage = ref<CollectionPageTab>(
+  savedState?.kind === 'producer'
+    ? { kind: 'producer', gallery: undefined }
+    : { kind: 'entry', gallery: savedState !== undefined && 'gallery' in savedState ? savedState.gallery : undefined },
+);
+const kind = computed<CollectionKind>(() => activePage.value.kind);
+const activeGallery = computed<string | null | undefined>(() => activePage.value.gallery);
+const galleries = ref<GallerySummary[]>([]);
 const collections = ref<CollectionRecordDto[]>([]);
+/** Which kind `collections` currently holds; a switch never renders the other kind's rows. */
+const loadedKind = ref<CollectionKind | null>(null);
 const activeCollectionId = ref<number | null>(savedState?.activeCollectionId ?? null);
 const editing = ref(false);
 const loading = ref(true);
@@ -48,6 +68,7 @@ const memberRequestId = ref(0);
 function rememberCollectionNavigationState(): void {
   navigationMemory.states.set('collections', {
     kind: kind.value,
+    gallery: activeGallery.value ?? null,
     activeCollectionId: activeCollectionId.value,
     returnScrollPositions: [...returnScrollPositions],
     memberPage: memberPage.value,
@@ -55,9 +76,10 @@ function rememberCollectionNavigationState(): void {
   });
 }
 
-watch([kind, activeCollectionId], ([currentKind, collectionId]) => {
+watch([activePage, activeCollectionId], ([page, collectionId]) => {
   navigationMemory.states.set('collections', {
-    kind: currentKind,
+    kind: page.kind,
+    gallery: page.gallery ?? null,
     activeCollectionId: collectionId,
     returnScrollPositions: [...returnScrollPositions],
     memberPage: memberPage.value,
@@ -136,11 +158,19 @@ async function loadMembers(resetPage = false): Promise<void> {
 }
 
 async function load(): Promise<void> {
+  const requestedKind = kind.value;
   loading.value = true;
   error.value = null;
   try {
-    const records = await props.api.listCollections(kind.value, showNsfw.value);
+    const [records, gallerySummaries] = await Promise.all([
+      props.api.listCollections(requestedKind, showNsfw.value),
+      props.api.listGalleries(),
+    ]);
+    galleries.value = gallerySummaries;
+    // A response for a page the user already left must not land.
+    if (requestedKind !== kind.value) return;
     collections.value = records;
+    loadedKind.value = requestedKind;
     if (!findCollection(collections.value, activeCollectionId.value ?? 0)) {
       activeCollectionId.value = null;
     }
@@ -152,15 +182,76 @@ async function load(): Promise<void> {
   }
 }
 
-function switchKind(next: CollectionKind): void {
-  if (kind.value === next) return;
-  kind.value = next;
+interface CollectionGalleryTab {
+  /** null is the unfiled folder list, not a Gallery. */
+  key: string | null;
+  label: string;
+  nsfw: boolean;
+}
+
+/**
+ * Entry folders are paged by the Gallery they were curated into, so an NSFW
+ * Gallery page carries its folders out of SFW mode with it. A scope whose Entry
+ * type has no works left still gets a page: hiding it would strand its folders.
+ */
+const galleryTabs = computed<CollectionGalleryTab[]>(() => {
+  const tabs: CollectionGalleryTab[] = galleries.value.map((gallery) => ({
+    key: gallery.type,
+    label: gallery.type,
+    nsfw: gallery.nsfw,
+  }));
+  const known = new Set(tabs.map((tab) => tab.key));
+  const rows = loadedKind.value === 'entry' ? collections.value : [];
+  for (const record of rows) {
+    const scope = record.galleryType;
+    if (scope !== null && !known.has(scope)) {
+      known.add(scope);
+      tabs.push({ key: scope, label: scope, nsfw: false });
+    }
+  }
+  if (rows.some((record) => record.galleryType === null)) {
+    tabs.push({ key: null, label: t('collections.unfiled'), nsfw: false });
+  }
+  return tabs;
+});
+
+const visibleGalleryTabs = computed(() => (
+  galleryTabs.value.filter((tab) => showNsfw.value || !tab.nsfw)
+));
+
+const scopedCollections = computed(() => {
+  if (loadedKind.value !== kind.value) return [];
+  return kind.value === 'entry'
+    ? collections.value.filter((record) => record.galleryType === activeGallery.value)
+    : collections.value;
+});
+
+function selectPage(next: CollectionPageTab): void {
+  if (next.kind === activePage.value.kind && next.gallery === activePage.value.gallery) return;
+  activePage.value = next;
   activeCollectionId.value = null;
   memberPage.value = 1;
   editing.value = false;
   clearDrag();
   void load();
 }
+
+// Pages come and go with the SFW toggle, so the active one is re-picked whenever
+// it stops being offered — but never before the first page list exists, or the
+// unfiled page would win by default.
+watch(visibleGalleryTabs, (tabs) => {
+  if (kind.value !== 'entry') return;
+  if (tabs.length === 0) {
+    // Every Gallery page is hidden: Authors is the only page left. Wait for the
+    // entry page list to actually arrive first, or this fires on an empty start.
+    if (loadedKind.value !== 'entry') return;
+    activePage.value = { kind: 'producer', gallery: undefined };
+    void load();
+    return;
+  }
+  if (activePage.value.gallery !== undefined && tabs.some((tab) => tab.key === activePage.value.gallery)) return;
+  activePage.value = { kind: 'entry', gallery: tabs[0]!.key };
+}, { immediate: true });
 
 function findCollection(
   records: CollectionRecordDto[],
@@ -222,7 +313,7 @@ function coversOf(record: CollectionRecordDto): string[] {
 }
 
 const visibleCollections = computed(() => (
-  collections.value.filter((record) => showNsfw.value || !record.nsfw)
+  scopedCollections.value.filter((record) => showNsfw.value || !record.nsfw)
 ));
 
 const visibleCollectionIds = computed(() => {
@@ -263,7 +354,13 @@ async function createCollection(): Promise<void> {
   if (title === '') return;
   error.value = null;
   try {
-    const created = await props.api.createCollection({ kind: kind.value, title });
+    const created = await props.api.createCollection({
+      kind: kind.value,
+      title,
+      ...(kind.value === 'entry' && activeGallery.value !== null
+        ? { galleryType: activeGallery.value }
+        : {}),
+    });
     newTitle.value = '';
     await load();
     activeCollectionId.value = created.id;
@@ -378,7 +475,55 @@ async function removeEntryFromActiveCollection(entryId: number): Promise<void> {
   }
 }
 
+const { armedKey, arm, disarm } = useArmableAction();
+
+// "Add common tag": one Tag on every work the open folder holds.
+const commonTagOpen = ref(false);
+const commonTagName = ref('');
+const commonTagBusy = ref(false);
+const commonTagNotice = ref<string | null>(null);
+
+function toggleCommonTag(): void {
+  commonTagOpen.value = !commonTagOpen.value;
+  commonTagName.value = '';
+  commonTagNotice.value = null;
+}
+
+async function submitCommonTag(): Promise<void> {
+  const collection = activeCollection.value;
+  const name = commonTagName.value.trim();
+  if (collection === null || name === '') return;
+  commonTagBusy.value = true;
+  error.value = null;
+  commonTagNotice.value = null;
+  try {
+    const result = await props.api.addCollectionTag(collection.id, name);
+    commonTagNotice.value = t('collections.commonTagResult', {
+      applied: result.entriesAffected,
+      already: result.alreadyPresent,
+      skipped: result.skipped,
+    });
+    commonTagName.value = '';
+    commonTagOpen.value = false;
+    await load();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.createEntry');
+  } finally {
+    commonTagBusy.value = false;
+  }
+}
+
+/** A folder with anything in it needs the second, confirming tap. */
+function collectionHasContent(record: CollectionRecordDto): boolean {
+  return (record.entryCount ?? record.entries.length) > 0
+    || (record.producerCount ?? record.producers.length) > 0
+    || record.children.length > 0;
+}
+
 async function removeCollection(record: CollectionRecordDto): Promise<void> {
+  const armedFor = `collection-${record.id}`;
+  if (collectionHasContent(record) && !arm(armedFor)) return;
+  disarm(armedFor);
   error.value = null;
   try {
     await props.api.deleteCollection(record.id);
@@ -540,21 +685,32 @@ onMounted(load);
     </header>
 
     <div class="recent-tab-shell">
-      <div class="recent-tabs" data-testid="collections-kind-tabs" role="tablist">
-      <button
-        type="button"
-        class="recent-tab"
-        :class="{ 'recent-tab-active': kind === 'entry' }"
-        data-testid="collections-kind-entry"
-        @click="switchKind('entry')"
-      >{{ t('collections.worksTab') }}</button>
-      <button
-        type="button"
-        class="recent-tab"
-        :class="{ 'recent-tab-active': kind === 'producer' }"
-        data-testid="collections-kind-producer"
-        @click="switchKind('producer')"
-      >{{ t('collections.authorsTab') }}</button>
+      <div
+        class="recent-tabs"
+        data-testid="collections-page-tabs"
+        role="tablist"
+        :aria-label="t('collections.pageTabs')"
+      >
+        <button
+          v-for="tab in visibleGalleryTabs"
+          :key="tab.key ?? '__unfiled__'"
+          type="button"
+          class="recent-tab"
+          :class="{ 'recent-tab-active': kind === 'entry' && tab.key === activeGallery }"
+          :data-collection-gallery-tab="tab.key ?? '__unfiled__'"
+          role="tab"
+          :aria-selected="kind === 'entry' && tab.key === activeGallery"
+          @click="selectPage({ kind: 'entry', gallery: tab.key })"
+        >{{ tab.label }}</button>
+        <button
+          type="button"
+          class="recent-tab"
+          :class="{ 'recent-tab-active': kind === 'producer' }"
+          data-testid="collections-kind-producer"
+          role="tab"
+          :aria-selected="kind === 'producer'"
+          @click="selectPage({ kind: 'producer', gallery: undefined })"
+        >{{ t('collections.authorsTab') }}</button>
       </div>
 
       <div class="recent-tab-panel" data-testid="collections-panel" role="tabpanel">
@@ -567,15 +723,59 @@ onMounted(load);
             <button class="back-button" type="button" @click="closeCollection">
               {{ t('collections.backToList') }}
             </button>
-          <button
-            data-testid="collection-nsfw-toggle"
-            class="secondary-button"
-            type="button"
-            @click="toggleNsfw"
-          >
-            {{ activeCollection.nsfw ? t('gallery.nsfwBadge') : t('gallery.sfwBadge') }}
-          </button>
+          <div class="collection-head-actions">
+            <template v-if="editing && activeCollection.kind === 'entry'">
+              <button
+                v-if="!commonTagOpen"
+                data-testid="collection-common-tag-toggle"
+                class="secondary-button"
+                type="button"
+                @click="toggleCommonTag"
+              >
+                {{ t('collections.commonTag') }}
+              </button>
+              <form
+                v-else
+                class="collection-common-tag"
+                data-testid="collection-common-tag-form"
+                @submit.prevent="submitCommonTag"
+              >
+                <input
+                  v-model="commonTagName"
+                  name="commonTagName"
+                  data-testid="collection-common-tag-input"
+                  :placeholder="t('collections.commonTagPlaceholder')"
+                >
+                <button
+                  class="add-button"
+                  type="submit"
+                  data-testid="collection-common-tag-submit"
+                  :disabled="commonTagBusy || commonTagName.trim() === ''"
+                >{{ commonTagBusy ? t('entry.creating') : t('common.confirm') }}</button>
+                <button
+                  class="text-button"
+                  type="button"
+                  data-testid="collection-common-tag-cancel"
+                  :aria-label="t('navigation.close')"
+                  @click="toggleCommonTag"
+                >×</button>
+              </form>
+            </template>
+            <button
+              data-testid="collection-nsfw-toggle"
+              class="secondary-button"
+              type="button"
+              @click="toggleNsfw"
+            >
+              {{ activeCollection.nsfw ? t('gallery.nsfwBadge') : t('gallery.sfwBadge') }}
+            </button>
+          </div>
         </div>
+        <p
+          v-if="commonTagNotice"
+          class="muted"
+          data-testid="collection-common-tag-result"
+        >{{ commonTagNotice }}</p>
         <template v-if="editingActive">
           <label class="collection-edit-row">
             {{ t('collections.nameLabel') }}
@@ -674,10 +874,12 @@ onMounted(load);
               v-if="editing"
               type="button"
               class="view-later-remove"
+              :class="{ 'armable-armed': armedKey === `collection-${child.id}` }"
               :data-testid="'delete-sub-collection-' + child.id"
-              :aria-label="t('collections.delete')"
+              :aria-label="armedKey === `collection-${child.id}` ? t('collections.deleteConfirm', { title: child.title }) : t('collections.delete')"
+              :title="armedKey === `collection-${child.id}` ? t('collections.deleteConfirm', { title: child.title }) : undefined"
               @click.stop="removeCollection(child)"
-            >×</button>
+            >{{ armedKey === `collection-${child.id}` ? t('common.confirm') : '×' }}</button>
           </article>
         </PagedCardGrid>
 
@@ -817,10 +1019,12 @@ onMounted(load);
             v-if="editing"
             type="button"
             class="view-later-remove"
+            :class="{ 'armable-armed': armedKey === `collection-${record.id}` }"
             :data-testid="'delete-collection-' + record.id"
-            :aria-label="t('collections.delete')"
+            :aria-label="armedKey === `collection-${record.id}` ? t('collections.deleteConfirm', { title: record.title }) : t('collections.delete')"
+            :title="armedKey === `collection-${record.id}` ? t('collections.deleteConfirm', { title: record.title }) : undefined"
             @click.stop="removeCollection(record)"
-          >×</button>
+          >{{ armedKey === `collection-${record.id}` ? t('common.confirm') : '×' }}</button>
         </article>
       </PagedCardGrid>
     </template>
@@ -854,6 +1058,9 @@ onMounted(load);
 .view-later-remove:hover { background: radial-gradient(circle, rgb(0 0 0 / 78%) 0 0.68rem, transparent 0.72rem); }
 .collection-detail { display: grid; gap: 0.8rem; }
 .collection-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.collection-head-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.5rem; }
+.collection-common-tag { display: flex; align-items: center; gap: 0.35rem; }
+.collection-common-tag input { min-width: 0; width: 11rem; padding: 0.45rem 0.6rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface); font: inherit; }
 .collection-detail h3 { margin: 0; }
 .collection-description { margin: 0; color: var(--text-muted); white-space: pre-wrap; }
 .collection-edit-row { display: grid; gap: 0.35rem; }

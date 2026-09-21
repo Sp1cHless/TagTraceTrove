@@ -19,7 +19,11 @@ import AdvancedEditingPage from './AdvancedEditingPage.vue';
 import AuthorPage from './AuthorPage.vue';
 import RecentViewPage from './RecentViewPage.vue';
 import ViewLaterPage from './ViewLaterPage.vue';
-import { flattenCollectionOptions, type CollectionMenuOption } from './collection-tree.js';
+import {
+  collectionOptionsForGallery,
+  flattenCollectionOptions,
+  type CollectionMenuOption,
+} from './collection-tree.js';
 import CollectionsPage from './CollectionsPage.vue';
 import HomePage from './HomePage.vue';
 import RandomPage from './RandomPage.vue';
@@ -34,6 +38,7 @@ import {
 import SearchPage from './SearchPage.vue';
 import { entryCardMediaRef, entryStackLayerStyle, entryStackLayers } from './entry-media-stack.js';
 import { accent, accentPresets, accentSwatchColors, rowsPerPage, rowsPerPageOptions, showNsfw } from './stores/preferences.js';
+import type { NavigationCounts } from '@t3/shared';
 import { useArmableAction } from './armable.js';
 import FacetFilterBar, { type GalleryFacetFilters } from './components/FacetFilterBar.vue';
 import SuggestionInput from './components/SuggestionInput.vue';
@@ -45,6 +50,7 @@ import OfflineLibrarySettings from './components/OfflineLibrarySettings.vue';
 import { supportedLocales, useI18n, type Locale } from './i18n.js';
 import { createMemorySnapshotStore, type SnapshotStore } from './offline/snapshot-store.js';
 import type { OfflineApiState } from './offline/offline-api.js';
+import { isOfflineTransportError } from './api/transport-error.js';
 
 import { createNavigationMemory, navigationMemoryKey } from './navigation-memory.js';
 
@@ -85,6 +91,66 @@ const props = defineProps<{ api: GalleryApi; offlineStore?: SnapshotStore; offli
 // main.ts always supplies IndexedDB. The in-memory fallback keeps component
 // fixtures and embedders deterministic without touching browser storage.
 const offlineStore = props.offlineStore ?? createMemorySnapshotStore();
+const offlineDiagnosticsOpen = ref(false);
+const offlineDiagnosticsText = ref('');
+const DIAGNOSTIC_BUILD = '0.0.8-c2-offline-rating';
+
+async function refreshOfflineDiagnostics(): Promise<void> {
+  const list = (offlineStore as SnapshotStore & {
+    list?: () => Promise<Array<{ operationKind: string; status: string }>>;
+  }).list;
+  const readMeta = async (key: string): Promise<string | null> => {
+    try {
+      return await offlineStore.readMeta(key);
+    } catch (cause) {
+      return `read-error:${cause instanceof Error ? cause.message : String(cause)}`;
+    }
+  };
+  let operations: Array<{ operationKind: string; status: string }> | string = 'outbox-unavailable';
+  if (typeof list === 'function') {
+    try {
+      operations = await list.call(offlineStore);
+    } catch (cause) {
+      operations = `read-error:${cause instanceof Error ? cause.message : String(cause)}`;
+    }
+  }
+  offlineDiagnosticsText.value = JSON.stringify({
+    diagnosticBuild: DIAGNOSTIC_BUILD,
+    capturedAt: new Date().toISOString(),
+    mode: props.offlineState?.mode ?? null,
+    lastFallbackAt: props.offlineState?.lastFallbackAt ?? null,
+    pendingCount: props.offlineState?.pendingCount ?? null,
+    conflictCount: props.offlineState?.conflictCount ?? null,
+    failedCount: props.offlineState?.failedCount ?? null,
+    lastReplayError: props.offlineState?.lastReplayError ?? null,
+    lastCapabilityProbe: props.offlineState?.lastCapabilityProbe ?? null,
+    lastSuccessfulCapabilityProbe: props.offlineState?.lastSuccessfulCapabilityProbe ?? null,
+    lastMutationDiagnostic: props.offlineState?.lastMutationDiagnostic ?? null,
+    mutationDiagnostics: props.offlineState?.mutationDiagnostics ?? [],
+    metadata: {
+      activeGeneration: await readMeta('activeGeneration'),
+      offlineEntryCreate: await readMeta('capability.offlineEntryCreate'),
+      offlineUsageEvents: await readMeta('capability.offlineUsageEvents'),
+      offlineEntryViewLater: await readMeta('capability.offlineEntryViewLater'),
+      offlineEntryRating: await readMeta('capability.offlineEntryRating'),
+    },
+    outbox: Array.isArray(operations)
+      ? operations.map((operation) => ({ kind: operation.operationKind, status: operation.status }))
+      : operations,
+    userAgent: navigator.userAgent,
+  }, null, 2);
+}
+
+async function toggleOfflineDiagnostics(): Promise<void> {
+  offlineDiagnosticsOpen.value = !offlineDiagnosticsOpen.value;
+  if (offlineDiagnosticsOpen.value) await refreshOfflineDiagnostics();
+}
+
+async function copyOfflineDiagnostics(): Promise<void> {
+  await refreshOfflineDiagnostics();
+  await navigator.clipboard.writeText(offlineDiagnosticsText.value);
+}
+
 const navigationMemory = createNavigationMemory();
 provide(navigationMemoryKey, navigationMemory);
 const galleries = ref<GallerySummary[]>([]);
@@ -239,6 +305,10 @@ function suggestEntryTags(query: string, excludeIds: number[], signal: AbortSign
     excludeIds,
     entryType: activeEntry.value?.type ?? undefined,
     facetId: tagEditorFacetId.value ?? undefined,
+    // Isolation follows the WORK's Gallery, not the browser-wide switch: a work
+    // in an SFW Gallery may only be indexed by Tags the SFW side can show, even
+    // while NSFW Galleries are visible elsewhere.
+    includeNsfw: entryNsfwTypes.value.has(activeEntry.value?.type ?? '') ? 'true' : 'false',
   }, signal);
 }
 
@@ -649,7 +719,13 @@ async function openTagFromSearch(
 }
 
 watch(showNsfw, () => {
+  void refreshNavigationCounts();
   if (tagResults.value) void changeEntryTagPage(1);
+});
+
+// Saving or removing an Entry/Author changes both lists the sidebar counts.
+watch([viewLaterIds, viewLaterAuthorIds], () => {
+  void refreshNavigationCounts();
 });
 
 function isHttpUrl(value: string): boolean {
@@ -663,17 +739,17 @@ function formatDate(isoTimestamp: string): string {
 
 /**
  * A view is counted only when the user actually opens the source URL —
- * clicking the card itself never counts. Record first, then navigate.
+ * clicking the card itself never counts. Navigation opens immediately; usage
+ * recording is a non-blocking best-effort side effect that may enqueue offline.
  */
-async function openSourceUrl(event: MouseEvent, url: string): Promise<void> {
+function openSourceUrl(event: MouseEvent, url: string): void {
   event.preventDefault();
   if (!activeEntry.value) return;
-  try {
-    applyUsage(await props.api.recordEntryView(activeEntry.value.id));
-  } catch {
-    // Recording is best-effort: never block the navigation.
-  }
+  const entryId = activeEntry.value.id;
   window.open(url, '_blank', 'noopener,noreferrer');
+  void props.api.recordEntryView(entryId).then(applyUsage).catch(() => {
+    // Recording is online-only best-effort; never delay or block navigation.
+  });
 }
 
 async function likeActiveEntry(): Promise<void> {
@@ -707,7 +783,9 @@ async function toggleEntryCollectionMenu(): Promise<void> {
         props.api.listCollections('entry'),
         props.api.listCollectionsForEntry(activeEntry.value.id),
       ]);
-      entryCollectionOptions.value = flattenCollectionOptions(collectionTree);
+      entryCollectionOptions.value = flattenCollectionOptions(
+        collectionOptionsForGallery(collectionTree, activeEntry.value.type, memberIds),
+      );
       entryCollectionIds.value = memberIds;
     } catch {
       // Keep whatever options are cached; the menu still renders.
@@ -892,11 +970,10 @@ onUnmounted(() => {
   clearMultiAuthorNotice();
 });
 
-async function saveLayoutTemplate(): Promise<void> {
+/** Save this work's structure as the Gallery's shared template. */
+async function applyLayoutTemplate(): Promise<void> {
   if (!activeEntry.value) return;
   const type = activeEntry.value.type;
-  if (!arm('save-template')) return;
-  disarm('save-template');
   templateBusy.value = true;
   templateNotice.value = null;
   error.value = null;
@@ -915,6 +992,13 @@ async function saveLayoutTemplate(): Promise<void> {
   } finally {
     templateBusy.value = false;
   }
+}
+
+async function saveLayoutTemplate(): Promise<void> {
+  if (!activeEntry.value) return;
+  if (!arm('save-template')) return;
+  disarm('save-template');
+  await applyLayoutTemplate();
 }
 
 // Tag layout sync: the open Entry's tag→Facet placement becomes the standard
@@ -1243,7 +1327,9 @@ async function openEntry(entryId: number): Promise<void> {
       props.api.listCollections('entry'),
       props.api.listCollectionsForEntry(entryId),
     ]);
-    entryCollectionOptions.value = flattenCollectionOptions(collectionOptions);
+    entryCollectionOptions.value = flattenCollectionOptions(
+      collectionOptionsForGallery(collectionOptions, detail.type, memberIds),
+    );
     entryCollectionIds.value = memberIds;
     activeEntry.value = detail;
   } catch (cause) {
@@ -1329,6 +1415,20 @@ async function saveEntryTitle(): Promise<void> {
     error.value = cause instanceof Error ? cause.message : t('error.updateEntry');
   } finally {
     entryTitleSaving.value = false;
+  }
+}
+
+async function discardBlockedOfflineEdits(): Promise<void> {
+  try {
+    await props.api.discardBlockedOfflineOperations?.();
+    const current = activeEntry.value;
+    if (current !== null) {
+      const refreshed = await props.api.getEntry(current.id);
+      activeEntry.value = refreshed;
+      entries.value = replaceEntryTitle(entries.value, refreshed.id, refreshed.title);
+    }
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.updateEntry');
   }
 }
 
@@ -1546,12 +1646,44 @@ function openAuthorFromEntry(authorId: number): void {
   resetLayoutEditors();
 }
 
+const templatePromptOpen = ref(false);
+
+/**
+ * The first work of a Gallery that has no shared structure yet. Offering the
+ * template here is the last chance to notice it: after this, the work's own
+ * Sections and Facets exist but no peer work has been given them.
+ */
+function needsTemplatePrompt(): boolean {
+  const entry = activeEntry.value;
+  if (entry === null || entry.sections.length > 0) return false;
+  const summary = galleries.value.find((gallery) => gallery.type === entry.type);
+  return summary?.entryCount === 1;
+}
+
 function finishEditing(): void {
+  if (needsTemplatePrompt()) {
+    templatePromptOpen.value = true;
+    return;
+  }
+  editingEntry.value = false;
+  resetLayoutEditors();
+}
+
+function dismissTemplatePrompt(): void {
+  templatePromptOpen.value = false;
+  editingEntry.value = false;
+  resetLayoutEditors();
+}
+
+async function applyTemplateAndFinish(): Promise<void> {
+  templatePromptOpen.value = false;
+  await applyLayoutTemplate();
   editingEntry.value = false;
   resetLayoutEditors();
 }
 
 function resetLayoutEditors(): void {
+  templatePromptOpen.value = false;
   cancelEntryTitleEdit();
   sectionEditorOpen.value = false;
   facetEditorSectionId.value = null;
@@ -2004,11 +2136,44 @@ async function removeTag(tagId: number): Promise<void> {
   }
 }
 
+/**
+ * Sidebar numbers come from one visibility-aware interface instead of the raw
+ * list lengths, so SFW mode never advertises NSFW Authors or saved works. The
+ * list lengths remain the fallback for a client whose server has no counts route.
+ */
+const navigationCounts = ref<NavigationCounts | null>(null);
+
+async function refreshNavigationCounts(): Promise<void> {
+  if (props.api.getNavigationCounts === undefined) {
+    navigationCounts.value = null;
+    return;
+  }
+  try {
+    navigationCounts.value = await props.api.getNavigationCounts(showNsfw.value);
+  } catch {
+    navigationCounts.value = null;
+  }
+}
+
+const visibleAuthorCount = computed(() => (
+  navigationCounts.value?.authors ?? authors.value.length
+));
+const visibleViewLaterCount = computed(() => (
+  navigationCounts.value === null
+    ? viewLaterIds.value.length + viewLaterAuthorIds.value.length
+    : navigationCounts.value.viewLaterEntries + navigationCounts.value.viewLaterAuthors
+));
+
 async function initialize(): Promise<void> {
   try {
     // Home is the default view: nothing is selected until the user picks a
     // Gallery (homepage design guide §10 — no first-gallery fallback).
-    await Promise.all([refreshGalleries(), refreshAuthors(), initializeViewLater(props.api)]);
+    await Promise.all([
+      refreshGalleries(),
+      refreshAuthors(),
+      initializeViewLater(props.api),
+      refreshNavigationCounts(),
+    ]);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.loadGalleries');
   } finally {
@@ -2035,12 +2200,50 @@ async function submitEntry(draft: ManualEntryDraft): Promise<void> {
   error.value = null;
   submitting.value = true;
   const targetType = draft.type;
-  try {
-    const created = await props.api.createEntry({
+  const enqueueOffline = async (cause?: unknown): Promise<void> => {
+    if (props.api.enqueueOfflineEntryCreate === undefined) {
+      throw cause ?? new Error('Offline Entry creation is unavailable');
+    }
+    const input = {
       title: draft.title,
       type: targetType,
       uploadDate: draft.uploadDate,
-    });
+      pageCount: draft.pageCount,
+      ratings: draft.ratings.flatMap((rating) => (
+        rating.stars === null ? [] : [{ slotId: rating.slotId, stars: rating.stars }]
+      )),
+      viewLater: draft.viewLater,
+      coverFile: draft.coverFile,
+      previewFile: draft.previewFile,
+    };
+    if (cause === undefined) await props.api.enqueueOfflineEntryCreate(input);
+    else await props.api.enqueueOfflineEntryCreate(input, cause);
+  };
+  try {
+    if (props.offlineState?.mode === 'offline') {
+      if (draft.openInEditor === true) {
+        throw new Error(t('entry.advancedEditingRequiresConnection'));
+      }
+      await enqueueOffline();
+      creationView.value = null;
+      return;
+    }
+    let created;
+    try {
+      created = await props.api.createEntry({
+        title: draft.title,
+        type: targetType,
+        uploadDate: draft.uploadDate,
+        ...(draft.pageCount === null ? {} : { pageCount: draft.pageCount }),
+      });
+    } catch (cause) {
+      if (draft.openInEditor === true && isOfflineTransportError(cause)) {
+        throw new Error(t('entry.advancedEditingRequiresConnection'));
+      }
+      await enqueueOffline(cause);
+      creationView.value = null;
+      return;
+    }
     if (draft.coverFile) await props.api.uploadEntryMedia(created.id, 'cover', draft.coverFile);
     if (draft.previewFile) await props.api.uploadEntryMedia(created.id, 'preview', draft.previewFile);
     for (const rating of draft.ratings) {
@@ -2053,6 +2256,12 @@ async function submitEntry(draft: ManualEntryDraft): Promise<void> {
     creationView.value = null;
     await refreshAuthors();
     await viewEntry(created.id);
+    // Handed over from the composer's template button: open the new work's
+    // editor, where an existing template is already applied and a missing one is
+    // visible as the empty structure it still needs.
+    if (draft.openInEditor === true && activeEntry.value?.id === created.id) {
+      startEditing();
+    }
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.createEntry');
   } finally {
@@ -2080,15 +2289,30 @@ async function submitAuthor(draft: CreateProducerRequest): Promise<void> {
   }
 }
 
-async function finishImport(entryType: string, entryIds: number[] = [], viewLater = false): Promise<void> {
+async function finishImport(
+  entryType: string,
+  entryIds: number[] = [],
+  viewLater = false,
+  existingEntryIds: number[] = [],
+): Promise<void> {
   if (viewLater) await addEntriesToViewLater(props.api, entryIds);
   creationView.value = null;
   batchReview.value = null;
   await Promise.all([refreshGalleries(), refreshAuthors()]);
-  if (entryIds.length === 1) {
+  // What the run produced is both halves: the works it created and the ones the
+  // library already had, which the folder it came from still says something about.
+  if (entryIds.length === 1 && existingEntryIds.length === 0) {
     await viewEntry(entryIds[0]!);
-  } else if (entryIds.length > 1) {
-    batchReview.value = { entryType, entryIds, warnings: [], runId: ++batchReviewRunCounter };
+  } else if (entryIds.length + existingEntryIds.length > 0) {
+    batchReview.value = {
+      entryType,
+      entryIds,
+      existingEntryIds,
+      warnings: existingEntryIds.length === 0
+        ? []
+        : [t('import.batchDuplicates', { count: existingEntryIds.length })],
+      runId: ++batchReviewRunCounter,
+    };
   } else {
     await selectGallery(entryType);
   }
@@ -2101,6 +2325,9 @@ async function finishImport(entryType: string, entryIds: number[] = [], viewLate
 const batchReview = ref<{
   entryType: string;
   entryIds: number[];
+  /** Works the run carried that the library already had: not reviewed again, but
+   *  filed with the run so the folder they came from is recorded. */
+  existingEntryIds: number[];
   warnings: string[];
   /** Distinct per batch run: the review's page key must not inherit the page a
    *  longer earlier batch of the same Gallery left in the navigation memory. */
@@ -2113,14 +2340,21 @@ async function finishBatchImport(
   entryIds: number[] = [],
   viewLater = false,
   warnings: string[] = [],
+  existingEntryIds: number[] = [],
 ): Promise<void> {
   // The batch "view later" checkbox applies to every committed item.
   if (viewLater) await addEntriesToViewLater(props.api, entryIds);
-  if (entryIds.length > 0) {
+  if (entryIds.length + existingEntryIds.length > 0) {
     creationView.value = null;
     // The review is the only place a commit note survives: the Add Entry page
     // that produced it unmounts as soon as this view takes over.
-    batchReview.value = { entryType, entryIds, warnings, runId: ++batchReviewRunCounter };
+    batchReview.value = {
+      entryType,
+      entryIds,
+      existingEntryIds,
+      warnings,
+      runId: ++batchReviewRunCounter,
+    };
     void refreshGalleries();
     void refreshAuthors();
   }
@@ -2128,10 +2362,14 @@ async function finishBatchImport(
 
 async function openBatchReviewEntries(): Promise<GalleryEntrySummary[]> {
   const review = batchReview.value;
-  if (!review || review.entryIds.length === 0) return [];
-  // Load by the committed ids alone: they are exact, while filtering by the
-  // Gallery type as well would hide the whole group whenever that spelling
-  // drifts (a typed `comic` that resolved to `Comic`, or a later rename).
+  if (!review) return [];
+  // The run's own works first, then the ones the library already had: both were
+  // part of what this folder held, and the review is where that is visible.
+  const reviewIds = [...review.entryIds, ...review.existingEntryIds];
+  if (reviewIds.length === 0) return [];
+  // Load by ids alone: they are exact, while filtering by the Gallery type as
+  // well would hide the whole group whenever that spelling drifts (a typed
+  // `comic` that resolved to `Comic`, or a later rename).
   const loaded: GalleryEntrySummary[] = [];
   let page = 1;
   while (true) {
@@ -2142,7 +2380,7 @@ async function openBatchReviewEntries(): Promise<GalleryEntrySummary[]> {
       ratingSort: null,
       usageConditions: [],
       usageSort: null,
-      entryIds: review.entryIds,
+      entryIds: reviewIds,
       sort: 'source-order',
       page,
       pageSize: 100,
@@ -2178,11 +2416,15 @@ const batchCollectionEntryCount = ref(0);
 
 async function saveBatchReviewAsCollection(): Promise<void> {
   const review = batchReview.value;
-  if (review === null || review.entryIds.length === 0) return;
+  if (review === null) return;
+  // Created and already-present works are filed together: the folder the run came
+  // from held both, and which of them was new is not what the Collection records.
+  const entryIds = [...review.entryIds, ...review.existingEntryIds];
+  if (entryIds.length === 0) return;
   batchCollectionBusy.value = true;
   error.value = null;
   try {
-    const collection = await props.api.createTemporaryCollection(review.entryIds);
+    const collection = await props.api.createTemporaryCollection(entryIds);
     batchCollectionTitle.value = collection.title;
     batchCollectionEntryCount.value = collection.entryCount;
   } catch (cause) {
@@ -2344,12 +2586,53 @@ onUnmounted(() => {
     </header>
 
     <div
-      v-if="props.offlineState?.mode === 'offline'"
+      v-if="props.offlineState?.mode === 'offline'
+        || (props.offlineState?.pendingCount ?? 0) > 0
+        || (props.offlineState?.conflictCount ?? 0) > 0
+        || (props.offlineState?.failedCount ?? 0) > 0"
       class="offline-mode-banner"
       data-testid="offline-mode-banner"
       role="status"
     >
-      {{ t('offline.modeBanner') }}
+      <span v-if="props.offlineState?.mode === 'offline'">{{ t('offline.modeBanner') }}</span>
+      <span v-if="(props.offlineState?.conflictCount ?? 0) > 0" data-testid="offline-conflict-count">
+        {{ t('offline.conflictBanner', { count: props.offlineState?.conflictCount ?? 0 }) }}
+      </span>
+      <span v-if="(props.offlineState?.failedCount ?? 0) > 0" data-testid="offline-failed-count">
+        {{ t('offline.failedBanner', { count: props.offlineState?.failedCount ?? 0 }) }}
+      </span>
+      <span v-if="(props.offlineState?.pendingCount ?? 0) > 0" data-testid="offline-pending-count">
+        {{ t('offline.pendingBanner', { count: props.offlineState?.pendingCount ?? 0 }) }}
+      </span>
+      <button
+        v-if="(props.offlineState?.conflictCount ?? 0) > 0 || (props.offlineState?.failedCount ?? 0) > 0"
+        type="button"
+        class="offline-discard-button"
+        data-testid="offline-discard-blocked"
+        @click="discardBlockedOfflineEdits()"
+      >
+        {{ t('offline.discardBlocked') }}
+      </button>
+      <button
+        type="button"
+        class="offline-diagnostics-button"
+        data-testid="offline-diagnostics-toggle"
+        @click="toggleOfflineDiagnostics()"
+      >
+        Diagnostics
+      </button>
+      <section
+        v-if="offlineDiagnosticsOpen"
+        class="offline-diagnostics"
+        data-testid="offline-diagnostics"
+      >
+        <div class="offline-diagnostics-actions">
+          <strong>C2 runtime diagnostics</strong>
+          <button type="button" @click="refreshOfflineDiagnostics()">Refresh</button>
+          <button type="button" @click="copyOfflineDiagnostics()">Copy</button>
+        </div>
+        <pre>{{ offlineDiagnosticsText }}</pre>
+      </section>
     </div>
 
     <main class="app-layout">
@@ -2431,7 +2714,7 @@ onUnmounted(() => {
             @click="showAuthors"
           >
             <span>{{ t('author.navigation') }}</span>
-            <span class="count">{{ authors.length }}</span>
+            <span class="count" data-testid="author-navigation-count">{{ visibleAuthorCount }}</span>
           </button>
           <button
             data-testid="recent-view-navigation"
@@ -2441,7 +2724,6 @@ onUnmounted(() => {
             @click="showRecentView"
           >
             <span>{{ t('recent.title') }}</span>
-            <span class="count" v-if="viewLaterIds.length > 0" />
           </button>
           <button
             data-testid="collections-navigation"
@@ -2469,7 +2751,7 @@ onUnmounted(() => {
             @click="showViewLater"
           >
             <span>{{ t('viewLater.title') }}</span>
-            <span class="count" v-if="viewLaterIds.length + viewLaterAuthorIds.length > 0">{{ viewLaterIds.length + viewLaterAuthorIds.length }}</span>
+            <span class="count" v-if="visibleViewLaterCount > 0" data-testid="view-later-navigation-count">{{ visibleViewLaterCount }}</span>
           </button>
         </nav>
 
@@ -2662,7 +2944,7 @@ onUnmounted(() => {
                 {{ t('import.batchReviewComplete') }}
               </button>
               <button
-                v-if="batchReview.entryIds.length > 0"
+                v-if="batchReview.entryIds.length + batchReview.existingEntryIds.length > 0"
                 class="secondary-button"
                 type="button"
                 data-testid="batch-review-save-collection"
@@ -2727,6 +3009,13 @@ onUnmounted(() => {
                 <span class="entry-meta">
                   <strong>{{ entry.title }}</strong>
                   <small>{{ entry.type }}</small>
+                  <small
+                    v-if="batchReview.existingEntryIds.includes(entry.id)"
+                    class="entry-usage-note"
+                    data-testid="batch-review-existing"
+                  >
+                    {{ t('import.batchReviewExisting') }}
+                  </small>
                 </span>
               </button>
             </article>
@@ -3585,13 +3874,6 @@ onUnmounted(() => {
             </div>
           </section>
 
-          <IconButton
-            class="scroll-top-fab"
-            icon="arrow-up"
-            :label="t('navigation.scrollTop')"
-            data-testid="entry-scroll-top"
-            @click="scrollToTop"
-          />
         </article>
         <template v-else-if="activeType">
           <div class="content-heading">
@@ -3707,10 +3989,68 @@ onUnmounted(() => {
         />
       </section>
     </main>
+
+    <!-- Fixed on every view: the top bar scrolls away, so Back has to stay
+         reachable, and the same has to hold for a long Gallery or Author page. -->
+    <div class="floating-actions">
+      <IconButton
+        class="floating-action"
+        icon="back"
+        :label="t('navigation.back')"
+        :disabled="!topBarBackEnabled"
+        data-testid="floating-back"
+        @click="navigateBackFromTopBar"
+      />
+      <IconButton
+        class="floating-action"
+        icon="arrow-up"
+        :label="t('navigation.scrollTop')"
+        data-testid="floating-scroll-top"
+        @click="scrollToTop"
+      />
+    </div>
+
+    <div v-if="templatePromptOpen" class="template-prompt-overlay" role="presentation">
+      <section
+        class="template-prompt-dialog"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="t('entry.templatePromptTitle')"
+        data-testid="template-prompt"
+      >
+        <h2>{{ t('entry.templatePromptTitle') }}</h2>
+        <p class="muted">
+          {{ t('entry.templatePromptBody', { type: activeEntry?.type ?? '' }) }}
+        </p>
+        <div class="template-prompt-actions">
+          <button
+            type="button"
+            class="primary-button"
+            data-testid="template-prompt-apply"
+            :disabled="templateBusy"
+            @click="applyTemplateAndFinish"
+          >
+            {{ templateBusy ? t('template.applying') : t('entry.templatePromptApply') }}
+          </button>
+          <button
+            type="button"
+            class="secondary-button"
+            data-testid="template-prompt-later"
+            @click="dismissTemplatePrompt"
+          >
+            {{ t('entry.templatePromptLater') }}
+          </button>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.template-prompt-overlay { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 1rem; background: color-mix(in srgb, #000 58%, transparent); }
+.template-prompt-dialog { display: grid; gap: 0.9rem; width: min(30rem, 100%); padding: 1.2rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-overlay); }
+.template-prompt-dialog h2, .template-prompt-dialog p { margin: 0; }
+.template-prompt-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
 .gallery-app {
   min-height: 100vh;
   padding: clamp(1rem, 3vw, 2.5rem);
@@ -3772,7 +4112,15 @@ h2 { margin-bottom: 0; }
 .advanced-entry { display: grid; gap: 0.15rem; width: 100%; margin-top: 0.9rem; padding: 0.65rem 0.7rem; border: 1px solid var(--border-subtle); border-radius: 0.6rem; color: var(--text-primary); background: var(--surface-muted); font: inherit; text-align: left; cursor: pointer; }
 .advanced-entry small { color: var(--text-muted); font-weight: 400; font-size: 0.72rem; }
 .advanced-entry:hover, .advanced-entry:focus-visible { border-color: var(--accent); outline: none; }
-.offline-mode-banner { margin: 0 0 0.75rem; padding: 0.65rem 0.85rem; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border-subtle)); border-radius: var(--radius-control); color: var(--text-primary); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); font-size: 0.84rem; }
+.offline-mode-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 0 0 0.75rem; padding: 0.65rem 0.85rem; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border-subtle)); border-radius: var(--radius-control); color: var(--text-primary); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); font-size: 0.84rem; }
+.offline-discard-button, .offline-diagnostics-button, .offline-diagnostics-actions button { padding: 0.3rem 0.55rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface); cursor: pointer; }
+.offline-discard-button { margin-left: auto; }
+.offline-diagnostics-button { margin-left: auto; }
+.offline-discard-button + .offline-diagnostics-button { margin-left: 0; }
+.offline-diagnostics { flex: 1 0 100%; min-width: 0; }
+.offline-diagnostics-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; margin-bottom: 0.45rem; }
+.offline-diagnostics-actions strong { margin-right: auto; }
+.offline-diagnostics pre { overflow: auto; max-height: 18rem; margin: 0; padding: 0.65rem; border-radius: var(--radius-control); background: var(--surface); font: 0.72rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-word; user-select: text; }
 
 .app-layout { display: grid; grid-template-columns: 18rem minmax(0, 1fr); gap: 1rem; }
 .sidebar,
@@ -3825,15 +4173,24 @@ h2 { margin-bottom: 0; }
 .secondary-button:hover { border-color: var(--accent); }
 .secondary-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .entry-detail > h2 { margin-bottom: 1.5rem; font-size: clamp(1.7rem, 4vw, 2.5rem); }
-.scroll-top-fab {
+/* App-wide: the top bar scrolls away on any long page, so Back and scroll-to-top
+   stay reachable. Back runs the same action (and disabled state) as the top-bar
+   arrow rather than a second implementation. */
+.floating-actions {
   position: fixed;
   right: max(1rem, env(safe-area-inset-right));
   bottom: max(1rem, env(safe-area-inset-bottom));
   z-index: 30;
+  display: grid;
+  gap: 0.5rem;
+  justify-items: center;
+}
+.floating-action {
   border-color: var(--accent);
   background: var(--surface);
   box-shadow: var(--shadow-overlay);
 }
+.floating-action:disabled { opacity: 0.4; cursor: default; }
 .detail-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
 .detail-toolbar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem; }
 .detail-toolbar-actions .secondary-button { white-space: nowrap; }

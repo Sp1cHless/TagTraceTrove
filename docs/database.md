@@ -58,6 +58,10 @@ The current tables and invariants are documented in `current-architecture.md`. `
   `(type, title COLLATE NOCASE, id)` indexes for deterministic Gallery pages.
   `db:doctor` treats both as required schema objects. Migration tests cover a
   populated temporary-file 12→13 upgrade and prove data/integrity preservation.
+- `021_site_crawl_state.sql` — `site_works` (durable `(site, workId)` → Entry
+  identity, FK CASCADE, `WITHOUT ROWID`) and `site_crawl_sources` (one update
+  cursor per crawled listing). They record the local crawl rather than the
+  curated library, so neither joins the sync allowlist. See `import-commit.md`.
 
 
 ## Backup and restore

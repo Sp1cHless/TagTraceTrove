@@ -56,9 +56,9 @@ function listLinkedAuthors(database: T3Database, entryId: number): LinkedAuthorR
  * mixes one-off contributors with real Authors, and an Author who only ever
  * appears in anthologies keeps resurfacing while their per-work work count never
  * looks like a lone credit. After the conversion the work is credited to the
- * multi-author Author alone, and an Author left without any work disappears from
- * the Author list by itself. The emptied rows are preserved, so a later import
- * can still resolve those names.
+ * multi-author Author alone, so a contributor who was in anthologies only is left
+ * holding no work at all and the Author rule removes that row with it. A later
+ * import of such a name creates its Author again from the work it brings.
  */
 export function convertEntryAuthorsToMultiAuthor(
   database: T3Database,

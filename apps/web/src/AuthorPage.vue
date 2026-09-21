@@ -151,8 +151,20 @@ const authorTagExcludeIds = computed(() => (
   (activeAuthor.value?.tags ?? []).map((tag) => tag.tagId)
 ));
 
+/** The sidebar summary carries the Author's derived partition; the detail does not. */
+const authorSummary = computed(() => (
+  props.authors.find((author) => author.id === activeAuthor.value?.id)
+));
+
 function suggestProducerTags(query: string, excludeIds: number[], signal: AbortSignal) {
-  return props.api.suggestTags({ vocabulary: 'producer', q: query, excludeIds }, signal);
+  return props.api.suggestTags({
+    vocabulary: 'producer',
+    q: query,
+    excludeIds,
+    // Same isolation as the work side: the Author's own derived partition decides
+    // which Tag vocabulary may index them.
+    includeNsfw: (authorSummary.value?.nsfw ?? showNsfw.value) ? 'true' : 'false',
+  }, signal);
 }
 
 // Add-to-collection menu on the author detail toolbar (same pattern as the
@@ -1294,6 +1306,7 @@ async function removeFromDirectory(): Promise<void> {
           <button type="button" class="text-button" @click="closeAuthor">
             {{ props.backLabel ?? t('author.backToList') }}
           </button>
+          <div class="author-toolbar-actions">
           <IconButton
             v-if="!editingAuthor"
             data-testid="start-author-editing"
@@ -1365,6 +1378,7 @@ async function removeFromDirectory(): Promise<void> {
           >
             {{ armedKey === 'delete-author' ? t('author.deleteConfirmShort', { name: activeAuthor?.name }) : t('author.delete') }}
           </button>
+          </div>
         </div>
         <form v-if="editingAuthor" class="author-edit-form" @submit.prevent="saveAuthor">
           <label>{{ t('author.name') }}<input v-model="authorName" name="authorName" required></label>
@@ -2031,7 +2045,7 @@ async function removeFromDirectory(): Promise<void> {
 .works-heading, .pagination { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
 /* Back link stays left; Done / Delete and the edit button group on the right. */
 .author-toolbar { display: flex; align-items: center; gap: 0.75rem; }
-.author-toolbar .text-button { margin-right: auto; }
+.author-toolbar-actions { display: flex; align-items: center; gap: 0.75rem; margin-left: auto; }
 .directory-edit-actions { display: grid; justify-items: stretch; gap: 0.35rem; }
 .directory-remove-target { padding: 0.35rem 0.6rem; border: 1px dashed #b84a4a; border-radius: 0.5rem; color: #a12626; background: transparent; font: inherit; cursor: pointer; transition: transform 140ms ease, background 140ms ease; }
 .directory-remove-target.drop-target { transform: scale(1.04); background: color-mix(in srgb, #b84a4a 14%, transparent); }
@@ -2214,6 +2228,15 @@ async function removeFromDirectory(): Promise<void> {
 @media (max-width: 44rem) {
   .author-toolbar,
   .works-heading { align-items: flex-start; flex-wrap: wrap; }
+  .author-toolbar-actions { flex-wrap: wrap; }
+  /* The shared phone rule anchors this menu's left edge for the Entry page,
+     whose quick actions sit top-left. These actions sit top-right, so a
+     left-anchored menu hangs out of the card and gets clipped by it. */
+  .author-toolbar .add-to-collection-menu {
+    left: auto;
+    right: 0;
+    max-width: calc(100vw - 2.5rem);
+  }
   .author-toolbar .text-button { display: inline-flex; min-height: 44px; align-items: center; }
   .author-toolbar .secondary-button,
   .author-edit-form input,

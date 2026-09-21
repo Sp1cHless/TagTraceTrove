@@ -9,8 +9,8 @@ function capabilities(overrides: Partial<SyncCapabilities> = {}): SyncCapabiliti
   return {
     libraryId: 'library-1',
     syncEpoch: 'epoch-1',
-    sqliteSchemaVersion: 15,
-    snapshotFormatVersion: 1,
+    sqliteSchemaVersion: 21,
+    snapshotFormatVersion: 2,
     syncProtocolVersion: 1,
     serverBuild: 'test',
     featureFlags: { readOnlySnapshot: true, offlineMutations: false },
@@ -23,9 +23,10 @@ async function snapshot(overrides: Partial<SyncSnapshot['header']> = {}): Promis
     libraryId: 'library-1',
     syncEpoch: 'epoch-1',
     snapshotSeq: 1,
+    changeSeq: 0,
     generatedAt: '2026-09-13T00:00:00.000Z',
-    sqliteSchemaVersion: 15,
-    snapshotFormatVersion: 1,
+    sqliteSchemaVersion: 21,
+    snapshotFormatVersion: 2,
     counts: { entries: 1, producers: 0, entryContents: 0, entryTags: 0, collections: 0 },
     ...overrides,
   };
@@ -68,6 +69,33 @@ describe('offline snapshot download', () => {
 
     expect(result).toMatchObject({ ok: true, status: 'updated', active: { generationId: 1 } });
     expect((await readActiveSnapshot(store))?.snapshot.payload.entries[0]?.title).toBe('Endfield');
+  });
+
+  it('accepts the current protocol 1 and snapshot format 2 capability pair', async () => {
+    const store = createMemorySnapshotStore();
+    const incoming = await snapshot({ snapshotFormatVersion: 2, changeSeq: 0 });
+    const result = await downloadOfflineSnapshot({
+      api: {
+        async getSyncCapabilities() {
+          return capabilities({
+            snapshotFormatVersion: 2,
+            featureFlags: {
+              readOnlySnapshot: true,
+              offlineMutations: true,
+              offlineEntryUpdate: true,
+            },
+          });
+        },
+        async fetchSyncSnapshot() { return incoming; },
+      },
+      store,
+    });
+
+    expect(result).toMatchObject({ ok: true, status: 'updated' });
+    expect((await readActiveSnapshot(store))?.snapshot.header).toMatchObject({
+      snapshotFormatVersion: 2,
+      changeSeq: 0,
+    });
   });
 
   it('accepts an explicit full resnapshot after the server epoch rotates', async () => {

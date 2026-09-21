@@ -68,8 +68,8 @@ describe('database verification', () => {
       // A producer rating value pointed at an 'entry' slot: the FK holds but
       // the subject kinds do not match.
       const slot = database.prepare(`
-        INSERT INTO rating_slots (subject_kind, entry_type, name, sort_order)
-        VALUES ('entry', 'game', 'Quality', 0)
+        INSERT INTO rating_slots (subject_kind, entry_type, name, sort_order, sync_uid)
+        VALUES ('entry', 'game', 'Quality', 0, '81818181-8181-4181-8181-818181818181')
       `).run();
       database.pragma('foreign_keys = OFF');
       database.prepare(

@@ -1,0 +1,20 @@
+{
+  "name": "t3-android-webview-spike",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Disposable C0 spike: package the existing T3 Vue build in a Capacitor Android shell.",
+  "scripts": {
+    "prepare:web": "node prepare-web.mjs",
+    "cap:add": "cap add android",
+    "cap:copy": "cap copy android",
+    "cap:sync": "cap sync android",
+    "cap:doctor": "cap doctor android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/core": "8.5.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2"
+  }
+}

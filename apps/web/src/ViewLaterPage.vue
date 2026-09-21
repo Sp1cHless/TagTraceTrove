@@ -23,6 +23,8 @@ type RecentMode = 'lastViewed' | 'mostViewed' | 'mostLiked' | 'random' | null;
 interface GalleryTab {
   type: string;
   entryCount: number;
+  /** Gallery partition flag, never derived from the type name. */
+  nsfw: boolean;
 }
 
 const props = defineProps<{
@@ -79,7 +81,7 @@ const orderedTabs = computed(() => {
   return orderedTypes.map((type) => byType.get(type)).filter((tab): tab is GalleryTab => tab !== undefined);
 });
 
-const allowedGalleries = computed(() => orderedTabs.value.filter((gallery) => showNsfw.value || !gallery.type.toLowerCase().includes('nsfw')));
+const allowedGalleries = computed(() => orderedTabs.value.filter((gallery) => showNsfw.value || !gallery.nsfw));
 
 const savedEntries = computed(() => {
   const byId = new Map(entries.value.map((entry) => [entry.id, entry]));
@@ -197,6 +199,7 @@ async function load(): Promise<void> {
     authors.value = authorSummaries;
     tabs.value = galleries.map((gallery) => ({
       type: gallery.type,
+      nsfw: gallery.nsfw,
       entryCount: savedEntrySummaries.filter((entry) => entry.type === gallery.type).length,
     }));
     if (!allowedGalleries.value.some((tab) => tab.type === activeTab.value)) {
@@ -242,6 +245,7 @@ async function loadSavedEntries(): Promise<GalleryEntrySummary[]> {
       usageConditions: [],
       usageSort: null,
       entryIds: viewLaterIds.value,
+      includeNsfw: showNsfw.value,
       sort: 'source-order',
       page,
       pageSize: 100,
@@ -253,6 +257,12 @@ async function loadSavedEntries(): Promise<GalleryEntrySummary[]> {
 }
 
 onMounted(load);
+
+// The saved lists themselves are not partitioned, so the visible works depend
+// on the SFW/NSFW toggle: reload instead of filtering loaded rows by hand.
+watch(showNsfw, () => {
+  void load();
+});
 
 function openEntry(entryId: number): void {
   emit('open-entry', entryId);
@@ -322,10 +332,10 @@ async function removeAuthor(authorId: number): Promise<void> {
 
     <div class="entity-tabs" role="tablist" :aria-label="t('viewLater.title')">
       <button type="button" class="entity-tab" :class="{ 'entity-tab-active': entityKind === 'entry' }" data-testid="view-later-kind-entry" role="tab" :aria-selected="entityKind === 'entry'" @click="entityKind = 'entry'">
-        {{ t('viewLater.entries') }} <span>{{ viewLaterIds.length }}</span>
+        {{ t('viewLater.entries') }} <span data-testid="view-later-entry-count">{{ savedEntries.length }}</span>
       </button>
       <button type="button" class="entity-tab" :class="{ 'entity-tab-active': entityKind === 'author' }" data-testid="view-later-kind-author" role="tab" :aria-selected="entityKind === 'author'" @click="entityKind = 'author'">
-        {{ t('viewLater.authors') }} <span>{{ viewLaterAuthorIds.length }}</span>
+        {{ t('viewLater.authors') }} <span data-testid="view-later-author-count">{{ savedAuthors.length }}</span>
       </button>
     </div>
 

@@ -29,6 +29,7 @@ const totalCount = ref(0);
 const galleries = ref<GallerySummary[]>([]);
 const recentEntries = ref<GalleryEntrySummary[]>([]);
 const recentError = ref(false);
+const nsfwFiltered = ref(false);
 
 onMounted(load);
 async function load(): Promise<void> {
@@ -49,8 +50,11 @@ async function load(): Promise<void> {
         pageSize: 4,
       }),
     ]);
-    totalCount.value = galleryList.reduce((sum, gallery) => sum + gallery.entryCount, 0);
-    galleries.value = galleryList.filter((gallery) => showNsfw.value || !gallery.nsfw);
+    const visibleGalleries = galleryList.filter((gallery) => showNsfw.value || !gallery.nsfw);
+    nsfwFiltered.value = !showNsfw.value && galleryList.length > 0 && visibleGalleries.length === 0;
+    // The headline counts what this page can show, not every Gallery in the file.
+    totalCount.value = visibleGalleries.reduce((sum, gallery) => sum + gallery.entryCount, 0);
+    galleries.value = visibleGalleries;
     recentEntries.value = recent.items;
     recentError.value = false;
   } catch {
@@ -61,6 +65,13 @@ async function load(): Promise<void> {
 }
 
 const isEmptyHome = computed(() => !loading.value && !loadFailed.value && totalCount.value === 0);
+const isNsfwFilteredHome = computed(() => !loading.value && !loadFailed.value && nsfwFiltered.value);
+
+async function revealNsfw(): Promise<void> {
+  showNsfw.value = true;
+  loading.value = true;
+  await load();
+}
 const galleryPreview = computed(() => galleries.value.slice(0, 3));
 
 const greeting = computed(() => {
@@ -174,7 +185,24 @@ onBeforeUnmount(() => {
 
 <template>
   <section data-testid="home-page" class="home-page">
-    <template v-if="!isEmptyHome">
+    <div v-if="isNsfwFilteredHome" class="home-empty" data-testid="home-nsfw-hidden">
+      <span class="home-empty-symbol" aria-hidden="true">◌</span>
+      <p class="eyebrow">{{ t('home.filtered.eyebrow') }}</p>
+      <h2>{{ t('home.filtered.title') }}</h2>
+      <p>{{ t('home.filtered.body') }}</p>
+      <div class="home-hero-actions home-empty-actions">
+        <button
+          data-testid="home-show-nsfw"
+          class="primary-button"
+          type="button"
+          @click="revealNsfw"
+        >
+          {{ t('home.filtered.primary') }}
+        </button>
+      </div>
+    </div>
+
+    <template v-else-if="!isEmptyHome">
       <div class="home-hero">
         <div class="home-hero-copy">
           <p class="eyebrow">{{ greeting }} · {{ t('home.eyebrow') }}</p>

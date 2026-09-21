@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { T3Database } from '../database/connection.js';
 import { galleryTypeForProducer } from './producer-tag-repository.js';
 
@@ -95,9 +96,9 @@ export function createRatingSlot(
     WHERE subject_kind = ? AND entry_type = ?
   `).pluck().get(input.kind, input.entryType) as number;
   const result = database.prepare(`
-    INSERT INTO rating_slots (subject_kind, entry_type, name, sort_order)
-    VALUES (?, ?, ?, ?)
-  `).run(input.kind, input.entryType, name, maxOrder + 1);
+    INSERT INTO rating_slots (subject_kind, entry_type, name, sort_order, sync_uid)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(input.kind, input.entryType, name, maxOrder + 1, randomUUID());
   return {
     id: Number(result.lastInsertRowid),
     name,
@@ -166,6 +167,7 @@ function requireSlot(
 export function setEntryRating(
   database: T3Database,
   input: { entryId: number; slotId: number; stars: number | null },
+  options: { touchEntry?: boolean } = {},
 ): RatingRowRecord {
   if (!isValidStars(input.stars)) {
     throw new Error('cannot set the rating: stars must be null or a half-step value between 0.5 and 5');
@@ -176,17 +178,31 @@ export function setEntryRating(
     throw new Error('entry not found');
   }
   requireSlot(database, input.slotId, 'entry', row.type);
-  database.prepare(`
-    INSERT INTO entry_rating_values (slot_id, entry_id, stars)
-    VALUES (?, ?, ?)
-    ON CONFLICT (slot_id, entry_id) DO UPDATE SET
-      stars = excluded.stars,
-      updated_at = CURRENT_TIMESTAMP
-  `).run(input.slotId, input.entryId, input.stars);
+  const name = database.prepare('SELECT name FROM rating_slots WHERE id = ?')
+    .pluck().get(input.slotId) as string;
+  const existing = database.prepare(`
+    SELECT stars FROM entry_rating_values WHERE slot_id = ? AND entry_id = ?
+  `).get(input.slotId, input.entryId) as { stars: number | null } | undefined;
+  const currentStars = existing?.stars ?? null;
+  if (currentStars === input.stars) {
+    return { slotId: input.slotId, name, stars: input.stars };
+  }
+
+  database.transaction(() => {
+    database.prepare(`
+      INSERT INTO entry_rating_values (slot_id, entry_id, stars)
+      VALUES (?, ?, ?)
+      ON CONFLICT (slot_id, entry_id) DO UPDATE SET
+        stars = excluded.stars,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(input.slotId, input.entryId, input.stars);
+    if (options.touchEntry !== false) {
+      database.prepare('UPDATE entries SET updated_at = updated_at WHERE id = ?').run(input.entryId);
+    }
+  })();
   return {
     slotId: input.slotId,
-    name: (database.prepare('SELECT name FROM rating_slots WHERE id = ?')
-      .pluck().get(input.slotId) as string),
+    name,
     stars: input.stars,
   };
 }

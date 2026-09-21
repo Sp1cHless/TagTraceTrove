@@ -55,20 +55,38 @@ export function likeEntry(database: T3Database, entryId: number): EntryUsageReco
 export function recordEntryView(
   database: T3Database,
   entryId: number,
+  viewedAt?: string,
 ): EntryUsageRecord {
   const entry = database.prepare('SELECT 1 FROM entries WHERE id = ?').get(entryId);
   if (!entry) {
     throw new Error('entry not found');
   }
   return database.transaction(() => {
-    database.prepare(`
-      INSERT INTO entry_usage (entry_id, view_count, last_viewed_at, updated_at)
-      VALUES (?, 1, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), CURRENT_TIMESTAMP)
-      ON CONFLICT (entry_id) DO UPDATE SET
-        view_count = entry_usage.view_count + 1,
-        last_viewed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
-        updated_at = CURRENT_TIMESTAMP
-    `).run(entryId);
+    if (viewedAt === undefined) {
+      database.prepare(`
+        INSERT INTO entry_usage (entry_id, view_count, last_viewed_at, updated_at)
+        VALUES (?, 1, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), CURRENT_TIMESTAMP)
+        ON CONFLICT (entry_id) DO UPDATE SET
+          view_count = entry_usage.view_count + 1,
+          last_viewed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+          updated_at = CURRENT_TIMESTAMP
+      `).run(entryId);
+    } else {
+      if (Number.isNaN(Date.parse(viewedAt))) throw new Error('invalid view timestamp');
+      database.prepare(`
+        INSERT INTO entry_usage (entry_id, view_count, last_viewed_at, updated_at)
+        VALUES (?, 1, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT (entry_id) DO UPDATE SET
+          view_count = entry_usage.view_count + 1,
+          last_viewed_at = CASE
+            WHEN entry_usage.last_viewed_at IS NULL
+              OR julianday(excluded.last_viewed_at) > julianday(entry_usage.last_viewed_at)
+            THEN excluded.last_viewed_at
+            ELSE entry_usage.last_viewed_at
+          END,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(entryId, viewedAt);
+    }
     const row = database.prepare(
       'SELECT view_count, last_viewed_at, like_count FROM entry_usage WHERE entry_id = ?',
     ).get(entryId) as { view_count: number; last_viewed_at: string | null; like_count: number };

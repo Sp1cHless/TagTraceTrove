@@ -14,6 +14,7 @@ import {
 } from '../repositories/entry-tag-repository.js';
 import {
   createEntry,
+  deleteEntry,
   getEntryDetail,
   listGalleries,
   updateEntry,
@@ -41,13 +42,16 @@ import {
   createProducer,
   getAuthorDetail,
   linkEntryProducer,
+  unlinkEntryProducer,
   updateProducer,
 } from '../repositories/producer-repository.js';
 import {
   createAuthorDirectory,
   removeEntryFromAuthorDirectory,
 } from '../repositories/author-directory-repository.js';
+import { deleteTag } from '../repositories/tag-merge-repository.js';
 import { commitImportBatch } from '../import/commit.js';
+import { executeProducerMerges, planProducerMerges } from '../import/merge-producers.js';
 import {
   createEntryRatingSlot,
   createProducerRatingSlot,
@@ -83,6 +87,13 @@ import {
   removeViewLaterEntry,
   removeViewLaterProducer,
 } from '../repositories/view-later-repository.js';
+import {
+  findSiteWork,
+  getSiteCrawlSource,
+  partitionKnownSiteWorks,
+  recordCrawlObservation,
+  siteWorkOrderKey,
+} from '../repositories/site-crawl-repository.js';
 import { inspectDatabase } from './doctor.js';
 import { createMigratedMemoryDatabase } from './testing.js';
 
@@ -275,9 +286,130 @@ export function runDatabaseProbe(): DatabaseProbeResult {
         && detail?.title === 'Imported Work';
     });
 
+    check('delete a tag and every assignment of it', () => {
+      // Two Entries share one tag plus keep a second tag of their own, so the
+      // delete has to remove one assignment per work and leave the other alone.
+      const shared = assignEntryTag(database, {
+        entryId: 1, facetId: targetFacetId, name: 'Doomed tag',
+      });
+      const kept = assignEntryTag(database, {
+        entryId: 1, facetId: targetFacetId, name: 'Surviving tag',
+      });
+      assignEntryTag(database, { entryId: 2, facetId: targetFacetId, name: 'Doomed tag' });
+      assignEntryTag(database, { entryId: 2, facetId: targetFacetId, name: 'Surviving tag' });
+
+      const result = deleteTag(database, { vocabulary: 'entry', tagId: shared.tagId });
+      const survivors = database.prepare(
+        'SELECT COUNT(*) FROM entry_tags WHERE tag_id = ?',
+      ).pluck().get(shared.tagId);
+      const keptSurvives = database.prepare(
+        'SELECT COUNT(*) FROM entry_tags WHERE tag_id = ?',
+      ).pluck().get(kept.tagId);
+      return result.removedAssignments === 2
+        && result.deletedTags === 1
+        && result.tagName === 'Doomed tag'
+        && survivors === 0
+        && keptSurvives === 2
+        && database.prepare('SELECT COUNT(*) FROM tags WHERE id = ?').pluck().get(shared.tagId) === 0;
+    });
+
     check('derive Galleries from Entry types', () => {
       const gallery = listGalleries(database).find((item) => item.type === 'game');
       return gallery?.entryCount === 3;
+    });
+
+    check('retain a site work id per imported work and advance its cursor', () => {
+      // One run of a folder listing: the export carries the site identity, so
+      // the commit both files each work under its id and moves the cursor.
+      const folderBatch = {
+        source: 'hitomi.la',
+        origin: { kind: 'folder' as const, ref: 'probe-folder', displayName: 'Probe folder' },
+        warnings: [],
+        entries: [
+          {
+            externalKey: 'hitomi.la:100',
+            title: 'Crawled work 100',
+            uploadDate: '2026-01-10',
+            sources: [{ url: 'https://hitomi.la/galleries/100.html' }],
+          },
+          {
+            externalKey: 'hitomi.la:120',
+            title: 'Crawled work 120',
+            uploadDate: '2026-03-05',
+            sources: [{ url: 'https://hitomi.la/galleries/120.html' }],
+          },
+        ],
+      };
+      const folderMapping = {
+        entryType: 'game',
+        canonicalTagFacetId: targetFacetId,
+        sourceContentType: 'source url',
+        externalKeyContentType: 'external key',
+        fieldMappings: {},
+        ignoredFields: [],
+        authorRatings: [],
+      };
+      const firstRun = commitImportBatch(database, folderBatch, folderMapping);
+
+      // A second run of the same folder, a month later: the two known works are
+      // gone from disk, the third is past the cursor, and only it gets fetched.
+      const secondRun = commitImportBatch(database, {
+        source: 'hitomi.la',
+        origin: { kind: 'folder', ref: 'probe-folder' },
+        warnings: [],
+        entries: [{
+          externalKey: 'hitomi.la:140',
+          title: 'Crawled work 140',
+          uploadDate: '2026-04-01',
+          sources: [{ url: 'https://hitomi.la/galleries/140.html' }],
+        }],
+      }, folderMapping);
+
+      const listing = partitionKnownSiteWorks(database, 'hitomi.la', ['100', '120', '140', '160']);
+      const work = findSiteWork(database, 'hitomi.la', '100');
+      const digest = getSiteCrawlSource(database, {
+        sourceSite: 'hitomi.la',
+        sourceKind: 'folder',
+        sourceRef: 'probe-folder',
+      });
+
+      return firstRun.entryCount === 2
+        && secondRun.entryCount === 1
+        && work?.entryId === firstRun.entries[0]?.entryId
+        && work?.workDate === '2026-01-10'
+        && listing.known.length === 3
+        && listing.unknown.length === 1
+        && listing.unknown[0] === '160'
+        && digest?.lastSeenSourceId === '140'
+        && digest?.lastSeenWorkDate === '2026-04-01'
+        && digest?.crawlCount === 2
+        && digest?.libraryWorkCount === 3;
+    });
+
+    check('never pull a crawl cursor backwards', () => {
+      const cursor = { sourceSite: 'hitomi.la', sourceKind: 'folder' as const, sourceRef: 'revisited' };
+      const earlier = recordCrawlObservation(database, {
+        ...cursor,
+        works: [{ sourceId: '500', workDate: '2026-05-01' }],
+      });
+      const later = recordCrawlObservation(database, {
+        ...cursor,
+        works: [{ sourceId: '400', workDate: '2026-01-01' }],
+      });
+      return earlier.lastSeenSourceId === '500'
+        && later.lastSeenSourceId === '500'
+        && later.lastSeenWorkDate === '2026-05-01'
+        && later.crawlCount === 2;
+    });
+
+    check('order site work ids numerically rather than as raw text', () => {
+      const byId = ['100', '9', '10', '1024']
+        .sort((left, right) => (siteWorkOrderKey(left, null) < siteWorkOrderKey(right, null) ? -1 : 1));
+      return byId.join(',') === '9,10,100,1024'
+        // A site with no dates on its works still gets a pure id ordering, and a
+        // dated work always outranks the same work without its date.
+        && siteWorkOrderKey('1', '2026-01-01') < siteWorkOrderKey('1', '2026-02-01')
+        && siteWorkOrderKey('1', null) < siteWorkOrderKey('1', '2026-01-01');
     });
 
     check('aggregate Entry tags for Gallery filtering', () => {
@@ -450,7 +582,11 @@ export function runDatabaseProbe(): DatabaseProbeResult {
     });
 
     check('curate collections with members and one-level nesting', () => {
-      const parent = createCollection(database, { kind: 'entry', title: 'Read list' });
+      const parent = createCollection(database, {
+        kind: 'entry',
+        title: 'Read list',
+        galleryType: 'game',
+      });
       addCollectionEntry(database, parent.id, 1);
       const child = createCollection(database, {
         kind: 'entry',
@@ -465,14 +601,59 @@ export function runDatabaseProbe(): DatabaseProbeResult {
       } catch {
         rejected = true;
       }
+      // An Author folder has no Gallery page of its own.
+      let galleryRejected = false;
+      try {
+        createCollection(database, { kind: 'producer', title: 'Filed authors', galleryType: 'game' });
+      } catch {
+        galleryRejected = true;
+      }
       const authorCollection = createCollection(database, { kind: 'producer', title: 'Favourite authors' });
       addCollectionProducer(database, authorCollection.id, 1);
       const reloaded = getCollection(database, parent.id);
       return rejected
+        && galleryRejected
+        && parent.galleryType === 'game'
+        && child.galleryType === 'game'
+        && authorCollection.galleryType === null
+        && reloaded?.galleryType === 'game'
         && reloaded?.entries.some((entry) => entry.id === 1) === true
         && reloaded?.children.some((nested) => nested.id === child.id
+          && nested.galleryType === 'game'
           && nested.entries.some((entry) => entry.id === 2)) === true
         && getCollection(database, authorCollection.id)?.producers[0]?.id === 1;
+    });
+
+    check('drop an Author once its last work is gone', () => {
+      const author = createProducer(database, { name: 'One Work Author' });
+      const entry = createEntry(database, { title: 'Only Work', type: 'game' });
+      linkEntryProducer(database, entry.id, author.id);
+      // A hand-created Author that never held a work waits for one.
+      const fresh = createProducer(database, { name: 'Fresh Author' });
+
+      const producerExists = (id: number): boolean => database.prepare(
+        'SELECT COUNT(*) FROM producers WHERE id = ?',
+      ).pluck().get(id) !== 0;
+
+      unlinkEntryProducer(database, entry.id, author.id);
+      const goneAfterUnlink = producerExists(author.id) === false;
+
+      const second = createProducer(database, { name: 'Two Work Author' });
+      const firstWork = createEntry(database, { title: 'Work A', type: 'game' });
+      const secondWork = createEntry(database, { title: 'Work B', type: 'game' });
+      linkEntryProducer(database, firstWork.id, second.id);
+      linkEntryProducer(database, secondWork.id, second.id);
+      deleteEntry(database, firstWork.id);
+      const keptWhileBusy = producerExists(second.id);
+      deleteEntry(database, secondWork.id);
+      const goneAfterLastWork = producerExists(second.id) === false;
+
+      // A hand-created Author that never held a work is left alone.
+      return goneAfterUnlink
+        && keptWhileBusy
+        && goneAfterLastWork
+        && producerExists(fresh.id)
+        && findProducers(database).some((row) => row.name === 'Two Work Author') === false;
     });
 
     check('persist shared View later', () => {
@@ -615,12 +796,56 @@ export function runDatabaseProbe(): DatabaseProbeResult {
     return (
       capabilities.libraryId === identity.libraryId
       && capabilities.syncEpoch !== ''
-      && capabilities.snapshotFormatVersion === 1
+      && capabilities.snapshotFormatVersion === 2
+      && capabilities.featureFlags.offlineMutations === true
+      && capabilities.featureFlags.offlineEntryUpdate === true
       && second.header.snapshotSeq === first.header.snapshotSeq + 1
+      && second.header.changeSeq === first.header.changeSeq
       && first.header.checksum.length === 64
       && rotated !== capabilities.syncEpoch
       && first.payload.entries.length >= 1
+      && first.payload.entries.every((entry) => (
+        entry.syncUid !== undefined && entry.syncVersion !== undefined
+      ))
     );
+  });
+
+  // Runs last: it merges every pending duplicate Author, so the database is not
+  // the same afterwards.
+  check('hand Collection and View later memberships to the merged Author', () => {
+    const keeper = createProducer(database, { name: 'Merge Keeper' });
+    const twin = createProducer(database, { name: 'Merge Keeper' });
+    const work = createEntry(database, { title: 'Merged Work', type: 'game' });
+    linkEntryProducer(database, work.id, twin.id);
+    const shelf = createCollection(database, { kind: 'producer', title: 'Merged shelf' });
+    addCollectionProducer(database, shelf.id, twin.id);
+    addViewLaterProducer(database, twin.id);
+
+    const plans = planProducerMerges(database);
+    database.pragma('foreign_keys = OFF');
+    try {
+      executeProducerMerges(database, plans);
+    } finally {
+      database.pragma('foreign_keys = ON');
+    }
+
+    const orphanMemberships = (table: string): number => Number(database.prepare(
+      `SELECT COUNT(*) FROM ${table} AS link
+       LEFT JOIN producers AS producer ON producer.id = link.producer_id
+       WHERE producer.id IS NULL`,
+    ).pluck().get());
+    // Which of the two rows survives is the merge's own decision.
+    const survivorId = database.prepare(
+      "SELECT id FROM producers WHERE name = 'Merge Keeper'",
+    ).pluck().get() as number | undefined;
+    return keeper.id !== twin.id
+      && survivorId !== undefined
+      && orphanMemberships('collection_producers') === 0
+      && orphanMemberships('view_later_producers') === 0
+      && database.prepare(
+        'SELECT COUNT(*) FROM collection_producers WHERE producer_id = ?',
+      ).pluck().get(survivorId) === 1
+      && listViewLaterProducerIds(database).includes(survivorId);
   });
 
   check('database doctor clean', () => inspectDatabase(database).ok);

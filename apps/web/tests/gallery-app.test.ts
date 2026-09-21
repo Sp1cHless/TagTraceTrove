@@ -13,6 +13,8 @@ const suggestionDebounce = (ms = 220) => new Promise<void>((resolve) => setTimeo
 import { multiAuthorProducerName } from '@t3/shared';
 import type { GalleryApi } from '../src/api/gallery.js';
 import { setLocale } from '../src/i18n.js';
+import { createMemorySnapshotStore } from '../src/offline/snapshot-store.js';
+import { showNsfw } from '../src/stores/preferences.js';
 
 function createMemoryApi(options: {
   withAuthors?: boolean;
@@ -82,6 +84,7 @@ function createMemoryApi(options: {
   let mangaSectionName: string | null = null;
   let extraSectionName: string | null = null;
   let createdFacetName: string | null = null;
+  let createdSectionCount = 0;
   let movedTagFacetId = 11;
   let renamedTagName = 'ARPG';
   let removedTag = false;
@@ -90,7 +93,7 @@ function createMemoryApi(options: {
   let ratingSlotCount = 0;
   const ratingSlots: Array<{ id: number; name: string; sortOrder: number; entryId: number }> = [];
   const entryUsages: Array<{ entryId: number; viewCount: number; likeCount: number; lastViewedAt: string | null }> = [];
-  const collectionStore: Array<{ id: number; kind: 'entry' | 'producer'; title: string; description: string; nsfw: boolean; sortOrder: number; children: never[]; entries: never[]; producers: never[] }> = [];
+  const collectionStore: Array<{ id: number; kind: 'entry' | 'producer'; title: string; description: string; nsfw: boolean; sortOrder: number; galleryType: string | null; children: never[]; entries: never[]; producers: never[] }> = [];
   let viewLaterStore: number[] = [];
   let viewLaterAuthorStore: number[] = [];
   const entryRatings: Array<{ entryId: number; slotId: number; name: string; stars: number | null }> = [
@@ -334,6 +337,9 @@ function createMemoryApi(options: {
     async mergeTag(input: { vocabulary: 'entry' | 'producer'; keptTagId: number; mergedTagIds: number[] }) {
       return { keptTagId: input.keptTagId, movedAssignments: 0, skippedDuplicates: 0, deletedTags: input.mergedTagIds.length };
     },
+    async deleteTag(input: { vocabulary: 'entry' | 'producer'; tagId: number }) {
+      return { tagId: input.tagId, tagName: 'stub', removedAssignments: 0, deletedTags: 1 };
+    },
     async listTemplates() {
       return [];
     },
@@ -372,10 +378,11 @@ function createMemoryApi(options: {
       return collectionStore.filter((record) => record.kind === kind);
     },
 
-    async createCollection(input: { kind: 'entry' | 'producer'; title: string }) {
+    async createCollection(input: { kind: 'entry' | 'producer'; title: string; galleryType?: string }) {
       const record = {
         id: 900 + collectionStore.length, kind: input.kind, title: input.title,
         description: '', nsfw: false, sortOrder: collectionStore.length,
+        galleryType: input.galleryType ?? null,
         children: [], entries: [], producers: [],
       };
       collectionStore.push(record);
@@ -393,12 +400,23 @@ function createMemoryApi(options: {
       collectionStore.push({
         id, kind: 'entry', title,
         description: '', nsfw: false, sortOrder: collectionStore.length,
+        galleryType: null,
         children: [], entries: [], producers: [],
       });
       return { collectionId: id, title, entryCount: new Set(entryIds).size };
     },
     async updateCollection() {
       throw new Error('Not implemented in memory API');
+    },
+    async addCollectionTag(collectionId: number, name: string) {
+      const record = collectionStore.find((candidate) => candidate.id === collectionId);
+      return {
+        tagId: 1,
+        entriesAffected: record?.entries.length ?? 0,
+        alreadyPresent: 0,
+        skipped: 0,
+        name,
+      };
     },
     async deleteCollection(collectionId: number) {
       const index = collectionStore.findIndex((record) => record.id === collectionId);
@@ -804,6 +822,14 @@ function createMemoryApi(options: {
     async createSection(input) {
       if (input.entryType === 'manga') mangaSectionName = input.name.trim();
       else extraSectionName = input.name.trim();
+      createdSectionCount += 1;
+      return {
+        id: 800 + createdSectionCount,
+        entryType: input.entryType,
+        name: input.name.trim(),
+        sortOrder: input.sortOrder ?? 0,
+        defaultFacetId: 900 + createdSectionCount,
+      };
     },
     async createFacet(input) {
       createdFacetName = input.name.trim();
@@ -1085,6 +1111,79 @@ describe('GalleryApp', () => {
     expect(wrapper.get('[data-testid="offline-mode-banner"]').text()).toContain('offline copy');
   });
 
+  it('shows a copyable runtime report for offline mutation diagnosis', async () => {
+    const offlineStore = createMemorySnapshotStore();
+    await offlineStore.writeMeta('activeGeneration', '7');
+    await offlineStore.writeMeta('capability.offlineEntryCreate', '1');
+    await offlineStore.writeMeta('capability.offlineUsageEvents', '0');
+    await offlineStore.writeMeta('capability.offlineEntryViewLater', '1');
+    await offlineStore.writeMeta('capability.offlineEntryRating', '1');
+    const wrapper = mount(GalleryApp, {
+      props: {
+        api: createMemoryApi(),
+        offlineStore,
+        offlineState: {
+          mode: 'offline',
+          lastFallbackAt: '2026-09-21T00:00:00Z',
+          pendingCount: 0,
+          lastCapabilityProbe: {
+            at: '2026-09-21T00:00:00Z', status: 'success', serverBuild: 'test',
+            offlineUsageEvents: false, offlineEntryViewLater: true, offlineEntryRating: true, error: null,
+          },
+          lastMutationDiagnostic: {
+            at: '2026-09-21T00:01:00Z', action: 'like', modeBefore: 'offline', modeAfter: 'offline',
+            capability: '0', result: 'error', transportClassified: false,
+            errorName: 'Error', errorMessage: 'offline usage is disabled',
+          },
+        },
+      },
+    });
+
+    await wrapper.get('[data-testid="offline-diagnostics-toggle"]').trigger('click');
+    await flushPromises();
+    const report = wrapper.get('[data-testid="offline-diagnostics"]').text();
+    expect(report).toContain('0.0.8-c2-offline-rating');
+    expect(report).toContain('"offlineUsageEvents": "0"');
+    expect(report).toContain('"offlineEntryRating": "1"');
+    expect(report).toContain('"action": "like"');
+    expect(report).toContain('"activeGeneration": "7"');
+  });
+
+  it('shows durable pending and conflict counts in the offline banner', async () => {
+    const api = createMemoryApi();
+    api.discardBlockedOfflineOperations = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mount(GalleryApp, {
+      props: {
+        api,
+        offlineState: {
+          mode: 'online', lastFallbackAt: null, pendingCount: 1,
+          conflictCount: 0, lastReplayError: null,
+        },
+      },
+    });
+
+    expect(wrapper.get('[data-testid="offline-pending-count"]').text()).toContain('1 offline edit');
+    await wrapper.setProps({
+      offlineState: {
+        mode: 'online', lastFallbackAt: null, pendingCount: 0,
+        conflictCount: 1, lastReplayError: 'conflict',
+      },
+    });
+    expect(wrapper.find('[data-testid="offline-mode-banner"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="offline-conflict-count"]').text()).toContain('1 offline edit');
+    await wrapper.get('[data-testid="offline-discard-blocked"]').trigger('click');
+    expect(api.discardBlockedOfflineOperations).toHaveBeenCalledTimes(1);
+    await wrapper.setProps({
+      offlineState: {
+        mode: 'online', lastFallbackAt: null, pendingCount: 2,
+        conflictCount: 1, failedCount: 1, lastReplayError: 'validation',
+      },
+    });
+    expect(wrapper.get('[data-testid="offline-pending-count"]').text()).toContain('2 offline edit');
+    expect(wrapper.get('[data-testid="offline-conflict-count"]').text()).toContain('1 offline edit');
+    expect(wrapper.get('[data-testid="offline-failed-count"]').text()).toContain('failed validation');
+  });
+
   it('opens Settings and switches all UI copy between English and Chinese', async () => {
     const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
     await flushPromises();
@@ -1355,6 +1454,33 @@ describe('GalleryApp', () => {
     expect(wrapper.get('[data-testid="tag-results"]').text()).toContain(chosenTagName);
   });
 
+  it('uses a fresh seed for every random Work deal', async () => {
+    const api = createMemoryApi();
+    const queryEntryPage = vi.spyOn(api, 'queryEntryPage');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="random-navigation"]').trigger('click');
+    await flushPromises();
+
+    const random = vi.spyOn(Math, 'random')
+      .mockReturnValueOnce(0.125)
+      .mockReturnValueOnce(0.875);
+    await wrapper.get('[data-testid="random-deal-button"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="random-deal-button"]').trigger('click');
+    await flushPromises();
+    random.mockRestore();
+
+    const seeds = queryEntryPage.mock.calls
+      .map(([input]) => input)
+      .filter((input) => input.sort === 'random')
+      .map((input) => input.randomSeed);
+    expect(seeds).toEqual([
+      Math.floor(0.125 * 2_147_483_648),
+      Math.floor(0.875 * 2_147_483_648),
+    ]);
+  });
+
   it('returns from an Author work to the same Author pagination state', async () => {
     const api = createMemoryApi();
     const getAuthor = api.getAuthor.bind(api);
@@ -1622,6 +1748,245 @@ describe('GalleryApp', () => {
     expect(wrapper.get('[data-testid="add-author-page"]').text()).toContain('New Author');
   });
 
+  it('files an export whose works were all already imported, through the plain folder import', async () => {
+    setLocale('en');
+    const api = createMemoryApi();
+    api.listLayout = vi.fn(async () => [{
+      id: 10, name: 'Imported', sortOrder: 0, facets: [{ id: 11, name: '', sortOrder: 0 }],
+    }]);
+    api.previewSiteProbeFolder = vi.fn(async () => ({
+      source: 'hitomi.la',
+      entryCount: 1,
+      tagAssignmentCount: 0,
+      uniqueTagCount: 0,
+      entriesMissingCover: 0,
+      warnings: [],
+      batch: {
+        source: 'hitomi.la',
+        warnings: [],
+        entries: [{
+          externalKey: 'hitomi.la:42',
+          title: 'Known work',
+          tags: [],
+          sources: [{ label: 'hitomi', url: 'https://hitomi.la/g/42.html' }],
+        }],
+      },
+    })) as unknown as typeof api.previewSiteProbeFolder;
+    // Nothing new: the export's single work is already in the library.
+    api.commitImport = vi.fn(async () => ({
+      entries: [],
+      entryCount: 0,
+      skippedExistingEntryCount: 1,
+      existingEntryIds: [2],
+      createdProducerCount: 0,
+      producerLinkCount: 0,
+      tagAssignmentCount: 0,
+      contentCount: 0,
+      authorRatingCount: 0,
+      warnings: [],
+    })) as unknown as typeof api.commitImport;
+    const createTemporaryCollection = vi.fn(async (entryIds: number[]) => ({
+      collectionId: 88, title: 'Temporary', entryCount: entryIds.length,
+    }));
+    api.createTemporaryCollection = createTemporaryCollection as unknown as typeof api.createTemporaryCollection;
+
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
+    Object.defineProperty(file, 'webkitRelativePath', { value: 'folder_42/items/42/metadata.json' });
+    const input = wrapper.get('[data-testid="desktop-entry-import"] input[webkitdirectory]');
+    Object.defineProperty(input.element, 'files', { value: [file] });
+    await input.trigger('change');
+    await flushPromises();
+    await wrapper.get('[data-testid="import-review"] .primary-button').trigger('click');
+    await flushPromises();
+
+    // Not the gallery: the run is offered for filing, with the known work shown.
+    const review = wrapper.get('[data-testid="batch-review"]');
+    const card = review.get('[data-entry-id="2"]');
+    expect(card.get('[data-testid="batch-review-existing"]').text()).toBe('Already in the library');
+    await wrapper.get('[data-testid="batch-review-save-collection"]').trigger('click');
+    await flushPromises();
+    expect(createTemporaryCollection).toHaveBeenCalledWith([2]);
+  });
+
+  it('files the works a batch import already knew into the same temporary collection', async () => {
+    setLocale('en');
+    const api = createMemoryApi();
+    api.listLayout = vi.fn(async () => [{
+      id: 10, name: 'Imported', sortOrder: 0, facets: [{ id: 11, name: '', sortOrder: 0 }],
+    }]);
+    api.previewSiteProbeFolder = vi.fn(async () => ({
+      source: 'hitomi.la',
+      entryCount: 1,
+      tagAssignmentCount: 0,
+      uniqueTagCount: 0,
+      entriesMissingCover: 0,
+      warnings: [],
+      batch: {
+        source: 'hitomi.la',
+        warnings: [],
+        entries: [{
+          externalKey: 'hitomi.la:99',
+          title: 'Fresh work',
+          tags: [],
+          sources: [{ label: 'hitomi', url: 'https://hitomi.la/g/99.html' }],
+        }],
+      },
+    })) as unknown as typeof api.previewSiteProbeFolder;
+    // One item the run created, one the library already had.
+    api.commitImport = vi.fn(async () => ({
+      entries: [{ entryId: 4, title: 'Fresh work', externalKey: 'hitomi.la:99' }],
+      entryCount: 1,
+      skippedExistingEntryCount: 1,
+      existingEntryIds: [2],
+      createdProducerCount: 0,
+      producerLinkCount: 0,
+      tagAssignmentCount: 0,
+      contentCount: 1,
+      authorRatingCount: 0,
+      warnings: [],
+    })) as unknown as typeof api.commitImport;
+    const createTemporaryCollection = vi.fn(async (entryIds: number[]) => ({
+      collectionId: 77, title: 'Temporary', entryCount: entryIds.length,
+    }));
+    api.createTemporaryCollection = createTemporaryCollection as unknown as typeof api.createTemporaryCollection;
+
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await wrapper.get('.batch-import-toggle .secondary-button').trigger('click');
+    const batchTypeInput = wrapper.get('.batch-import input[list="add-entry-gallery-types"]');
+    await batchTypeInput.setValue('Comic');
+    await batchTypeInput.trigger('change');
+    await flushPromises();
+
+    const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
+    Object.defineProperty(file, 'webkitRelativePath', { value: 'folder_42/items/99/metadata.json' });
+    const batchInput = wrapper.get('.batch-import input[webkitdirectory]');
+    Object.defineProperty(batchInput.element, 'files', { value: [file] });
+    await batchInput.trigger('change');
+    await flushPromises();
+    await wrapper.get('.batch-import .primary-button').trigger('click');
+    await flushPromises();
+
+    const review = wrapper.get('[data-testid="batch-review"]');
+    // The works the library already had are stated, not silently dropped: the
+    // folder a work came from is itself information.
+    expect(review.get('[data-testid="batch-review-warnings"]').text())
+      .toContain('1 works were already in the library and are filed with this run.');
+
+    // Both appear, and the one the library already had says so.
+    const cards = wrapper.findAll('[data-testid="batch-review"] [data-entry-id]');
+    expect(cards.map((card) => card.attributes('data-entry-id'))).toContain('2');
+    const existingCard = cards.find((card) => card.attributes('data-entry-id') === '2')!;
+    expect(existingCard.get('[data-testid="batch-review-existing"]').text()).toBe('Already in the library');
+
+    await wrapper.get('[data-testid="batch-review-save-collection"]').trigger('click');
+    await flushPromises();
+    expect(createTemporaryCollection).toHaveBeenCalledWith([4, 2]);
+  });
+
+  it('offers the template path from the composer without complicating it', async () => {
+    setLocale('en');
+    const api = createMemoryApi();
+    const created: Array<{ title: string; type: string }> = [];
+    const memoryCreateEntry = api.createEntry;
+    api.createEntry = (async (input: { title: string; type: string }) => {
+      created.push(input);
+      return memoryCreateEntry(input as Parameters<typeof memoryCreateEntry>[0]);
+    }) as typeof api.createEntry;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await flushPromises();
+
+    // The simple composer is still there: cover + fields, nothing else.
+    expect(wrapper.find('[data-testid="manual-template-section"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="entry-cover-dropzone"]').exists()).toBe(true);
+
+    // Default type is an existing Gallery -> the template is already there.
+    expect(wrapper.get('[data-testid="create-with-template"]').text())
+      .toContain('Template ready — open detailed editing');
+    await wrapper.get('[data-testid="add-entry-page"] input[name="title"]').setValue('Quick one');
+    await wrapper.get('[data-testid="create-with-template"]').trigger('click');
+    await flushPromises();
+    expect(created).toHaveLength(1);
+    expect(created[0]).toMatchObject({ title: 'Quick one', type: 'game' });
+    // Straight into the new work's editor, which is where the template lives.
+    expect(wrapper.find('[data-testid="entry-detail"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="entry-detail"]').text()).toContain('Quick one');
+    expect(wrapper.find('[data-testid="finish-entry-editing"]').exists()).toBe(true);
+  });
+
+  it('labels the template path as a new Gallery when the type is unknown', async () => {
+    setLocale('en');
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await flushPromises();
+
+    await wrapper.get('[data-testid="add-entry-page"] input[name="type"]').setValue('doujin');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="create-with-template"]').text())
+      .toContain('New Gallery — create its template');
+  });
+
+  it('offers to apply the template when the first work of a Gallery finishes editing', async () => {
+    setLocale('en');
+    const api = createMemoryApi();
+    const apply = vi.fn(async () => ({
+      entryId: 3, entriesAffected: 1, tagsRelinked: 0, templatePath: null, tagLayoutPath: null,
+      backupPath: null, foreignKeyCheckPass: true, doctorPass: true, doctorIssues: [],
+    }));
+    api.applyEntryLayoutTemplate = apply as unknown as typeof api.applyEntryLayoutTemplate;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    // Entry 3 is the only manga work and carries no Sections yet.
+    await openGalleryType(wrapper, 'manga');
+    await wrapper.get('[data-entry-id="3"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');
+    await flushPromises();
+
+    await wrapper.get('[data-testid="finish-entry-editing"]').trigger('click');
+    await flushPromises();
+
+    const prompt = wrapper.get('[data-testid="template-prompt"]');
+    expect(prompt.text()).toContain('This Gallery has no template yet');
+    expect(prompt.text()).toContain('Apply this work’s Sections and Facets to every manga work');
+    // Still editing behind the prompt: nothing was saved away yet.
+    expect(wrapper.find('[data-testid="finish-entry-editing"]').exists()).toBe(true);
+
+    await wrapper.get('[data-testid="template-prompt-apply"]').trigger('click');
+    await flushPromises();
+    expect(apply).toHaveBeenCalledWith(3);
+    expect(wrapper.find('[data-testid="template-prompt"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="finish-entry-editing"]').exists()).toBe(false);
+  });
+
+  it('leaves a Gallery whose work already has a structure alone when Done is clicked', async () => {
+    setLocale('en');
+    const api = createMemoryApi();
+    const apply = vi.fn(async () => ({
+      entryId: 1, entriesAffected: 1, tagsRelinked: 0, templatePath: null, tagLayoutPath: null,
+      backupPath: null, foreignKeyCheckPass: true, doctorPass: true, doctorIssues: [],
+    }));
+    api.applyEntryLayoutTemplate = apply as unknown as typeof api.applyEntryLayoutTemplate;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    // Entry 1 carries Sections and shares its Gallery with entry 2.
+    await openEntryForEditing(wrapper, 1);
+
+    await wrapper.get('[data-testid="finish-entry-editing"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="template-prompt"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="finish-entry-editing"]').exists()).toBe(false);
+    expect(apply).not.toHaveBeenCalled();
+  });
+
   it('returns from Add Author to the Authors page', async () => {
     const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
     await flushPromises();
@@ -1667,6 +2032,7 @@ describe('GalleryApp', () => {
       entries: [{ entryId: 4, title: 'Imported work', externalKey: '18comic.vip:42' }],
       entryCount: 1,
       skippedExistingEntryCount: 0,
+      existingEntryIds: [],
       createdProducerCount: 1,
       producerLinkCount: 1,
       tagAssignmentCount: 1,
@@ -1721,6 +2087,7 @@ describe('GalleryApp', () => {
       entries: [{ entryId: 7, title: 'Artist collection', externalKey: 'hitomi.la:1' }],
       entryCount: 1,
       skippedExistingEntryCount: 0,
+      existingEntryIds: [],
       createdProducerCount: 0,
       producerLinkCount: 0,
       tagAssignmentCount: 2,
@@ -1827,6 +2194,7 @@ describe('GalleryApp', () => {
       entries: [{ entryId: 99, title: 'New work', externalKey: 'hitomi.la:99' }],
       entryCount: 1,
       skippedExistingEntryCount: 1,
+      existingEntryIds: [],
       createdProducerCount: 0,
       producerLinkCount: 0,
       tagAssignmentCount: 0,
@@ -1919,6 +2287,7 @@ describe('GalleryApp', () => {
       entries: [{ entryId: 4, title: 'Work', externalKey: 'hitomi.la:99' }],
       entryCount: 1,
       skippedExistingEntryCount: 0,
+      existingEntryIds: [],
       createdProducerCount: 1,
       producerLinkCount: 1,
       tagAssignmentCount: 5,
@@ -2001,6 +2370,7 @@ describe('GalleryApp', () => {
       entries: [{ entryId: 14, title: 'Work', externalKey: 'hanime1.me:99' }],
       entryCount: 1,
       skippedExistingEntryCount: 0,
+      existingEntryIds: [],
       createdProducerCount: 1,
       producerLinkCount: 1,
       tagAssignmentCount: 4,
@@ -2099,6 +2469,7 @@ describe('GalleryApp', () => {
       })),
       entryCount: batch.entries.length,
       skippedExistingEntryCount: 0,
+      existingEntryIds: [],
       createdProducerCount: 0,
       producerLinkCount: 0,
       tagAssignmentCount: 2,
@@ -2186,6 +2557,7 @@ describe('GalleryApp', () => {
       })),
       entryCount: batch.entries.length,
       skippedExistingEntryCount: 0,
+      existingEntryIds: [],
       createdProducerCount: 0,
       producerLinkCount: 1,
       tagAssignmentCount: 1,
@@ -2274,6 +2646,7 @@ describe('GalleryApp', () => {
         })),
         entryCount: batch.entries.length,
         skippedExistingEntryCount: 0,
+      existingEntryIds: [],
         createdProducerCount: commitCount === 1 ? 1 : 0,
         producerLinkCount: 1,
         tagAssignmentCount: 1,
@@ -2368,6 +2741,7 @@ describe('GalleryApp', () => {
       })),
       entryCount: batch.entries.length,
       skippedExistingEntryCount: 0,
+      existingEntryIds: [],
       createdProducerCount: 0,
       producerLinkCount: 1,
       tagAssignmentCount: 1,
@@ -2424,6 +2798,33 @@ describe('GalleryApp', () => {
     await flushPromises();
     expect(deleteAuthor).toHaveBeenCalledOnce();
     expect(deleteAuthor).toHaveBeenCalledWith(9);
+  });
+
+  it('takes the sidebar numbers from the visibility-aware counts interface', async () => {
+    showNsfw.value = false;
+    const api = createMemoryApi();
+    const requested: boolean[] = [];
+    api.getNavigationCounts = vi.fn(async (includeNsfw: boolean) => {
+      requested.push(includeNsfw);
+      return includeNsfw
+        ? { authors: 4, viewLaterEntries: 3, viewLaterAuthors: 2 }
+        : { authors: 1, viewLaterEntries: 0, viewLaterAuthors: 0 };
+    });
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="author-navigation-count"]').text()).toBe('1');
+    expect(wrapper.find('[data-testid="view-later-navigation-count"]').exists()).toBe(false);
+
+    showNsfw.value = true;
+    await flushPromises();
+    expect(wrapper.get('[data-testid="author-navigation-count"]').text()).toBe('4');
+    expect(wrapper.get('[data-testid="view-later-navigation-count"]').text()).toBe('5');
+    // Startup and the saved-list watcher may both refresh; the preference always
+    // travels with the request, and the last one follows the current switch.
+    expect(requested[0]).toBe(false);
+    expect(requested).toContain(true);
+    expect(requested.at(-1)).toBe(true);
   });
 
   it('reveals the Author page after creating and linking the first Author from an Entry', async () => {
@@ -3582,6 +3983,31 @@ describe('Facet filter bar', () => {
     expect(wrapper.get('[data-testid="entry-list"]').text()).toContain('Endfield');
   });
 
+  it('keeps the filter bar and its chips after opening an Entry and coming back', async () => {
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    await flushPromises();
+    await openGameGallery(wrapper);
+    await pickFacet(wrapper, 'Genre');
+    await pickTag(wrapper, 'Sci-fi');
+    expect(wrapper.get('[data-testid="entry-list"]').text()).not.toContain('Hades II');
+
+    expect(wrapper.get('[data-testid="filter-tag-chip"]').text()).toContain('Sci-fi');
+    await wrapper.get('[data-entry-id="1"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="entry-detail"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="facet-filter-bar"]').exists()).toBe(false);
+
+    await wrapper.get('[data-testid="top-bar-back"]').trigger('click');
+    await flushPromises();
+
+    // Back on the filtered Gallery: the bar, the chip and the filtered result
+    // all have to survive so the filter can still be adjusted.
+    expect(wrapper.find('[data-testid="facet-filter-bar"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="filter-tag-chip"]').text()).toContain('Sci-fi');
+    expect(wrapper.get('[data-testid="entry-list"]').text()).toContain('Endfield');
+    expect(wrapper.get('[data-testid="entry-list"]').text()).not.toContain('Hades II');
+  });
+
   it('combines rows with AND and clears everything back to the full gallery', async () => {
     const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
     await flushPromises();
@@ -3878,6 +4304,124 @@ describe('Facet filter bar', () => {
     expect(entryId).toBeGreaterThan(0);
   });
 
+  it('queues the manual Entry when the initial create transport fails without running online follow-ups', async () => {
+    const api = createMemoryApi();
+    api.createEntry = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    const enqueue = vi.fn().mockResolvedValue({
+      localKey: 'local:22222222-2222-4222-8222-222222222222',
+    });
+    api.enqueueOfflineEntryCreate = enqueue;
+    const upload = vi.spyOn(api, 'uploadEntryMedia');
+    const rating = vi.spyOn(api, 'setEntryRating');
+    const viewLater = vi.spyOn(api, 'addViewLaterEntry');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Queued manual work');
+    await form.get('input[name="type"]').setValue('game');
+    await form.get('input[name="pageCount"]').setValue('24');
+    await wrapper.get('[data-testid="manual-entry-view-later"] input').setValue(true);
+
+    await form.trigger('submit');
+    await flushPromises();
+
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue.mock.calls[0]?.[0]).toMatchObject({
+      title: 'Queued manual work',
+      type: 'game',
+      pageCount: 24,
+      viewLater: true,
+      coverFile: null,
+      previewFile: null,
+    });
+    expect(enqueue.mock.calls[0]?.[1]).toBeInstanceOf(TypeError);
+    expect(upload).not.toHaveBeenCalled();
+    expect(rating).not.toHaveBeenCalled();
+    expect(viewLater).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(false);
+  });
+
+  it('queues a manual Entry immediately when snapshot mode is already active', async () => {
+    const api = createMemoryApi();
+    const createEntry = vi.spyOn(api, 'createEntry');
+    const enqueue = vi.fn().mockResolvedValue({
+      localKey: 'local:22222222-2222-4222-8222-222222222222',
+    });
+    api.enqueueOfflineEntryCreate = enqueue;
+    const offlineState = {
+      mode: 'offline' as const,
+      lastFallbackAt: new Date().toISOString(),
+      pendingCount: 0,
+      conflictCount: 0,
+      failedCount: 0,
+      lastReplayError: null,
+    };
+    const wrapper = mount(GalleryApp, { props: { api, offlineState } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Immediate offline work');
+    await form.get('input[name="type"]').setValue('game');
+
+    await form.trigger('submit');
+    await flushPromises();
+
+    expect(createEntry).not.toHaveBeenCalled();
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue.mock.calls[0]?.[0]).toMatchObject({
+      title: 'Immediate offline work',
+      type: 'game',
+    });
+    expect(enqueue.mock.calls[0]).toHaveLength(1);
+    expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(false);
+  });
+
+  it('shows an offline-created Entry in global search without inventing a numeric id', async () => {
+    const api = createMemoryApi();
+    api.listPendingOfflineEntryCreates = vi.fn().mockResolvedValue([{
+      localKey: 'local:22222222-2222-4222-8222-222222222222',
+      title: 'test1',
+      type: 'game',
+      uploadDate: null,
+      pageCount: null,
+      status: 'pending',
+    }]);
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="sidebar-search-input"]').setValue('test1');
+    await wrapper.get('[data-testid="sidebar-search-form"]').trigger('submit');
+    await flushPromises();
+
+    const pending = wrapper.get('[data-testid="search-pending-entry-local:22222222-2222-4222-8222-222222222222"]');
+    expect(pending.text()).toContain('test1');
+    expect(pending.text()).toContain('Pending sync');
+    expect(pending.find('button').exists()).toBe(false);
+  });
+
+  it('keeps the composer open when Template ready is used without a server', async () => {
+    setLocale('en');
+    const api = createMemoryApi();
+    api.createEntry = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    const enqueue = vi.fn().mockResolvedValue({
+      localKey: 'local:22222222-2222-4222-8222-222222222222',
+    });
+    api.enqueueOfflineEntryCreate = enqueue;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await wrapper.get('[data-testid="manual-entry-form"] input[name="title"]').setValue('Template offline');
+
+    await wrapper.get('[data-testid="create-with-template"]').trigger('click');
+    await flushPromises();
+
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(true);
+    expect(wrapper.get('[role="alert"]').text()).toContain('Advanced editing requires a connection');
+    expect(wrapper.find('[data-testid="home-page"]').exists()).toBe(false);
+  });
+
   it('records the reviewed Author rating for the batch instead of rating every imported work', async () => {
     const api = createMemoryApi();
     const setEntryRating = vi.fn(async () => ({}));
@@ -3913,6 +4457,7 @@ describe('Facet filter bar', () => {
       }),
       entryCount: batch.entries.length,
       skippedExistingEntryCount: 0,
+      existingEntryIds: [],
       createdProducerCount: 0,
       producerLinkCount: 0,
       tagAssignmentCount: 0,
@@ -3999,6 +4544,42 @@ describe('Facet filter bar', () => {
     const stats2 = wrapper.get('[data-testid="entry-usage-stats"]');
     expect(stats2.text()).toContain('1 views');
     expect(stats2.text()).toContain('Last viewed');
+    openSpy.mockRestore();
+  });
+
+  it('opens a Source URL immediately without waiting for usage tracking', async () => {
+    const api = createMemoryApi();
+    const baseGetEntry = api.getEntry;
+    api.getEntry = vi.fn(async (entryId: number) => {
+      const detail = await baseGetEntry(entryId);
+      return entryId === 1 ? {
+        ...detail,
+        contents: [...detail.contents, {
+          id: 99, contentType: 'Source URL', content: 'https://example.test/game', sortOrder: 5,
+        }],
+      } : detail;
+    });
+    let finishTracking: (() => void) | undefined;
+    api.recordEntryView = vi.fn(() => new Promise<{
+      viewCount: number;
+      likeCount: number;
+      lastViewedAt: string | null;
+    }>((resolve) => {
+      finishTracking = () => resolve({ viewCount: 1, likeCount: 0, lastViewedAt: new Date().toISOString() });
+    }));
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-entry-id="1"]').trigger('click');
+    await flushPromises();
+
+    const click = wrapper.get('[data-source-url-content-id]').trigger('click');
+    expect(openSpy).toHaveBeenCalledWith('https://example.test/game', '_blank', 'noopener,noreferrer');
+    expect(api.recordEntryView).toHaveBeenCalledWith(1);
+
+    finishTracking?.();
+    await click;
+    await flushPromises();
     openSpy.mockRestore();
   });
 
@@ -4289,6 +4870,7 @@ describe('Facet filter bar', () => {
       description: '',
       nsfw: false,
       sortOrder: 0,
+      galleryType: 'game',
       children: [],
       entries: [{ id: 1, title: 'Endfield', type: 'game', coverRef: null, previewRefs: [] }],
       producers: [],
@@ -4323,6 +4905,7 @@ describe('Facet filter bar', () => {
       description: '',
       nsfw: false,
       sortOrder: 0,
+      galleryType: 'game',
       children: [],
       entries: [{ id: 1, title: 'Endfield', type: 'game', coverRef: null, previewRefs: [] }],
       producers: [],
@@ -4371,6 +4954,7 @@ describe('Facet filter bar', () => {
       entries: [{ entryId: 400, title: 'Freshly Imported Work', externalKey: 'hitomi.la:400' }],
       entryCount: 1,
       skippedExistingEntryCount: 0,
+      existingEntryIds: [],
       createdProducerCount: 0,
       producerLinkCount: 0,
       tagAssignmentCount: 1,
@@ -4446,6 +5030,7 @@ describe('Facet filter bar', () => {
       })),
       entryCount: batch.entries.length,
       skippedExistingEntryCount: 0,
+      existingEntryIds: [],
       createdProducerCount: 0,
       producerLinkCount: 0,
       tagAssignmentCount: 0,
@@ -4574,6 +5159,7 @@ describe('Facet filter bar', () => {
         entries,
         entryCount: entries.length,
         skippedExistingEntryCount: 0,
+      existingEntryIds: [],
         createdProducerCount: 0,
         producerLinkCount: 0,
         tagAssignmentCount: 0,
@@ -4672,6 +5258,7 @@ describe('Facet filter bar', () => {
         entries,
         entryCount: entries.length,
         skippedExistingEntryCount: 0,
+      existingEntryIds: [],
         createdProducerCount: 0,
         producerLinkCount: 0,
         tagAssignmentCount: 0,
@@ -4777,6 +5364,7 @@ describe('Facet filter bar', () => {
       })),
       entryCount: batch.entries.length,
       skippedExistingEntryCount: 0,
+      existingEntryIds: [],
       createdProducerCount: 0,
       producerLinkCount: 0,
       tagAssignmentCount: 0,
@@ -4877,16 +5465,38 @@ describe('Home page', () => {
     expect(wrapper.get('[data-testid="top-bar-back"]').attributes('disabled')).toBeDefined();
   });
 
-  it('shows a fixed scroll-to-top control on Entry detail pages', async () => {
+  it('keeps Back and scroll-to-top floating on every view', async () => {
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
     const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
     await flushPromises();
+
+    // Home: present, with Back disabled exactly like the top-bar arrow.
+    const fabs = wrapper.get('[data-testid="floating-back"]').element.parentElement!;
+    expect([...fabs.children].map((child) => child.getAttribute('data-testid')))
+      .toEqual(['floating-back', 'floating-scroll-top']);
+    expect(wrapper.get('[data-testid="floating-back"]').attributes('disabled')).toBeDefined();
+
+    await wrapper.get('[data-testid="floating-scroll-top"]').trigger('click');
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 0, left: 0, behavior: 'smooth' });
+    expect(wrapper.find('[data-testid="floating-back"]').exists()).toBe(true);
+
+    // A Gallery page: Back is live and leads home, and the pair stays put.
+    await wrapper.get('[data-gallery-type="game"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="floating-back"]').attributes('disabled')).toBeUndefined();
+    await wrapper.get('[data-testid="floating-back"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="home-page"]').exists()).toBe(true);
+
+    // Entry detail: same control, same action as the top-bar arrow.
     await wrapper.get('[data-gallery-type="game"]').trigger('click');
     await wrapper.get('[data-entry-id="1"]').trigger('click');
     await flushPromises();
-
-    await wrapper.get('[data-testid="entry-scroll-top"]').trigger('click');
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 0, left: 0, behavior: 'smooth' });
+    await wrapper.get('[data-testid="floating-back"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="entry-detail"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="active-gallery-title"]').text()).toBe('game');
+    expect(wrapper.find('[data-testid="floating-back"]').exists()).toBe(true);
     scrollTo.mockRestore();
   });
 
@@ -4933,6 +5543,24 @@ describe('Home page', () => {
     await wrapper.get('[data-testid="home-add-first-entry"]').trigger('click');
     await flushPromises();
     expect(wrapper.find('[data-testid="add-entry-page"]').exists()).toBe(true);
+  });
+
+  it('distinguishes an NSFW-filtered library from a genuinely empty library', async () => {
+    showNsfw.value = false;
+    const api = createMemoryApi();
+    const listGalleries = api.listGalleries.bind(api);
+    api.listGalleries = async () => (await listGalleries()).map((gallery) => ({ ...gallery, nsfw: true }));
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="home-empty"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="home-nsfw-hidden"]').text()).toContain('hidden by your NSFW setting');
+
+    await wrapper.get('[data-testid="home-show-nsfw"]').trigger('click');
+    await flushPromises();
+    expect(showNsfw.value).toBe(true);
+    expect(wrapper.find('[data-testid="home-nsfw-hidden"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-gallery-type]').length).toBeGreaterThan(0);
   });
 
   it('opens the new-entry creation flow from the Home hero', async () => {

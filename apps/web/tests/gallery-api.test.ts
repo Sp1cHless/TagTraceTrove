@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createGalleryApi, resolveDefaultApiBaseUrl } from '../src/api/gallery.js';
+import {
+  createGalleryApi,
+  resolveAssetUrl,
+  resolveDefaultApiBaseUrl,
+} from '../src/api/gallery.js';
 import type { ApiClient } from '../src/api/client.js';
 
 describe('default GalleryApi origin', () => {
@@ -8,6 +12,27 @@ describe('default GalleryApi origin', () => {
     expect(resolveDefaultApiBaseUrl(undefined, false, 'http://127.0.0.1:5173')).toBe('http://127.0.0.1:8765/api/');
     expect(resolveDefaultApiBaseUrl('http://localhost:9000/custom/', true, 'http://127.0.0.1:8799'))
       .toBe('http://localhost:9000/custom/');
+    expect(resolveDefaultApiBaseUrl(undefined, true, 'https://localhost', 'http://192.168.1.8:8765/api/'))
+      .toBe('http://192.168.1.8:8765/api/');
+    expect(resolveDefaultApiBaseUrl(undefined, true, 'https://localhost', '   '))
+      .toBe('https://localhost/api/');
+  });
+});
+
+describe('GalleryApi asset origin', () => {
+  it('routes remote media through the Capacitor same-origin interceptor only inside the native shell', () => {
+    const path = '/api/thumbnails/entries/17/cover';
+    const remote = 'http://192.168.50.155:8765/api/thumbnails/entries/17/cover';
+
+    expect(resolveAssetUrl(path, 'http://192.168.50.155:8765/')).toBe(remote);
+    expect(resolveAssetUrl(path, 'http://192.168.50.155:8765/', 'https://localhost')).toBe(
+      'https://localhost/_capacitor_http_interceptor_?u=http%3A%2F%2F192.168.50.155%3A8765%2Fapi%2Fthumbnails%2Fentries%2F17%2Fcover',
+    );
+    expect(resolveAssetUrl(
+      'https://localhost/_capacitor_http_interceptor_?u=http%3A%2F%2F192.168.50.155%3A8765%2Fcover.webp',
+      'http://192.168.50.155:8765/',
+      'https://localhost',
+    )).toBe('https://localhost/_capacitor_http_interceptor_?u=http%3A%2F%2F192.168.50.155%3A8765%2Fcover.webp');
   });
 });
 
@@ -149,6 +174,7 @@ describe('GalleryApi Entry Content', () => {
             entries: [{ entryId: 7, title: 'Work', externalKey: '42' }],
             entryCount: 1,
             skippedExistingEntryCount: 0,
+            existingEntryIds: [],
             createdProducerCount: 0,
             producerLinkCount: 0,
             tagAssignmentCount: 0,

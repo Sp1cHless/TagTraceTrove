@@ -5,7 +5,12 @@ import {
   type AuthorDirectoryRecord,
   type AuthorWorkSummary,
 } from './author-directory-repository.js';
-import { listProducerTags, galleryTypeForProducer, type ProducerTagAssignment } from './producer-tag-repository.js';
+import {
+  galleryTypeForProducer,
+  listProducerTags,
+  pruneUnusedProducerTags,
+  type ProducerTagAssignment,
+} from './producer-tag-repository.js';
 import { listProducerRatings, type RatingRowRecord } from './rating-repository.js';
 import { getProducerUsage } from './usage-repository.js';
 import { resolveTaxonomyName } from './taxonomy-repository.js';
@@ -323,11 +328,46 @@ export function unlinkEntryProducer(
     DELETE FROM entry_producers
     WHERE entry_id = ? AND producer_id = ?
   `).run(entryId, producerId);
+  pruneWorklessProducers(database, [producerId]);
+}
+
+/**
+ * An Author exists to hold works, and every import carries its Author info with
+ * the work, so an Author left holding none is residue. Every path that can take
+ * an Author's last work away calls this: unlinking, deleting or merging an Entry,
+ * and an Author merge that leaves a keeper blank. A named set is passed rather
+ * than sweeping the table, so an Author someone just created by hand — one that
+ * never had a work yet — is not silently deleted.
+ */
+export function pruneWorklessProducers(database: T3Database, producerIds: number[]): number {
+  const unique = [...new Set(producerIds)];
+  if (unique.length === 0) return 0;
+  const placeholders = unique.map(() => '?').join(', ');
+  const tagStatement = database.prepare(
+    'SELECT tag_id AS tagId FROM producer_tag_assignments WHERE producer_id = ?',
+  ).pluck();
+  const heldTagIds = unique.flatMap((producerId) => tagStatement.all(producerId) as number[]);
+  const result = database.prepare(`
+    DELETE FROM producers
+    WHERE id IN (${placeholders})
+      AND NOT EXISTS (
+        SELECT 1 FROM entry_producers WHERE entry_producers.producer_id = producers.id
+      )
+  `).run(...unique);
+  // The Tags those Authors were carrying follow the same rule as the work side.
+  if (heldTagIds.length > 0) pruneUnusedProducerTags(database, heldTagIds);
+  return result.changes;
 }
 
 export function deleteProducer(database: T3Database, producerId: number): void {
-  const result = database.prepare('DELETE FROM producers WHERE id = ?').run(producerId);
-  if (result.changes === 0) {
-    throw new Error('producer not found');
-  }
+  database.transaction(() => {
+    const heldTagIds = database.prepare(
+      'SELECT tag_id AS tagId FROM producer_tag_assignments WHERE producer_id = ?',
+    ).pluck().all(producerId) as number[];
+    const result = database.prepare('DELETE FROM producers WHERE id = ?').run(producerId);
+    if (result.changes === 0) {
+      throw new Error('producer not found');
+    }
+    pruneUnusedProducerTags(database, heldTagIds);
+  })();
 }

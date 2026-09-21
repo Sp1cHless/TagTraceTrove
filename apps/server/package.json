@@ -12,6 +12,7 @@
     "db:restore": "tsx src/database/restore-cli.ts",
     "dev": "tsx --watch src/http/server-cli.ts",
     "import:commit": "tsx src/import/commit-cli.ts",
+    "import:cursor": "tsx src/import/crawl-state-cli.ts",
     "import:site-probe": "tsx src/import/cli.ts",
     "merge:authors": "tsx src/import/merge-producers-cli.ts",
     "media:thumbnails": "tsx src/import/thumbnail-backfill-cli.ts",

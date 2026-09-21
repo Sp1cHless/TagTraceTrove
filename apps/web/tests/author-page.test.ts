@@ -381,6 +381,7 @@ describe('AuthorPage', () => {
       description: '',
       nsfw: false,
       sortOrder: 0,
+      galleryType: null,
       children: [],
       entries: [],
       producers: [],

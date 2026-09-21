@@ -29,6 +29,8 @@ export const tagSuggestionQuerySchema = suggestionQueryBaseSchema.extend({
   vocabulary: suggestionVocabularySchema,
   entryType: z.string().trim().min(1).max(200).optional(),
   facetId: z.coerce.number().int().positive().optional(),
+  /** Visibility boundary: SFW mode must not offer a tag only NSFW Galleries use. */
+  includeNsfw: z.enum(['true', 'false']).optional(),
 });
 
 export const producerSuggestionQuerySchema = suggestionQueryBaseSchema;

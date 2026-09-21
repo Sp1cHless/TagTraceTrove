@@ -9,7 +9,7 @@ import { findProducers } from '../../src/repositories/producer-tag-repository.js
 import { createProducer, linkEntryProducer } from '../../src/repositories/producer-repository.js';
 
 describe('multi-author conversion integration', () => {
-  it('credits the work to the multi-author Author alone, keeping Author rows but hiding empty ones', () => {
+  it('credits the work to the multi-author Author alone and drops an emptied contributor', () => {
     const database = createMigratedMemoryDatabase();
     try {
       const anthology = createEntry(database, { title: 'Anthology 45', type: 'comic' });
@@ -38,9 +38,8 @@ describe('multi-author conversion integration', () => {
       ]);
       expect(detail?.producers.map((producer) => producer.entryCount)).toEqual([1]);
 
-      // The Author rows are kept; only the links are gone. An Author left with
-      // no work disappears from the Author list, an Author with their own work
-      // stays visible without this anthology.
+      // An Author with their own work stays visible without this anthology, and
+      // one this conversion emptied holds no work at all — so its row goes too.
       const visible = findProducers(database).map((producer) => producer.name);
       expect(visible).toEqual(['Established Author', MULTI_AUTHOR_PRODUCER_NAME]);
       const establishedWorks = database.prepare(`
@@ -50,7 +49,7 @@ describe('multi-author conversion integration', () => {
       const stillStored = database.prepare(
         'SELECT COUNT(*) FROM producers WHERE name IN (?, ?)',
       ).pluck().get('Solo Contributor', 'Other Contributor');
-      expect(stillStored).toBe(2);
+      expect(stillStored).toBe(0);
     } finally {
       database.close();
     }
@@ -112,13 +111,14 @@ describe('multi-author conversion integration', () => {
         .toEqual([MULTI_AUTHOR_PRODUCER_NAME]);
 
       // A work with a single real Author is still refused.
+      const soloAuthor = createProducer(database, { name: 'Solo Author' });
       const solo = createEntry(database, { title: 'Solo work', type: 'comic' });
-      linkEntryProducer(database, solo.id, first.id);
+      linkEntryProducer(database, solo.id, soloAuthor.id);
       expect(() => convertEntryAuthorsToMultiAuthor(database, solo.id)).toThrow(
         /Entry with several Authors/u,
       );
       expect(getEntryDetail(database, solo.id)?.producers.map((producer) => producer.name))
-        .toEqual(['First Contributor']);
+        .toEqual(['Solo Author']);
     } finally {
       database.close();
     }

@@ -55,6 +55,30 @@ export function createSection(
   const sortOrder = input.sortOrder ?? 0;
 
   return database.transaction(() => {
+    // Asking for a Section the Gallery already has is the same request, not a
+    // conflict: answer with the one that is there (its empty-named Facet
+    // included) instead of failing on the unique name.
+    const existing = database.prepare(`
+      SELECT section.id AS id, section.sort_order AS sortOrder,
+             (
+               SELECT facet.id FROM tag_groups AS facet
+               WHERE facet.parent_id = section.id AND facet.group_kind = 'facet'
+               ORDER BY facet.sort_order, facet.id
+               LIMIT 1
+             ) AS defaultFacetId
+      FROM tag_groups AS section
+      WHERE section.entry_type = ? AND section.group_kind = 'section' AND section.name = ?
+    `).get(entryType, name) as { id: number; sortOrder: number; defaultFacetId: number } | undefined;
+    if (existing !== undefined) {
+      return {
+        id: existing.id,
+        entryType,
+        name,
+        sortOrder: existing.sortOrder,
+        defaultFacetId: existing.defaultFacetId,
+      };
+    }
+
     const sectionResult = database.prepare(`
       INSERT INTO tag_groups (entry_type, name, group_kind, sort_order)
       VALUES (?, ?, 'section', ?)
@@ -95,6 +119,22 @@ export function createFacet(
   }
 
   const sortOrder = input.sortOrder ?? 0;
+  // Same rule as a Section: a Facet that already exists under this name is the
+  // requested one, not a conflict to report.
+  const existing = database.prepare(`
+    SELECT id, sort_order AS sortOrder
+    FROM tag_groups
+    WHERE parent_id = ? AND group_kind = 'facet' AND name = ?
+  `).get(input.sectionId, name) as { id: number; sortOrder: number } | undefined;
+  if (existing !== undefined) {
+    return {
+      id: existing.id,
+      sectionId: input.sectionId,
+      name,
+      sortOrder: existing.sortOrder,
+    };
+  }
+
   const result = database.prepare(`
     INSERT INTO tag_groups (entry_type, name, group_kind, parent_id, sort_order)
     VALUES (?, ?, 'facet', ?, ?)

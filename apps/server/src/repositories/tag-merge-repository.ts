@@ -1,5 +1,10 @@
 import type { T3Database } from '../database/connection.js';
-import type { TagMergeRequest, TagMergeResponse } from '@t3/shared';
+import type {
+  TagDeleteRequest,
+  TagDeleteResponse,
+  TagMergeRequest,
+  TagMergeResponse,
+} from '@t3/shared';
 
 /**
  * Tag merge: one kept tag absorbs every merged tag — assignments are
@@ -107,4 +112,48 @@ export function mergeTag(
     throw new TagMergeError('tag merge deleted an unexpected number of tags');
   }
   return result;
+}
+
+/**
+ * Delete a tag outright, and with it every Work or Author that carried it.
+ *
+ * The merge path keeps the old names out of the picture because a merge is about
+ * identity ("these two spellings are one tag"). A delete is about the tag not
+ * belonging in the collection at all, so nothing is preserved and nothing is
+ * re-pointed — which is also why it does not touch the dictionary: whether a name
+ * should keep resolving is a separate decision from whether this tag is kept.
+ */
+export function deleteTag(
+  database: T3Database,
+  input: TagDeleteRequest,
+  options: { injectFailure?: () => void } = {},
+): TagDeleteResponse {
+  const { vocabulary, tagId } = input;
+  const tagTable = vocabulary === 'entry' ? 'tags' : 'producer_tags';
+  const assignmentTable = vocabulary === 'entry' ? 'entry_tags' : 'producer_tag_assignments';
+
+  const name = database.prepare(
+    `SELECT name FROM ${tagTable} WHERE id = ?`,
+  ).pluck().get(tagId) as string | undefined;
+  if (name === undefined) {
+    throw new TagMergeError('tag does not exist');
+  }
+
+  // Counted before the delete, because the cascade leaves nothing to count and
+  // the number is the only feedback that says the action matched the intent.
+  const assigned = database.prepare(
+    `SELECT COUNT(*) FROM ${assignmentTable} WHERE tag_id = ?`,
+  ).pluck().get(tagId) as number;
+
+  const tx = database.transaction((): number => {
+    database.prepare(`DELETE FROM ${assignmentTable} WHERE tag_id = ?`).run(tagId);
+    options.injectFailure?.();
+    return database.prepare(`DELETE FROM ${tagTable} WHERE id = ?`).run(tagId).changes;
+  });
+
+  const deleted = tx.immediate();
+  if (deleted !== 1) {
+    throw new TagMergeError('tag delete removed an unexpected number of tags');
+  }
+  return { tagId, tagName: name, removedAssignments: assigned, deletedTags: deleted };
 }

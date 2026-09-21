@@ -1,4 +1,7 @@
+import { normalizeTag } from '@t3/shared';
 import type { T3Database } from '../database/connection.js';
+import { assignEntryTag } from './entry-tag-repository.js';
+import { majorityFacetForTag } from './template-export.js';
 
 export type CollectionKind = 'entry' | 'producer';
 
@@ -23,6 +26,8 @@ export interface CollectionRecord {
   description: string;
   nsfw: boolean;
   sortOrder: number;
+  /** Entry collections only: the Gallery page this folder is curated under. */
+  galleryType: string | null;
   /** Entry collections only: one level of child folders. */
   children: CollectionRecord[];
   entries: CollectionMemberEntry[];
@@ -39,6 +44,7 @@ interface CollectionRow {
   nsfw: number;
   parent_id: number | null;
   sort_order: number;
+  gallery_type: string | null;
 }
 
 function parsePreviewRefs(raw: string | null): string[] {
@@ -65,6 +71,7 @@ function rowToRecord(
     description: row.description,
     nsfw: row.nsfw === 1,
     sortOrder: row.sort_order,
+    galleryType: row.gallery_type,
     children,
     entries,
     producers,
@@ -74,7 +81,7 @@ function rowToRecord(
 
 function listRows(database: T3Database, kind: CollectionKind): CollectionRow[] {
   return database.prepare(`
-    SELECT id, kind, title, description, nsfw, parent_id, sort_order
+    SELECT id, kind, title, description, nsfw, parent_id, sort_order, gallery_type
     FROM collections
     WHERE kind = ?
     ORDER BY sort_order, id
@@ -195,7 +202,7 @@ function requireCollection(
   kind?: CollectionKind,
 ): CollectionRow {
   const row = database.prepare(
-    'SELECT id, kind, title, description, nsfw, parent_id, sort_order FROM collections WHERE id = ?',
+    'SELECT id, kind, title, description, nsfw, parent_id, sort_order, gallery_type FROM collections WHERE id = ?',
   ).get(collectionId) as CollectionRow | undefined;
   if (!row) {
     throw new Error('collection not found');
@@ -213,27 +220,37 @@ export function createCollection(
     title: string;
     description?: string | undefined;
     parentId?: number | null | undefined;
+    galleryType?: string | null | undefined;
   },
 ): CollectionRecord {
   const title = input.title.trim();
   if (title === '') {
     throw new Error('collection title cannot be empty');
   }
+  const requestedGallery = input.galleryType?.trim() ?? '';
+  if (requestedGallery !== '' && input.kind !== 'entry') {
+    throw new Error('only an entry collection can be filed under a Gallery');
+  }
   let parentId: number | null = null;
+  let galleryType: string | null = requestedGallery === '' ? null : requestedGallery;
   if (input.parentId != null) {
     const parent = requireCollection(database, input.parentId, 'entry');
     if (parent.parent_id !== null) {
       throw new Error('cannot nest a collection more than one level deep');
     }
+    if (galleryType !== null && galleryType !== parent.gallery_type) {
+      throw new Error('a nested collection stays on its parent Gallery page');
+    }
+    galleryType = parent.gallery_type;
     parentId = parent.id;
   }
   const maxOrder = database.prepare(
     'SELECT COALESCE(MAX(sort_order), -1) FROM collections WHERE kind = ? AND parent_id IS NULL',
   ).pluck().get(input.kind) as number;
   const result = database.prepare(`
-    INSERT INTO collections (kind, title, description, parent_id, sort_order)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(input.kind, title, input.description?.trim() ?? '', parentId, maxOrder + 1);
+    INSERT INTO collections (kind, title, description, parent_id, sort_order, gallery_type)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(input.kind, title, input.description?.trim() ?? '', parentId, maxOrder + 1, galleryType);
   return getCollection(database, Number(result.lastInsertRowid), { compact: true })!;
 }
 
@@ -352,13 +369,26 @@ export function createCollectionFromEntries(
       suffix += 1;
     }
 
-    const collection = createCollection(database, { kind: 'entry', title });
+    // A batch of just-imported Entries is normally one Gallery, so the throwaway
+    // folder opens on that Gallery page; a mixed batch stays unfiled.
+    const unique = [...new Set(entryIds)];
+    const placeholders = unique.map(() => '?').join(', ');
+    const batchTypes = unique.length === 0
+      ? []
+      : database.prepare(
+        `SELECT DISTINCT type FROM entries WHERE id IN (${placeholders})`,
+      ).pluck().all(...unique) as string[];
+
+    const collection = createCollection(database, {
+      kind: 'entry',
+      title,
+      galleryType: batchTypes.length === 1 ? batchTypes[0]! : null,
+    });
     const insert = database.prepare(`
       INSERT INTO collection_entries (collection_id, entry_id) VALUES (?, ?)
       ON CONFLICT (collection_id, entry_id) DO NOTHING
     `);
     const exists = database.prepare('SELECT 1 FROM entries WHERE id = ?');
-    const unique = [...new Set(entryIds)];
     let entryCount = 0;
     for (const entryId of unique) {
       if (exists.get(entryId) === undefined) continue;
@@ -366,6 +396,80 @@ export function createCollectionFromEntries(
       entryCount += 1;
     }
     return { collectionId: collection.id, title: collection.title, entryCount };
+  })();
+}
+
+export interface CollectionCommonTagResult {
+  tagId: number | null;
+  entriesAffected: number;
+  alreadyPresent: number;
+  skipped: number;
+}
+
+/**
+ * Puts one Tag on every work a folder holds, its child folders included. Each
+ * work keeps the placement that Gallery already uses for that Tag name, and an
+ * unseen name lands in the Gallery's default (empty-named) Facet, so a bulk add
+ * cannot scatter one Tag across different Facets of the same Gallery. A work
+ * whose Gallery has no structure yet is counted as skipped instead of failing.
+ */
+export function addCommonTagToCollection(
+  database: T3Database,
+  collectionId: number,
+  name: string,
+): CollectionCommonTagResult {
+  requireCollection(database, collectionId, 'entry');
+  const tagName = name.trim();
+  if (tagName === '') {
+    throw new Error('tag name cannot be empty');
+  }
+
+  return database.transaction(() => {
+    const members = database.prepare(`
+      SELECT entry.id AS id, entry.type AS type
+      FROM collection_entries AS link
+      JOIN entries AS entry ON entry.id = link.entry_id
+      WHERE link.collection_id IN (
+        SELECT id FROM collections WHERE id = ? OR parent_id = ?
+      )
+      ORDER BY entry.id
+    `).all(collectionId, collectionId) as Array<{ id: number; type: string }>;
+
+    let entriesAffected = 0;
+    let alreadyPresent = 0;
+    let skipped = 0;
+    let tagId: number | null = null;
+    const defaultFacetStatement = database.prepare(`
+      SELECT id FROM tag_groups
+      WHERE entry_type = ? AND group_kind = 'facet' AND name = ''
+      ORDER BY id LIMIT 1
+    `);
+    const tagIdStatement = database.prepare('SELECT id FROM tags WHERE normalized_name = ?');
+    const assignmentStatement = database.prepare(
+      'SELECT 1 FROM entry_tags WHERE entry_id = ? AND tag_id = ?',
+    );
+
+    for (const member of members) {
+      const entryType = member.type.trim();
+      const existingTagId = tagIdStatement.pluck().get(normalizeTag(tagName)) as number | undefined;
+      if (existingTagId !== undefined) {
+        tagId = existingTagId;
+        if (assignmentStatement.get(member.id, existingTagId) !== undefined) {
+          alreadyPresent += 1;
+          continue;
+        }
+      }
+      const facetId = majorityFacetForTag(database, entryType, tagName)?.facetId
+        ?? (defaultFacetStatement.pluck().get(entryType) as number | undefined);
+      if (facetId === undefined) {
+        skipped += 1;
+        continue;
+      }
+      tagId = assignEntryTag(database, { entryId: member.id, facetId, name: tagName }).tagId;
+      entriesAffected += 1;
+    }
+
+    return { tagId, entriesAffected, alreadyPresent, skipped };
   })();
 }
 

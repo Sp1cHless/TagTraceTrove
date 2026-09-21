@@ -32,7 +32,7 @@ declare const self: {
 };
 declare const __T3_PRECACHE_URLS__: readonly string[] | undefined;
 
-export const SW_VERSION = 't3-shell-v4';
+export const SW_VERSION = 't3-shell-v5';
 export { OFFLINE_MEDIA_CACHE };
 
 export type CacheStrategy =

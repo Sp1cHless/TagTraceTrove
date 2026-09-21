@@ -8,7 +8,8 @@ import type { GalleryApi, GalleryAuthorSummary, GalleryEntrySummary } from '../s
 import CollectionsPage from '../src/CollectionsPage.vue';
 import RandomPage from '../src/RandomPage.vue';
 import RecentViewPage from '../src/RecentViewPage.vue';
-import { showNsfw } from '../src/stores/preferences.js';
+import ViewLaterPage from '../src/ViewLaterPage.vue';
+import { showNsfw, viewLaterIds } from '../src/stores/preferences.js';
 
 const safeGallery: GallerySummary = { type: 'safe', entryCount: 1, nsfw: false };
 const adultGallery: GallerySummary = { type: 'adult', entryCount: 1, nsfw: true };
@@ -47,6 +48,7 @@ function apiStub(overrides: Partial<GalleryApi>): GalleryApi {
 beforeEach(() => {
   window.localStorage.clear();
   showNsfw.value = false;
+  viewLaterIds.value = [];
 });
 
 describe('whole-Gallery partition visibility outside Gallery pages', () => {
@@ -60,6 +62,34 @@ describe('whole-Gallery partition visibility outside Gallery pages', () => {
     expect(wrapper.text()).not.toContain('Adult Work');
   });
 
+  it('hides NSFW works and their Gallery tab from View later', async () => {
+    viewLaterIds.value = [1, 2];
+    const wrapper = mount(ViewLaterPage, { props: { api: apiStub({}) } });
+    await flushPromises();
+
+    expect(wrapper.find('[data-view-later-tab="safe"]').exists()).toBe(true);
+    expect(wrapper.find('[data-view-later-tab="adult"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="view-later-entry-count"]').text()).toBe('1');
+    expect(wrapper.text()).toContain('Safe Work');
+    expect(wrapper.text()).not.toContain('Adult Work');
+  });
+
+  it('reveals the NSFW View later tab and its works as soon as Show NSFW is turned on', async () => {
+    viewLaterIds.value = [1, 2];
+    const wrapper = mount(ViewLaterPage, { props: { api: apiStub({}) } });
+    await flushPromises();
+    expect(wrapper.find('[data-view-later-tab="adult"]').exists()).toBe(false);
+
+    showNsfw.value = true;
+    await flushPromises();
+
+    expect(wrapper.find('[data-view-later-tab="adult"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="view-later-entry-count"]').text()).toBe('2');
+    await wrapper.get('[data-view-later-tab="adult"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Adult Work');
+  });
+
   it('hides entries from NSFW Galleries inside an SFW Collection', async () => {
     const collection: CollectionRecordDto = {
       id: 10,
@@ -68,6 +98,7 @@ describe('whole-Gallery partition visibility outside Gallery pages', () => {
       description: '',
       nsfw: false,
       sortOrder: 0,
+      galleryType: 'safe',
       children: [],
       entries: [
         { id: 1, title: 'Safe Work', type: 'safe', coverRef: null, previewRefs: [] },
@@ -99,6 +130,7 @@ describe('whole-Gallery partition visibility outside Gallery pages', () => {
       description: '',
       nsfw: true,
       sortOrder: 0,
+      galleryType: 'safe',
       children: [],
       entries: [{ id: 2, title: 'Adult Work', type: 'adult', coverRef: null, previewRefs: [] }],
       producers: [],

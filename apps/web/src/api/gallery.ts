@@ -11,6 +11,7 @@ import {
   createFacetRequestSchema,
   createRatingSlotRequestSchema,
   createSectionRequestSchema,
+  createSectionResponseSchema,
   entryDetailResponseSchema,
   entryContentRecordSchema,
   entrySourceRecordSchema,
@@ -21,6 +22,8 @@ import {
   entryTagUsageSchema,
   facetFilterOptionsResponseSchema,
   collectionRecordSchema,
+  addCollectionTagRequestSchema,
+  addCollectionTagResponseSchema,
   createCollectionRequestSchema,
   createTemporaryCollectionRequestSchema,
   temporaryCollectionResponseSchema,
@@ -64,7 +67,12 @@ import {
   sourceLibraryRecordSchema,
   sourceStatusPatchSchema,
   sourceStatusRecordSchema,
+  navigationCountsSchema,
   syncCapabilitiesSchema,
+  syncMediaUploadMetadataSchema,
+  syncMediaUploadResultSchema,
+  syncReplayOperationSchema,
+  syncReplayResultSchema,
   syncSnapshotSchema,
   ratingRowSchema,
   ratingSlotSchema,
@@ -75,6 +83,7 @@ import {
   updateCollectionRequestSchema,
   tagLayoutApplyResponseSchema,
   tagSearchHitSchema,
+  tagDeleteRequestSchema,
   tagMergeRequestSchema,
   templateSummarySchema,
   taxonomyAliasSchema,
@@ -109,7 +118,12 @@ import {
   type CommitSourceMaintenanceResponse,
   type SourceStatusPatch,
   type SourceStatusRecordDto,
+  type NavigationCounts,
   type SyncCapabilities,
+  type SyncMediaUploadMetadata,
+  type SyncMediaUploadResult,
+  type SyncReplayOperation,
+  type SyncReplayResult,
   type SyncSnapshot,
   type EntryTagUsage,
   type FacetFilterOptions,
@@ -186,6 +200,26 @@ export interface GalleryAuthorSummary {
 }
 
 
+export interface OfflineEntryCreateRequest {
+  title: string;
+  type: string;
+  uploadDate: string | null;
+  pageCount: number | null;
+  ratings: Array<{ slotId: number; stars: number }>;
+  viewLater: boolean;
+  coverFile: File | null;
+  previewFile: File | null;
+}
+
+export interface PendingOfflineEntryCreate {
+  localKey: `local:${string}`;
+  title: string;
+  type: string;
+  uploadDate: string | null;
+  pageCount: number | null;
+  status: 'pending' | 'conflict' | 'failed';
+}
+
 export interface GalleryApi {
   assetUrl(path: string): string;
   getViewLaterState(): Promise<ViewLaterState>;
@@ -231,7 +265,22 @@ export interface GalleryApi {
   listEntrySources(entryId: number): Promise<EntrySourceRecordDto[]>;
   listSourceLibrary(): Promise<SourceLibraryRecordDto[]>;
   getSyncCapabilities(): Promise<SyncCapabilities>;
+  /** Sidebar numbers that follow the Show NSFW preference. */
+  getNavigationCounts?(includeNsfw?: boolean): Promise<NavigationCounts>;
   fetchSyncSnapshot(): Promise<SyncSnapshot>;
+  replaySyncOperation?(operation: SyncReplayOperation): Promise<SyncReplayResult>;
+  uploadSyncMedia?(
+    uploadId: string,
+    metadata: SyncMediaUploadMetadata,
+    blob: Blob,
+  ): Promise<SyncMediaUploadResult>;
+  enqueueOfflineEntryCreate?(
+    input: OfflineEntryCreateRequest,
+    transportError?: unknown,
+  ): Promise<{ localKey: string }>;
+  listPendingOfflineEntryCreates?(): Promise<PendingOfflineEntryCreate[]>;
+  flushOfflineOutbox?(): Promise<void>;
+  discardBlockedOfflineOperations?(): Promise<void>;
   probeSourceTarget(homepage: string): Promise<{
     ok: true;
     adapterKey: string;
@@ -274,7 +323,13 @@ export interface GalleryApi {
   deleteEntryContent(contentId: number): Promise<void>;
   reorderEntryContents(entryId: number, orderedContentIds: number[]): Promise<void>;
   reorderSectionFacets(sectionId: number, orderedFacetIds: number[]): Promise<void>;
-  createSection(input: CreateSectionRequest): Promise<void>;
+  createSection(input: CreateSectionRequest): Promise<{
+    id: number;
+    entryType: string;
+    name: string;
+    sortOrder: number;
+    defaultFacetId: number;
+  }>;
   createFacet(input: CreateFacetRequest): Promise<void>;
   createEntryRatingSlot(entryId: number, name: string): Promise<RatingSlotDto>;
   listRatingSlots(entryType: string): Promise<RatingSlotDto[]>;
@@ -290,6 +345,13 @@ export interface GalleryApi {
   createTemporaryCollection(entryIds: number[]): Promise<TemporaryCollectionResponse>;
   updateCollection(collectionId: number, input: { title?: string; description?: string }): Promise<CollectionRecordDto>;
   deleteCollection(collectionId: number): Promise<void>;
+  /** One tag on every work this folder holds, child folders included. */
+  addCollectionTag(collectionId: number, name: string): Promise<{
+    tagId: number | null;
+    entriesAffected: number;
+    alreadyPresent: number;
+    skipped: number;
+  }>;
   setCollectionNsfw(collectionId: number, nsfw: boolean): Promise<CollectionRecordDto>;
   reorderCollections(kind: CollectionKind, orderedCollectionIds: number[]): Promise<void>;
   addCollectionEntry(collectionId: number, entryId: number): Promise<void>;
@@ -303,6 +365,10 @@ export interface GalleryApi {
     keptTagId: number;
     mergedTagIds: number[];
   }): Promise<{ keptTagId: number; movedAssignments: number; skippedDuplicates: number; deletedTags: number }>;
+  deleteTag(input: {
+    vocabulary: 'entry' | 'producer';
+    tagId: number;
+  }): Promise<{ tagId: number; tagName: string; removedAssignments: number; deletedTags: number }>;
   listCollectionsForProducer(producerId: number): Promise<number[]>;
   recordEntryView(entryId: number): Promise<UsageInfo>;
   likeEntry(entryId: number): Promise<UsageInfo>;
@@ -357,10 +423,35 @@ export interface GalleryApi {
   ): Promise<AuthorDirectoryDto>;
 }
 
-export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi {
+const CAPACITOR_HTTP_INTERCEPTOR = '/_capacitor_http_interceptor_';
+
+export function resolveAssetUrl(
+  path: string,
+  assetBase = '',
+  capacitorServerUrl?: string,
+): string {
+  const resolved = /^https?:\/\//u.test(path) ? path : `${assetBase}${path.replace(/^\/+/, '')}`;
+  if (!capacitorServerUrl?.trim()
+    || !/^https?:\/\//u.test(resolved)
+    || resolved.includes(CAPACITOR_HTTP_INTERCEPTOR)) {
+    return resolved;
+  }
+  const proxyUrl = new URL(capacitorServerUrl);
+  proxyUrl.pathname = CAPACITOR_HTTP_INTERCEPTOR;
+  proxyUrl.search = '';
+  proxyUrl.hash = '';
+  proxyUrl.searchParams.append('u', resolved);
+  return proxyUrl.toString();
+}
+
+export function createGalleryApi(
+  client: ApiClient,
+  assetBase = '',
+  capacitorServerUrl?: string,
+): GalleryApi {
   return {
     assetUrl(path) {
-      return /^https?:\/\//u.test(path) ? path : `${assetBase}${path.replace(/^\/+/, '')}`;
+      return resolveAssetUrl(path, assetBase, capacitorServerUrl);
     },
     async getViewLaterState() {
       return viewLaterStateSchema.parse(await client.request('view-later'));
@@ -410,6 +501,7 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
           excludeIds: parsed.excludeIds.join(','),
           entryType: parsed.entryType,
           facetId: parsed.facetId,
+          includeNsfw: parsed.includeNsfw,
         },
         ...(signal === undefined ? {} : { signal }),
       }));
@@ -578,8 +670,29 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
     async getSyncCapabilities() {
       return syncCapabilitiesSchema.parse(await client.request('sync/capabilities'));
     },
+    async getNavigationCounts(includeNsfw = true) {
+      return navigationCountsSchema.parse(await client.request('navigation-counts', {
+        query: { includeNsfw: String(includeNsfw) },
+      }));
+    },
     async fetchSyncSnapshot() {
       return syncSnapshotSchema.parse(await client.request('sync/snapshot?media=thumbnails'));
+    },
+    async replaySyncOperation(operation) {
+      return syncReplayResultSchema.parse(await client.request('sync/replay', {
+        method: 'POST',
+        body: syncReplayOperationSchema.parse(operation),
+      }));
+    },
+    async uploadSyncMedia(uploadId, metadata, blob) {
+      const normalized = syncMediaUploadMetadataSchema.parse(metadata);
+      const formData = new FormData();
+      formData.set('metadata', JSON.stringify(normalized));
+      formData.set('file', blob, `${normalized.kind}-offline`);
+      return syncMediaUploadResultSchema.parse(await client.request(`sync/media/${uploadId}`, {
+        method: 'PUT',
+        formData,
+      }));
     },
     async probeSourceTarget(homepage) {
       let response: { ok: boolean; adapterKey?: string; displayName?: string; origin?: string; reason?: string; detail?: string };
@@ -696,10 +809,10 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
       });
     },
     async createSection(input) {
-      await client.request('sections', {
+      return createSectionResponseSchema.parse(await client.request('sections', {
         method: 'POST',
         body: createSectionRequestSchema.parse(input),
-      });
+      }));
     },
     async createFacet(input) {
       await client.request('facets', {
@@ -781,6 +894,12 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
         body: updateCollectionRequestSchema.parse(input),
       }));
     },
+    async addCollectionTag(collectionId, name) {
+      return addCollectionTagResponseSchema.parse(await client.request(
+        `collections/${collectionId}/tags`,
+        { method: 'POST', body: addCollectionTagRequestSchema.parse({ name }) },
+      ));
+    },
     async deleteCollection(collectionId) {
       await client.request(`collections/${collectionId}`, { method: 'DELETE' });
     },
@@ -808,6 +927,12 @@ export function createGalleryApi(client: ApiClient, assetBase = ''): GalleryApi 
     },
     async removeCollectionProducer(collectionId, producerId) {
       await client.request(`collections/${collectionId}/producers/${producerId}`, { method: 'DELETE' });
+    },
+    async deleteTag(input) {
+      return client.request('tags/delete', {
+        method: 'POST',
+        body: tagDeleteRequestSchema.parse(input),
+      }) as Promise<{ tagId: number; tagName: string; removedAssignments: number; deletedTags: number }>;
     },
     async mergeTag(input) {
       return client.request('tags/merge', {
@@ -945,8 +1070,10 @@ export function resolveDefaultApiBaseUrl(
   configuredBaseUrl: string | undefined,
   production: boolean,
   origin: string,
+  runtimeBaseUrl?: string,
 ): string {
   if (configuredBaseUrl?.trim()) return configuredBaseUrl;
+  if (runtimeBaseUrl?.trim()) return runtimeBaseUrl;
   return production
     ? new URL('/api/', origin).toString()
     : 'http://127.0.0.1:8765/api/';
@@ -957,6 +1084,14 @@ export function createDefaultGalleryApi(): GalleryApi {
     import.meta.env.VITE_API_BASE_URL,
     import.meta.env.PROD,
     window.location.origin,
+    document.querySelector<HTMLMetaElement>('meta[name="t3-api-base-url"]')?.content,
   );
-  return createGalleryApi(createApiClient({ baseUrl }), new URL('/', baseUrl).toString());
+  const capacitorServerUrl = (window as Window & {
+    Capacitor?: { getServerUrl?: () => string };
+  }).Capacitor?.getServerUrl?.();
+  return createGalleryApi(
+    createApiClient({ baseUrl }),
+    new URL('/', baseUrl).toString(),
+    capacitorServerUrl,
+  );
 }

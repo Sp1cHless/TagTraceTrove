@@ -17,7 +17,7 @@ describe('service worker policy', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('shells out the versioned shell URLs for precache', () => {
-    expect(SW_VERSION).toMatch(/^t3-shell-v\d+$/u);
+    expect(SW_VERSION).toBe('t3-shell-v5');
     expect(shellUrls()).toEqual(['/', '/index.html', '/manifest.webmanifest']);
   });
 

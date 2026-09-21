@@ -910,15 +910,25 @@ describe('HTTP error boundary', () => {
       body: JSON.stringify({ title: 'Endfield', type: 'game' }),
     })).json() as { id: number };
     const tagBody = JSON.stringify({ facetId: section.defaultFacetId, name: 'ARPG' });
-    await app.request(`/api/entries/${entry.id}/tags`, {
+    const assigned = await app.request(`/api/entries/${entry.id}/tags`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: tagBody,
     });
-    const conflict = await app.request(`/api/entries/${entry.id}/tags`, {
+    expect(assigned.status).toBe(201);
+    // The same request twice is the same intent, not a conflict: a tag an Entry
+    // already carries is simply landed on the Facet it was typed into.
+    const repeated = await app.request(`/api/entries/${entry.id}/tags`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: tagBody,
+    });
+    expect(repeated.status).toBe(201);
+    // A Facet that does not exist is the real conflict on this route.
+    const conflict = await app.request(`/api/entries/${entry.id}/tags`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ facetId: 999_999, name: 'Nowhere' }),
     });
     expect(conflict.status).toBe(409);
     await expect(conflict.json()).resolves.toMatchObject({

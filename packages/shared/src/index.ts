@@ -10,6 +10,7 @@ export * from './schemas/source-maintenance.js';
 export * from './schemas/sync.js';
 export {
   importAuthorRatingSchema,
+  importBatchOriginSchema,
   importBatchSchema,
   importCommitMappingSchema,
   importCommitRequestSchema,
@@ -20,6 +21,7 @@ export {
   importPreviewSchema,
   type ImportAuthorRating,
   type ImportBatch,
+  type ImportBatchOrigin,
   type ImportCommitMapping,
   type ImportCommitResult,
   type ImportPreview,

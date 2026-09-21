@@ -12,6 +12,10 @@ interface ForeignKeyViolation {
   fkid: number;
 }
 
+interface TableColumn {
+  name: string;
+}
+
 export function inspectDatabase(database: T3Database): DatabaseDoctorResult {
   const issues: string[] = [];
   const integrityRows = database.pragma('integrity_check') as Array<{ integrity_check: string }>;
@@ -143,7 +147,53 @@ export function inspectDatabase(database: T3Database): DatabaseDoctorResult {
     issues.push(`invalid collection producer member: ${member}`);
   }
 
+  // A folder's Gallery page is a scope name, never a foreign key: a scope whose
+  // Entry type no longer exists would leave the folder unreachable.
+  const collectionColumns = new Set(
+    (database.pragma('table_info(collections)') as TableColumn[]).map((column) => column.name),
+  );
+  if (collectionColumns.has('gallery_type')) {
+    const orphanedGalleryScopes = database.prepare(`
+      SELECT collection.id || ':' || collection.gallery_type
+      FROM collections AS collection
+      WHERE collection.gallery_type IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM entries WHERE entries.type = collection.gallery_type)
+    `).pluck().all() as string[];
+    for (const scope of orphanedGalleryScopes) {
+      issues.push(`collection Gallery scope without a Gallery: ${scope}`);
+    }
+  }
+
+  const entriesColumns = new Set(
+    (database.pragma('table_info(entries)') as TableColumn[]).map((column) => column.name),
+  );
+  const contentColumns = new Set(
+    (database.pragma('table_info(entry_contents)') as TableColumn[]).map((column) => column.name),
+  );
+  if (entriesColumns.has('sync_uid')) {
+    const missingEntrySyncIds = database.prepare(`
+      SELECT id FROM entries
+      WHERE sync_uid IS NULL OR trim(sync_uid) = '' OR sync_version < 1
+      ORDER BY id
+    `).pluck().all() as number[];
+    for (const id of missingEntrySyncIds) {
+      issues.push(`missing sync identity: entries ${id}`);
+    }
+  }
+  if (contentColumns.has('sync_uid')) {
+    const missingContentSyncIds = database.prepare(`
+      SELECT id FROM entry_contents
+      WHERE sync_uid IS NULL OR trim(sync_uid) = '' OR sync_version < 1
+      ORDER BY id
+    `).pluck().all() as number[];
+    for (const id of missingContentSyncIds) {
+      issues.push(`missing sync identity: entry_contents ${id}`);
+    }
+  }
+
   const requiredIndexes = ['idx_entries_page_date', 'idx_entries_page_title'];
+  if (entriesColumns.has('sync_uid')) requiredIndexes.push('uq_entries_sync_uid');
+  if (contentColumns.has('sync_uid')) requiredIndexes.push('uq_entry_contents_sync_uid');
   const presentIndexes = new Set(database.prepare(`
     SELECT name FROM sqlite_master WHERE type = 'index'
   `).pluck().all() as string[]);

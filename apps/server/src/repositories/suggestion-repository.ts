@@ -14,6 +14,7 @@ type TagCandidateRow = {
   normalized_name: string;
   same_context_usage_count: number;
   total_usage_count: number;
+  visible_usage_count: number;
 };
 
 type AliasRow = {
@@ -119,6 +120,21 @@ export function suggestTags(
   const entryJoin = input.vocabulary === 'entry'
     ? 'LEFT JOIN entries AS entry ON entry.id = assignment.entry_id'
     : '';
+  // Usage that the current SFW/NSFW boundary can show. A tag reaching zero here
+  // is offered by NSFW Galleries only, so SFW mode must not suggest it — the same
+  // rule the Tag search applies.
+  const boundaryJoin = input.vocabulary === 'entry'
+    ? 'LEFT JOIN gallery_settings AS gallery ON gallery.entry_type = entry.type'
+    : '';
+  const visibleUsageSql = input.vocabulary === 'entry'
+    ? `COUNT(DISTINCT CASE WHEN COALESCE(gallery.nsfw, 0) = 0 THEN assignment.entry_id END)`
+    : `COUNT(DISTINCT CASE WHEN NOT EXISTS (
+        SELECT 1
+        FROM entry_producers AS relation
+        JOIN entries AS work ON work.id = relation.entry_id
+        JOIN gallery_settings AS partition ON partition.entry_type = work.type
+        WHERE relation.producer_id = assignment.producer_id AND partition.nsfw = 1
+      ) THEN assignment.producer_id END)`;
 
   const rows = database.prepare(`
     SELECT
@@ -126,11 +142,13 @@ export function suggestTags(
       tag.name,
       tag.normalized_name,
       ${context.sql} AS same_context_usage_count,
-      COUNT(DISTINCT assignment.${totalSubjectColumn}) AS total_usage_count
+      COUNT(DISTINCT assignment.${totalSubjectColumn}) AS total_usage_count,
+      ${visibleUsageSql} AS visible_usage_count
     FROM ${table} AS tag
     LEFT JOIN ${assignmentTable} AS assignment
       ON assignment.${assignmentTagColumn} = tag.id
     ${entryJoin}
+    ${boundaryJoin}
     WHERE (
       instr(tag.normalized_name, ?) > 0
       OR EXISTS (
@@ -144,10 +162,14 @@ export function suggestTags(
     )
     ${exclusionSql}
     GROUP BY tag.id, tag.name, tag.normalized_name
+    HAVING total_usage_count > 0
   `).all(...context.parameters, query, query, ...exclusions) as TagCandidateRow[];
 
-  const aliases = aliasesForTagCandidates(database, input.vocabulary, rows, query);
-  return rankRelationSuggestions(rows.map((row) => ({
+  const visible = input.includeNsfw === 'false'
+    ? rows.filter((row) => row.visible_usage_count > 0)
+    : rows;
+  const aliases = aliasesForTagCandidates(database, input.vocabulary, visible, query);
+  return rankRelationSuggestions(visible.map((row) => ({
     id: row.id,
     name: row.name,
     aliases: aliases.get(row.id) ?? [],

@@ -44,6 +44,8 @@ import {
   galleryPartitionRequestSchema,
   gallerySummarySchema,
   reorderCollectionsRequestSchema,
+  addCollectionTagRequestSchema,
+  addCollectionTagResponseSchema,
   tagSearchQuerySchema,
   updateCollectionRequestSchema,
   tagSearchHitSchema,
@@ -53,6 +55,8 @@ import {
   layoutResponseSchema,
   layoutTemplateApplyResponseSchema,
   mergeViewLaterRequestSchema,
+  navigationCountsQuerySchema,
+  navigationCountsSchema,
   mergeAuthorEntriesRequestSchema,
   mergeAuthorEntriesResponseSchema,
   convertEntryAuthorsResponseSchema,
@@ -76,6 +80,8 @@ import {
   linkEntryAuthorByNameRequestSchema,
   linkEntryAuthorByNameResponseSchema,
   renameEntryTagRequestSchema,
+  tagDeleteRequestSchema,
+  tagDeleteResponseSchema,
   tagMergeRequestSchema,
   tagMergeResponseSchema,
   renameProducerTagRequestSchema,
@@ -128,6 +134,10 @@ import {
   sourceStatusPatchSchema,
   sourceStatusRecordSchema,
   syncCapabilitiesSchema,
+  syncMediaUploadMetadataSchema,
+  syncMediaUploadResultSchema,
+  syncReplayOperationSchema,
+  syncReplayResultSchema,
   syncSnapshotSchema,
 } from '@t3/shared';
 import type {
@@ -232,7 +242,7 @@ import {
   setProducerRating,
 } from '../repositories/rating-repository.js';
 import { likeEntry, recordEntryView } from '../repositories/usage-repository.js';
-import { setGalleryPartition } from '../repositories/partition-repository.js';
+import { readNavigationCounts, setGalleryPartition } from '../repositories/partition-repository.js';
 import {
   listAuthorAliasGroups,
   writeAuthorAliasGroup,
@@ -244,6 +254,7 @@ import {
 } from '../repositories/template-export.js';
 import {
   addCollectionEntry,
+  addCommonTagToCollection,
   createCollectionFromEntries,
   addCollectionProducer,
   createCollection,
@@ -274,8 +285,8 @@ import {
   upsertTaxonomyAlias,
 } from '../repositories/taxonomy-repository.js';
 import { suggestProducers, suggestTags } from '../repositories/suggestion-repository.js';
-import { linkOrCreateEntryAuthor } from '../repositories/producer-repository.js';
-import { mergeTag } from '../repositories/tag-merge-repository.js';
+import { linkOrCreateEntryAuthor, pruneWorklessProducers } from '../repositories/producer-repository.js';
+import { deleteTag, mergeTag } from '../repositories/tag-merge-repository.js';
 import {
   createRun,
   getRun,
@@ -289,6 +300,8 @@ import { executeSearchRun } from '../source-maintenance/job-manager.js';
 import { commitSourceMaintenanceRun, CommitConflictError, CommitStaleError } from '../source-maintenance/commit-service.js';
 import { getSourceAdapter, probeTargetHomepage } from '../source-maintenance/adapter-registry.js';
 import { buildSyncCapabilities, buildSyncSnapshot } from '../sync/sync-service.js';
+import { replaySyncMediaUpload, SyncMediaUploadError } from '../sync/media-replay-service.js';
+import { replaySyncOperation } from '../sync/replay-service.js';
 import type { TitleCatalogProvider } from '../source-maintenance/catalog-provider.js';
 
 async function parseJson<T>(request: Request, schema: ZodType<T>): Promise<T> {
@@ -602,6 +615,17 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     return context.json(collectionRecordSchema.parse(getCollection(database, collectionId, { compact: true })));
   });
 
+  // One tag on every work a folder holds, child folders included.
+  app.post('/api/collections/:collectionId/tags', async (context) => {
+    const { collectionId } = collectionIdParamsSchema.parse({
+      collectionId: context.req.param('collectionId'),
+    });
+    const input = await parseJson(context.req.raw, addCollectionTagRequestSchema);
+    return context.json(addCollectionTagResponseSchema.parse(
+      addCommonTagToCollection(database, collectionId, input.name),
+    ), 201);
+  });
+
   app.put('/api/collections/order', async (context) => {
     const input = await parseJson(context.req.raw, reorderCollectionsRequestSchema);
     const kind = collectionKindSchema.parse(context.req.query().kind);
@@ -690,6 +714,21 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     }
     const result = linkOrCreateEntryAuthor(database, entryId, input.name);
     return context.json(linkEntryAuthorByNameResponseSchema.parse(result));
+  });
+
+  app.post('/api/tags/delete', async (context) => {
+    const input = await parseJson(context.req.raw, tagDeleteRequestSchema);
+    const backupPath = options.databasePath === undefined
+      ? null
+      : `${options.databasePath}.tag-delete-backup-${new Date()
+        .toISOString()
+        .replace(/[-:]/gu, '')
+        .replace(/\.\d{3}/u, '')}`;
+    if (backupPath !== null) {
+      await database.backup(backupPath);
+    }
+    const result = deleteTag(database, input);
+    return context.json(tagDeleteResponseSchema.parse(result));
   });
 
   app.post('/api/tags/merge', async (context) => {
@@ -799,6 +838,14 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
   app.post('/api/entries/query', async (context) => {
     const input = await parseJson(context.req.raw, entryPageQueryRequestSchema);
     return context.json(entryPageResponseSchema.parse(queryEntryPage(database, input)));
+  });
+
+  // One interface for the sidebar's visibility-aware numbers.
+  app.get('/api/navigation-counts', (context) => {
+    const { includeNsfw } = navigationCountsQuerySchema.parse(context.req.query());
+    return context.json(navigationCountsSchema.parse(
+      readNavigationCounts(database, { includeNsfw: includeNsfw !== 'false' }),
+    ));
   });
 
   app.get('/api/entries/facet-options/:entryType', (context) => {
@@ -1111,6 +1158,9 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     let executions: ReturnType<typeof executeProducerMerges> = [];
     try {
       executions = executeProducerMerges(database, plans);
+      // An absorbed Author is deleted by the merge itself; a keeper that ends up
+      // holding no work at all follows it out.
+      pruneWorklessProducers(database, plans.map((plan) => plan.keeper.id));
     } finally {
       database.pragma('foreign_keys = ON');
     }
@@ -1384,6 +1434,55 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
       .parse(context.req.query());
     const snapshot = buildSyncSnapshot(database, { media });
     return context.json(syncSnapshotSchema.parse(snapshot));
+  });
+
+  app.post('/api/sync/replay', async (context) => {
+    const operation = await parseJson(context.req.raw, syncReplayOperationSchema);
+    return context.json(syncReplayResultSchema.parse(replaySyncOperation(database, operation)));
+  });
+
+  app.put('/api/sync/media/:uploadId', async (context) => {
+    if (!options.assetRoot) {
+      return context.json(errorPayload('CONFLICT', 'Managed media storage is unavailable'), 409);
+    }
+    const uploadId = z.string().uuid().parse(context.req.param('uploadId'));
+    const body = await context.req.raw.formData();
+    const rawMetadata = body.get('metadata');
+    const file = body.get('file');
+    if (typeof rawMetadata !== 'string') {
+      return context.json(errorPayload('VALIDATION_ERROR', 'Missing media metadata'), 400);
+    }
+    let metadataJson: unknown;
+    try {
+      metadataJson = JSON.parse(rawMetadata);
+    } catch {
+      return context.json(errorPayload('VALIDATION_ERROR', 'Invalid media metadata JSON'), 400);
+    }
+    const metadata = syncMediaUploadMetadataSchema.parse(metadataJson);
+    const uploadedFile = typeof file === 'object'
+      && file !== null
+      && 'arrayBuffer' in file
+      && typeof file.arrayBuffer === 'function'
+      ? file
+      : null;
+    if (uploadedFile === null) {
+      return context.json(errorPayload('VALIDATION_ERROR', 'Missing media Blob'), 400);
+    }
+    try {
+      const result = await replaySyncMediaUpload(
+        database,
+        options.assetRoot,
+        uploadId,
+        metadata,
+        new Uint8Array(await uploadedFile.arrayBuffer()),
+      );
+      return context.json(syncMediaUploadResultSchema.parse(result));
+    } catch (error) {
+      if (!(error instanceof SyncMediaUploadError)) throw error;
+      if (error.status === 404) return context.json(errorPayload('NOT_FOUND', error.message), 404);
+      if (error.status === 409) return context.json(errorPayload('CONFLICT', error.message), 409);
+      return context.json(errorPayload('VALIDATION_ERROR', error.message), 400);
+    }
   });
 
   // --- Source invalidation maintenance (Advanced) ---------------------------

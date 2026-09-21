@@ -1,9 +1,10 @@
 import type { T3Database } from '../database/connection.js';
-import { listEntryTags } from './entry-tag-repository.js';
+import { listEntryTags, pruneUnusedTags } from './entry-tag-repository.js';
 import { listLayout } from './layout-repository.js';
 import { listEntryRatings, type RatingRowRecord } from './rating-repository.js';
 import { getEntryUsage } from './usage-repository.js';
 import { listNsfwGalleryTypes } from './partition-repository.js';
+import { pruneWorklessProducers } from './producer-repository.js';
 
 export interface EntryDetailTag {
   id: number;
@@ -77,6 +78,8 @@ export interface GallerySummary {
 export interface CreateEntryInput {
   title: string;
   type: string;
+  /** Reserved for sync replay; normal online creation lets SQLite generate it. */
+  syncUid?: string | undefined;
   coverRef?: string | null | undefined;
   previewRef?: string | null | undefined;
   uploadDate?: string | null | undefined;
@@ -167,10 +170,7 @@ export function createEntry(database: T3Database, input: CreateEntryInput): Entr
     throw new Error('entry type cannot be empty');
   }
 
-  const result = database.prepare(`
-    INSERT INTO entries (title, type, cover_ref, preview_ref, preview_refs, upload_date, page_count)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  const values = [
     title,
     type,
     input.coverRef ?? null,
@@ -178,7 +178,16 @@ export function createEntry(database: T3Database, input: CreateEntryInput): Entr
     '[]',
     input.uploadDate ?? null,
     input.pageCount ?? null,
-  );
+  ] as const;
+  const result = input.syncUid === undefined
+    ? database.prepare(`
+        INSERT INTO entries (title, type, cover_ref, preview_ref, preview_refs, upload_date, page_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(...values)
+    : database.prepare(`
+        INSERT INTO entries (title, type, sync_uid, cover_ref, preview_ref, preview_refs, upload_date, page_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(title, type, input.syncUid, ...values.slice(2));
   return getEntryRecord(database, Number(result.lastInsertRowid)) as EntryRecord;
 }
 
@@ -344,8 +353,23 @@ export function getEntryDetail(database: T3Database, entryId: number): EntryDeta
 }
 
 export function deleteEntry(database: T3Database, entryId: number): void {
-  const result = database.prepare('DELETE FROM entries WHERE id = ?').run(entryId);
-  if (result.changes === 0) {
-    throw new Error('entry not found');
-  }
+  database.transaction(() => {
+    // Read the Authors before the cascade takes the links away: deleting a work
+    // never deletes its Author directly, but an Author that only existed for
+    // this work must not outlive it.
+    const heldProducerIds = database.prepare(
+      'SELECT producer_id AS producerId FROM entry_producers WHERE entry_id = ?',
+    ).pluck().all(entryId) as number[];
+    // Tags are the work's index, so a Tag this work was the last to carry goes
+    // with it for the same reason an Author does.
+    const heldTagIds = database.prepare(
+      'SELECT tag_id AS tagId FROM entry_tags WHERE entry_id = ?',
+    ).pluck().all(entryId) as number[];
+    const result = database.prepare('DELETE FROM entries WHERE id = ?').run(entryId);
+    if (result.changes === 0) {
+      throw new Error('entry not found');
+    }
+    pruneWorklessProducers(database, heldProducerIds);
+    pruneUnusedTags(database, heldTagIds);
+  })();
 }
