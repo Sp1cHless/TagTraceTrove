@@ -18,7 +18,6 @@ const emit = defineEmits<{
   'open-entry': [entryId: number];
   'open-gallery': [galleryType: string];
   'create-entry': [];
-  'create-author': [];
 }>();
 
 const { locale, t } = useI18n();
@@ -32,6 +31,20 @@ const recentError = ref(false);
 const nsfwFiltered = ref(false);
 
 onMounted(load);
+
+/**
+ * Read again, for the shell to call when the connection mode changes.
+ *
+ * This page reads once, when it mounts, and that read can be answered from the offline copy: a cold
+ * start deliberately opens the local snapshot first (so the page is not blank while the server is
+ * probed), and the *recent* list is served from that snapshot's own usage records — which are as old
+ * as the last sync. Measured on this symptom: Home showed the same few works from days ago on every
+ * fresh open, and was right the moment the page was left and entered again, because that mount's read
+ * went to the server. The shell already re-reads its visible surfaces on a mode change; this is the
+ * one it did not know about.
+ */
+defineExpose({ reload: load });
+
 async function load(): Promise<void> {
   try {
     const [galleryList, recent] = await Promise.all([
@@ -317,9 +330,6 @@ onBeforeUnmount(() => {
           @click="emit('create-entry')"
         >
           {{ t('home.empty.primary') }}
-        </button>
-        <button class="secondary-button" type="button" @click="emit('create-author')">
-          {{ t('author.new') }}
         </button>
       </div>
     </div>

@@ -1,0 +1,22 @@
+{
+  "verifiedEntries": 1224,
+  "liveSavedSizeSHA": true,
+  "manifestSHA256": "50f9aa0514b5ba2cf97a52326204924788d0e0c43ed2d35e8ca67ba6736674a8",
+  "mismatch": [],
+  "actualCounts": {
+    "finite": {
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "nearest": {
+      "tests": 15,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "fixtureSurvivors": [],
+  "sourceTestsStopped": true
+}

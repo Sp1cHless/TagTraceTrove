@@ -1,0 +1,388 @@
+{
+  "stop-caps": {
+    "argv": [
+      "cmd.exe",
+      "/c",
+      "gradlew.bat",
+      "--no-daemon",
+      "--console=plain",
+      "-I",
+      "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\isolated.gradle",
+      "testDebugUnitTest",
+      "--tests",
+      "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest.g2"
+    ],
+    "exit": 0,
+    "seconds": 140.96738076210022,
+    "xml": [
+      {
+        "path": ".hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\gradle-output\\stop-caps\\app\\test-results\\testDebugUnitTest\\TEST-com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest.xml",
+        "name": "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest",
+        "tests": "1",
+        "skipped": "0",
+        "failures": "0",
+        "errors": "0",
+        "timestamp": "2026-10-10T09:39:54.418Z",
+        "hostname": "LAPTOP-70QV4MNN",
+        "time": "116.074",
+        "cases": [
+          {
+            "name": "g2",
+            "classname": "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest",
+            "time": "116.074",
+            "failure": null
+          }
+        ],
+        "systemout": "CAP_CELLS 6 absent/false zeroPOST original retained recovery actualSQL; legacy optionalabsence NOT enriched and deletecap NOT universal\n"
+      }
+    ]
+  },
+  "stop-core": {
+    "argv": [
+      "cmd.exe",
+      "/c",
+      "gradlew.bat",
+      "--no-daemon",
+      "--console=plain",
+      "-I",
+      "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\isolated.gradle",
+      "testDebugUnitTest",
+      "--tests",
+      "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest.g1",
+      "--tests",
+      "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest.g3",
+      "--tests",
+      "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest.g4",
+      "--tests",
+      "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest.g5",
+      "--tests",
+      "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest.g6"
+    ],
+    "exit": 0,
+    "seconds": 157.58308267593384,
+    "xml": [
+      {
+        "path": ".hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\gradle-output\\stop-core\\app\\test-results\\testDebugUnitTest\\TEST-com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest.xml",
+        "name": "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest",
+        "tests": "5",
+        "skipped": "0",
+        "failures": "0",
+        "errors": "0",
+        "timestamp": "2026-10-10T09:39:54.854Z",
+        "hostname": "LAPTOP-70QV4MNN",
+        "time": "132.359",
+        "cases": [
+          {
+            "name": "g1",
+            "classname": "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest",
+            "time": "20.144",
+            "failure": null
+          },
+          {
+            "name": "g3",
+            "classname": "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest",
+            "time": "16.071",
+            "failure": null
+          },
+          {
+            "name": "g4",
+            "classname": "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest",
+            "time": "32.122",
+            "failure": null
+          },
+          {
+            "name": "g5",
+            "classname": "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest",
+            "time": "48.119",
+            "failure": null
+          },
+          {
+            "name": "g6",
+            "classname": "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest",
+            "time": "15.903",
+            "failure": null
+          }
+        ],
+        "systemout": "REAL_SQL shared Entry layout delete cascade2 Author2/Film preserved onejournal onereceipt exactbody; raw native retained NOT ACK authority\nREAL_SQL commit then unusable-response MOCK loss; cold exact UUID/body/hash/client/libepoch/plan; receipts/journal dedup1 NOT socket/OS termination\nREAL_SQL pendingdimensioncreate->delete1->delete2 causal bases independentFilm; globaloff allhold; held layout childrefused independentEntry progresses\nMOCK_INVALID_RESPONSE 3 canonicalSQL valid receipt before fault strict settlement AND dependency rejected independentFilm advances retry recovered dedup\nREAL_SQL actual stale-layout conflict held blocks same-owner delete2 independentFilm advances originalbytes retained no mocked valid receipt\n"
+      }
+    ]
+  },
+  "nearest03-core": {
+    "argv": [
+      "cmd.exe",
+      "/c",
+      "gradlew.bat",
+      "--no-daemon",
+      "--console=plain",
+      "-I",
+      "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\isolated.gradle",
+      "testDebugUnitTest",
+      "--tests",
+      "com.speechless666.t3.spike.NativeCollectionTimelineJvmTest",
+      "--tests",
+      "com.speechless666.t3.spike.AppliedReceiptJvmTest",
+      "--tests",
+      "com.speechless666.t3.spike.TransferLedgerJvmTest"
+    ],
+    "exit": 0,
+    "seconds": 102.50115203857422,
+    "xml": [
+      {
+        "path": ".hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\gradle-output\\nearest03-core\\app\\test-results\\testDebugUnitTest\\TEST-com.speechless666.t3.spike.AppliedReceiptJvmTest.xml",
+        "name": "com.speechless666.t3.spike.AppliedReceiptJvmTest",
+        "tests": "2",
+        "skipped": "0",
+        "failures": "0",
+        "errors": "0",
+        "timestamp": "2026-10-10T09:33:06.077Z",
+        "hostname": "LAPTOP-70QV4MNN",
+        "time": "1.958",
+        "cases": [
+          {
+            "name": "uuidDomainMatchesSharedUuidIncludingNilAndMax",
+            "classname": "com.speechless666.t3.spike.AppliedReceiptJvmTest",
+            "time": "1.921",
+            "failure": null
+          },
+          {
+            "name": "optionalApiIdIsGenericSafePositiveIntegerWithoutCoercion",
+            "classname": "com.speechless666.t3.spike.AppliedReceiptJvmTest",
+            "time": "0.037",
+            "failure": null
+          }
+        ],
+        "systemout": ""
+      },
+      {
+        "path": ".hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\gradle-output\\nearest03-core\\app\\test-results\\testDebugUnitTest\\TEST-com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.xml",
+        "name": "com.speechless666.t3.spike.NativeCollectionTimelineJvmTest",
+        "tests": "4",
+        "skipped": "0",
+        "failures": "0",
+        "errors": "0",
+        "timestamp": "2026-10-10T09:33:08.723Z",
+        "hostname": "LAPTOP-70QV4MNN",
+        "time": "68.072",
+        "cases": [
+          {
+            "name": "c1",
+            "classname": "com.speechless666.t3.spike.NativeCollectionTimelineJvmTest",
+            "time": "19.688",
+            "failure": null
+          },
+          {
+            "name": "c2",
+            "classname": "com.speechless666.t3.spike.NativeCollectionTimelineJvmTest",
+            "time": "16.208",
+            "failure": null
+          },
+          {
+            "name": "c3",
+            "classname": "com.speechless666.t3.spike.NativeCollectionTimelineJvmTest",
+            "time": "16.048",
+            "failure": null
+          },
+          {
+            "name": "c4",
+            "classname": "com.speechless666.t3.spike.NativeCollectionTimelineJvmTest",
+            "time": "16.128",
+            "failure": null
+          }
+        ],
+        "systemout": "CAP_HOLD delete offlineMutations absent=true\nCAP_HOLD delete offlineMutations absent=false\nCAP_HOLD delete offlineCollectionManagement absent=true\nCAP_HOLD delete offlineCollectionManagement absent=false\nCAP_HOLD delete offlineCollectionDelete absent=true\nCAP_HOLD delete offlineCollectionDelete absent=false\nVALID_RETRY delete {\"opId\":\"623cfb5b-7356-4f47-9249-eb7c73f1f8ba\",\"uploadId\":null,\"metadata\":null,\"flags\":[\"offlineMutations\",\"offlineCollectionManagement\",\"offlineCollectionDelete\"],\"phase\":\"completed\",\"replay\":\"{\\\"opId\\\":\\\"623cfb5b-7356-4f47-9249-eb7c73f1f8ba\\\",\\\"status\\\":\\\"applied\\\",\\\"resourceVersion\\\":3,\\\"serverSeq\\\":1,\\\"entityId\\\":1,\\\"collectionDeleteJournal\\\":[{\\\"id\\\":1,\\\"syncUid\\\":\\\"bbfe9455-fe14-4fda-9989-5de2423efaaf\\\",\\\"resourceVersion\\\":3,\\\"serverSeq\\\":1}]}\",\"mediaResult\":null,\"error\":null}\nCAP_HOLD bulk offlineMutations absent=true\nCAP_HOLD bulk offlineMutations absent=false\nCAP_HOLD bulk offlineCollectionManagement absent=true\nCAP_HOLD bulk offlineCollectionManagement absent=false\nCAP_HOLD bulk offlineCollectionCommonTag absent=true\nCAP_HOLD bulk offlineCollectionCommonTag absent=false\nVALID_RETRY bulk {\"opId\":\"4ae9d034-b249-47d9-bb38-b3a9e2aa270b\",\"uploadId\":null,\"metadata\":null,\"flags\":[\"offlineMutations\",\"offlineCollectionManagement\",\"offlineCollectionCommonTag\"],\"phase\":\"completed\",\"replay\":\"{\\\"opId\\\":\\\"4ae9d034-b249-47d9-bb38-b3a9e2aa270b\\\",\\\"status\\\":\\\"applied\\\",\\\"resourceVersion\\\":3,\\\"serverSeq\\\":3,\\\"entityId\\\":1,\\\"collectionCommonTag\\\":{\\\"tagId\\\":1,\\\"tagUid\\\":\\\"efeac2f1-71cc-45d2-8da0-435abbfa8e13\\\",\\\"entriesAffected\\\":1,\\\"alreadyPresent\\\":0,\\\"skipped\\\":0,\\\"journal\\\":[{\\\"entityKind\\\":\\\"entry\\\",\\\"id\\\":1,\\\"syncUid\\\":\\\"9a54259c-42e0-4b92-83db-66cb6f187206\\\",\\\"resourceVersion\\\":2,\\\"serverSeq\\\":2},{\\\"entityKind\\\":\\\"collection\\\",\\\"id\\\":1,\\\"syncUid\\\":\\\"489f4cef-6036-4f4a-91eb-4c66e746dfff\\\",\\\"resourceVersion\\\":3,\\\"serverSeq\\\":3}]}}\",\"mediaResult\":null,\"error\":null}\nCHAIN_BULK {\"opId\":\"02bd4bd3-16db-43d6-9eaf-2fa41ae5f0b9\",\"uploadId\":null,\"metadata\":null,\"flags\":[\"offlineMutations\",\"offlineCollectionManagement\",\"offlineCollectionCommonTag\"],\"phase\":\"completed\",\"replay\":\"{\\\"opId\\\":\\\"02bd4bd3-16db-43d6-9eaf-2fa41ae5f0b9\\\",\\\"status\\\":\\\"applied\\\",\\\"resourceVersion\\\":3,\\\"serverSeq\\\":6,\\\"entityId\\\":1,\\\"collectionCommonTag\\\":{\\\"tagId\\\":1,\\\"tagUid\\\":\\\"b1e028c9-c49a-4a5c-9108-9fd140133ab7\\\",\\\"entriesAffected\\\":1,\\\"alreadyPresent\\\":0,\\\"skipped\\\":0,\\\"journal\\\":[{\\\"entityKind\\\":\\\"entry\\\",\\\"id\\\":1,\\\"syncUid\\\":\\\"b4d03cad-b5a1-431f-a124-51c4abb5eb61\\\",\\\"resourceVersion\\\":2,\\\"serverSeq\\\":5},{\\\"entityKind\\\":\\\"collection\\\",\\\"id\\\":1,\\\"syncUid\\\":\\\"f0ab1faf-221f-40dc-bc46-16be49c4d487\\\",\\\"resourceVersion\\\":3,\\\"serverSeq\\\":6}]}}\",\"mediaResult\":null,\"error\":null}\nFAULT foreign {\"opId\":\"ddf799bd-47b1-4037-a6a7-5b7338c3e0de\",\"uploadId\":null,\"metadata\":null,\"flags\":[\"offlineMutations\",\"offlineCollectionManagement\",\"offlineCollectionCommonTag\"],\"phase\":\"held\",\"replay\":\"{\\\"opId\\\":\\\"167de3b4-3455-4cfe-b16f-dfd9dd4efed7\\\",\\\"status\\\":\\\"applied\\\",\\\"resourceVersion\\\":3,\\\"serverSeq\\\":3,\\\"entityId\\\":1,\\\"collectionCommonTag\\\":{\\\"tagId\\\":1,\\\"tagUid\\\":\\\"f567c84a-88aa-4737-9c12-bce6a7e63e36\\\",\\\"entriesAffected\\\":1,\\\"alreadyPresent\\\":0,\\\"skipped\\\":0,\\\"journal\\\":[{\\\"entityKind\\\":\\\"entry\\\",\\\"id\\\":1,\\\"syncUid\\\":\\\"eaeef976-b99d-43bf-9f65-1124a996817f\\\",\\\"resourceVersion\\\":2,\\\"serverSeq\\\":2},{\\\"entityKind\\\":\\\"collection\\\",\\\"id\\\":1,\\\"syncUid\\\":\\\"9e2f728e-a41d-4e74-a87a-3d0b14a9a1b2\\\",\\\"resourceVersion\\\":3,\\\"serverSeq\\\":3}]}}\",\"mediaResult\":null,\"error\":\"Mutation failed\\/conflicted; successors held\"}\nFAULT shape {\"opId\":\"ddf799bd-47b1-4037-a6a7-5b7338c3e0de\",\"uploadId\":null,\"metadata\":null,\"flags\":[\"offlineMutations\",\"offlineCollectionManagement\",\"offlineCollectionCommonTag\"],\"phase\":\"held\",\"replay\":\"{\\\"opId\\\":\\\"ddf799bd-47b1-4037-a6a7-5b7338c3e0de\\\",\\\"status\\\":\\\"applied\\\",\\\"resourceVersion\\\":3,\\\"serverSeq\\\":3,\\\"entityId\\\":1}\",\"mediaResult\":null,\"error\":\"Mutation failed\\/conflicted; successors held\"}\nFAULT owned {\"opId\":\"ddf799bd-47b1-4037-a6a7-5b7338c3e0de\",\"uploadId\":null,\"metadata\":null,\"flags\":[\"offlineMutations\",\"offlineCollectionManagement\",\"offlineCollectionCommonTag\"],\"phase\":\"held\",\"replay\":\"{\\\"opId\\\":\\\"ddf799bd-47b1-4037-a6a7-5b7338c3e0de\\\",\\\"status\\\":\\\"applied\\\",\\\"resourceVersion\\\":3,\\\"serverSeq\\\":3,\\\"entityId\\\":1,\\\"collectionCommonTag\\\":{\\\"tagId\\\":1,\\\"tagUid\\\":\\\"f567c84a-88aa-4737-9c12-bce6a7e63e36\\\",\\\"entriesAffected\\\":1,\\\"alreadyPresent\\\":0,\\\"skipped\\\":0,\\\"journal\\\":[{\\\"entityKind\\\":\\\"entry\\\",\\\"id\\\":1,\\\"syncUid\\\":\\\"de29314a-0699-4bd0-9eed-a51cd0783edb\\\",\\\"resourceVersion\\\":2,\\\"serverSeq\\\":2},{\\\"entityKind\\\":\\\"collection\\\",\\\"id\\\":1,\\\"syncUid\\\":\\\"9e2f728e-a41d-4e74-a87a-3d0b14a9a1b2\\\",\\\"resourceVersion\\\":3,\\\"serverSeq\\\":3}]}}\",\"mediaResult\":null,\"error\":\"Mutation failed\\/conflicted; successors held\"}\nRESTORED_VALID {\"opId\":\"ddf799bd-47b1-4037-a6a7-5b7338c3e0de\",\"uploadId\":null,\"metadata\":null,\"flags\":[\"offlineMutations\",\"offlineCollectionManagement\",\"offlineCollectionCommonTag\"],\"phase\":\"completed\",\"replay\":\"{\\\"opId\\\":\\\"ddf799bd-47b1-4037-a6a7-5b7338c3e0de\\\",\\\"status\\\":\\\"applied\\\",\\\"resourceVersion\\\":3,\\\"serverSeq\\\":3,\\\"entityId\\\":1,\\\"collectionCommonTag\\\":{\\\"tagId\\\":1,\\\"tagUid\\\":\\\"f567c84a-88aa-4737-9c12-bce6a7e63e36\\\",\\\"entriesAffected\\\":1,\\\"alreadyPresent\\\":0,\\\"skipped\\\":0,\\\"journal\\\":[{\\\"entityKind\\\":\\\"entry\\\",\\\"id\\\":1,\\\"syncUid\\\":\\\"eaeef976-b99d-43bf-9f65-1124a996817f\\\",\\\"resourceVersion\\\":2,\\\"serverSeq\\\":2},{\\\"entityKind\\\":\\\"collection\\\",\\\"id\\\":1,\\\"syncUid\\\":\\\"9e2f728e-a41d-4e74-a87a-3d0b14a9a1b2\\\",\\\"resourceVersion\\\":3,\\\"serverSeq\\\":3}]}}\",\"mediaResult\":null,\"error\":null}\n"
+      },
+      {
+        "path": ".hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\gradle-output\\nearest03-core\\app\\test-results\\testDebugUnitTest\\TEST-com.speechless666.t3.spike.TransferLedgerJvmTest.xml",
+        "name": "com.speechless666.t3.spike.TransferLedgerJvmTest",
+        "tests": "6",
+        "skipped": "0",
+        "failures": "0",
+        "errors": "0",
+        "timestamp": "2026-10-10T09:34:17.528Z",
+        "hostname": "LAPTOP-70QV4MNN",
+        "time": "3.683",
+        "cases": [
+          {
+            "name": "independentHandlesClaimOnceAndColdResultsRemainUntilReconciled",
+            "classname": "com.speechless666.t3.spike.TransferLedgerJvmTest",
+            "time": "3.273",
+            "failure": null
+          },
+          {
+            "name": "standaloneFiniteLeaseCancelTombstoneAndExplicitResumeKeepExactOriginal",
+            "classname": "com.speechless666.t3.spike.TransferLedgerJvmTest",
+            "time": "0.066",
+            "failure": null
+          },
+          {
+            "name": "populatedLegacyVersionsUpgradeWithoutChangingBodiesBlobsLeasesOrResults",
+            "classname": "com.speechless666.t3.spike.TransferLedgerJvmTest",
+            "time": "0.193",
+            "failure": null
+          },
+          {
+            "name": "expiredOriginalOperationLeaseCannotRecordRawResult",
+            "classname": "com.speechless666.t3.spike.TransferLedgerJvmTest",
+            "time": "0.03",
+            "failure": null
+          },
+          {
+            "name": "coldOpenPreservesExactBodyAndBinaryAndRejectsCollision",
+            "classname": "com.speechless666.t3.spike.TransferLedgerJvmTest",
+            "time": "0.037",
+            "failure": null
+          },
+          {
+            "name": "previewCancelAuthority",
+            "classname": "com.speechless666.t3.spike.TransferLedgerJvmTest",
+            "time": "0.084",
+            "failure": null
+          }
+        ],
+        "systemout": ""
+      }
+    ]
+  },
+  "nearest03-author04": {
+    "argv": [
+      "cmd.exe",
+      "/c",
+      "gradlew.bat",
+      "--no-daemon",
+      "--console=plain",
+      "-I",
+      "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\isolated.gradle",
+      "testDebugUnitTest",
+      "--tests",
+      "com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest",
+      "--tests",
+      "com.speechless666.t3.spike.NativeGalleryFiniteJvmTest.g1",
+      "--tests",
+      "com.speechless666.t3.spike.NativeGalleryRepairJvmTest.g2",
+      "--tests",
+      "com.speechless666.t3.spike.NativeGalleryRepairJvmTest.g4"
+    ],
+    "exit": 0,
+    "seconds": 130.31541919708252,
+    "xml": [
+      {
+        "path": ".hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\gradle-output\\nearest03-author04\\app\\test-results\\testDebugUnitTest\\TEST-com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest.xml",
+        "name": "com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest",
+        "tests": "3",
+        "skipped": "0",
+        "failures": "0",
+        "errors": "0",
+        "timestamp": "2026-10-10T09:35:57.765Z",
+        "hostname": "LAPTOP-70QV4MNN",
+        "time": "52.359",
+        "cases": [
+          {
+            "name": "profileEditDeleteColdRetention",
+            "classname": "com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest",
+            "time": "20.005",
+            "failure": null
+          },
+          {
+            "name": "directoryHoldEntryProgressColdExactRetry",
+            "classname": "com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest",
+            "time": "16.285",
+            "failure": null
+          },
+          {
+            "name": "collectionHoldEntryProgressColdExactRetry",
+            "classname": "com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest",
+            "time": "16.069",
+            "failure": null
+          }
+        ]
+      },
+      {
+        "path": ".hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\gradle-output\\nearest03-author04\\app\\test-results\\testDebugUnitTest\\TEST-com.speechless666.t3.spike.NativeGalleryFiniteJvmTest.xml",
+        "name": "com.speechless666.t3.spike.NativeGalleryFiniteJvmTest",
+        "tests": "1",
+        "skipped": "0",
+        "failures": "0",
+        "errors": "0",
+        "timestamp": "2026-10-10T09:36:50.840Z",
+        "hostname": "LAPTOP-70QV4MNN",
+        "time": "19.463",
+        "cases": [
+          {
+            "name": "g1",
+            "classname": "com.speechless666.t3.spike.NativeGalleryFiniteJvmTest",
+            "time": "19.463",
+            "failure": null
+          }
+        ]
+      },
+      {
+        "path": ".hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\gradle-output\\nearest03-author04\\app\\test-results\\testDebugUnitTest\\TEST-com.speechless666.t3.spike.NativeGalleryRepairJvmTest.xml",
+        "name": "com.speechless666.t3.spike.NativeGalleryRepairJvmTest",
+        "tests": "2",
+        "skipped": "0",
+        "failures": "0",
+        "errors": "0",
+        "timestamp": "2026-10-10T09:37:11.026Z",
+        "hostname": "LAPTOP-70QV4MNN",
+        "time": "35.545",
+        "cases": [
+          {
+            "name": "g2",
+            "classname": "com.speechless666.t3.spike.NativeGalleryRepairJvmTest",
+            "time": "17.912",
+            "failure": null
+          },
+          {
+            "name": "g4",
+            "classname": "com.speechless666.t3.spike.NativeGalleryRepairJvmTest",
+            "time": "17.633",
+            "failure": null
+          }
+        ]
+      }
+    ]
+  },
+  "shared-types-final": {
+    "argv": [
+      "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+      "D:\\Project\\TagTraceTrove\\node_modules\\typescript\\bin\\tsc",
+      "-p",
+      "tsconfig.json",
+      "--noEmit"
+    ],
+    "cwd": "packages/shared",
+    "exit": 0
+  },
+  "web-types": {
+    "argv": [
+      "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+      "node_modules/vue-tsc/bin/vue-tsc.js",
+      "-p",
+      "tsconfig.json",
+      "--noEmit"
+    ],
+    "cwd": "apps/web",
+    "exit": 0
+  },
+  "native-plan-default": {
+    "argv": [
+      "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "apps/web/tests/native-mutation-plan.test.ts",
+      "--reporter=json",
+      "--outputFile=D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\native-plan-results.json"
+    ],
+    "cwd": "",
+    "exit": 0
+  },
+  "owned-eslint-final": {
+    "argv": [
+      "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+      "node_modules/eslint/bin/eslint.js",
+      "apps/server/tests/fixtures/native-entry-rating-dimension.mts"
+    ],
+    "cwd": "",
+    "exit": 0
+  }
+}

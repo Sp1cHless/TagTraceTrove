@@ -5,7 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyAllMigrations } from '../../src/database/migrations.js';
 import { inspectDatabase } from '../../src/database/doctor.js';
-import { createMigratedMemoryDatabase, createTempFileDatabase } from '../../src/database/testing.js';
+import {
+  createMigratedMemoryDatabase,
+  createTempFileDatabase,
+  insertLegacyEntry,
+  linkLegacyEntryProducer,
+} from '../../src/database/testing.js';
 import type { T3Database } from '../../src/database/connection.js';
 import { createEntry } from '../../src/repositories/entry-repository.js';
 import {
@@ -77,6 +82,69 @@ describe('author merge memberships', () => {
     database.close();
   });
 
+  it('moves one Author Directory-set owner and all Directory memberships to the surviving Author', () => {
+    const database = createMigratedMemoryDatabase();
+    const first = createProducer(database, { name: 'Directory twin' });
+    const second = createProducer(database, { name: 'Directory twin' });
+    const firstWork = createEntry(database, { title: 'First work', type: 'comic' });
+    const secondWork = createEntry(database, { title: 'Second work', type: 'comic' });
+    linkEntryProducer(database, firstWork.id, first.id);
+    linkEntryProducer(database, secondWork.id, second.id);
+    const firstDirectoryId = Number(database.prepare(`
+      INSERT INTO author_directories (producer_id, title, description, sort_order)
+      VALUES (?, 'First folder', '', 0)
+    `).run(first.id).lastInsertRowid);
+    database.prepare(`
+      INSERT INTO author_directory_entries (directory_id, producer_id, entry_id, sort_order)
+      VALUES (?, ?, ?, 0)
+    `).run(firstDirectoryId, first.id, firstWork.id);
+    const secondDirectoryId = Number(database.prepare(`
+      INSERT INTO author_directories (producer_id, title, description, sort_order)
+      VALUES (?, 'Second folder', '', 0)
+    `).run(second.id).lastInsertRowid);
+    database.prepare(`
+      INSERT INTO author_directory_entries (directory_id, producer_id, entry_id, sort_order)
+      VALUES (?, ?, ?, 0)
+    `).run(secondDirectoryId, second.id, secondWork.id);
+    const setUids = new Map(database.prepare(`
+      SELECT producer_id AS producerId, sync_uid AS syncUid FROM author_directory_sets
+      WHERE producer_id IN (?, ?)
+    `).all(first.id, second.id).map((row) => {
+      const value = row as { producerId: number; syncUid: string };
+      return [value.producerId, value.syncUid] as const;
+    }));
+    const directoryUids = [firstDirectoryId, secondDirectoryId].map((id) => String(database.prepare(
+      'SELECT sync_uid FROM author_directories WHERE id = ?',
+    ).pluck().get(id)));
+
+    expect(mergeDuplicateAuthors(database)).toBe(1);
+    const survivorId = Number(database.prepare(
+      "SELECT id FROM producers WHERE name = 'Directory twin'",
+    ).pluck().get());
+    const survivorSet = database.prepare(`
+      SELECT sync_uid AS syncUid, sync_version AS syncVersion
+      FROM author_directory_sets WHERE producer_id = ?
+    `).get(survivorId) as { syncUid: string; syncVersion: number };
+    const tombstonedSetUid = setUids.get(survivorId === first.id ? second.id : first.id);
+    expect(survivorSet.syncUid).toBe(setUids.get(survivorId));
+    expect(database.prepare('SELECT COUNT(*) FROM author_directory_sets').pluck().get()).toBe(1);
+    expect(database.prepare('SELECT COUNT(*) FROM author_directories WHERE producer_id = ?')
+      .pluck().get(survivorId)).toBe(2);
+    expect(database.prepare(`
+      SELECT COUNT(*) FROM author_directory_entries WHERE producer_id = ?
+    `).pluck().get(survivorId)).toBe(2);
+    expect(database.prepare(`
+      SELECT COUNT(*) FROM author_directories WHERE producer_id = ? AND sync_uid IN (?, ?)
+    `).pluck().get(survivorId, directoryUids[0], directoryUids[1])).toBe(2);
+    expect(database.prepare(`
+      SELECT COUNT(*) FROM sync_tombstones
+      WHERE entity_kind = 'author_directory_set' AND entity_uid = ?
+    `).pluck().get(tombstonedSetUid)).toBe(1);
+    expect(survivorSet.syncVersion).toBeGreaterThan(1);
+    expect(inspectDatabase(database)).toEqual({ ok: true, issues: [] });
+    database.close();
+  });
+
   it('keeps one View later position when both Authors were saved', () => {
     const database = createMigratedMemoryDatabase();
     const first = createProducer(database, { name: 'Saved Twin' });
@@ -111,8 +179,8 @@ describe('author merge memberships', () => {
       const database = temp.database;
       const author = createProducer(database, { name: 'Doomed Author' });
       const survivor = createProducer(database, { name: 'Surviving Author' });
-      const work = createEntry(database, { title: 'Work', type: 'comic' });
-      linkEntryProducer(database, work.id, survivor.id);
+      const work = insertLegacyEntry(database, { title: 'Work', type: 'comic' });
+      linkLegacyEntryProducer(database, work.id, survivor.id);
       const shelf = createCollection(database, { kind: 'producer', title: 'Shelf' });
       addCollectionProducer(database, shelf.id, survivor.id);
       addViewLaterProducer(database, survivor.id);

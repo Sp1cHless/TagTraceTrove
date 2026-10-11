@@ -1,0 +1,14 @@
+{
+  "url": "https://api.fixture.test/video/AB12CD34",
+  "body": {
+    "title": "Quiet Harbor",
+    "file": {
+      "id": "11112222-3333-4444-5555-666677778888"
+    },
+    "user": {
+      "name": "June Park"
+    },
+    "numComments": 4,
+    "limit": 32
+  }
+}

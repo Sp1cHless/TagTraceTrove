@@ -1,0 +1,17 @@
+{
+  "url": "https://api.fixture.test/post/AB12CD34",
+  "body": {
+    "data": {
+      "post": {
+        "title": "Harbor Lights",
+        "image": {
+          "url": "https://cdn.fixture.test/harbor-lights.webp"
+        },
+        "creator": {
+          "name": "June Park"
+        },
+        "publishedAt": "2022-07-01"
+      }
+    }
+  }
+}

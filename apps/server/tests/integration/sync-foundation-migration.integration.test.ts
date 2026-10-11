@@ -5,8 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyAllMigrations } from '../../src/database/migrations.js';
 import { inspectDatabase } from '../../src/database/doctor.js';
-import { createTempFileDatabase } from '../../src/database/testing.js';
-import { createEntry, updateEntry } from '../../src/repositories/entry-repository.js';
+import { insertLegacyEntry, createTempFileDatabase } from '../../src/database/testing.js';
 import {
   createEntryContent,
   updateEntryContent,
@@ -83,13 +82,16 @@ describe('sync foundation migration', () => {
       expect(temp.database.prepare('SELECT COUNT(*) FROM sync_changes').pluck().get()).toBe(0);
       expect(temp.database.prepare('SELECT COUNT(*) FROM sync_tombstones').pluck().get()).toBe(0);
 
-      const entry = createEntry(temp.database, { title: 'Queued Edit', type: 'comic' });
+      const entry = insertLegacyEntry(temp.database, { title: 'Queued Edit', type: 'comic' });
       const content = createEntryContent(temp.database, {
         entryId: entry.id,
         contentType: 'note',
         content: 'Before',
       });
-      updateEntry(temp.database, entry.id, { title: 'Applied Edit' });
+      // Written against the schema of this version: the current writer names every column an Entry
+      // has today, and v16 predates several of them. The journaling this test is about lives in the
+      // table's triggers, so an ordinary UPDATE exercises it exactly as the repository path would.
+      temp.database.prepare('UPDATE entries SET title = ? WHERE id = ?').run('Applied Edit', entry.id);
       updateEntryContent(temp.database, content.id, { content: 'After' });
 
       const liveResources = temp.database.prepare(`
@@ -136,6 +138,48 @@ describe('sync foundation migration', () => {
         { entityKind: 'entry', entityUid: entryUid, deletedVersion: 3, changeSeq: 6 },
       ]);
 
+      const cascadeEntry = insertLegacyEntry(temp.database, { title: 'Cascade parent', type: 'comic' });
+      const cascadeContent = createEntryContent(temp.database, {
+        entryId: cascadeEntry.id,
+        contentType: 'note',
+        content: 'Cascade child',
+      });
+      const cascadeEntryUid = String(temp.database.prepare(
+        'SELECT sync_uid FROM entries WHERE id = ?',
+      ).pluck().get(cascadeEntry.id));
+      const cascadeContentUid = String(temp.database.prepare(
+        'SELECT sync_uid FROM entry_contents WHERE id = ?',
+      ).pluck().get(cascadeContent.id));
+      const beforeCascadeSeq = Number(temp.database.prepare(
+        'SELECT MAX(seq) FROM sync_changes',
+      ).pluck().get());
+      temp.database.prepare('DELETE FROM entries WHERE id = ?').run(cascadeEntry.id);
+      const cascadeChanges = temp.database.prepare(`
+        SELECT seq, entity_kind AS entityKind, entity_uid AS entityUid,
+               change_kind AS changeKind, resource_version AS resourceVersion
+        FROM sync_changes WHERE seq > ? ORDER BY seq
+      `).all(beforeCascadeSeq) as Array<{
+        seq: number;
+        entityKind: string;
+        entityUid: string;
+        changeKind: string;
+        resourceVersion: number;
+      }>;
+      expect(cascadeChanges.map((change) => [
+        change.entityKind, change.entityUid, change.changeKind, change.resourceVersion,
+      ])).toEqual([
+        ['entry_content', cascadeContentUid, 'delete', 2],
+        ['entry', cascadeEntryUid, 'delete', 2],
+      ]);
+      expect(temp.database.prepare(`
+        SELECT entity_kind AS entityKind, entity_uid AS entityUid,
+               deleted_version AS deletedVersion, change_seq AS changeSeq
+        FROM sync_tombstones WHERE change_seq > ? ORDER BY change_seq
+      `).all(beforeCascadeSeq)).toEqual([
+        { entityKind: 'entry_content', entityUid: cascadeContentUid, deletedVersion: 2, changeSeq: beforeCascadeSeq + 1 },
+        { entityKind: 'entry', entityUid: cascadeEntryUid, deletedVersion: 2, changeSeq: beforeCascadeSeq + 2 },
+      ]);
+
       temp.database.prepare(`
         INSERT INTO sync_operation_receipts (op_id, request_hash, result_json, server_seq)
         VALUES (?, ?, ?, ?)
@@ -150,7 +194,7 @@ describe('sync foundation migration', () => {
         temp.database.prepare('SELECT COUNT(*) FROM sync_changes').pluck().get(),
       );
       const rolledBack = temp.database.transaction(() => {
-        const doomed = createEntry(temp.database, { title: 'Rolled Back', type: 'comic' });
+        const doomed = insertLegacyEntry(temp.database, { title: 'Rolled Back', type: 'comic' });
         createEntryContent(temp.database, {
           entryId: doomed.id,
           contentType: 'note',
@@ -170,6 +214,114 @@ describe('sync foundation migration', () => {
         ok: false,
         issues: [`missing sync identity: entries ${preservedEntryId}`],
       });
+    } finally {
+      temp.cleanup();
+    }
+  });
+
+  it('preserves existing journal sequence and tombstones when adding Producer sync identity', () => {
+    const migrationDirectory = mkdtempSync(join(tmpdir(), 't3-producer-sync-migration-'));
+    cleanupDirectories.push(migrationDirectory);
+    const migrationNames = readdirSync(sourceMigrationsDirectory)
+      .filter((name) => /^\d+_.+\.sql$/u.test(name));
+    for (const name of migrationNames.filter((name) => Number.parseInt(name, 10) <= 24)) {
+      copyFileSync(join(sourceMigrationsDirectory, name), join(migrationDirectory, name));
+    }
+    const temp = createTempFileDatabase();
+
+    try {
+      expect(applyAllMigrations(temp.database, migrationDirectory).currentVersion).toBe(24);
+      const producerId = Number(temp.database.prepare(
+        'INSERT INTO producers (name) VALUES (?)',
+      ).run('Preserved Author').lastInsertRowid);
+      const entryId = Number(temp.database.prepare(
+        'INSERT INTO entries (title, type) VALUES (?, ?)',
+      ).run('Preserved Entry', 'comic').lastInsertRowid);
+      const contentId = Number(temp.database.prepare(`
+        INSERT INTO entry_contents (entry_id, content_type, content, sort_order)
+        VALUES (?, 'note', 'to delete', 0)
+      `).run(entryId).lastInsertRowid);
+      temp.database.prepare('DELETE FROM entry_contents WHERE id = ?').run(contentId);
+
+      const currentSequence = Number(temp.database.prepare(
+        "SELECT seq FROM sqlite_sequence WHERE name = 'sync_changes'",
+      ).pluck().get());
+      const sequenceWatermark = currentSequence + 50;
+      temp.database.prepare(`
+        INSERT INTO sync_changes (
+          seq, entity_kind, entity_uid, change_kind, resource_version, record_json
+        ) VALUES (?, 'entry', 'deleted-high-water-test', 'update', 1, NULL)
+      `).run(sequenceWatermark);
+      temp.database.prepare('DELETE FROM sync_changes WHERE seq = ?').run(sequenceWatermark);
+
+      const priorChanges = temp.database.prepare(`
+        SELECT seq, entity_kind AS entityKind, entity_uid AS entityUid,
+               change_kind AS changeKind, resource_version AS resourceVersion, record_json AS recordJson
+        FROM sync_changes ORDER BY seq
+      `).all();
+      const priorTombstones = temp.database.prepare(`
+        SELECT entity_kind AS entityKind, entity_uid AS entityUid,
+               deleted_version AS deletedVersion, change_seq AS changeSeq
+        FROM sync_tombstones ORDER BY change_seq
+      `).all();
+      expect(priorChanges.length).toBeGreaterThan(0);
+      expect(priorTombstones.length).toBe(1);
+
+      const migration25 = migrationNames.find((name) => name.startsWith('025_'))!;
+      copyFileSync(join(sourceMigrationsDirectory, migration25), join(migrationDirectory, migration25));
+      expect(applyAllMigrations(temp.database, migrationDirectory)).toEqual({
+        applied: [25],
+        currentVersion: 25,
+      });
+      expect(temp.database.prepare(
+        "SELECT seq FROM sqlite_sequence WHERE name = 'sync_changes'",
+      ).pluck().get()).toBe(sequenceWatermark);
+
+      expect(temp.database.prepare(`
+        SELECT seq, entity_kind AS entityKind, entity_uid AS entityUid,
+               change_kind AS changeKind, resource_version AS resourceVersion, record_json AS recordJson
+        FROM sync_changes ORDER BY seq
+      `).all()).toEqual(priorChanges);
+      expect(temp.database.prepare(`
+        SELECT entity_kind AS entityKind, entity_uid AS entityUid,
+               deleted_version AS deletedVersion, change_seq AS changeSeq
+        FROM sync_tombstones ORDER BY change_seq
+      `).all()).toEqual(priorTombstones);
+      const producer = temp.database.prepare(`
+        SELECT sync_uid AS syncUid, sync_version AS syncVersion FROM producers WHERE id = ?
+      `).get(producerId) as { syncUid: string; syncVersion: number };
+      expect(producer.syncUid).toMatch(/^[0-9a-f-]{36}$/u);
+      expect(producer.syncVersion).toBe(1);
+
+      temp.database.prepare(`
+        INSERT INTO view_later_producers (producer_id, position) VALUES (?, 0)
+      `).run(producerId);
+      expect(temp.database.prepare('SELECT sync_version FROM producers WHERE id = ?').pluck().get(producerId))
+        .toBe(2);
+      expect(temp.database.prepare('SELECT MAX(seq) FROM sync_changes').pluck().get())
+        .toBeGreaterThan(sequenceWatermark);
+      expect(temp.database.prepare(`
+        SELECT entity_kind AS entityKind, entity_uid AS entityUid,
+               change_kind AS changeKind, resource_version AS resourceVersion
+        FROM sync_changes ORDER BY seq DESC LIMIT 1
+      `).get()).toEqual({
+        entityKind: 'producer',
+        entityUid: producer.syncUid,
+        changeKind: 'update',
+        resourceVersion: 2,
+      });
+      temp.database.prepare('DELETE FROM producers WHERE id = ?').run(producerId);
+      expect(temp.database.prepare(`
+        SELECT entity_kind AS entityKind, entity_uid AS entityUid,
+               deleted_version AS deletedVersion
+        FROM sync_tombstones WHERE entity_kind = 'producer'
+      `).get()).toEqual({
+        entityKind: 'producer',
+        entityUid: producer.syncUid,
+        deletedVersion: 3,
+      });
+      expect(temp.database.pragma('foreign_key_check')).toEqual([]);
+      expect(inspectDatabase(temp.database)).toEqual({ ok: true, issues: [] });
     } finally {
       temp.cleanup();
     }

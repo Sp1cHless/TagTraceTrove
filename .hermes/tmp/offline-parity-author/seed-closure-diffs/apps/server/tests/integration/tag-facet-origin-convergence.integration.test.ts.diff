@@ -1,0 +1,11 @@
+--- apps/server/tests/integration/tag-facet-origin-convergence.integration.test.ts before
++++ apps/server/tests/integration/tag-facet-origin-convergence.integration.test.ts after
+@@ -96,7 +96,7 @@
+       expect(f.db.prepare(`PRAGMA foreign_key_list("${row.name}")`).all()).not.toEqual(expect.arrayContaining([expect.objectContaining({ table: 'sync_offline_created_entry_facets' })]));
+     }
+     expect(f.db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND (sql LIKE '%sync_offline_created_entry_tags%' OR sql LIKE '%sync_offline_created_entry_facets%')").all()).toEqual([]);
+-    expect(applyAllMigrations(f.db)).toEqual({ applied: [35, 36, 37, 38, 39, 40, 41], currentVersion: 41 });
++    expect(applyAllMigrations(f.db)).toEqual({ applied: [35, 36, 37, 38, 39, 40, 41, 42], currentVersion: 42 });
+     expect(tables.map(table => f.db.prepare(`SELECT * FROM ${table}`).all())).toEqual(before);
+     const b = f.creates('B');
+     for (const op of [b.tag, b.facet]) expect(replaySyncOperation(f.db, op).status).toBe('applied');

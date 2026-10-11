@@ -1,0 +1,10 @@
+{
+  "apps/web/src/GalleryApp.vue": {
+    "expected": "8e9103c58f49800c745a6068655d5cf5f1c2da04a10ae1c6fec0d0ac6f873fb4",
+    "actual": "3b55d744f82a0296ad273e57d8dd3fb4c8438276c162e6b4236102869bce8fea"
+  },
+  "apps/web/tests/gallery-app.test.ts": {
+    "expected": "5504c3ab592c9db46eb6d72239aadfaa6c93d1aef875fb18b43a775b26131c1f",
+    "actual": "a9f36733f6478deeea9791bd067eada609e069967142e570e31667d1926eec12"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "inheritedCount": 828,
+  "authorizedDrift": [
+    "apps/web/src/offline/offline-api.ts",
+    "apps/web/src/offline/pending-work-restore.ts"
+  ],
+  "savedBad": []
+}

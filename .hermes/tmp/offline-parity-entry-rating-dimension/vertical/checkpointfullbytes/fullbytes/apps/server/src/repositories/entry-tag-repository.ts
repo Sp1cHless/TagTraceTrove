@@ -1,0 +1,1229 @@
+import {
+  normalizeTag,
+  type EntryListSort,
+  type EntryPageQueryRequest,
+  type EntryPageResponse,
+  type RatingFilterCondition,
+  type RatingSort,
+  type UsageFilterCondition,
+  type UsageSort,
+} from '@t3/shared';
+import type { T3Database } from '../database/connection.js';
+import { toSimplified } from '../taxonomy/simplify.js';
+import { findRatingSlotId, listRatingSlots, type RatingSlotRecord, type RatingSubjectKind } from './rating-repository.js';
+import { rankSearchResults } from './search-ranking.js';
+import { buildUsageFilterClauses } from './usage-repository.js';
+
+export interface AssignEntryTagInput {
+  entryId: number;
+  facetId: number;
+  name: string;
+}
+
+export interface EntryTagAssignment {
+  tagId: number;
+  name: string;
+  normalizedName: string;
+  facetId: number;
+}
+
+export interface MoveEntryTagInput {
+  entryId: number;
+  tagId: number;
+  targetFacetId: number;
+}
+
+export interface RenameEntryTagInput {
+  entryId: number;
+  tagId: number;
+  name: string;
+}
+
+export interface EntryTagFilter {
+  entryType?: string | undefined;
+  includeTagIds?: number[];
+  excludeTagIds?: number[];
+}
+
+export interface FacetFilterTagOption {
+  tagId: number;
+  name: string;
+}
+
+export interface FacetFilterAuthorOption {
+  authorId: number;
+  name: string;
+}
+
+export interface FacetFilterOption {
+  facetId: number;
+  facetName: string;
+  sectionName: string;
+  tags: FacetFilterTagOption[];
+}
+
+export interface FacetFilterOptionsResult {
+  entryType: string;
+  facets: FacetFilterOption[];
+  allTags: FacetFilterTagOption[];
+  authors: FacetFilterAuthorOption[];
+  ratingSlots: RatingSlotRecord[];
+}
+
+export interface FacetFilterConditionInput {
+  /** null = match the tags in ANY facet (the "all tags" row). */
+  facetId: number | null;
+  tagIds: number[];
+}
+
+export interface FacetFilterEntriesInput {
+  entryType: string;
+  conditions: FacetFilterConditionInput[];
+  /** Authors OR within the list and AND with every tag condition. */
+  authorIds: number[];
+  /** Rating conditions AND with every tag row and the author list. */
+  ratingConditions?: RatingFilterCondition[];
+  /** Optional single-slot rating sort (high to low, unrated sinks). */
+  ratingSort?: RatingSort | null;
+  /** Usage (view tracking) conditions AND with everything above. */
+  usageConditions?: UsageFilterCondition[];
+  /** Optional usage sort; wins over ratingSort when both are present. */
+  usageSort?: UsageSort | null;
+}
+
+export interface EntryTagLayoutApplyResult {
+  entryType: string;
+  entriesAffected: number;
+  tagsMoved: number;
+  entriesScanned: number;
+}
+
+export interface EntrySummary {
+  id: number;
+  title: string;
+  type: string;
+  coverRef: string | null;
+  previewRef: string | null;
+  previewRefs: string[];
+  uploadDate: string | null;
+  pageCount: number | null;
+  durationSeconds: number | null;
+  viewCount: number;
+  likeCount: number;
+  lastViewedAt: string | null;
+}
+
+function parseSummaryPreviewRefs(previewRefs: string | null, previewRef: string | null): string[] {
+  if (previewRefs) {
+    try {
+      const parsed: unknown = JSON.parse(previewRefs);
+      if (Array.isArray(parsed)) {
+        const refs = parsed.filter((item): item is string => typeof item === 'string' && item.length > 0);
+        if (refs.length > 0) return refs;
+      }
+    } catch {
+      // fall through
+    }
+  }
+  return previewRef ? [previewRef] : [];
+}
+
+export interface EntryTagUsage {
+  id: number;
+  name: string;
+  normalizedName: string;
+  entryCount: number;
+}
+
+interface TagRow {
+  id: number;
+  name: string;
+  normalized_name: string;
+}
+
+interface AssignmentRow {
+  tag_id: number;
+  name: string;
+  normalized_name: string;
+  facet_id: number;
+}
+
+/**
+ * A tag name as the library stores it: normalised, and **simplified**.
+ *
+ * Both writers of a tag name go through here (`assignEntryTag`, `renameEntryTag`), so a name typed in
+ * Traditional Chinese cannot become a second tag beside the Simplified one an import created. It is the
+ * same conversion the import path applies through `resolveTaxonomyName`, and it is the only one of the
+ * three scripts that can be done without asking anybody — English is a translation, and the alias
+ * dictionary is where that happens.
+ */
+function cleanDisplayName(value: string): string {
+  return toSimplified(value.normalize('NFKC').trim().replace(/\s+/gu, ' '));
+}
+
+export function assignEntryTag(
+  database: T3Database,
+  input: AssignEntryTagInput,
+): EntryTagAssignment {
+  const name = cleanDisplayName(input.name);
+  const normalizedName = normalizeTag(name);
+  if (normalizedName === '') {
+    throw new Error('tag name cannot be empty');
+  }
+
+  return database.transaction(() => {
+    database.prepare(`
+      INSERT INTO tags (name, normalized_name)
+      VALUES (?, ?)
+      ON CONFLICT(normalized_name) DO NOTHING
+    `).run(name, normalizedName);
+
+    const tag = database.prepare(`
+      SELECT id, name, normalized_name
+      FROM tags
+      WHERE normalized_name = ?
+    `).get(normalizedName) as TagRow;
+
+    // One Entry carries a tag once. Re-adding it lands it on the Facet it was
+    // just typed into — the same outcome as moving it — instead of hitting the
+    // primary key and answering the caller with a conflict it cannot act on.
+    database.prepare(`
+      INSERT INTO entry_tags (entry_id, tag_id, facet_id)
+      VALUES (?, ?, ?)
+      ON CONFLICT(entry_id, tag_id) DO UPDATE SET facet_id = excluded.facet_id
+    `).run(input.entryId, tag.id, input.facetId);
+
+    return {
+      tagId: tag.id,
+      name: tag.name,
+      normalizedName: tag.normalized_name,
+      facetId: input.facetId,
+    };
+  })();
+}
+
+export function moveEntryTag(database: T3Database, input: MoveEntryTagInput): void {
+  const result = database.prepare(`
+    UPDATE entry_tags
+    SET facet_id = ?
+    WHERE entry_id = ? AND tag_id = ?
+  `).run(input.targetFacetId, input.entryId, input.tagId);
+  if (result.changes === 0) {
+    throw new Error('entry tag assignment not found');
+  }
+}
+
+export function renameEntryTag(
+  database: T3Database,
+  input: RenameEntryTagInput,
+): EntryTagAssignment {
+  const name = cleanDisplayName(input.name);
+  const normalizedName = normalizeTag(name);
+  if (normalizedName === '') {
+    throw new Error('tag name cannot be empty');
+  }
+
+  return database.transaction(() => {
+    const assignment = database.prepare(`
+      SELECT facet_id
+      FROM entry_tags
+      WHERE entry_id = ? AND tag_id = ?
+    `).get(input.entryId, input.tagId) as { facet_id: number } | undefined;
+    if (!assignment) {
+      throw new Error('entry tag assignment not found');
+    }
+
+    database.prepare(`
+      INSERT INTO tags (name, normalized_name)
+      VALUES (?, ?)
+      ON CONFLICT(normalized_name) DO NOTHING
+    `).run(name, normalizedName);
+    const tag = database.prepare(`
+      SELECT id, name, normalized_name
+      FROM tags
+      WHERE normalized_name = ?
+    `).get(normalizedName) as TagRow;
+
+    database.prepare(`
+      UPDATE entry_tags
+      SET tag_id = ?
+      WHERE entry_id = ? AND tag_id = ?
+    `).run(tag.id, input.entryId, input.tagId);
+
+    return {
+      tagId: tag.id,
+      name: tag.name,
+      normalizedName: tag.normalized_name,
+      facetId: assignment.facet_id,
+    };
+  })();
+}
+
+/**
+ * A Tag exists to index works. The last assignment going away takes the row with
+ * it, so a mistyped name cannot come back from the autocomplete and the
+ * vocabulary cannot grow without bound. A named set is passed rather than a
+ * table sweep, so unrelated Tags are never touched.
+ */
+export function pruneUnusedTags(database: T3Database, tagIds: number[]): number {
+  const unique = [...new Set(tagIds)];
+  if (unique.length === 0) return 0;
+  const placeholders = unique.map(() => '?').join(', ');
+  const result = database.prepare(`
+    DELETE FROM tags
+    WHERE id IN (${placeholders})
+      AND NOT EXISTS (SELECT 1 FROM entry_tags WHERE entry_tags.tag_id = tags.id)
+  `).run(...unique);
+  return result.changes;
+}
+
+export function removeEntryTag(database: T3Database, entryId: number, tagId: number): void {
+  database.transaction(() => {
+    const result = database.prepare(`
+      DELETE FROM entry_tags
+      WHERE entry_id = ? AND tag_id = ?
+    `).run(entryId, tagId);
+    if (result.changes === 0) {
+      throw new Error('entry tag assignment not found');
+    }
+    pruneUnusedTags(database, [tagId]);
+  })();
+}
+
+export function listEntryTags(
+  database: T3Database,
+  entryId: number,
+): EntryTagAssignment[] {
+  const rows = database.prepare(`
+    SELECT
+      tag.id AS tag_id,
+      tag.name,
+      tag.normalized_name,
+      assignment.facet_id
+    FROM entry_tags AS assignment
+    JOIN tags AS tag ON tag.id = assignment.tag_id
+    WHERE assignment.entry_id = ?
+    ORDER BY tag.normalized_name, tag.id
+  `).all(entryId) as AssignmentRow[];
+
+  return rows.map((row) => ({
+    tagId: row.tag_id,
+    name: row.name,
+    normalizedName: row.normalized_name,
+    facetId: row.facet_id,
+  }));
+}
+
+export function listEntryTagsForType(
+  database: T3Database,
+  entryType: string,
+): EntryTagUsage[] {
+  const rows = database.prepare(`
+    SELECT
+      tag.id,
+      tag.name,
+      tag.normalized_name,
+      COUNT(DISTINCT assignment.entry_id) AS entry_count
+    FROM entry_tags AS assignment
+    JOIN tags AS tag ON tag.id = assignment.tag_id
+    JOIN entries AS entry ON entry.id = assignment.entry_id
+    WHERE entry.type = ?
+    GROUP BY tag.id, tag.name, tag.normalized_name
+    ORDER BY entry_count DESC, tag.normalized_name, tag.id
+  `).all(entryType.trim()) as Array<{
+    id: number;
+    name: string;
+    normalized_name: string;
+    entry_count: number;
+  }>;
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    normalizedName: row.normalized_name,
+    entryCount: row.entry_count,
+  }));
+}
+
+/** Same usage counts, but across every Gallery (random-tag picking). */
+export function listEntryTagsGlobally(database: T3Database): EntryTagUsage[] {
+  const rows = database.prepare(`
+    SELECT
+      tag.id,
+      tag.name,
+      tag.normalized_name,
+      COUNT(DISTINCT assignment.entry_id) AS entry_count
+    FROM entry_tags AS assignment
+    JOIN tags AS tag ON tag.id = assignment.tag_id
+    GROUP BY tag.id, tag.name, tag.normalized_name
+    ORDER BY entry_count DESC, tag.normalized_name, tag.id
+  `).all() as Array<{
+    id: number;
+    name: string;
+    normalized_name: string;
+    entry_count: number;
+  }>;
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    normalizedName: row.normalized_name,
+    entryCount: row.entry_count,
+  }));
+}
+
+// Shared summary projection for both plain tag search and facet-filtered
+// search, so entry lists stay lean and identical in shape.
+const entrySummarySelect = `
+    SELECT
+      entry.id,
+      entry.title,
+      entry.type,
+      entry.cover_ref AS coverRef,
+      entry.preview_ref AS previewRef,
+      entry.preview_refs AS previewRefs,
+      entry.upload_date AS uploadDate,
+      entry.page_count AS pageCount,
+      entry.duration_seconds AS durationSeconds,
+      COALESCE(entry_usage.view_count, 0) AS viewCount,
+      COALESCE(entry_usage.like_count, 0) AS likeCount,
+      entry_usage.last_viewed_at AS lastViewedAt
+    FROM entries AS entry
+    LEFT JOIN entry_usage AS entry_usage ON entry_usage.entry_id = entry.id
+  `;
+
+function mapEntrySummaryRows(rows: unknown[]): EntrySummary[] {
+  return (rows as Array<Omit<EntrySummary, 'previewRefs'> & { previewRefs: string | null }>).map((summary) => ({
+    id: summary.id,
+    title: summary.title,
+    type: summary.type,
+    coverRef: summary.coverRef,
+    previewRef: summary.previewRef,
+    previewRefs: parseSummaryPreviewRefs(summary.previewRefs, summary.previewRef),
+    uploadDate: summary.uploadDate,
+    pageCount: summary.pageCount,
+    durationSeconds: summary.durationSeconds,
+    viewCount: summary.viewCount,
+    likeCount: summary.likeCount,
+    lastViewedAt: summary.lastViewedAt,
+  }));
+}
+
+export function findEntriesByTags(
+  database: T3Database,
+  filter: EntryTagFilter,
+): EntrySummary[] {
+  const includeTagIds = [...new Set(filter.includeTagIds ?? [])];
+  const excludeTagIds = [...new Set(filter.excludeTagIds ?? [])];
+  const clauses: string[] = [];
+  const parameters: Array<string | number> = [];
+
+  if (filter.entryType !== undefined) {
+    clauses.push('entry.type = ?');
+    parameters.push(filter.entryType.trim());
+  }
+
+  if (includeTagIds.length > 0) {
+    const placeholders = includeTagIds.map(() => '?').join(', ');
+    clauses.push(`(
+      SELECT COUNT(DISTINCT assignment.tag_id)
+      FROM entry_tags AS assignment
+      WHERE assignment.entry_id = entry.id
+        AND assignment.tag_id IN (${placeholders})
+    ) = ?`);
+    parameters.push(...includeTagIds, includeTagIds.length);
+  }
+
+  if (excludeTagIds.length > 0) {
+    const placeholders = excludeTagIds.map(() => '?').join(', ');
+    clauses.push(`NOT EXISTS (
+      SELECT 1
+      FROM entry_tags AS assignment
+      WHERE assignment.entry_id = entry.id
+        AND assignment.tag_id IN (${placeholders})
+    )`);
+    parameters.push(...excludeTagIds);
+  }
+
+  return mapEntrySummaryRows(database.prepare(`
+    ${entrySummarySelect}
+    ${clauses.length > 0 ? `WHERE ${clauses.join('\n      AND ')}` : ''}
+    ORDER BY entry.title COLLATE NOCASE, entry.id
+  `).all(...parameters));
+}
+
+/**
+ * Aggregates the facet→tag options available for facet filtering within one
+ * Entry type. Only NAMED facets appear as filter rows; tags sitting in an
+ * unnamed default facet are still reachable through `allTags`. A tag that
+ * lives under several facets in different Entries appears under each of those
+ * facets (deliberately not deduplicated) — layouts can be inconsistent across
+ * Entries and the filter must let the user match either placement. When
+ * `authorId` is given, the aggregation is scoped to that Author's works (the
+ * Author page filter), and `authors` then contains that Author alone.
+ */
+export function listFacetFilterOptions(
+  database: T3Database,
+  entryType: string,
+  authorId: number | null = null,
+): FacetFilterOptionsResult {
+  const type = entryType.trim();
+  const authorClause = authorId === null
+    ? ''
+    : `AND EXISTS (
+      SELECT 1 FROM entry_producers AS author_link
+      WHERE author_link.entry_id = entry.id AND author_link.producer_id = ?
+    )`;
+  const authorParameter = authorId === null ? [] : [authorId];
+  const rows = database.prepare(`
+    SELECT
+      section.id AS section_id,
+      section.name AS section_name,
+      section.sort_order AS section_sort_order,
+      facet.id AS facet_id,
+      facet.name AS facet_name,
+      facet.sort_order AS facet_sort_order,
+      tag.id AS tag_id,
+      tag.name AS tag_name
+    FROM entry_tags AS assignment
+    JOIN entries AS entry ON entry.id = assignment.entry_id
+    JOIN tag_groups AS facet ON facet.id = assignment.facet_id
+    JOIN tag_groups AS section ON section.id = facet.parent_id
+    JOIN tags AS tag ON tag.id = assignment.tag_id
+    WHERE entry.type = ?
+      ${authorClause}
+    GROUP BY facet.id, tag.id
+    ORDER BY section.sort_order, section.id, facet.sort_order, facet.id,
+      tag.name COLLATE NOCASE, tag.id
+  `).all(type, ...authorParameter) as Array<{
+    section_name: string;
+    facet_id: number;
+    facet_name: string;
+    tag_id: number;
+    tag_name: string;
+  }>;
+
+  const facets = new Map<number, FacetFilterOption>();
+  const allTags = new Map<number, FacetFilterTagOption>();
+  for (const row of rows) {
+    const option = { tagId: row.tag_id, name: row.tag_name };
+    allTags.set(row.tag_id, option);
+    if (row.facet_name.trim() === '') continue;
+    let facet = facets.get(row.facet_id);
+    if (!facet) {
+      facet = {
+        facetId: row.facet_id,
+        facetName: row.facet_name,
+        sectionName: row.section_name,
+        tags: [],
+      };
+      facets.set(row.facet_id, facet);
+    }
+    facet.tags.push(option);
+  }
+
+  return {
+    entryType: type,
+    facets: [...facets.values()],
+    allTags: [...allTags.values()]
+      .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })),
+    authors: listFacetFilterAuthors(database, type, authorId),
+    // What a person picks: the work's own dimensions, and the author's own. The works summary is
+    // deliberately absent — a work's own dimension already reads as "its own value, else the
+    // Authors' summary of the same name", so offering the summary as a second option was the same
+    // number twice under two names.
+    ratingSlots: (['entry', 'author_self'] as const).flatMap((kind) => (
+      listRatingSlots(database, kind, type).map((slot) => ({ ...slot, subjectKind: kind }))
+    )),
+  };
+}
+
+function listFacetFilterAuthors(
+  database: T3Database,
+  entryType: string,
+  authorId: number | null = null,
+): FacetFilterAuthorOption[] {
+  const authorClause = authorId === null
+    ? ''
+    : `AND EXISTS (
+      SELECT 1 FROM entry_producers AS author_link
+      WHERE author_link.entry_id = entry.id AND author_link.producer_id = ?
+    )`;
+  const authorParameter = authorId === null ? [] : [authorId];
+  const rows = database.prepare(`
+    SELECT DISTINCT producer.id AS author_id, producer.name AS author_name
+    FROM entry_producers AS link
+    JOIN producers AS producer ON producer.id = link.producer_id
+    JOIN entries AS entry ON entry.id = link.entry_id
+    WHERE entry.type = ?
+      ${authorClause}
+    ORDER BY producer.name COLLATE NOCASE, producer.id
+  `).all(entryType, ...authorParameter) as Array<{ author_id: number; author_name: string }>;
+  return rows.map((row) => ({ authorId: row.author_id, name: row.author_name }));
+}
+
+/**
+ * Filters Entries of one type by facet conditions. Within one condition the
+ * Entry must carry EVERY listed tag id under the chosen Facet (AND — more
+ * tags always narrow the result); all conditions must match (AND across
+ * rows); `facetId: null` matches the tags in any facet (the "all tags" row).
+ * `authorIds` OR within the list and AND with every tag condition. Returns
+ * the same lean summaries as `findEntriesByTags`.
+ */
+export function findEntriesByFacetFilters(
+  database: T3Database,
+  input: FacetFilterEntriesInput,
+): EntrySummary[] {
+  const query = buildFacetFilterQuery(database, input, 'title-asc');
+  return mapEntrySummaryRows(database.prepare(`
+    ${entrySummarySelect}
+    WHERE ${query.whereSql}
+    ${query.orderSql}
+  `).all(...query.itemParameters));
+}
+
+interface BuiltFacetFilterQuery {
+  whereSql: string;
+  whereParameters: Array<string | number>;
+  itemParameters: Array<string | number>;
+  orderSql: string;
+}
+
+/**
+ * What one work is worth on one rating dimension — the expression both the rating filter and the
+ * rating sort compare and order by, so the two can never disagree about what "this work's value" is.
+ *
+ * The three classes answer it in two ways, and that difference is the whole point of having classes:
+ *
+ *   'entry' / 'producer'
+ *                  the work's own value, and where it has none, the highest value its Authors carry
+ *                  for the works summary of the same name — one question, not two. A work with four
+ *                  or more Authors inherits nothing (an anthology has no single Author score), so
+ *                  its missing value stays missing.
+ *   'author_self'  the author's own dimension: the highest value among the work's Authors, and never
+ *                  the work's own — this says what the author is like, not what the work is worth.
+ *
+ * The summary is not a choice the caller makes: `ratingSort.applyAuthorRating`, the older way of
+ * asking for it, changes nothing here, and the filter bar does not offer it as its own dimension.
+ *
+ * The SQL is a scalar expression over `entry.id`, so it works in WHERE and in ORDER BY alike, and
+ * its parameters must be supplied once per SQL occurrence.
+ */
+function ratingValueSql(
+  database: T3Database,
+  entryType: string,
+  slot: { id: number; kind: RatingSubjectKind; name: string },
+): { sql: string; parameters: Array<string | number> } {
+  const ownValue = `(
+          SELECT own.stars FROM entry_rating_values AS own
+          WHERE own.entry_id = entry.id AND own.slot_id = ?
+        )`;
+  // The class is a bound parameter, not interpolated: one expression text, three classes.
+  const completedByAuthors = (): string => `CASE
+          WHEN (
+            SELECT COUNT(*) FROM entry_producers AS author_count
+            WHERE author_count.entry_id = entry.id
+          ) >= 4 THEN NULL
+          ELSE (
+            SELECT MAX(author_value.stars)
+            FROM entry_producers AS author_link
+            JOIN producer_rating_values AS author_value
+              ON author_value.producer_id = author_link.producer_id
+            JOIN rating_slots AS author_slot
+              ON author_slot.id = author_value.slot_id
+            WHERE author_link.entry_id = entry.id
+              AND author_slot.subject_kind = ?
+              AND author_slot.entry_type = ?
+              AND author_slot.name = ?
+              AND author_value.stars IS NOT NULL
+          )
+        END`;
+  if (slot.kind === 'author_self') {
+    return {
+      sql: completedByAuthors(),
+      parameters: ['author_self', entryType, slot.name],
+    };
+  }
+  // A work's own dimension, and the summary of the same name, are one question: the work's own value
+  // first, the Authors' summary where the work carries none. Nobody selects the summary — asking for
+  // it separately was always the same number, so the fallback is simply how a work dimension reads.
+  const ownSlotId = slot.kind === 'entry'
+    ? slot.id
+    : findRatingSlotId(database, 'entry', entryType, slot.name) ?? -1;
+  return {
+    sql: `COALESCE(${ownValue}, ${completedByAuthors()})`,
+    parameters: [ownSlotId, 'producer', entryType, slot.name],
+  };
+}
+
+function entryListOrderSql(sort: EntryListSort): string {
+  switch (sort) {
+    case 'date-desc':
+      return 'ORDER BY entry.upload_date DESC, entry.id DESC';
+    case 'date-asc':
+      return 'ORDER BY entry.upload_date ASC, entry.id ASC';
+    case 'title-desc':
+      return 'ORDER BY entry.title COLLATE NOCASE DESC, entry.id ASC';
+    case 'title-asc':
+      return 'ORDER BY entry.title COLLATE NOCASE ASC, entry.id ASC';
+    case 'type':
+      return 'ORDER BY entry.type COLLATE NOCASE ASC, entry.title COLLATE NOCASE ASC, entry.id ASC';
+    case 'source-order':
+      return 'ORDER BY entry.id ASC';
+    case 'random':
+      return 'ORDER BY random()';
+  }
+}
+
+type FacetQueryInput = Omit<FacetFilterEntriesInput, 'entryType'> & {
+  entryType?: string | undefined;
+  entryIds?: number[] | undefined;
+  includeTagIds?: number[] | undefined;
+  excludeEntryTypes?: string[] | undefined;
+  searchQuery?: string | undefined;
+  recentOnly?: boolean | undefined;
+  producerDirectoryId?: number | undefined;
+  looseForProducerId?: number | undefined;
+  collectionId?: number | undefined;
+  includeNsfw?: boolean | undefined;
+  randomSeed?: number | undefined;
+};
+
+function buildFacetFilterQuery(
+  database: T3Database,
+  input: FacetQueryInput,
+  sort: EntryListSort,
+): BuiltFacetFilterQuery {
+  const clauses: string[] = [];
+  const parameters: Array<string | number> = [];
+  const entryType = input.entryType?.trim();
+  if (entryType) {
+    clauses.push('entry.type = ?');
+    parameters.push(entryType);
+  }
+
+  const entryIds = [...new Set(input.entryIds ?? [])];
+  const entryIdsJson = JSON.stringify(entryIds);
+  if (entryIds.length > 0) {
+    clauses.push('entry.id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))');
+    parameters.push(entryIdsJson);
+  }
+
+  const includeTagIds = [...new Set(input.includeTagIds ?? [])];
+  if (includeTagIds.length > 0) {
+    clauses.push(`(
+      SELECT COUNT(DISTINCT assignment.tag_id)
+      FROM entry_tags AS assignment
+      WHERE assignment.entry_id = entry.id
+        AND assignment.tag_id IN (${includeTagIds.map(() => '?').join(', ')})
+    ) = ${includeTagIds.length}`);
+    parameters.push(...includeTagIds);
+  }
+
+  const excludedTypes = [...new Set(input.excludeEntryTypes ?? [])];
+  if (excludedTypes.length > 0) {
+    clauses.push('entry.type NOT IN (SELECT value FROM json_each(?))');
+    parameters.push(JSON.stringify(excludedTypes));
+  }
+
+  if (input.recentOnly) clauses.push('entry_usage.last_viewed_at IS NOT NULL');
+
+  if (input.producerDirectoryId !== undefined) {
+    clauses.push(`EXISTS (
+      SELECT 1 FROM author_directory_entries AS directory_member
+      WHERE directory_member.directory_id = ? AND directory_member.entry_id = entry.id
+    )`);
+    parameters.push(input.producerDirectoryId);
+  }
+  if (input.looseForProducerId !== undefined) {
+    clauses.push(`EXISTS (
+      SELECT 1 FROM entry_producers AS loose_relation
+      WHERE loose_relation.producer_id = ? AND loose_relation.entry_id = entry.id
+    )`);
+    parameters.push(input.looseForProducerId);
+    clauses.push(`NOT EXISTS (
+      SELECT 1 FROM author_directory_entries AS grouped_member
+      WHERE grouped_member.producer_id = ? AND grouped_member.entry_id = entry.id
+    )`);
+    parameters.push(input.looseForProducerId);
+  }
+  if (input.collectionId !== undefined) {
+    clauses.push(`EXISTS (
+      SELECT 1 FROM collection_entries AS collection_member
+      WHERE collection_member.collection_id = ? AND collection_member.entry_id = entry.id
+    )`);
+    parameters.push(input.collectionId);
+  }
+  if (input.includeNsfw === false) {
+    clauses.push(`NOT EXISTS (
+      SELECT 1 FROM gallery_settings AS partition
+      WHERE partition.entry_type = entry.type AND partition.nsfw = 1
+    )`);
+  }
+
+  for (const condition of input.conditions) {
+    const uniqueTagIds = [...new Set(condition.tagIds)];
+    const tagPlaceholders = uniqueTagIds.map(() => '?').join(', ');
+    const facetClause = condition.facetId === null
+      ? ''
+      : 'AND assignment.facet_id = ?';
+    clauses.push(`(
+      SELECT COUNT(DISTINCT assignment.tag_id)
+      FROM entry_tags AS assignment
+      WHERE assignment.entry_id = entry.id
+        AND assignment.tag_id IN (${tagPlaceholders})
+        ${facetClause}
+    ) = ${uniqueTagIds.length}`);
+    parameters.push(...uniqueTagIds);
+    if (condition.facetId !== null) {
+      parameters.push(condition.facetId);
+    }
+  }
+
+  const uniqueAuthorIds = [...new Set(input.authorIds ?? [])];
+  if (uniqueAuthorIds.length > 0) {
+    const authorPlaceholders = uniqueAuthorIds.map(() => '?').join(', ');
+    clauses.push(`EXISTS (
+      SELECT 1 FROM entry_producers AS link
+      WHERE link.entry_id = entry.id
+        AND link.producer_id IN (${authorPlaceholders})
+    )`);
+    parameters.push(...uniqueAuthorIds);
+  }
+
+  // Rating conditions compare what the work is worth on one dimension, whichever class that
+  // dimension belongs to (see `ratingValueSql`): eq/gt/lt compare the given stars, and a missing
+  // value never satisfies a comparison — `unrated` is exactly that missing value.
+  for (const condition of input.ratingConditions ?? []) {
+    if (!entryType) throw new Error('entryType is required for rating filters');
+    const slot = requireRatingSlot(database, condition.slotId, entryType);
+    const value = ratingValueSql(database, entryType, slot);
+    if (condition.operator === 'unrated') {
+      clauses.push(`(${value.sql}) IS NULL`);
+      parameters.push(...value.parameters);
+      continue;
+    }
+    const comparison = condition.operator === 'eq' ? '=' : condition.operator === 'gt' ? '>' : '<';
+    clauses.push(`(${value.sql}) ${comparison} ?`);
+    // The schema refine guarantees stars is non-null for eq/gt/lt.
+    parameters.push(...value.parameters, condition.stars as number);
+  }
+
+  // Rating sort: high to low with unrated sinking below every rated entry.
+  const ratingSort = input.ratingSort ?? null;
+  let orderClause = entryListOrderSql(sort);
+  let ratingSortOrderParameters: Array<string | number> = [];
+  if (ratingSort) {
+    if (!entryType) throw new Error('entryType is required for rating sort');
+    const requested = requireRatingSlot(database, ratingSort.slotId, entryType);
+    // `applyAuthorRating` is the older way of saying "sort by the works summary of this name": it
+    // names a work dimension and asks for its summary. A summary slot named directly says the same
+    // thing, and both end up in the same expression.
+    const slot = requested.kind === 'entry' && ratingSort.applyAuthorRating
+      ? { ...requested, kind: 'producer' as const }
+      : requested;
+    const sortValue = ratingValueSql(database, entryType, slot);
+    // The expression appears twice (the IS NULL test and the value itself).
+    ratingSortOrderParameters = [...sortValue.parameters, ...sortValue.parameters];
+    orderClause = `ORDER BY (${sortValue.sql} IS NULL) ASC, ${sortValue.sql} DESC, entry.title COLLATE NOCASE, entry.id`;
+  }
+
+  // Usage conditions and sort (usage sort wins over the rating sort).
+  const usageClauses = buildUsageFilterClauses(
+    database,
+    input.usageConditions ?? [],
+    input.usageSort ?? null,
+  );
+  if (usageClauses.sql) {
+    clauses.push(usageClauses.sql);
+    parameters.push(...usageClauses.parameters);
+  }
+  if (input.usageSort) {
+    orderClause = `${usageClauses.orderSql}, entry.id ASC`;
+  } else if (!ratingSort && sort === 'source-order') {
+    orderClause = `ORDER BY (
+      SELECT CAST(key AS INTEGER) FROM json_each(?)
+      WHERE CAST(value AS INTEGER) = entry.id
+    ), entry.id`;
+  } else if (!ratingSort && sort === 'random') {
+    orderClause = 'ORDER BY ((entry.id * 1103515245 + ? * 12345) & 2147483647), entry.id';
+  }
+
+  const orderParameters = !input.usageSort && !ratingSort && sort === 'source-order'
+    ? [entryIdsJson]
+    : !input.usageSort && !ratingSort && sort === 'random'
+      ? [input.randomSeed ?? 0]
+      : [];
+
+  return {
+    whereSql: clauses.length > 0 ? clauses.join('\n      AND ') : '1 = 1',
+    whereParameters: parameters,
+    itemParameters: [
+      ...parameters,
+      ...orderParameters,
+      ...(!input.usageSort ? ratingSortOrderParameters : []),
+    ],
+    orderSql: orderClause,
+  };
+}
+
+/** Executes filtering, deterministic sorting, counting and paging in SQLite. */
+export function queryEntryPage(
+  database: T3Database,
+  input: EntryPageQueryRequest,
+): EntryPageResponse {
+  if (input.searchQuery) {
+    const excludedTypes = new Set(input.excludeEntryTypes ?? []);
+    const ranked = searchEntriesByTitle(database, input.searchQuery, input.entryType ?? null)
+      .filter((entry) => !excludedTypes.has(entry.type));
+    const offset = (input.page - 1) * input.pageSize;
+    return {
+      items: ranked.slice(offset, offset + input.pageSize),
+      total: ranked.length,
+      page: input.page,
+      pageSize: input.pageSize,
+    };
+  }
+  const query = buildFacetFilterQuery(database, input, input.sort);
+  const total = database.prepare(`
+    SELECT COUNT(*)
+    FROM entries AS entry
+    LEFT JOIN entry_usage AS entry_usage ON entry_usage.entry_id = entry.id
+    WHERE ${query.whereSql}
+  `).pluck().get(...query.whereParameters) as number;
+  const offset = (input.page - 1) * input.pageSize;
+  const items = mapEntrySummaryRows(database.prepare(`
+    ${entrySummarySelect}
+    WHERE ${query.whereSql}
+    ${query.orderSql}
+    LIMIT ? OFFSET ?
+  `).all(...query.itemParameters, input.pageSize, offset));
+  return { items, total, page: input.page, pageSize: input.pageSize };
+}
+
+/**
+ * Ranked global title search. The local library is small enough to score in
+ * memory, keeping punctuation literal while allowing bounded typo tolerance.
+ * Optional entryType restricts the search to one Gallery.
+ */
+export function searchEntriesByTitle(
+  database: T3Database,
+  query: string,
+  entryType: string | null = null,
+): EntrySummary[] {
+  const clause = entryType === null ? '' : 'WHERE entry.type = ?';
+  const parameters = entryType === null ? [] : [entryType];
+  const entries = mapEntrySummaryRows(database.prepare(`
+    ${entrySummarySelect}
+    ${clause}
+    ORDER BY entry.title COLLATE NOCASE, entry.id
+  `).all(...parameters));
+  return rankSearchResults(entries, query, (entry) => entry.title);
+}
+
+/** Ranked search over Entry Tags, optionally limited to SFW Gallery usage. */
+export function searchEntryTags(
+  database: T3Database,
+  query: string,
+  includeNsfw = true,
+): Array<{ tagId: number; name: string; normalizedName: string; entryCount: number }> {
+  const rows = database.prepare(`
+    SELECT tag.id AS tag_id, tag.name AS name, tag.normalized_name AS normalized_name,
+      (
+        SELECT COUNT(*)
+        FROM entry_tags AS assignment
+        JOIN entries AS entry ON entry.id = assignment.entry_id
+        LEFT JOIN gallery_settings AS gallery ON gallery.entry_type = entry.type
+        WHERE assignment.tag_id = tag.id
+          AND (? = 1 OR COALESCE(gallery.nsfw, 0) = 0)
+      ) AS entry_count
+    FROM tags AS tag
+    ORDER BY tag.name COLLATE NOCASE, tag.id
+  `).all(includeNsfw ? 1 : 0) as Array<{ tag_id: number; name: string; normalized_name: string; entry_count: number }>;
+  const hits = rows
+    .map((row) => ({
+      tagId: row.tag_id,
+      name: row.name,
+      normalizedName: row.normalized_name,
+      entryCount: row.entry_count,
+    }))
+    .filter((hit) => includeNsfw || hit.entryCount > 0);
+  return rankSearchResults(hits, query, (hit) => hit.name);
+}
+
+/**
+ * The rating dimension a filter or a sort names, and the class it belongs to.
+ *
+ * Any class of the work's Gallery is allowed — the work's own dimension, the author's works summary,
+ * or the author's own — because what a filter means by "this work's value" is answered per class in
+ * `ratingValueSql`. A slot of another Gallery is refused: its numbers are not comparable.
+ */
+function requireRatingSlot(
+  database: T3Database,
+  slotId: number,
+  entryType: string,
+): { id: number; kind: RatingSubjectKind; name: string } {
+  const row = database.prepare(`
+    SELECT id, subject_kind AS kind, name
+    FROM rating_slots
+    WHERE id = ? AND entry_type = ?
+  `).get(slotId, entryType) as { id: number; kind: RatingSubjectKind; name: string } | undefined;
+  if (!row) {
+    throw new Error(
+      `cannot filter: rating slot ${slotId} does not belong to the Gallery "${entryType}"`,
+    );
+  }
+  return row;
+}
+
+/**
+ * Applies the source Entry's tag placement as the standard for every OTHER
+ * Entry of the same type: each tag the source carries is moved, in any peer
+ * Entry that has the same tag under a different Facet, onto the source's
+ * Facet. Peers that do not carry the tag are untouched; tags the source does
+ * not carry are never relocated. The layout is shared per type, so the source
+ * Facet always exists for every peer — nothing is skipped as a structural
+ * conflict, and the source Entry itself is never modified.
+ */
+export function applyEntryTagLayout(
+  database: T3Database,
+  sourceEntryId: number,
+): EntryTagLayoutApplyResult {
+  const entry = database.prepare('SELECT id, type FROM entries WHERE id = ?')
+    .get(sourceEntryId) as { id: number; type: string } | undefined;
+  if (!entry) {
+    throw new Error('entry not found');
+  }
+  const entryType = entry.type.trim();
+
+  return database.transaction(() => {
+    const assignments = database.prepare(`
+      SELECT tag_id, facet_id
+      FROM entry_tags
+      WHERE entry_id = ?
+    `).all(sourceEntryId) as Array<{ tag_id: number; facet_id: number }>;
+
+    const entriesScanned = database.prepare(
+      'SELECT COUNT(*) AS n FROM entries WHERE type = ? AND id <> ?',
+    ).get(entryType, sourceEntryId) as { n: number };
+
+    if (assignments.length === 0) {
+      return {
+        entryType,
+        entriesAffected: 0,
+        tagsMoved: 0,
+        entriesScanned: entriesScanned.n,
+      };
+    }
+
+    const peersClause = 'entry_id IN (SELECT id FROM entries WHERE type = ? AND id <> ?)';
+    const selectMisplaced = database.prepare(
+      `SELECT DISTINCT entry_id
+       FROM entry_tags
+       WHERE tag_id = ? AND facet_id <> ? AND ${peersClause}`,
+    );
+    const syncTag = database.prepare(
+      `UPDATE entry_tags SET facet_id = ?
+       WHERE tag_id = ? AND facet_id <> ? AND ${peersClause}`,
+    );
+
+    const affectedEntries = new Set<number>();
+    let tagsMoved = 0;
+    for (const assignment of assignments) {
+      const misplaced = selectMisplaced.all(
+        assignment.tag_id,
+        assignment.facet_id,
+        entryType,
+        sourceEntryId,
+      ) as Array<{ entry_id: number }>;
+      if (misplaced.length === 0) continue;
+      for (const row of misplaced) {
+        affectedEntries.add(row.entry_id);
+      }
+      tagsMoved += syncTag.run(
+        assignment.facet_id,
+        assignment.tag_id,
+        assignment.facet_id,
+        entryType,
+        sourceEntryId,
+      ).changes;
+    }
+
+    return {
+      entryType,
+      entriesAffected: affectedEntries.size,
+      tagsMoved,
+      entriesScanned: entriesScanned.n,
+    };
+  })();
+}
+
+// ---------------------------------------------------------------------------
+// Unassigned-tag cleanup (tags sitting in a type's unnamed default Facet)
+// ---------------------------------------------------------------------------
+
+export interface UnassignedTagSuggestion {
+  facetId: number;
+  facetName: string;
+  count: number;
+}
+
+export interface UnassignedTagItem {
+  tagId: number;
+  tagName: string;
+  /** Entries carrying this tag in the unnamed default Facet (the ones to move). */
+  entryCount: number;
+  /** Where the OTHER entries of this type keep this tag, if anywhere. */
+  suggestion: UnassignedTagSuggestion | null;
+}
+
+export interface UnassignedTagGroup {
+  entryType: string;
+  /** Named Facets of this type, the valid move targets. */
+  facets: Array<{ facetId: number; facetName: string }>;
+  tags: UnassignedTagItem[];
+}
+
+/**
+ * Every type's tags that still sit in the unnamed default Facet ("未分类").
+ * The tag vocabulary is global and Facets belong to one type, so grouping is
+ * per type: the same tag name may be unassigned in one type and classified in
+ * another, and each type's move targets are its own named Facets. Each item
+ * carries a suggestion = the named Facet where the REST of this type's
+ * entries keep that tag (majority by entry count).
+ */
+export function listUnassignedTags(database: T3Database): UnassignedTagGroup[] {
+  const entryTypes = database.prepare(
+    'SELECT DISTINCT type FROM entries ORDER BY type COLLATE NOCASE',
+  ).all() as Array<{ type: string }>;
+
+  const groups: UnassignedTagGroup[] = [];
+  for (const { type } of entryTypes) {
+    const entryType = type.trim();
+    const unnamed = database.prepare(
+      `SELECT id FROM tag_groups
+       WHERE entry_type = ? AND group_kind = 'facet' AND name = ''
+       ORDER BY id LIMIT 1`,
+    ).get(entryType) as { id: number } | undefined;
+    if (!unnamed) continue;
+
+    const facetRows = database.prepare(
+      `SELECT id AS facetId, name AS facetName
+       FROM tag_groups
+       WHERE entry_type = ? AND group_kind = 'facet' AND name <> ''
+       ORDER BY sort_order, id`,
+    ).all(entryType) as Array<{ facetId: number; facetName: string }>;
+
+    const unassignedRows = database.prepare(`
+      SELECT tags.id AS tagId, tags.name AS tagName, COUNT(*) AS entryCount
+      FROM entry_tags AS assignment
+      JOIN entries ON entries.id = assignment.entry_id
+      JOIN tags ON tags.id = assignment.tag_id
+      WHERE entries.type = ? AND assignment.facet_id = ?
+      GROUP BY tags.id, tags.name
+      ORDER BY tags.name COLLATE NOCASE
+    `).all(entryType, unnamed.id) as Array<{ tagId: number; tagName: string; entryCount: number }>;
+
+    if (unassignedRows.length === 0) continue;
+
+    const tagIds = unassignedRows.map((row) => row.tagId);
+    const placeholders = tagIds.map(() => '?').join(', ');
+    const placementRows = database.prepare(`
+      SELECT assignment.tag_id AS tagId, facet.id AS facetId,
+             facet.name AS facetName, COUNT(*) AS count
+      FROM entry_tags AS assignment
+      JOIN entries ON entries.id = assignment.entry_id
+      JOIN tag_groups AS facet ON facet.id = assignment.facet_id
+      WHERE entries.type = ? AND facet.name <> '' AND assignment.tag_id IN (${placeholders})
+      GROUP BY assignment.tag_id, facet.id, facet.name
+    `).all(entryType, ...tagIds) as Array<{
+      tagId: number;
+      facetId: number;
+      facetName: string;
+      count: number;
+    }>;
+
+    const bestByTag = new Map<number, UnassignedTagSuggestion>();
+    for (const row of placementRows) {
+      const current = bestByTag.get(row.tagId);
+      if (!current || row.count > current.count
+        || (row.count === current.count && row.facetId < current.facetId)) {
+        bestByTag.set(row.tagId, {
+          facetId: row.facetId,
+          facetName: row.facetName,
+          count: row.count,
+        });
+      }
+    }
+
+    groups.push({
+      entryType,
+      facets: facetRows,
+      tags: unassignedRows.map((row) => ({
+        tagId: row.tagId,
+        tagName: row.tagName,
+        entryCount: row.entryCount,
+        suggestion: bestByTag.get(row.tagId) ?? null,
+      })),
+    });
+  }
+  return groups;
+}
+
+export interface MoveUnassignedTagInput {
+  entryType: string;
+  tagId: number;
+  targetFacetId: number;
+}
+
+export interface MoveUnassignedTagResult {
+  entryType: string;
+  tagId: number;
+  moved: number;
+  targetFacetId: number;
+}
+
+/**
+ * Moves every assignment of ONE tag that sits in this type's unnamed default
+ * Facet onto a named target Facet of the same type. Assignments that are
+ * already classified (named Facet) are untouched; other types are never
+ * touched (their unnamed Facet is a different row and their named Facets may
+ * legitimately disagree). Requires the exact same type on both sides.
+ */
+export function moveUnassignedTagToFacet(
+  database: T3Database,
+  input: MoveUnassignedTagInput,
+): MoveUnassignedTagResult {
+  const entryType = input.entryType.trim();
+  const target = database.prepare(
+    `SELECT id FROM tag_groups
+     WHERE entry_type = ? AND group_kind = 'facet' AND id = ?`,
+  ).get(entryType, input.targetFacetId) as { id: number } | undefined;
+  if (!target) {
+    throw new Error(`cannot move tag into a facet of another type`);
+  }
+
+  const unnamed = database.prepare(
+    `SELECT id FROM tag_groups
+     WHERE entry_type = ? AND group_kind = 'facet' AND name = ''
+     ORDER BY id LIMIT 1`,
+  ).get(entryType) as { id: number } | undefined;
+  if (!unnamed) {
+    throw new Error(`type has no unnamed default facet`);
+  }
+  if (unnamed.id === input.targetFacetId) {
+    throw new Error('cannot move tags into the unnamed default facet');
+  }
+
+  const moved = database.prepare(`
+    UPDATE entry_tags SET facet_id = ?
+    WHERE tag_id = ?
+      AND facet_id = ?
+      AND entry_id IN (SELECT id FROM entries WHERE type = ?)
+  `).run(input.targetFacetId, input.tagId, unnamed.id, entryType).changes;
+
+  return {
+    entryType,
+    tagId: input.tagId,
+    moved,
+    targetFacetId: input.targetFacetId,
+  };
+}

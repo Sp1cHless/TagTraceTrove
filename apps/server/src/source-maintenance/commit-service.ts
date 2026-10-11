@@ -154,6 +154,50 @@ export async function commitSourceMaintenanceRun(
   // 9. Single transaction: new Contents, optional group annotation, run state.
   const unresolvedCount = items.filter((item) => item.decision !== 'accept').length;
   database.transaction(() => {
+    const currentRun = getRun(database, runId);
+    if (currentRun?.status !== 'review') {
+      throw new CommitConflictError(`run ${runId} is ${currentRun?.status ?? 'missing'}; review changed during backup`);
+    }
+    if (currentRun.markOriginInvalid !== run.markOriginInvalid ||
+        currentRun.targetOrigin !== run.targetOrigin ||
+        currentRun.originSourceKey !== run.originSourceKey) {
+      throw new CommitStaleError(`run ${runId} settings changed during backup`);
+    }
+    const currentItems = listItemEntries(database, runId);
+    if (currentItems.length !== items.length || currentItems.some((item, index) => {
+      const original = items[index];
+      return original === undefined || item.entryId !== original.entryId ||
+        item.decision !== original.decision || item.selectedUrl !== original.selectedUrl;
+    })) {
+      throw new CommitStaleError(`run ${runId} decisions changed during backup`);
+    }
+    for (const item of accepted) {
+      const stored = getItem(database, runId, item.entryId);
+      const title = database.prepare('SELECT title FROM entries WHERE id = ?')
+        .pluck().get(item.entryId) as string | undefined;
+      if (stored === null || title !== stored.entryTitleSnapshot ||
+          listEntrySources(database, item.entryId)
+            .filter((source) => source.sourceKey === run.originSourceKey)
+            .map((source) => source.url).join('\n') !== stored.originUrls.join('\n')) {
+        throw new CommitStaleError(`Entry ${item.entryId} changed during backup`);
+      }
+    }
+    const currentOwnership = new Map<string, Set<number>>();
+    for (const source of listAllEntrySources(database)) {
+      const owners = currentOwnership.get(source.url) ?? new Set<number>();
+      owners.add(source.entryId);
+      currentOwnership.set(source.url, owners);
+    }
+    const plannedWrites = new Set(toWrite.map((item) => `${item.entryId}\n${item.url}`));
+    for (const item of normalized) {
+      const owners = currentOwnership.get(item.url);
+      if (owners !== undefined && !(owners.size === 1 && owners.has(item.entryId))) {
+        throw new CommitConflictError(`URL ${item.url} already belongs to another Entry`);
+      }
+      if (plannedWrites.has(`${item.entryId}\n${item.url}`) && owners !== undefined) {
+        throw new CommitStaleError(`URL ${item.url} appeared during backup`);
+      }
+    }
     for (const item of toWrite) {
       const nextSortOrder = database.prepare(`
         SELECT COALESCE(MAX(sort_order), -1) + 1

@@ -1,0 +1,107 @@
+{
+  "results": [
+    {
+      "name": "shared-types-final",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/shared/tsconfig.json",
+        "--noEmit"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "name": "server-types-final",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "apps/server/tsconfig.json",
+        "--noEmit"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "name": "web-types-final",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "apps/web/node_modules/vue-tsc/bin/vue-tsc.js",
+        "-p",
+        "apps/web/tsconfig.json",
+        "--noEmit"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "name": "owned-lint-final",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "node_modules/eslint/bin/eslint.js",
+        "packages/shared/src/schemas/sync.ts",
+        "apps/server/src/http/app.ts",
+        "apps/server/src/sync/entry-conversion-context.ts",
+        "apps/web/src/api/gallery.ts",
+        "apps/web/src/offline/offline-api.ts",
+        "apps/web/src/offline/sync-mutation-plan.ts",
+        "apps/web/tests/offline-entry-multi-author.integration.test.ts"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "name": "nearest-default",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "apps/web/tests/outbox-store.test.ts",
+        "apps/web/tests/pending-work-restore.test.ts",
+        "apps/web/tests/pending-work-restore-atomic.test.ts",
+        "packages/shared/tests/pending-entry-authors.test.ts",
+        "--reporter=json",
+        "--outputFile=D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-entry-multi-author\\connected\\gates\\nearest-default.json"
+      ],
+      "exit": 0,
+      "output": "JSON report written to D:/Project/TagTraceTrove/.hermes/tmp/offline-parity-entry-multi-author/connected/gates/nearest-default.json\n"
+    },
+    {
+      "name": "nearest-integration",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "apps/server/tests/integration/pending-entry-authors.integration.test.ts",
+        "apps/server/tests/integration/pending-entry-authors-flow.integration.test.ts",
+        "--reporter=json",
+        "--outputFile=D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-entry-multi-author\\connected\\gates\\nearest-integration.json"
+      ],
+      "exit": 0,
+      "output": "JSON report written to D:/Project/TagTraceTrove/.hermes/tmp/offline-parity-entry-multi-author/connected/gates/nearest-integration.json\n"
+    }
+  ],
+  "before": {
+    "packages/shared/src/schemas/sync.ts": "e98e298af259a2a693158ad54f7bcbdb4b27125077ea88411b5738dad10d912c",
+    "apps/server/src/http/app.ts": "1772aeaff0742f574d7c52f0f553811fb9b594289f32a5250ee12c5193db0c56",
+    "apps/server/src/sync/entry-conversion-context.ts": "252920622c8297ac30e19874518af01f5fdeac3a4126478d5c9bb66700f7fd13",
+    "apps/web/src/api/gallery.ts": "729ace38d420280971ef4019250d5d159d76a3f86cd3b6d59597310d50ce1493",
+    "apps/web/src/offline/offline-api.ts": "2e0d55154b050958526c5bc7c0dd75828a66599f1bcf0df324eb5fcd99457091",
+    "apps/web/src/offline/sync-mutation-plan.ts": "f40814407b8121118eae94f0a51ad52ce76b304aa1f2259c547688743adf09a3",
+    "apps/web/tests/offline-entry-multi-author.integration.test.ts": "dbf56762343a40678e97edabbbc4f403f886a4089e0033ec0f0ca9f594b7ecca"
+  },
+  "after": {
+    "packages/shared/src/schemas/sync.ts": "e98e298af259a2a693158ad54f7bcbdb4b27125077ea88411b5738dad10d912c",
+    "apps/server/src/http/app.ts": "1772aeaff0742f574d7c52f0f553811fb9b594289f32a5250ee12c5193db0c56",
+    "apps/server/src/sync/entry-conversion-context.ts": "252920622c8297ac30e19874518af01f5fdeac3a4126478d5c9bb66700f7fd13",
+    "apps/web/src/api/gallery.ts": "729ace38d420280971ef4019250d5d159d76a3f86cd3b6d59597310d50ce1493",
+    "apps/web/src/offline/offline-api.ts": "2e0d55154b050958526c5bc7c0dd75828a66599f1bcf0df324eb5fcd99457091",
+    "apps/web/src/offline/sync-mutation-plan.ts": "f40814407b8121118eae94f0a51ad52ce76b304aa1f2259c547688743adf09a3",
+    "apps/web/tests/offline-entry-multi-author.integration.test.ts": "dbf56762343a40678e97edabbbc4f403f886a4089e0033ec0f0ca9f594b7ecca"
+  },
+  "shaUnchanged": true
+}

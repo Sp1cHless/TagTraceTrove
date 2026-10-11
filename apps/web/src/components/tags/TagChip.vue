@@ -1,4 +1,8 @@
 <script setup lang="ts">
+
+import { useI18n } from '../../i18n.js';
+
+const { t } = useI18n();
 withDefaults(
   defineProps<{
     label: string;
@@ -19,12 +23,12 @@ defineEmits<{
 <template>
   <span class="tag-chip" :draggable="draggable">
     <span class="tag-chip__grip" aria-hidden="true">⠿</span>
-    <span>{{ label }}</span>
+    <span class="t3-library-text">{{ label }}</span>
     <button
       v-if="removable"
       class="tag-chip__remove"
       type="button"
-      :aria-label="`Remove ${label}`"
+      :aria-label="t('tag.remove', { name: label })"
       @click.stop="$emit('remove')"
     >
       ×

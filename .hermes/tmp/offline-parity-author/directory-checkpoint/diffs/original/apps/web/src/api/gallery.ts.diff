@@ -1,0 +1,22 @@
+--- original/apps/web/src/api/gallery.ts
++++ live/apps/web/src/api/gallery.ts
+@@ -435,7 +435,8 @@
+   listEntrySources(entryId: number): Promise<EntrySourceRecordDto[]>;
+   listSourceLibrary(): Promise<SourceLibraryRecordDto[]>;
+   getSyncCapabilities(options?: { replay?: boolean }): Promise<SyncCapabilities>;
+-  getEntrySyncIdentity?(entryId: number): Promise<SyncEntryIdentity>;
++  getEntrySyncIdentity?(entryId: number): Promise<SyncEntryIdentity>;
++  getAuthorSyncIdentity?(authorId: number): Promise<SyncEntryIdentity>;
+   /** Stable sync client identity for operation receipts; the online browser keeps one in localStorage. */
+   getClientId?(): Promise<string>;
+   /** Read-only bounded journal transport; records are NOT a complete snapshot projection. */
+@@ -1014,6 +1015,9 @@
+     async getSyncCapabilities() {
+       return syncCapabilitiesSchema.parse(await client.request('sync/capabilities'));
+     },
++    async getAuthorSyncIdentity(authorId) {
++      return syncEntryIdentitySchema.parse(await client.request(`producers/${authorId}/sync-identity`));
++    },
+     async getEntrySyncIdentity(entryId) {
+       return syncEntryIdentitySchema.parse(await client.request(`entries/${entryId}/sync-identity`));
+     },

@@ -1,0 +1,762 @@
+{
+  "version": 1,
+  "status": "FIRST_FUNCTIONAL_VERTICAL_GREEN_NOT_03_DONE",
+  "entries": [
+    {
+      "live": "packages/shared/src/schemas/sync.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/packages/shared/src/schemas/sync.ts",
+      "size": 62922,
+      "sha256": "a78e74ffcf2138c274e10bf2bc1b910c36e576dba36ec253895d434b79f38f83",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "packages/shared/src/schemas/native-mutation-contract.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/packages/shared/src/schemas/native-mutation-contract.ts",
+      "size": 4147,
+      "sha256": "6e4eebe411131cedb9b7ffe5bce3fc5f72d1f1c120fa9eaabf70eac4141ac2cf",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "packages/shared/src/collection-common-tag.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/packages/shared/src/collection-common-tag.ts",
+      "size": 4059,
+      "sha256": "45b0cc262de2e640d613eed6599e6676b6c6342e84c2a9fc6242517a21c7b9ea",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "packages/shared/src/index.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/packages/shared/src/index.ts",
+      "size": 1389,
+      "sha256": "ee34edcf6a33edb575c935e130e1231d93f572108b2f149ab2945f08d7859c08",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/server/src/sync/collection-common-tag.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/server/src/sync/collection-common-tag.ts",
+      "size": 5734,
+      "sha256": "cba3f56da00795910947edbd638d132088f4fefd880a5dab634c0e47acdea2f4",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/server/src/sync/replay-service.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/server/src/sync/replay-service.ts",
+      "size": 122228,
+      "sha256": "de1ef6f918f3b2ba3b2f6db517d67d70ab8a9dfac2fbdd06a5d54b17e947d743",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/server/src/sync/sync-service.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/server/src/sync/sync-service.ts",
+      "size": 19371,
+      "sha256": "473811bb87418eed87331a78a01aaef6844163a76e7bedd2e8f21799dc160e3f",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/server/src/http/app.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/server/src/http/app.ts",
+      "size": 101601,
+      "sha256": "02c185cce8543d13cf151860eebad73aabdebc666c0b3f58bec1335adeb8f9c2",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/web/src/api/gallery.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/web/src/api/gallery.ts",
+      "size": 67319,
+      "sha256": "7712a66050a41df2a41a3540e90ba772700dcba1d30a70424d3c1740fc82e4ff",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/web/src/offline/collection-common-tag.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/web/src/offline/collection-common-tag.ts",
+      "size": 5402,
+      "sha256": "8bcf1d3cd181ed6546675ad5b5b54190b940d77b429b655d27d2a4723496a36b",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/web/src/offline/offline-api.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/web/src/offline/offline-api.ts",
+      "size": 375407,
+      "sha256": "c00e80494759a153a356cb5812b4ff12d29fdb8d4c9b364075e5c36d9def34b6",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/web/src/offline/sync-mutation-plan.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/web/src/offline/sync-mutation-plan.ts",
+      "size": 10090,
+      "sha256": "dae671b832f3756bc4ba4b213ed707c01a8e72f479dfce578dc6f2c32306285b",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/web/src/offline/pending-work-restore.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/web/src/offline/pending-work-restore.ts",
+      "size": 28854,
+      "sha256": "f6614dad18f8f042b0d969e4b10b242b6d9bcfabf2e11466b70f6b522bdd79d2",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/web/tests/offline-collection-common-tag.integration.test.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/web/tests/offline-collection-common-tag.integration.test.ts",
+      "size": 13852,
+      "sha256": "f7526afc5e84f5a504829d2cf5bc60ee1ac05c06a662866df8147b2b637ac704",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/web/tests/offline-collection-parity.integration.test.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/web/tests/offline-collection-parity.integration.test.ts",
+      "size": 8002,
+      "sha256": "4e6b8c6ad43f304742de06f9f5b5a055d5b502d9aa0bec83582707f36cd96d37",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "packages/shared/package.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/packages/shared/package.json",
+      "size": 297,
+      "sha256": "2ef541414369ef148e414681953c6ea59b7162c00b35d974bd7fa6f36f24dfe3",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "pnpm-lock.yaml",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/pnpm-lock.yaml",
+      "size": 123880,
+      "sha256": "b2147c5ca5a38be454faad5554b94e88c1426acedd2f12032d6d967ba09343a5",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/web/src/CollectionsPage.vue",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/web/src/CollectionsPage.vue",
+      "size": 48091,
+      "sha256": "77e0268966c77aab28ee6a38fdf6ea7d5f91174cc7d5a5b399abd1a6037c5945",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/web/tests/offline-collection-delete.integration.test.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/web/tests/offline-collection-delete.integration.test.ts",
+      "size": 29081,
+      "sha256": "05950c3faa1ae0ca51fa0b35dbb4066bc9b09600e6d03585bacc4006e9e5925a",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/server/src/database/migrations/028_author_resource_sync.sql",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/server/src/database/migrations/028_author_resource_sync.sql",
+      "size": 25354,
+      "sha256": "a9b86901b93087165ae9d1c4f574e15f3697266100d44091eee5f44a1a3f85fe",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/server/src/database/migrations/037_gallery_order_sync.sql",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/server/src/database/migrations/037_gallery_order_sync.sql",
+      "size": 38817,
+      "sha256": "39904508f711bf9c1ac7bcc8bcb6a6eb72b8c968a5065e275bc62c2368649c68",
+      "role": "latest-source/report"
+    },
+    {
+      "live": "apps/server/src/database/migrations/042_standalone_author_directory_seed.sql",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/apps/server/src/database/migrations/042_standalone_author_directory_seed.sql",
+      "size": 1249,
+      "sha256": "ee9dccd44efe6cf383633d7e44ebab39368a58a9e8c1da0f6d971c362cdbb008",
+      "role": "latest-source/report"
+    },
+    {
+      "live": ".hermes/artifacts/offline-parity-collection-common-tag-vertical.md",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/artifacts/offline-parity-collection-common-tag-vertical.md",
+      "size": 9793,
+      "sha256": "1af2972e9090bbfc1dad4b23253ecdaf6f9c2487a8c76bc5d4bdc215112c36c2",
+      "role": "latest-source/report"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/batch2-provenance.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/batch2-provenance.json",
+      "size": 823,
+      "sha256": "489e99df35f63fb21800662c4af10e1b4065d52f8f9ebafba0b5339b1021f880",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/caller-run2.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/caller-run2.json",
+      "size": 1331,
+      "sha256": "640c41499f0a719cdb4eb6e2435e27f4de8eae96e24f915e752b5e1de761db3b",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/caller-run2.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/caller-run2.log",
+      "size": 123,
+      "sha256": "0a0fbf06f3d076e7098b24e7df5f2c8eeddf45c77689aa910d9e7148a02c25f1",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/final-owned-list.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/final-owned-list.json",
+      "size": 1118,
+      "sha256": "15d022cf43be5bcecbcef8db57d34e6699c32f454c7ef4306a5df1e214f3d5eb",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/final-test-lint.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/final-test-lint.json",
+      "size": 15,
+      "sha256": "47b8b6b49d4695fe6e036bd916538aff4f46773e212ca0d429db80f3963e2cfe",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/final-test-lint.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/final-test-lint.log",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/final-vertical-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/final-vertical-execution.json",
+      "size": 566,
+      "sha256": "a6e4f371e2b954f15484ff18be31122263a9d26e6e4cdda7531db7a6f4f12729",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/final-vertical.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/final-vertical.json",
+      "size": 11896,
+      "sha256": "1a0eded649cdc5357607c19f4514881f41bc1d7b26e3285282668b9fe1b44d22",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/final-vertical.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/final-vertical.log",
+      "size": 126,
+      "sha256": "f780eca10af686a7a8628dbd5cff86bf22b422660df1444966eb810cb4b51ba2",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/finite-gates.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/finite-gates.json",
+      "size": 505,
+      "sha256": "402401195e3702fbcba2e7ebe747f49516de232348ffa07381e888270b9c01c6",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/first-GREEN-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/first-GREEN-execution.json",
+      "size": 540,
+      "sha256": "3249a18e8f38719fbdad25cf6c46f27f91298a745e0ef65c3289a7162e8b36b7",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/first-GREEN.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/first-GREEN.json",
+      "size": 11927,
+      "sha256": "24a49463de331d45ee237d41136609856bcc6288c0448ec16650bdf166246e52",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/first-GREEN.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/first-GREEN.log",
+      "size": 123,
+      "sha256": "56639531fdd7fddfa706603db50b5dcfefb3b7442a2813798acd4e56760ac6e2",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/first-RED.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/first-RED.json",
+      "size": 1668,
+      "sha256": "e3da38129e181b152188a831e5a8bf797e9ad582235953a3bbd5f89911b13162",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/first-RED.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/first-RED.log",
+      "size": 121,
+      "sha256": "d120588a213287416d271a2196113f859b2ea5c6c93e5bc2871359f01b5d9c5c",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/first-run-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/first-run-execution.json",
+      "size": 410,
+      "sha256": "4714d076c871e27dcedeb5e3e719dddf670b436cb18dcbef816dc96eb53b0086",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/first-run.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/first-run.json",
+      "size": 1666,
+      "sha256": "0d5b0dad77896e02875c052721d858e4be5b085cb2945980dfaa44a472f2124b",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/first-run.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/first-run.log",
+      "size": 121,
+      "sha256": "2dc5b4af2d10ce7d5cc2e1fcf7fcf92fdf504844d72cff7619ceba786b5a1c1b",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/gate-after-hashes.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/gate-after-hashes.json",
+      "size": 2326,
+      "sha256": "4f1bbdde624a79d5d19c976f6ca5cc72f35ce29563a16465bf7023290609d1c5",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/gate-before-hashes.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/gate-before-hashes.json",
+      "size": 2326,
+      "sha256": "0d144319b43d78414a825b14dc61b134bbffe4b059d219f0194083922ee02910",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/nearest-default-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/nearest-default-execution.json",
+      "size": 667,
+      "sha256": "fc553098b77d9b9ab6bca8b54d96cca93aaaf6074e5e9d4596353cf6152be950",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/nearest-default.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/nearest-default.json",
+      "size": 57124,
+      "sha256": "823d57db93bcad74adbabbbd9be8d0b66680831d8e0a986ab6e796bb22d82eed",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/nearest-default.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/nearest-default.log",
+      "size": 127,
+      "sha256": "abb1b194289456bae81d6a018a70e7765b7ac46714f868062d93cb86e7a8bc80",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/nearest-sql-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/nearest-sql-execution.json",
+      "size": 873,
+      "sha256": "2ccd0bae7d775bf3da5d6c96522a1997d5db2c9193792e4d355f95a6bd123c7c",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/nearest-sql.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/nearest-sql.json",
+      "size": 24272,
+      "sha256": "463534e5727b0ed9ececd043907cd29a371475a99e1c4c151a0a7c4531836e00",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/nearest-sql.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/nearest-sql.log",
+      "size": 123,
+      "sha256": "2d6aa24dd8836021c0e9704cbbfba46692f1c6f7da58af26a3a9a298ee451ddf",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/new-file-markers.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/new-file-markers.json",
+      "size": 325,
+      "sha256": "499282cb7b70588b2e2d063eb43de98989713fb302d6674ceefb2c41a65b38de",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/owned-lint-final-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/owned-lint-final-execution.json",
+      "size": 923,
+      "sha256": "cb6151e48912b6ce0ea4197938ee4e28c6a2430781ec5dd9c9064c358db8ecd2",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/owned-lint-final.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/owned-lint-final.log",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/owned-provenance.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/owned-provenance.json",
+      "size": 4264,
+      "sha256": "3af9f7110ae41684a4caf5ff9965c2a0719e7bc9f0c69439a97c4e4d8b1155b7",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/scoped-diff-check.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/scoped-diff-check.json",
+      "size": 1053,
+      "sha256": "a197a18ca544802582070172a60240a47a380bdf0a5c209b42a0a983e0f03ef9",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/scoped-diff-check.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/scoped-diff-check.log",
+      "size": 1230,
+      "sha256": "2238eef020dffe3d8e2c348d3bd4fa970074ddbf2fc80b29bf9eddb90fda51dc",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/server-types-final-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/server-types-final-execution.json",
+      "size": 158,
+      "sha256": "42426b19a8d21e8a262df0791f36ffbc4d9c7fc7ac60bce80574aaf2035f5ad2",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/server-types-final.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/server-types-final.log",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/server-types-initial.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/server-types-initial.log",
+      "size": 196,
+      "sha256": "a27752cf626818e6b2efb1c5f4fcb8255c5e54ab7f23369523eda7c51f54ad0e",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/shared-types-final-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/shared-types-final-execution.json",
+      "size": 227,
+      "sha256": "3ad85a739d3df59ea7199f773dc466fd654dbd9f1e7651ba29ab10ae471e8243",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/shared-types-final.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/shared-types-final.log",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/test-before-expanded.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/test-before-expanded.ts",
+      "size": 7957,
+      "sha256": "cae3dc4914d7220b0b35868ed5a3418e8eeb5fb3d68281605173e41822d91d3b",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/vertical-run1.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/vertical-run1.json",
+      "size": 2896,
+      "sha256": "c67937398d015db0088de1be20594a9dc0ce7d92c57dc2eb5128113edcef6377",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/vertical-run1.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/vertical-run1.log",
+      "size": 125,
+      "sha256": "b33a3e5a8194335a9345b7d3ab90fd5f305396436d58e3a7ecf11f9379afde19",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/vertical-run2.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/vertical-run2.json",
+      "size": 12415,
+      "sha256": "46ccc18934e70ff8444fe14239b7950f50e198aee682c9f088b2a64a9307e8a0",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/vertical-run2.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/vertical-run2.log",
+      "size": 125,
+      "sha256": "613127d223c35687af7f95e38a3b053e87c3f1fb1ff5266ead2129e77ec8d34c",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/web-types-final-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/web-types-final-execution.json",
+      "size": 233,
+      "sha256": "64686143329a4f109130fde22638bd98f756016291ace0037a5691630a0df6bd",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/web-types-final.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/web-types-final.log",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/web-types-initial-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/web-types-initial-execution.json",
+      "size": 168,
+      "sha256": "2c0bac3319236670f6e02db7a4034ec1753a81408e683cd41338f1c4da2b9563",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/web-types-initial.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/web-types-initial.log",
+      "size": 8000,
+      "sha256": "76b7ad3d37daa78b960b00e0a5b112efd49af3528e5dbd0d75b1dd01206bf86b",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/web-types-run2.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/web-types-run2.log",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/pnpm-lock.yaml",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/pnpm-lock.yaml",
+      "size": 123814,
+      "sha256": "496a4de8a02079905b57f651cfe9b58736296285e88a7e43b3a76a9dfa73e302",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/server/src/http/app.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/server/src/http/app.ts",
+      "size": 101101,
+      "sha256": "d4ae18b1fde4f3525f8ccebc6d0c3ed6f0222cca1e8aa607d17af3a773e89f63",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/server/src/repositories/collection-repository.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/server/src/repositories/collection-repository.ts",
+      "size": 18537,
+      "sha256": "f7011273420eddb731d101f0a110513174c80b92c07992642c6acde1f7cdfb97",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/server/src/sync/replay-service.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/server/src/sync/replay-service.ts",
+      "size": 121063,
+      "sha256": "f0697ee412ef1e0a1bbac0ee74d43732718b36e684079518e10f6ffa97526c80",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/server/src/sync/sync-service.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/server/src/sync/sync-service.ts",
+      "size": 19310,
+      "sha256": "b3d052259fe3c7034fca8c259ef0d626d0e49f8c88b29a15d2a4f0e05e2ab88b",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/web/src/api/gallery.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/web/src/api/gallery.ts",
+      "size": 66900,
+      "sha256": "6e5d9475a19ac1544cd89d0a3d0581326f3c97a9ab60546725bf9db1a12e3dac",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/web/src/offline/offline-api.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/web/src/offline/offline-api.ts",
+      "size": 369765,
+      "sha256": "369c503b143997384da8f774e4c0a1cb572e1c5c15a3c64dc933d28609c4401a",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/web/src/offline/outbox-store.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/web/src/offline/outbox-store.ts",
+      "size": 9547,
+      "sha256": "ba11716ebf20040e182a2d3f8cedf06d851cc5d15c0840fa3198a6e1d7bf470b",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/web/src/offline/pending-work-restore.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/web/src/offline/pending-work-restore.ts",
+      "size": 27398,
+      "sha256": "0689cfd726b84371f87cf663bacfcdc6f673d1c4f00adac641bcc9e1e9373f09",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/web/src/offline/sync-mutation-plan.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/web/src/offline/sync-mutation-plan.ts",
+      "size": 9290,
+      "sha256": "265c1ecac2a456c55e02028f8fb1fe121d8891c6306588fd1970ab96c0dcb745",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/web/tests/offline-collection-common-tag.integration.test.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/web/tests/offline-collection-common-tag.integration.test.ts",
+      "size": 7957,
+      "sha256": "cae3dc4914d7220b0b35868ed5a3418e8eeb5fb3d68281605173e41822d91d3b",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/web/tests/offline-collection-parity.integration.test.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/apps/web/tests/offline-collection-parity.integration.test.ts",
+      "size": 7950,
+      "sha256": "3beea510fc0528cafb29620866d370b69dacf8cfe29be16cac248fe4c5158345",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/packages/shared/package.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/packages/shared/package.json",
+      "size": 270,
+      "sha256": "2b887dc7f180d0ef45c3988f0c90d3cc4381fd161c44609b7d716b0e2811cbd6",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/packages/shared/src/index.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/packages/shared/src/index.ts",
+      "size": 1345,
+      "sha256": "ee4a381890af560a4b65bb21f4ddc24b11635e9b185a443d6e87dd5910074d42",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/packages/shared/src/schemas/native-mutation-contract.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/packages/shared/src/schemas/native-mutation-contract.ts",
+      "size": 3999,
+      "sha256": "26b02be372725e75239f89972cfe722a7b3b5294a8108d4c9cb2470a1a2e5822",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/before/packages/shared/src/schemas/sync.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/before/packages/shared/src/schemas/sync.ts",
+      "size": 59998,
+      "sha256": "41a33d667586e825f0761593f93e1f9fd6bd8a12fc00a26dd928d0200726341d",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/edits/before-collection-common-tag.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/edits/before-collection-common-tag.ts",
+      "size": 5356,
+      "sha256": "128830b1c113f15ef592a874e8df1200e72886eec85bd5d48ecf69373b5e0e25",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/edits/before-offline-api.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/edits/before-offline-api.ts",
+      "size": 375152,
+      "sha256": "017ce5a18fdef1a03b6bc1ba8aee7f67bb2ce53c67435d9bdb8b8430596754e2",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/edits/rollback-second-write-before.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/edits/rollback-second-write-before.ts",
+      "size": 13842,
+      "sha256": "df43f4022b35aac4c88549dc9c26005e357bc3fe92b161b0146d8904d1162dfd",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/edits/stage3-before-collection-common-tag.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/edits/stage3-before-collection-common-tag.ts",
+      "size": 5714,
+      "sha256": "ee209e510cde76fe0f860f03bf01db5c6c6799b294b20c58c539afd35896fa60",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/edits/stage3-before-offline-api.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/edits/stage3-before-offline-api.ts",
+      "size": 375127,
+      "sha256": "3b8450162d1437cab40ada350c77c2dc16b075eeb6696e5c985872b6fbb0e611",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/edits/stage3-before-offline-collection-common-tag.integration.test.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/edits/stage3-before-offline-collection-common-tag.integration.test.ts",
+      "size": 12652,
+      "sha256": "255361731489bf78ecacdec4fc15d2ff77ad077c2a0b268ba6633324c9fa1f68",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/edits/stage3-before-sync-mutation-plan.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/edits/stage3-before-sync-mutation-plan.ts",
+      "size": 9886,
+      "sha256": "9ada9537891404c141b58876adc23bb1cb61c0795e672fd47299eeed2af09c7e",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/edits/stage4-before-offline-collection-parity.integration.test.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/edits/stage4-before-offline-collection-parity.integration.test.ts",
+      "size": 7938,
+      "sha256": "65908fde31b0a4e551b837a108bc7ff8d86c518e3b1c64c9da18fe4d8092ee83",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__server__src__http__app.ts.diff",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__server__src__http__app.ts.diff",
+      "size": 1355,
+      "sha256": "2c93f6c837f2135b162bfd09992304359e6d5954844a4b07f063769731f4572c",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__server__src__sync__replay-service.ts.diff",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__server__src__sync__replay-service.ts.diff",
+      "size": 1993,
+      "sha256": "8d922ae29b032d6f7c879c1a5142d87c1c8ea0879cf4b81f92dcd69194665979",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__server__src__sync__sync-service.ts.diff",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__server__src__sync__sync-service.ts.diff",
+      "size": 657,
+      "sha256": "9e36d5730b9e96c6d4ccf267848ffd11b7f614e0d3a816bb7bf9985999d639f5",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__web__src__api__gallery.ts.diff",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__web__src__api__gallery.ts.diff",
+      "size": 1362,
+      "sha256": "de573330b65009ebf5c562a8ebc12e8dd1c260d33c786138d17a28d49a28a064",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__web__src__offline__offline-api.ts.diff",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__web__src__offline__offline-api.ts.diff",
+      "size": 28052,
+      "sha256": "bb3f4589d0bfffe14e78546fc2db3023c0d9fc1aaa1a24a1867b2cea2af7f8e7",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__web__src__offline__pending-work-restore.ts.diff",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__web__src__offline__pending-work-restore.ts.diff",
+      "size": 1951,
+      "sha256": "1f2545806fa6ca59f23fbd19b0883fe44976f1cde5bc26d766d7fe965053774c",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__web__src__offline__sync-mutation-plan.ts.diff",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__web__src__offline__sync-mutation-plan.ts.diff",
+      "size": 3662,
+      "sha256": "5a2e34762ebdfb54835693978e078c8bd96dc68adc8bfc33bdc7548fccd39e82",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__web__tests__offline-collection-common-tag.integration.test.ts.diff",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__web__tests__offline-collection-common-tag.integration.test.ts.diff",
+      "size": 7906,
+      "sha256": "c0c59250bc840856270797c8bba6d4ec9472c34a4a0f85f5b06ed9437408d1c2",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__web__tests__offline-collection-parity.integration.test.ts.diff",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/apps__web__tests__offline-collection-parity.integration.test.ts.diff",
+      "size": 1203,
+      "sha256": "110c3d30b2170866de2b5d6cc73ab41875a329d1739bc491a9bfaf21b0d600c8",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/packages__shared__package.json.diff",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/packages__shared__package.json.diff",
+      "size": 246,
+      "sha256": "2181b1591ba5b83bdaf25f56a5472e986eb19f0a9161897a5e1f11651217b5e2",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/packages__shared__src__index.ts.diff",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/packages__shared__src__index.ts.diff",
+      "size": 351,
+      "sha256": "d4af442daf7b7ae54d1bd6f39e55942dbca7466c470e8fc184b2bf8b0e6c3534",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/packages__shared__src__schemas__native-mutation-contract.ts.diff",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/packages__shared__src__schemas__native-mutation-contract.ts.diff",
+      "size": 574,
+      "sha256": "96911b6cdbca8502af56d645bcaa033f93e13dacf1fa22dd0d3149f3b9b9c1ee",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/packages__shared__src__schemas__sync.ts.diff",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/packages__shared__src__schemas__sync.ts.diff",
+      "size": 4175,
+      "sha256": "aff99a4616bf1c3a769550f3e99497d8514f4cfe9333a8d4f24cf087c14e8dea",
+      "role": "before/raw/gate/provenance"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/pnpm-lock.yaml.diff",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-vertical/sealed/.hermes/tmp/offline-parity-collection/common-tag-vertical/source-diffs/pnpm-lock.yaml.diff",
+      "size": 263,
+      "sha256": "ebc639b53818ae22b393daa1b915a4f35a8afbf7094099d7ffd920d2458d1b24",
+      "role": "before/raw/gate/provenance"
+    }
+  ]
+}

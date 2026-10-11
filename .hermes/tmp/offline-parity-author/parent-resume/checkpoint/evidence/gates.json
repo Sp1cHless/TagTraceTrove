@@ -1,0 +1,32 @@
+{
+  "focused": {
+    "exitCode": 0,
+    "success": true,
+    "numPassedTests": 15,
+    "numFailedTests": 0,
+    "numPendingTests": 0
+  },
+  "default": {
+    "exitCode": 0,
+    "success": true,
+    "numPassedTests": 1239,
+    "numFailedTests": 0,
+    "numPendingTests": 0
+  },
+  "integration": {
+    "exitCode": 0,
+    "success": true,
+    "numPassedTests": 709,
+    "numFailedTests": 0,
+    "numPendingTests": 0
+  },
+  "lint": {
+    "exitCode": 0
+  },
+  "diff": {
+    "exitCode": 0
+  },
+  "build": {
+    "exitCode": 0
+  }
+}

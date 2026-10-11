@@ -1,0 +1,10 @@
+{
+  "apps/web/src/offline/offline-api.ts": {
+    "sha256": "07970a1af7358da807bf0c1c8c81e2531dcd3f0eb8d9193bf94f02dc40952b88",
+    "bytes": 304231
+  },
+  "apps/web/tests/existing-entry-media-vertical.test.ts": {
+    "sha256": "80a9b985783dc223e4cfe27f3584eb866ce6721b3cd4d3d6f7cb250c142fedf0",
+    "bytes": 20889
+  }
+}

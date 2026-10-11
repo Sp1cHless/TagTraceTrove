@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { SyncSnapshot } from '@t3/shared';
 import {
   ACTIVE_GENERATION_KEY,
@@ -44,6 +44,22 @@ async function stampChecksum(snapshot: SyncSnapshot): Promise<void> {
 }
 
 describe('snapshot store rules', () => {
+  it('verifies without WebCrypto and rejects tampering before activation', async () => {
+    const snapshot = makeSnapshot();
+    await stampChecksum(snapshot);
+    const store = createMemorySnapshotStore();
+    vi.stubGlobal('crypto', { subtle: undefined });
+    try {
+      expect(await applySnapshot(snapshot, { store })).toMatchObject({ ok: true, generationId: 1 });
+      const tampered = makeSnapshot({ snapshotSeq: 2, checksum: snapshot.header.checksum });
+      expect(await applySnapshot(tampered, { store })).toMatchObject({ ok: false, failure: { reason: 'checksum-mismatch' } });
+      expect(await store.readMeta(ACTIVE_GENERATION_KEY)).toBe('1');
+      expect(await store.listGenerationIds()).toEqual([1]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('rejects a wrong library id before touching the store', async () => {
     const store = createMemorySnapshotStore();
     const result = await applySnapshot(makeSnapshot({ libraryId: 'other-lib' }), {
@@ -126,7 +142,7 @@ describe('snapshot store rules', () => {
     await store.writeGeneration(1, '{"header":{},"payload":{}}');
     await store.writeMeta(ACTIVE_GENERATION_KEY, '1');
     const failing: typeof store = {
-      ...store,
+      ...Object.fromEntries(Object.entries(store).filter(([key]) => key !== 'installSnapshot' && key !== 'captureSnapshot')) as typeof store,
       async writeGeneration(generationId) {
         if (generationId > 1) throw new Error('quota exceeded');
         await store.writeGeneration(generationId, '{}');
@@ -146,7 +162,7 @@ describe('snapshot store rules', () => {
     await store.writeGeneration(1, '{"header":{},"payload":{}}');
     await store.writeMeta(ACTIVE_GENERATION_KEY, '1');
     const failing: typeof store = {
-      ...store,
+      ...Object.fromEntries(Object.entries(store).filter(([key]) => key !== 'installSnapshot' && key !== 'captureSnapshot')) as typeof store,
       async writeMeta(key, value) {
         if (key === ACTIVE_GENERATION_KEY && value === '2') throw new Error('quota exceeded');
         await store.writeMeta(key, value);

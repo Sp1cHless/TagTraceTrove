@@ -1,3 +1,4 @@
+import { rateLimitFromResponse } from '../catalog-provider.js';
 import type { AdapterCandidate, AdapterSearchInput, SourceSearchAdapter } from '../source-search-adapter.js';
 
 /**
@@ -116,8 +117,8 @@ async function fetchSearchHtml(
     throw new MangabzStructureError(`mangabz: search request failed (${cause instanceof Error ? cause.message : String(cause)})`);
   }
   if (signal.aborted) throw signal.reason ?? new Error('mangabz: aborted');
-  if (response.status === 429 || response.status === 503) {
-    throw new MangabzStructureError(`mangabz: rate limited (HTTP ${response.status})`);
+  if (response.status === 429 || response.status === 503 || response.status === 509) {
+    throw rateLimitFromResponse(response);
   }
   if (!response.ok) {
     throw new MangabzStructureError(`mangabz: HTTP ${response.status}`);

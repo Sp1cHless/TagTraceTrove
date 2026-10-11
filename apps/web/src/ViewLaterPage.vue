@@ -383,9 +383,9 @@ async function removeAuthor(authorId: number): Promise<void> {
             <span v-if="author.covers.length" class="author-cover-grid">
               <LazyCardImage v-for="coverRef in author.covers.slice(0, 4)" :key="coverRef" :src="api.assetUrl(entryCardMediaRef(coverRef))" :alt="author.name" loading="lazy" decoding="async" />
             </span>
-            <span v-else class="author-placeholder">{{ author.name.slice(0, 1).toUpperCase() }}</span>
+            <span v-else class="author-placeholder t3-library-text">{{ author.name.slice(0, 1).toUpperCase() }}</span>
             <span class="author-card-meta">
-              <strong>{{ author.name }}</strong>
+              <strong class="t3-library-text">{{ author.name }}</strong>
               <small v-if="author.galleryType">{{ author.galleryType }}</small>
               <small class="entry-usage-note">{{ usageNote(author) }}</small>
             </span>

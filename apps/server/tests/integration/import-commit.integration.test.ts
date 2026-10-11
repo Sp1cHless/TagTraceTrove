@@ -31,7 +31,7 @@ describe('commitImportBatch', () => {
         fields: {
           authors: ['Example Author'],
           characters: ['Example Character'],
-          language: { code: 'en', name: 'English' },
+          language: ['English'],
           works: ['Example Series'],
         },
         sources: [{ label: 'Original', url: 'https://example.test/items/42' }],
@@ -61,10 +61,16 @@ describe('commitImportBatch', () => {
       entryCount: 1,
       skippedExistingEntryCount: 0,
       existingEntryIds: [],
+      // The works that were already in the library, paired with the Entry each belongs to. Empty here
+      // because every work in this batch is new; the pairing exists so the media half of an import can
+      // reach an already-known work — see `site-probe-media-repair.integration.test.ts`.
+      skippedExisting: [],
       createdProducerCount: 1,
       producerLinkCount: 1,
       tagAssignmentCount: 2,
-      contentCount: 1,
+      // The source URL, the body, and the field the review sent to Content: three rows, where
+      // the contract used to validate two channels and write neither.
+      contentCount: 3,
       authorRatingCount: 0,
       warnings: [],
     });
@@ -80,6 +86,8 @@ describe('commitImportBatch', () => {
       ],
       contents: [
         { contentType: 'source url', content: 'https://example.test/items/42', sortOrder: 0 },
+        { contentType: 'body', content: 'Imported note', sortOrder: 1 },
+        { contentType: 'language', content: 'English', sortOrder: 2 },
       ],
     });
 
@@ -372,6 +380,52 @@ describe('commitImportBatch', () => {
     expect(linked.createdProducerCount).toBe(0);
     expect(linked.producerLinkCount).toBe(1);
     expect(database.prepare('SELECT COUNT(*) FROM producers').pluck().get()).toBe(1);
+    database.close();
+  });
+
+  it('links the batch Author typed on the review page, reusing an existing one and creating a new one', () => {
+    const database = createMigratedMemoryDatabase();
+    const section = createSection(database, { entryType: 'comic', name: '分类' });
+    const mapping = {
+      entryType: 'comic',
+      canonicalTagFacetId: section.defaultFacetId,
+      sourceContentType: 'source url',
+      externalKeyContentType: 'external key',
+      fieldMappings: {},
+      ignoredFields: [],
+      authorRatings: [],
+    };
+
+    // A typed name nobody holds creates the Author once and links every work.
+    const created = commitImportBatch(database, {
+      source: 'example.test',
+      warnings: [],
+      entries: [
+        { title: 'First work', sources: [{ label: 'example.test', url: 'https://example.test/11' }] },
+        { title: 'Second work', sources: [{ label: 'example.test', url: 'https://example.test/12' }] },
+      ],
+    }, { ...mapping, authorName: '冷泉' });
+    expect(created.createdProducerCount).toBe(1);
+    expect(created.producerLinkCount).toBe(2);
+    expect(database.prepare('SELECT COUNT(*) FROM producers').pluck().get()).toBe(1);
+    expect(getEntryDetail(database, created.entries[1]!.entryId)?.producers)
+      .toEqual([expect.objectContaining({ name: '冷泉' })]);
+
+    // An alias spelling of the same Author links that one instead of a duplicate,
+    // which is the same canonical resolution imported field names already get.
+    upsertTaxonomyAlias(database, { vocabulary: 'producer', alias: 'leon', canonicalName: '冷泉' });
+    const linked = commitImportBatch(database, {
+      source: 'example.test',
+      warnings: [],
+      entries: [
+        { title: 'Third work', sources: [{ label: 'example.test', url: 'https://example.test/13' }] },
+      ],
+    }, { ...mapping, authorName: 'leon' });
+    expect(linked.createdProducerCount).toBe(0);
+    expect(linked.producerLinkCount).toBe(1);
+    expect(database.prepare('SELECT COUNT(*) FROM producers').pluck().get()).toBe(1);
+    expect(getEntryDetail(database, linked.entries[0]!.entryId)?.producers)
+      .toEqual([expect.objectContaining({ name: '冷泉' })]);
     database.close();
   });
 

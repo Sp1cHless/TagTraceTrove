@@ -1,0 +1,99 @@
+{
+  "results": [
+    {
+      "label": "final-tracer",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "apps/web/tests/offline-entry-multi-author.integration.test.ts",
+        "apps/server/tests/integration/entry-multi-author-sync.integration.test.ts",
+        "--reporter=json"
+      ],
+      "exit": 0,
+      "timeout": 180,
+      "log": ".hermes\\tmp\\offline-parity-entry-multi-author\\foreground\\gates\\final-tracer.log",
+      "success": true,
+      "numPassedTests": 12,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "label": "final-web-types",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "apps/web/node_modules/vue-tsc/bin/vue-tsc.js",
+        "--noEmit",
+        "-p",
+        "apps/web/tsconfig.json"
+      ],
+      "exit": 0,
+      "timeout": 180,
+      "log": ".hermes\\tmp\\offline-parity-entry-multi-author\\foreground\\gates\\final-web-types.log"
+    },
+    {
+      "label": "final-shared-types",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "node_modules/typescript/bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/shared/tsconfig.json"
+      ],
+      "exit": 0,
+      "timeout": 180,
+      "log": ".hermes\\tmp\\offline-parity-entry-multi-author\\foreground\\gates\\final-shared-types.log"
+    },
+    {
+      "label": "final-server-types",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "node_modules/typescript/bin/tsc",
+        "--noEmit",
+        "-p",
+        "apps/server/tsconfig.json"
+      ],
+      "exit": 0,
+      "timeout": 180,
+      "log": ".hermes\\tmp\\offline-parity-entry-multi-author\\foreground\\gates\\final-server-types.log"
+    },
+    {
+      "label": "final-owned-lint",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "node_modules/eslint/bin/eslint.js",
+        "apps/web/src/offline/offline-api.ts",
+        "apps/web/src/offline/entry-multi-author.ts",
+        "apps/web/src/offline/pending-work-restore.ts",
+        "apps/web/src/offline/sync-mutation-plan.ts",
+        "apps/web/tests/offline-entry-multi-author.integration.test.ts",
+        "packages/shared/src/schemas/sync.ts",
+        "apps/server/src/sync/replay-service.ts"
+      ],
+      "exit": 0,
+      "timeout": 180,
+      "log": ".hermes\\tmp\\offline-parity-entry-multi-author\\foreground\\gates\\final-owned-lint.log"
+    }
+  ],
+  "pre": {
+    "apps/web/src/offline/offline-api.ts": "a1540cdc94296d2073c869eae85550aa2b90e4f74bd25c5c347d8edc3b5e0396",
+    "apps/web/src/offline/entry-multi-author.ts": "cab7f517cff79ebb8a47d7389743879a65df46efc6e64650d5bd8b1c1063c538",
+    "apps/web/src/offline/pending-work-restore.ts": "92e093babadc0a3db2d2e56444f6f012f4f9594088829cabc348093cc927a879",
+    "apps/web/src/offline/sync-mutation-plan.ts": "052e0bcb9e21d843cc7b148c3c632204a1821aecead40f69703f5017ff6489ed",
+    "apps/web/tests/offline-entry-multi-author.integration.test.ts": "7179ac403e23a5cf9a731d7903c0c2da8109363e7ed12c74b107b39a4025e612",
+    "packages/shared/src/schemas/sync.ts": "0612f66eff66f159e22df6b97192c6a2e5ab5d736d3b4232b9d7c8732355bbe1",
+    "apps/server/src/sync/replay-service.ts": "d379794f27d6a3139335b159f9dd113bbb899b99dd0e3415857d42c56615f180"
+  },
+  "post": {
+    "apps/web/src/offline/offline-api.ts": "a1540cdc94296d2073c869eae85550aa2b90e4f74bd25c5c347d8edc3b5e0396",
+    "apps/web/src/offline/entry-multi-author.ts": "cab7f517cff79ebb8a47d7389743879a65df46efc6e64650d5bd8b1c1063c538",
+    "apps/web/src/offline/pending-work-restore.ts": "92e093babadc0a3db2d2e56444f6f012f4f9594088829cabc348093cc927a879",
+    "apps/web/src/offline/sync-mutation-plan.ts": "052e0bcb9e21d843cc7b148c3c632204a1821aecead40f69703f5017ff6489ed",
+    "apps/web/tests/offline-entry-multi-author.integration.test.ts": "7179ac403e23a5cf9a731d7903c0c2da8109363e7ed12c74b107b39a4025e612",
+    "packages/shared/src/schemas/sync.ts": "0612f66eff66f159e22df6b97192c6a2e5ab5d736d3b4232b9d7c8732355bbe1",
+    "apps/server/src/sync/replay-service.ts": "d379794f27d6a3139335b159f9dd113bbb899b99dd0e3415857d42c56615f180"
+  },
+  "ownedHashesUnchanged": true
+}

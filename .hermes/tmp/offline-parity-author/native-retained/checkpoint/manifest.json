@@ -1,0 +1,676 @@
+{
+  "time": "2026-10-09T14:29:33.475369+00:00",
+  "scope": "Author02 native retained timeline; STOP",
+  "newRepositoryPaths": [
+    "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeAuthorDeleteTimelineJvmTest.java",
+    "apps/server/tests/fixtures/native-author-delete-timeline.mts",
+    ".hermes/artifacts/offline-parity-author-native-retained.md"
+  ],
+  "originalExistingBefore": {
+    "time": "2026-10-09T14:18:08.518591+00:00",
+    "existing": [
+      {
+        "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/AppliedReceipt.java",
+        "sha256": "3d4596f706cb1b9b678362884af1341f5f15c92e1715154e803eb49f577a18f6"
+      },
+      {
+        "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferPlugin.java",
+        "sha256": "c14a201e9c1e3bcb0c410ea3253fdac29e5d29a58acc48ebd9592e8f04cee5e0"
+      },
+      {
+        "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java",
+        "sha256": "ba469f3e29733740962324a9aa7a3c3bb26d98b5750d3ab0edc20e0c326813cb"
+      },
+      {
+        "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/MainActivity.java",
+        "sha256": "72ceb47effc06edcbe0b3752f2a1d0065d6c2dc11d0bb9b8c428104335c0167f"
+      },
+      {
+        "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/NativeMutationPlan.java",
+        "sha256": "5d4419066a78183b39c7e0e25afbddd9ee385d56f3865b8320c14b7e0dc3e92a"
+      },
+      {
+        "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairedTransportPlugin.java",
+        "sha256": "2ae0fa9d87d1d002d53de039f329bd4d10bba3a2996def29cd1487139bcafc5a"
+      },
+      {
+        "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingState.java",
+        "sha256": "1be655f3a005503b4b7ccbd76b6bc13c703c98f01f09cb0c4daaac426b697a33"
+      },
+      {
+        "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingVault.java",
+        "sha256": "68cb1818a5c3f4fedea41d2e142cf6d9b005a5270301b4135e536150d221b5b8"
+      },
+      {
+        "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PinnedLanTransport.java",
+        "sha256": "5bd3771a3efbcda3ddfdd31f839ec9dd34620655ffa31ebf905d57714e3c50da"
+      },
+      {
+        "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java",
+        "sha256": "494f132632e59a782c6e4965a4e35ba088bbb947c8278d6d2cf6683075bb8579"
+      },
+      {
+        "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TrustedLanPairing.java",
+        "sha256": "249fdd78891c0628b1220c52c375c319260feae37ca1f448d3b9c8d2f4291648"
+      },
+      {
+        "path": "packages/shared/src/schemas/api.ts",
+        "sha256": "3e5402cd5f08f0b36ecf038e2c31cb662431ca96866e381c41a475b66156ef4e"
+      },
+      {
+        "path": "packages/shared/src/schemas/import.ts",
+        "sha256": "4e1c718ce5f9941c93c7f1b604c3b5e5da8ab77800a0cc46a9168992e3ddd792"
+      },
+      {
+        "path": "packages/shared/src/schemas/native-mutation-contract.ts",
+        "sha256": "460aeaa49e3f22456409599b3879ca39c65b77fca022e73d1c36faf4fd505313"
+      },
+      {
+        "path": "packages/shared/src/schemas/pending-work.ts",
+        "sha256": "7ad377c617b69a5d6a894a4c77bbb4d19d1f2c6c5169721156218b46895ef87e"
+      },
+      {
+        "path": "packages/shared/src/schemas/siteprobe.ts",
+        "sha256": "0746189db49df4e3020d95e2bdba605cb9292ba29060cd61bd88f76e221977e7"
+      },
+      {
+        "path": "packages/shared/src/schemas/source-maintenance.ts",
+        "sha256": "058f96b6d9c60fcbe34a2fdf7a8c16c97010bd369db4f6992a6bcb45724506fa"
+      },
+      {
+        "path": "packages/shared/src/schemas/suggestions.ts",
+        "sha256": "050e23edb1af17f1747843add0c6ac363fc133d7ee15531f1cf8993025efb707"
+      },
+      {
+        "path": "packages/shared/src/schemas/sync-delta.ts",
+        "sha256": "3a508c21dec8990d675be33c8457ab85bdfc17d0378e67e07bc7c28aa527fe83"
+      },
+      {
+        "path": "packages/shared/src/schemas/sync.ts",
+        "sha256": "8de9a02acb4d6aa6e20db547d5489a35395ab282c43b3a940b4fe8e406a88c9e"
+      },
+      {
+        "path": "apps/web/src/offline/outbox-store.ts",
+        "sha256": "ba11716ebf20040e182a2d3f8cedf06d851cc5d15c0840fa3198a6e1d7bf470b"
+      },
+      {
+        "path": "apps/web/src/offline/sync-mutation-plan.ts",
+        "sha256": "0ee2f2e72a8f1ec698044fc1d07e11b37e4a4e151014aed702fdf137aac615d2"
+      },
+      {
+        "path": "apps/web/src/offline/offline-api.ts",
+        "sha256": "982b69cb25178c4dddf6331007664e277c97ffbcee9bb452b6496b57a9598805"
+      },
+      {
+        "path": "apps/server/tests/fixtures/native-worker-authority-acceptance.mts",
+        "sha256": "2f31bf5347cec1fae4deae3977a9d73bfae9cb6552a2e297517e0bb96da0a0dc"
+      },
+      {
+        "path": "apps/web/tests/fixtures/native-valid-kind-fixture.ts",
+        "sha256": "696b1933a481cf9bc8bc051a1df4b90f6a15905bc3de5443844528cbd1314104"
+      }
+    ],
+    "new": [
+      "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeAuthorDeleteTimelineJvmTest.java",
+      "apps/server/tests/fixtures/native-author-delete-timeline.mts"
+    ]
+  },
+  "finalXml": {
+    "name": "com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest",
+    "tests": "3",
+    "skipped": "0",
+    "failures": "0",
+    "errors": "0",
+    "timestamp": "2026-10-09T14:26:13.839Z",
+    "hostname": "LAPTOP-70QV4MNN",
+    "time": "54.134"
+  },
+  "entries": [
+    {
+      "path": ".hermes/artifacts/offline-parity-author-native-retained.md",
+      "saved": "fullbytes/.hermes/artifacts/offline-parity-author-native-retained.md",
+      "bytes": 8978,
+      "sha256": "b8e25adbe20ee081db00c3711ad5bd126863139c3adbcb85ac2b49f93c7e010c",
+      "new": true
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/author02-retained-isolated.init.gradle",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/author02-retained-isolated.init.gradle",
+      "bytes": 1617,
+      "sha256": "fe8ba05336e194f94fbdf0a6df84a4a4c6d9511df6e56c5f0e016fce392b47ec",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/apps/server/tests/fixtures/native-worker-authority-acceptance.mts",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/apps/server/tests/fixtures/native-worker-authority-acceptance.mts",
+      "bytes": 4067,
+      "sha256": "2f31bf5347cec1fae4deae3977a9d73bfae9cb6552a2e297517e0bb96da0a0dc",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/apps/web/src/offline/offline-api.ts",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/apps/web/src/offline/offline-api.ts",
+      "bytes": 363445,
+      "sha256": "982b69cb25178c4dddf6331007664e277c97ffbcee9bb452b6496b57a9598805",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/apps/web/src/offline/outbox-store.ts",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/apps/web/src/offline/outbox-store.ts",
+      "bytes": 9547,
+      "sha256": "ba11716ebf20040e182a2d3f8cedf06d851cc5d15c0840fa3198a6e1d7bf470b",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/apps/web/src/offline/sync-mutation-plan.ts",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/apps/web/src/offline/sync-mutation-plan.ts",
+      "bytes": 8936,
+      "sha256": "0ee2f2e72a8f1ec698044fc1d07e11b37e4a4e151014aed702fdf137aac615d2",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/apps/web/tests/fixtures/native-valid-kind-fixture.ts",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/apps/web/tests/fixtures/native-valid-kind-fixture.ts",
+      "bytes": 5055,
+      "sha256": "696b1933a481cf9bc8bc051a1df4b90f6a15905bc3de5443844528cbd1314104",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/api.ts",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/api.ts",
+      "bytes": 55986,
+      "sha256": "3e5402cd5f08f0b36ecf038e2c31cb662431ca96866e381c41a475b66156ef4e",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/import.ts",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/import.ts",
+      "bytes": 9190,
+      "sha256": "4e1c718ce5f9941c93c7f1b604c3b5e5da8ab77800a0cc46a9168992e3ddd792",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/native-mutation-contract.ts",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/native-mutation-contract.ts",
+      "bytes": 3862,
+      "sha256": "460aeaa49e3f22456409599b3879ca39c65b77fca022e73d1c36faf4fd505313",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/pending-work.ts",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/pending-work.ts",
+      "bytes": 1531,
+      "sha256": "7ad377c617b69a5d6a894a4c77bbb4d19d1f2c6c5169721156218b46895ef87e",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/siteprobe.ts",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/siteprobe.ts",
+      "bytes": 16699,
+      "sha256": "0746189db49df4e3020d95e2bdba605cb9292ba29060cd61bd88f76e221977e7",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/source-maintenance.ts",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/source-maintenance.ts",
+      "bytes": 6711,
+      "sha256": "058f96b6d9c60fcbe34a2fdf7a8c16c97010bd369db4f6992a6bcb45724506fa",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/suggestions.ts",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/suggestions.ts",
+      "bytes": 2723,
+      "sha256": "050e23edb1af17f1747843add0c6ac363fc133d7ee15531f1cf8993025efb707",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/sync-delta.ts",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/sync-delta.ts",
+      "bytes": 1263,
+      "sha256": "3a508c21dec8990d675be33c8457ab85bdfc17d0378e67e07bc7c28aa527fe83",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/sync.ts",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/packages/shared/src/schemas/sync.ts",
+      "bytes": 58368,
+      "sha256": "8de9a02acb4d6aa6e20db547d5489a35395ab282c43b3a940b4fe8e406a88c9e",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/AppliedReceipt.java",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/AppliedReceipt.java",
+      "bytes": 1325,
+      "sha256": "3d4596f706cb1b9b678362884af1341f5f15c92e1715154e803eb49f577a18f6",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferPlugin.java",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferPlugin.java",
+      "bytes": 17567,
+      "sha256": "c14a201e9c1e3bcb0c410ea3253fdac29e5d29a58acc48ebd9592e8f04cee5e0",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java",
+      "bytes": 17366,
+      "sha256": "ba469f3e29733740962324a9aa7a3c3bb26d98b5750d3ab0edc20e0c326813cb",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/MainActivity.java",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/MainActivity.java",
+      "bytes": 9139,
+      "sha256": "72ceb47effc06edcbe0b3752f2a1d0065d6c2dc11d0bb9b8c428104335c0167f",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/NativeMutationPlan.java",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/NativeMutationPlan.java",
+      "bytes": 3996,
+      "sha256": "5d4419066a78183b39c7e0e25afbddd9ee385d56f3865b8320c14b7e0dc3e92a",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairedTransportPlugin.java",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairedTransportPlugin.java",
+      "bytes": 4526,
+      "sha256": "2ae0fa9d87d1d002d53de039f329bd4d10bba3a2996def29cd1487139bcafc5a",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingState.java",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingState.java",
+      "bytes": 5867,
+      "sha256": "1be655f3a005503b4b7ccbd76b6bc13c703c98f01f09cb0c4daaac426b697a33",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingVault.java",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingVault.java",
+      "bytes": 4237,
+      "sha256": "68cb1818a5c3f4fedea41d2e142cf6d9b005a5270301b4135e536150d221b5b8",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PinnedLanTransport.java",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PinnedLanTransport.java",
+      "bytes": 10772,
+      "sha256": "5bd3771a3efbcda3ddfdd31f839ec9dd34620655ffa31ebf905d57714e3c50da",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java",
+      "bytes": 39518,
+      "sha256": "494f132632e59a782c6e4965a4e35ba088bbb947c8278d6d2cf6683075bb8579",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TrustedLanPairing.java",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TrustedLanPairing.java",
+      "bytes": 2164,
+      "sha256": "249fdd78891c0628b1220c52c375c319260feae37ca1f448d3b9c8d2f4291648",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/before-manifest.json",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/before-manifest.json",
+      "bytes": 5034,
+      "sha256": "7446014b7a65ae0c8d7099cce94fba3e3ae12b8cf5c29df695727896ca1e195b",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/cell-0-isolated-archive/cell-0-isolated.stdout",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/cell-0-isolated-archive/cell-0-isolated.stdout",
+      "bytes": 105,
+      "sha256": "bd1b4c1376cedd239a957837ddcad5fec72e320429a2845fb32814adb5cfd5c2",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/cell-0-isolated-archive/gate.json",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/cell-0-isolated-archive/gate.json",
+      "bytes": 682,
+      "sha256": "d8158ac584e0a70f6f4334558bbe34abbd90d8d47527e5e105601c12c55a6540",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/cell-0-isolated-v2-archive/cell-0-isolated-v2.stdout",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/cell-0-isolated-v2-archive/cell-0-isolated-v2.stdout",
+      "bytes": 9287,
+      "sha256": "df65429e50b480876020e9cdc84e51c0ec06f39027ba6464a487c21cc552b0b6",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/cell-0-isolated-v2-archive/gate.json",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/cell-0-isolated-v2-archive/gate.json",
+      "bytes": 5000,
+      "sha256": "eddb3bda095208a04034e74d587d5f1385f6d6b330c0aee428fa4ba74fd45112",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/cell-0-isolated-v2-archive/generated/NativeMutationContract.java",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/cell-0-isolated-v2-archive/generated/NativeMutationContract.java",
+      "bytes": 3242,
+      "sha256": "834e199053c34d764b739ca4d0005d62e83264307e129d1b488913f5c4813c26",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/cell-0-isolated-v2-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest.xml",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/cell-0-isolated-v2-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest.xml",
+      "bytes": 4386,
+      "sha256": "cd63e91bc5f173f42b8c59413dc9bc09d538f9fd91d0216a86048e7ce3c0757a",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/cell-0-isolated-v2.stdout",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/cell-0-isolated-v2.stdout",
+      "bytes": 9287,
+      "sha256": "df65429e50b480876020e9cdc84e51c0ec06f39027ba6464a487c21cc552b0b6",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/cell-0-isolated.stdout",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/cell-0-isolated.stdout",
+      "bytes": 105,
+      "sha256": "bd1b4c1376cedd239a957837ddcad5fec72e320429a2845fb32814adb5cfd5c2",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/first-archive/jvm-first.stdout",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/first-archive/jvm-first.stdout",
+      "bytes": 9556,
+      "sha256": "7ed674aa545d84334af84cb2b431bcc6cb3087a88b12e383593d53c7a028fff0",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/first-archive/run-author02-20261009/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest.xml",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/first-archive/run-author02-20261009/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest.xml",
+      "bytes": 8599,
+      "sha256": "637ea0f9f70a9767827fbaf966dc44686c91d35b635c0b82552a16dcb1100e74",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/first-archive/xml-summary.json",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/first-archive/xml-summary.json",
+      "bytes": 276,
+      "sha256": "bfd85a2006851704c95aead9aed9a4bd2be4b85a4a209cb980db26b400c27f63",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/gradle-output/run-author02-20261009/project-app/generated/nativeMutationContract/com/speechless666/t3/spike/NativeMutationContract.java",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/gradle-output/run-author02-20261009/project-app/generated/nativeMutationContract/com/speechless666/t3/spike/NativeMutationContract.java",
+      "bytes": 3242,
+      "sha256": "834e199053c34d764b739ca4d0005d62e83264307e129d1b488913f5c4813c26",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/isolated-cells-summary.json",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/isolated-cells-summary.json",
+      "bytes": 5092,
+      "sha256": "91a121bd59af81698c3040c2cde305e4755b4e9feb559559f44d21e58b06da7a",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/jvm-first.stdout",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/jvm-first.stdout",
+      "bytes": 9556,
+      "sha256": "7ed674aa545d84334af84cb2b431bcc6cb3087a88b12e383593d53c7a028fff0",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/jvm-shortnames.stdout",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/jvm-shortnames.stdout",
+      "bytes": 8575,
+      "sha256": "01e565451c659b79bee7fe08d26b156b01ce1a1c0af30bdb512d6bc9dea11576",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/owned-whitespace-gate.json",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/owned-whitespace-gate.json",
+      "bytes": 320,
+      "sha256": "6ee2cbdb56ffbe6a51afcd9165c28ed58e91dce3eca05626110479459c153887",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/run_cells.py",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/run_cells.py",
+      "bytes": 2573,
+      "sha256": "caa04b44e10511667afca8a47a63b73eb13e2daf5bd57657161e39df32aae844",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/scoped-diff-check.json",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/scoped-diff-check.json",
+      "bytes": 326,
+      "sha256": "bec5e285c23e741175d79d8bb146e137996d6914bb2098a89f4c7de17eadd9f7",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/shortnames-final-archive/jvm-shortnames.stdout",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/shortnames-final-archive/jvm-shortnames.stdout",
+      "bytes": 8575,
+      "sha256": "01e565451c659b79bee7fe08d26b156b01ce1a1c0af30bdb512d6bc9dea11576",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/shortnames-final-archive/NativeMutationContract.java",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/shortnames-final-archive/NativeMutationContract.java",
+      "bytes": 3242,
+      "sha256": "834e199053c34d764b739ca4d0005d62e83264307e129d1b488913f5c4813c26",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/shortnames-final-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest.xml",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/shortnames-final-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest.xml",
+      "bytes": 799,
+      "sha256": "15a99892d95c5cb8e68ec4d97edc7894a6318991016421cca5df47db32ce3cdc",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/shortnames-final-archive/xml-summary.json",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/shortnames-final-archive/xml-summary.json",
+      "bytes": 277,
+      "sha256": "cf4c74c3da1eb80ecbeb14c8383a9564a7876ba1ff7678438828b2c31674beb1",
+      "new": false
+    },
+    {
+      "path": ".hermes/tmp/offline-parity-author/native-retained/source-guard-final.json",
+      "saved": "fullbytes/.hermes/tmp/offline-parity-author/native-retained/source-guard-final.json",
+      "bytes": 37,
+      "sha256": "87d184c93b088baa0f1cc277c43bb68b27eb65f5006885a079153d361c10c6a7",
+      "new": false
+    },
+    {
+      "path": "apps/server/tests/fixtures/native-author-delete-timeline.mts",
+      "saved": "fullbytes/apps/server/tests/fixtures/native-author-delete-timeline.mts",
+      "bytes": 6033,
+      "sha256": "54bd00fe20f77f0ff68c91a015c51931c8cd44733375642133f3603ddf600302",
+      "new": true
+    },
+    {
+      "path": "apps/server/tests/fixtures/native-worker-authority-acceptance.mts",
+      "saved": "fullbytes/apps/server/tests/fixtures/native-worker-authority-acceptance.mts",
+      "bytes": 4067,
+      "sha256": "2f31bf5347cec1fae4deae3977a9d73bfae9cb6552a2e297517e0bb96da0a0dc",
+      "new": false
+    },
+    {
+      "path": "apps/web/src/offline/offline-api.ts",
+      "saved": "fullbytes/apps/web/src/offline/offline-api.ts",
+      "bytes": 363445,
+      "sha256": "982b69cb25178c4dddf6331007664e277c97ffbcee9bb452b6496b57a9598805",
+      "new": false
+    },
+    {
+      "path": "apps/web/src/offline/outbox-store.ts",
+      "saved": "fullbytes/apps/web/src/offline/outbox-store.ts",
+      "bytes": 9547,
+      "sha256": "ba11716ebf20040e182a2d3f8cedf06d851cc5d15c0840fa3198a6e1d7bf470b",
+      "new": false
+    },
+    {
+      "path": "apps/web/src/offline/sync-mutation-plan.ts",
+      "saved": "fullbytes/apps/web/src/offline/sync-mutation-plan.ts",
+      "bytes": 8936,
+      "sha256": "0ee2f2e72a8f1ec698044fc1d07e11b37e4a4e151014aed702fdf137aac615d2",
+      "new": false
+    },
+    {
+      "path": "apps/web/tests/fixtures/native-valid-kind-fixture.ts",
+      "saved": "fullbytes/apps/web/tests/fixtures/native-valid-kind-fixture.ts",
+      "bytes": 5055,
+      "sha256": "696b1933a481cf9bc8bc051a1df4b90f6a15905bc3de5443844528cbd1314104",
+      "new": false
+    },
+    {
+      "path": "packages/shared/src/schemas/api.ts",
+      "saved": "fullbytes/packages/shared/src/schemas/api.ts",
+      "bytes": 55986,
+      "sha256": "3e5402cd5f08f0b36ecf038e2c31cb662431ca96866e381c41a475b66156ef4e",
+      "new": false
+    },
+    {
+      "path": "packages/shared/src/schemas/import.ts",
+      "saved": "fullbytes/packages/shared/src/schemas/import.ts",
+      "bytes": 9190,
+      "sha256": "4e1c718ce5f9941c93c7f1b604c3b5e5da8ab77800a0cc46a9168992e3ddd792",
+      "new": false
+    },
+    {
+      "path": "packages/shared/src/schemas/native-mutation-contract.ts",
+      "saved": "fullbytes/packages/shared/src/schemas/native-mutation-contract.ts",
+      "bytes": 3862,
+      "sha256": "460aeaa49e3f22456409599b3879ca39c65b77fca022e73d1c36faf4fd505313",
+      "new": false
+    },
+    {
+      "path": "packages/shared/src/schemas/pending-work.ts",
+      "saved": "fullbytes/packages/shared/src/schemas/pending-work.ts",
+      "bytes": 1531,
+      "sha256": "7ad377c617b69a5d6a894a4c77bbb4d19d1f2c6c5169721156218b46895ef87e",
+      "new": false
+    },
+    {
+      "path": "packages/shared/src/schemas/siteprobe.ts",
+      "saved": "fullbytes/packages/shared/src/schemas/siteprobe.ts",
+      "bytes": 16699,
+      "sha256": "0746189db49df4e3020d95e2bdba605cb9292ba29060cd61bd88f76e221977e7",
+      "new": false
+    },
+    {
+      "path": "packages/shared/src/schemas/source-maintenance.ts",
+      "saved": "fullbytes/packages/shared/src/schemas/source-maintenance.ts",
+      "bytes": 6711,
+      "sha256": "058f96b6d9c60fcbe34a2fdf7a8c16c97010bd369db4f6992a6bcb45724506fa",
+      "new": false
+    },
+    {
+      "path": "packages/shared/src/schemas/suggestions.ts",
+      "saved": "fullbytes/packages/shared/src/schemas/suggestions.ts",
+      "bytes": 2723,
+      "sha256": "050e23edb1af17f1747843add0c6ac363fc133d7ee15531f1cf8993025efb707",
+      "new": false
+    },
+    {
+      "path": "packages/shared/src/schemas/sync-delta.ts",
+      "saved": "fullbytes/packages/shared/src/schemas/sync-delta.ts",
+      "bytes": 1263,
+      "sha256": "3a508c21dec8990d675be33c8457ab85bdfc17d0378e67e07bc7c28aa527fe83",
+      "new": false
+    },
+    {
+      "path": "packages/shared/src/schemas/sync.ts",
+      "saved": "fullbytes/packages/shared/src/schemas/sync.ts",
+      "bytes": 58368,
+      "sha256": "8de9a02acb4d6aa6e20db547d5489a35395ab282c43b3a940b4fe8e406a88c9e",
+      "new": false
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/AppliedReceipt.java",
+      "saved": "fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/AppliedReceipt.java",
+      "bytes": 1325,
+      "sha256": "3d4596f706cb1b9b678362884af1341f5f15c92e1715154e803eb49f577a18f6",
+      "new": false
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferPlugin.java",
+      "saved": "fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferPlugin.java",
+      "bytes": 17567,
+      "sha256": "c14a201e9c1e3bcb0c410ea3253fdac29e5d29a58acc48ebd9592e8f04cee5e0",
+      "new": false
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java",
+      "saved": "fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java",
+      "bytes": 17366,
+      "sha256": "ba469f3e29733740962324a9aa7a3c3bb26d98b5750d3ab0edc20e0c326813cb",
+      "new": false
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/MainActivity.java",
+      "saved": "fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/MainActivity.java",
+      "bytes": 9139,
+      "sha256": "72ceb47effc06edcbe0b3752f2a1d0065d6c2dc11d0bb9b8c428104335c0167f",
+      "new": false
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/NativeMutationPlan.java",
+      "saved": "fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/NativeMutationPlan.java",
+      "bytes": 3996,
+      "sha256": "5d4419066a78183b39c7e0e25afbddd9ee385d56f3865b8320c14b7e0dc3e92a",
+      "new": false
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairedTransportPlugin.java",
+      "saved": "fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairedTransportPlugin.java",
+      "bytes": 4526,
+      "sha256": "2ae0fa9d87d1d002d53de039f329bd4d10bba3a2996def29cd1487139bcafc5a",
+      "new": false
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingState.java",
+      "saved": "fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingState.java",
+      "bytes": 5867,
+      "sha256": "1be655f3a005503b4b7ccbd76b6bc13c703c98f01f09cb0c4daaac426b697a33",
+      "new": false
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingVault.java",
+      "saved": "fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingVault.java",
+      "bytes": 4237,
+      "sha256": "68cb1818a5c3f4fedea41d2e142cf6d9b005a5270301b4135e536150d221b5b8",
+      "new": false
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PinnedLanTransport.java",
+      "saved": "fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PinnedLanTransport.java",
+      "bytes": 10772,
+      "sha256": "5bd3771a3efbcda3ddfdd31f839ec9dd34620655ffa31ebf905d57714e3c50da",
+      "new": false
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java",
+      "saved": "fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java",
+      "bytes": 39518,
+      "sha256": "494f132632e59a782c6e4965a4e35ba088bbb947c8278d6d2cf6683075bb8579",
+      "new": false
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TrustedLanPairing.java",
+      "saved": "fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TrustedLanPairing.java",
+      "bytes": 2164,
+      "sha256": "249fdd78891c0628b1220c52c375c319260feae37ca1f448d3b9c8d2f4291648",
+      "new": false
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeAuthorDeleteTimelineJvmTest.java",
+      "saved": "fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeAuthorDeleteTimelineJvmTest.java",
+      "bytes": 9092,
+      "sha256": "136bf2614899015e833e26d80d01ccc27a7ae5e82e6a592face314e44d141f9c",
+      "new": true
+    }
+  ]
+}

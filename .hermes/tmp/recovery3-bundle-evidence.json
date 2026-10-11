@@ -1,0 +1,13 @@
+{
+  "candidate": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\recovery3-bundle-candidate.ts",
+  "bytes": 295017,
+  "lines": 5359,
+  "sha256": "432854c35a07d61513825fb5e402f3e89736b8f86c790ba5da1e0c8dbf5e2951",
+  "bundle": "apps\\web\\dist\\assets\\index-B5YHEFQj.js",
+  "bundle_sha256": "41329b1383bf65711bbb14326fa07e11f5207c185988a2cb0354899b8415c246",
+  "helper_offset": 624080,
+  "helper_evidence": "async function ye(e,t){try{let n=((await te())?.getEntry(e))?.sections.flatMap(e=>e.facets).find(e=>e.id===t.facetId);if(n===void 0)return null;let r=q(t.name),i=n.tags.find(e=>q(e.name)===r);return i===void 0?null:{tagId:i.id,name:i.name,normalizedName:q(i.name),facetId:n.id}}catch{return null}}",
+  "method_offset": 690194,
+  "method_evidence": "async assignEntryTag(t,n){return C(`entry-tags-set`,gI,async()=>{let i=async e=>(await P(t,(e,t)=>{let r=q(n.name),i=(t.payload.taxonomyAliases??[]).find(e=>e.vocabulary===`entry`&&e.normalizedAlias===r),a=i?.normalizedCanonical??r,o=t.payload.tags.find(e=>e.normalizedName===a)?.name??i?.canonicalName??n.name;return[...e.filter(e=>q(e.name)!==a),{name:o,facetId:n.facetId}]},e),await ye(t,n));if(r===`offline`||n.facetId<0||await _e(t)||await ve(n.name))return i();try{let r=await e.assignEntryTag(t,n);return h(`online`),r}catch(e){return i(e)}})},",
+  "scope": "Behavior restored from delivered compiled artifact; not original source-byte recovery"
+}

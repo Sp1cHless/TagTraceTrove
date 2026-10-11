@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-10-09T04:26:42.053Z" hostname="LAPTOP-70QV4MNN" time="238.623">
+  <properties/>
+  <testcase name="all23KindsEachRequiredFlagAbsentAndFalseRetainOriginalWithZeroMutations" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="45.673"/>
+  <testcase name="all23EnabledKindsSendExactOriginalAcceptContractReceiptButRetainRows" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="16.825"/>
+  <testcase name="rotatedActualSqlEpochPreflightZeroWritesRetainsOperationAndBytes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="15.892"/>
+  <testcase name="cachedCompletedInvalidReceiptsNeverGrantDependencies" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="15.912"/>
+  <testcase name="malformedStatusHoldsDependentButIndependentOwnerExecutes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="15.904"/>
+  <testcase name="malformedResourceKindHoldsDependentButIndependentOwnerExecutes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="16.174"/>
+  <testcase name="malformedOpIdHoldsDependentButIndependentOwnerExecutes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="15.943"/>
+  <testcase name="capabilityHeldOwnerDoesNotBlockIndependentOwner" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="15.917"/>
+  <testcase name="replacedActualCertificatePreflightZeroWritesRetainsOperationAndBytes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="16.195"/>
+  <testcase name="deletionDefersAcrossStandaloneMediaQueueAndRetainsUncertainOriginals" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="15.907"/>
+  <testcase name="revokedActualSessionPreflightZeroWritesRetainsOperationAndBytes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="15.977"/>
+  <testcase name="malformedLibraryHoldsDependentButIndependentOwnerExecutes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="16.282"/>
+  <testcase name="malformedEpochHoldsDependentButIndependentOwnerExecutes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="16.022"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

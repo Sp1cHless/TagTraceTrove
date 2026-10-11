@@ -16,7 +16,23 @@
     </style>
 
 
+    <!--
+      The launch screen. Android 12 and later draw this from the theme itself (the window's
+      background colour plus one icon), which is why the `splash.png` below never appeared on a
+      modern phone. Both are set explicitly, and the icon is deliberately transparent: the launch
+      screen is the same white the app's own boot screen is, and the icon then appears exactly
+      once, in the boot screen.
+
+      An icon here was tried and removed: the system scales it into a 288dp box and animates the
+      splash away on its own, so between the two screens there is a blank frame (the system's
+      dismissal, then the WebView's first paint) and the icon visibly blinks. Matching the sizes
+      is possible and was measured (launch 540x538 at (541,1206) against boot 536x535 at
+      (540,1205)), but the blink is not the page's to control.
+    -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/launch_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@color/launch_icon_none</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
         <item name="android:background">@drawable/splash</item>
     </style>
 </resources>

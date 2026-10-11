@@ -1,0 +1,27 @@
+{
+  "apps/web/src/offline/offline-api.ts": {
+    "sha256": "83967623be3a3f30e98be656a4a021e54c6c7908947c8033a8615693625857a1",
+    "bytes": 307439,
+    "lines": 5444
+  },
+  "apps/web/tests/existing-entry-media-vertical.test.ts": {
+    "sha256": "a21a386927ea5debe5f314dbf4f535c2717fd660af18b1479421deb864926585",
+    "bytes": 22443,
+    "lines": 264
+  },
+  "apps/server/src/import/media.ts": {
+    "sha256": "40986bc12b86b75a8505a6ce8985a114cfef3018dd116a1de9da1598cbb9b0a8",
+    "bytes": 12845,
+    "lines": 322
+  },
+  "apps/web/tests/existing-entry-media.test.ts": {
+    "sha256": "4dce49d0448d60f33e0595d8226cbf86d88fb1ed19307a83557ede73ea8458f6",
+    "bytes": 8893,
+    "lines": 95
+  },
+  "apps/server/src/sync/replay-service.ts": {
+    "sha256": "ecbfd3d2c31ec1c77e68f95da4970943ccd83c2404c5e5d7459a02e12690d0fd",
+    "bytes": 111455,
+    "lines": 2176
+  }
+}

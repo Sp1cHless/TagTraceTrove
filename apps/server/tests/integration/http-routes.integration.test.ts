@@ -23,6 +23,29 @@ afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true })));
 });
 
+describe('Entry media order route', () => {
+  it('is reachable next to the upload route and reports an unknown ref instead of taking `order` as a kind', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const assetRoot = await mkdtemp(join(tmpdir(), 't3-media-order-route-'));
+    temporaryDirectories.push(assetRoot);
+    const app = createApiApp(database, { assetRoot });
+    const created = createEntry(database, { title: 'Ordered', type: 'comic' });
+
+    // The specific path must win over `.../media/:kind`, or `order` is read as a
+    // media kind and the request is refused before it reaches the handler.
+    const response = await app.request(`/api/entries/${created.id}/media/order`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refs: [] }),
+    });
+    expect(response.status).toBe(200);
+    const updated = await response.json() as { coverRef: string | null; previewRefs: string[] };
+    expect(updated.coverRef).toBeNull();
+    expect(updated.previewRefs).toEqual([]);
+  });
+});
+
 describe('Entry HTTP routes', () => {
   it('creates, updates, and reads an Entry through shared contracts', async () => {
     const database = createMigratedMemoryDatabase();
@@ -55,6 +78,41 @@ describe('Entry HTTP routes', () => {
       sections: [],
       contents: [],
     });
+  });
+
+  it('takes a video runtime over the wire, changes it, and clears it again', async () => {
+    // The layer a person actually touches: the Entry editor PATCHes the field, and the only way to
+    // find out whether the request body is accepted is to send it through the real app. (Measured
+    // 2026-10-08: a server process older than this field answers `unrecognized_keys:
+    // ["durationSeconds"]` and an "Invalid request", while the rebuilt page happily types one in.)
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const app = createApiApp(database);
+
+    const createResponse = await app.request('/api/entries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'A video', type: 'video', durationSeconds: 470 }),
+    });
+    expect(createResponse.status).toBe(201);
+    const created = await createResponse.json() as { id: number; durationSeconds: number | null };
+    expect(created.durationSeconds).toBe(470);
+
+    const patch = async (body: Record<string, unknown>): Promise<number | null | undefined> => {
+      const response = await app.request(`/api/entries/${created.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      expect(response.status).toBe(200);
+      return ((await response.json()) as { durationSeconds?: number | null }).durationSeconds;
+    };
+
+    // `7:50` from the editor is 7 minutes 50 seconds; the client parses it and sends the seconds.
+    expect(await patch({ durationSeconds: 3756 })).toBe(3756);
+    expect(await patch({ durationSeconds: null })).toBeNull();
+    await expect((await app.request(`/api/entries/${created.id}`)).json())
+      .resolves.toMatchObject({ id: created.id, pageCount: null, durationSeconds: null });
   });
 
   it('merges two works for one Author and exposes their derived Sources', async () => {
@@ -749,6 +807,7 @@ describe('Producer HTTP routes', () => {
     await expect(filterOptionsResponse.json()).resolves.toEqual({
       authorTags: [{ tagId: producerTag.tagId, name: 'Studio' }],
       workTags: [{ tagId: entryTag.tagId, name: 'ARPG' }],
+      ratingSlots: [],
     });
 
     const adultSection = createSection(database, { entryType: 'adult', name: 'Tags' });
@@ -767,11 +826,13 @@ describe('Producer HTTP routes', () => {
       .resolves.toEqual({
         authorTags: [{ tagId: producerTag.tagId, name: 'Studio' }],
         workTags: [{ tagId: entryTag.tagId, name: 'ARPG' }],
+        ratingSlots: [],
       });
     await expect((await app.request('/api/producers/filter-options?entryType=adult&includeNsfw=true')).json())
       .resolves.toEqual({
         authorTags: [{ tagId: adultAuthorTag.tagId, name: 'Adult author tag' }],
         workTags: [{ tagId: adultWorkTag.tagId, name: 'Adult work tag' }],
+        ratingSlots: [],
       });
 
     const detail = await (await app.request(`/api/entries/${entry.id}`)).json();
@@ -1060,7 +1121,12 @@ describe('Taxonomy HTTP routes', () => {
       }),
     });
     expect(importResponse.status).toBe(201);
-    await expect(importResponse.json()).resolves.toHaveLength(2);
+    // A bulk import answers with what it wrote and what it passed over: a dictionary is thousands of
+    // pairs, so one the library contradicts is reported rather than thrown.
+    await expect(importResponse.json()).resolves.toMatchObject({
+      aliases: [{ alias: 'Doctor' }, { alias: 'Kaltsit' }],
+      skipped: [],
+    });
 
     expect((await app.request(`/api/taxonomy-aliases/${alias.id}`, { method: 'DELETE' })).status)
       .toBe(200);
@@ -1096,10 +1162,10 @@ describe('Taxonomy HTTP routes', () => {
       }),
     });
     expect(importResponse.status).toBe(201);
-    const imported = await importResponse.json() as Array<{ canonicalName: string }>;
+    const imported = await importResponse.json() as { aliases: Array<{ canonicalName: string }> };
 
     expect(created.partition).toBe('characters');
-    expect(imported.find((alias) => alias.canonicalName === '')).toBeDefined();
+    expect(imported.aliases.find((alias) => alias.canonicalName === '')).toBeDefined();
     const list = await (await app.request('/api/taxonomy-aliases')).json() as Array<{
       vocabulary: string;
       partition: string;
@@ -1110,7 +1176,9 @@ describe('Taxonomy HTTP routes', () => {
     // The completed 'producer' mapping from the second import row survived
     // (the entry-vocabulary 'bob' row is a separate vocabulary).
     expect(list.find((alias) => alias.vocabulary === 'producer' && alias.alias === 'bob')?.canonicalName)
-      .toBe('鮑勃');
+      // Stored simplified: `鮑勃` is the Traditional spelling of `鲍勃`, and the library holds one
+      // form of a name — the built-in conversion, not a dictionary decision.
+      .toBe('鲍勃');
   });
 
   it('rejects a manual upsert with an empty canonical name', async () => {
@@ -1359,7 +1427,9 @@ describe('Layout and import HTTP routes', () => {
     expect(basicSection.facets.find((facet) => facet.name === 'Type')!.tags.map((tag) => tag.name))
       .toEqual(['Image Set']);
     expect(basicSection.facets.find((facet) => facet.name === 'Language')!.tags.map((tag) => tag.name))
-      .toEqual(['日本語']);
+      // The source spells it `日本語`; every name that enters is simplified, so the library holds
+      // `日本语`. English names are the ones a dictionary is still needed for.
+      .toEqual(['日本语']);
     expect(tagsSection.facets[0]!.tags.map((tag) => tag.name)).toEqual(['Big Breasts']);
     expect(detail.producers.map((producer) => producer.name)).toEqual(['Akchu']);
   });
@@ -1442,7 +1512,9 @@ describe('Author alias group HTTP routes', () => {
     };
     expect(listed.groups).toHaveLength(1);
     expect(listed.groups[0]!.aliases.map((alias) => alias.name).sort())
-      .toEqual(['pirate cat', '海盜貓']);
+      // `海盜貓` is the Traditional spelling of the display name `海盗猫`, so it is the same name and
+      // needs no row of its own — it resolves to the display name without one.
+      .toEqual(['pirate cat']);
     expect(listed.groups[0]!.producerId).toBe(display.id);
 
     const works = database.prepare(
@@ -1481,6 +1553,29 @@ describe('Author alias group HTTP routes', () => {
     expect(summaries[0]!.entryType).toBe('comic');
     expect(summaries[0]!.sections[0]).toEqual({ name: 'Info', facets: [''] });
     expect(summaries[0]!.mappings[0]).toMatchObject({ tag: 'Unfiled tag', facet: '' });
+  });
+
+  it('exposes one Gallery’s Content kinds over HTTP, built-ins first', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const app = createApiApp(database);
+    const work = createEntry(database, { title: 'Work', type: '漫画' });
+    createEntryContent(database, { entryId: work.id, contentType: '短评', content: '好看' });
+
+    // A Chinese Gallery name travels in the path, exactly as the client sends it.
+    const response = await app.request(`/api/content-kinds/${encodeURIComponent('漫画')}`);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      entryType: '漫画',
+      kinds: ['Source URL', 'description', '短评'],
+    });
+
+    // A Gallery whose works carry nothing still answers with the built-ins rather than nothing.
+    const empty = await app.request('/api/content-kinds/novel');
+    await expect(empty.json()).resolves.toEqual({
+      entryType: 'novel',
+      kinds: ['Source URL', 'description'],
+    });
   });
 
   it('rejects a group with duplicate tag names (400)', async () => {

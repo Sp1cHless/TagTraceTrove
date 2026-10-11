@@ -1,0 +1,20 @@
+[
+  {
+    "path": "apps\\web\\src\\offline\\offline-api.ts",
+    "beforeSHA": "d6f7446680ebefb1bde63cd4333399141851c7bf3583ca71ae5c35cede58df4a",
+    "afterSHA": "3427715821305cce2b17d76d7db5d25bdaef9313e519084e12f7580f6090cb63",
+    "anchors": 1
+  },
+  {
+    "path": "apps\\web\\src\\GalleryApp.vue",
+    "beforeSHA": "1b7d53cb4586e68b1c8491b5db99ccc15cc0eb5025bf95cac6d848c0d995c67c",
+    "afterSHA": "6dcdf0dc4d2000a44803051c2cdac3ee1fd190a92bfdb52d4166342507415da1",
+    "anchors": 1
+  },
+  {
+    "path": "apps\\web\\src\\offline\\offline-api.ts",
+    "beforeSHA": "3427715821305cce2b17d76d7db5d25bdaef9313e519084e12f7580f6090cb63",
+    "afterSHA": "beab435ceec626c0f1cde1ddda7d6e422156516d01522c8ee254e590de90448c",
+    "anchors": 1
+  }
+]

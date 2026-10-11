@@ -1,0 +1,17 @@
+[
+  {
+    "path": "CURRENT.md",
+    "before": "406ce6bb84a56cd130bd2c962282d3be009df21c3c9d7baf76bae48e5c73829e",
+    "after": "dc26c4274618712325d7d0db3343afacc829c57eba3a387751e09f863eba8951"
+  },
+  {
+    "path": ".hermes\\artifacts\\offline-parity-implementation-board.md",
+    "before": "43328cb0d93bd2e78d4fb946e9270c2c6cbff9413c9ebb82effd922f43a297a4",
+    "after": "54644c83bac0b790301a93babcf54c52431da0df242ed8eba73dabdf90302049"
+  },
+  {
+    "path": ".hermes\\artifacts\\offline-parity-filtered-backlog.md",
+    "before": "46e3888e198b51300dbf5a32c834737478ef9e90284371f381fc1251a759bbe3",
+    "after": "7e96d001bf511973e31b2d7d9346e59de499edea978f403555ebeed5ae6884fa"
+  }
+]

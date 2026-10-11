@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The launch screen is white, the same white as the app's boot screen. -->
+    <color name="launch_background">#FFFFFFFF</color>
+    <!-- No icon on the launch screen: a fully transparent drawable keeps the system from
+         drawing the app icon there. -->
+    <color name="launch_icon_none">#00000000</color>
+</resources>

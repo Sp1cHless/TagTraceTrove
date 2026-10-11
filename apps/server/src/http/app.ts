@@ -1,6 +1,9 @@
+import { entryConversionContext } from '../sync/entry-conversion-context.js';
+import { collectionCommonTagContext } from '../sync/collection-common-tag.js';
+import { collectionDeleteIdentity } from '../sync/collection-delete.js';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readFile, stat } from 'node:fs/promises';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import {
   apiErrorResponseSchema,
   authorDetailResponseSchema,
@@ -15,6 +18,7 @@ import {
   createAuthorDirectoryRequestSchema,
   createEntryRequestSchema,
   createFacetRequestSchema,
+  createAuthorRatingSlotRequestSchema,
   createFacetResponseSchema,
   createProducerRequestSchema,
   createRatingSlotRequestSchema,
@@ -22,6 +26,8 @@ import {
   createSectionResponseSchema,
   entryContentRecordSchema,
   entryDetailResponseSchema,
+  syncEntryIdentitySchema,
+  syncCollectionIdentitySchema,
   entryIdParamsSchema,
   entryProducerParamsSchema,
   entryRecordSchema,
@@ -42,7 +48,11 @@ import {
   createTemporaryCollectionRequestSchema,
   temporaryCollectionResponseSchema,
   galleryPartitionRequestSchema,
+  syncGalleryPartitionContextSchema,
+  syncEntryRatingLayoutContextSchema,
+  galleryOrderResponseSchema,
   gallerySummarySchema,
+  setGalleryOrderRequestSchema,
   reorderCollectionsRequestSchema,
   addCollectionTagRequestSchema,
   addCollectionTagResponseSchema,
@@ -88,6 +98,8 @@ import {
   renameTagGroupRequestSchema,
   ratingRowSchema,
   ratingSlotSchema,
+  authorRatingSlotIdParamsSchema,
+  entryRatingSlotIdParamsSchema,
   ratingSlotsQuerySchema,
   reorderEntryContentsRequestSchema,
   reorderRatingSlotsRequestSchema,
@@ -95,15 +107,23 @@ import {
   reorderTagGroupRequestSchema,
   relationSuggestionResponseSchema,
   producerSuggestionQuerySchema,
+  setProducerGalleryAnchorRequestSchema,
   tagSuggestionQuerySchema,
   sectionIdParamsSchema,
   setRatingRequestSchema,
+  setEntryMediaOrderRequestSchema,
   tagGroupIdParamsSchema,
   tagIdParamsSchema,
   tagLayoutApplyResponseSchema,
+  applyCommonTemplateRequestSchema,
+  applyCommonTemplateResponseSchema,
+  commonTemplateSchema,
+  contentKindsResponseSchema,
   templateSummarySchema,
+  siteDictionaryImportResultSchema,
   taxonomyAliasIdParamsSchema,
   taxonomyAliasesQuerySchema,
+  taxonomyAliasImportResultSchema,
   taxonomyAliasSchema,
   unassignedTagGroupsResponseSchema,
   unassignedTagMoveRequestSchema,
@@ -133,12 +153,27 @@ import {
   sourceLibraryRecordSchema,
   sourceStatusPatchSchema,
   sourceStatusRecordSchema,
+  siteprobeExportPreviewRequestSchema,
+  siteprobeLinkRequestSchema,
+  siteprobeLinkMetaSchema,
+  siteprobeReadmeSchema,
+  siteprobeRevealFolderRequestSchema,
+  siteprobeRevealFolderSchema,
+  siteprobeSelectionUploadSchema,
+  siteprobeResolveRequestSchema,
+  siteprobeRunRequestSchema,
+  siteprobeRunSchema,
+  importCommitRequestSchema,
   syncCapabilitiesSchema,
   syncMediaUploadMetadataSchema,
   syncMediaUploadResultSchema,
-  syncReplayOperationSchema,
+  syncReplayRequestSchema,
   syncReplayResultSchema,
   syncSnapshotSchema,
+  syncChangesQuerySchema,
+  syncChangesResponseSchema,
+  syncAckRequestSchema,
+  syncAckResponseSchema,
 } from '@t3/shared';
 import type {
   SourceLibraryRecord,
@@ -146,6 +181,7 @@ import type {
 } from '@t3/shared';
 import type { T3Database } from '../database/connection.js';
 import { inspectDatabase } from '../database/doctor.js';
+import { registerSystemRoutes } from './system-routes.js';
 import { commitImportBatch } from '../import/commit.js';
 import {
   executeProducerMerges,
@@ -156,10 +192,23 @@ import {
   readEntryMedia,
   readEntryThumbnail,
   resolveEntryThumbnail,
+  applyEntryMediaOrder,
   storeEntryMedia,
   type EntryMediaKind,
 } from '../import/media.js';
 import { previewSiteProbeUpload } from '../import/upload-preview.js';
+import { commitSiteProbeExportPath, mimeTypeOf, previewSiteProbeExportPath,
+         readInsideExportRoot, resolveExistingInsideExportRoot } from '../import/site-probe-path.js';
+import { setGalleryOrder } from '../repositories/gallery-order-repository.js';
+import { siteprobeStatus } from '../siteprobe/home.js';
+import { revealFolder } from '../siteprobe/reveal.js';
+import { writeSiteprobeErrorLog } from '../siteprobe/log.js';
+import { importSiteDictionaries } from '../taxonomy/import-dictionaries.js';
+import { readLinkMeta } from '../siteprobe/link-meta.js';
+import { createSiteprobeRuntime, type SiteprobeRuntime } from '../siteprobe/runtime.js';
+import type { SiteprobeJobStore } from '../siteprobe/jobs.js';
+import { runSiteprobeOnce } from '../siteprobe/transport.js';
+
 import {
   createEntryContent,
   deleteEntryContent,
@@ -173,7 +222,6 @@ import {
   planTitleShortening,
 } from '../repositories/title-shortening-repository.js';
 import {
-  createEntry,
   deleteEntry,
   getEntryDetail,
   listGalleries,
@@ -234,11 +282,14 @@ import {
 } from '../repositories/producer-tag-repository.js';
 import {
   createEntryRatingSlot,
+  deleteAuthorRatingSlot,
+  deleteEntryRatingSlot,
   createProducerRatingSlot,
   listRatingSlots,
   reorderEntryRatingSlots,
   reorderProducerRatingSlots,
   setEntryRating,
+  setProducerGalleryAnchor,
   setProducerRating,
 } from '../repositories/rating-repository.js';
 import { likeEntry, recordEntryView } from '../repositories/usage-repository.js';
@@ -248,10 +299,12 @@ import {
   writeAuthorAliasGroup,
 } from '../repositories/author-alias-repository.js';
 import {
+  contentKindsForType,
   listTemplateSummaries,
   templatesDirFor,
   writeTemplateFiles,
 } from '../repositories/template-export.js';
+import { COMMON_TEMPLATE, applyCommonRatingSlots, applyCommonTemplate } from '../repositories/common-template.js';
 import {
   addCollectionEntry,
   addCommonTagToCollection,
@@ -299,9 +352,12 @@ import {
 import { executeSearchRun } from '../source-maintenance/job-manager.js';
 import { commitSourceMaintenanceRun, CommitConflictError, CommitStaleError } from '../source-maintenance/commit-service.js';
 import { getSourceAdapter, probeTargetHomepage } from '../source-maintenance/adapter-registry.js';
-import { buildSyncCapabilities, buildSyncSnapshot } from '../sync/sync-service.js';
+import { readSnapshotDelta, rememberSnapshot } from '../sync/snapshot-delta.js';
+import { syncDeltaRequestSchema, syncDeltaPageSchema } from '@t3/shared';
+import { ackSyncChanges, buildSyncCapabilities, buildSyncSnapshot, getSyncIdentity, readSyncChanges, SyncFeedConflict } from '../sync/sync-service.js';
 import { replaySyncMediaUpload, SyncMediaUploadError } from '../sync/media-replay-service.js';
-import { replaySyncOperation } from '../sync/replay-service.js';
+import { replayEntryMediaOperation, replaySyncOperation } from '../sync/replay-service.js';
+import { createOnlineEntry } from '../sync/online-entry-create.js';
 import type { TitleCatalogProvider } from '../source-maintenance/catalog-provider.js';
 
 async function parseJson<T>(request: Request, schema: ZodType<T>): Promise<T> {
@@ -355,10 +411,54 @@ function isExportDataError(error: unknown): boolean {
     || error.message.startsWith('Unsupported site_probe export format');
 }
 
+/**
+ * Why a one-shot SiteProbe command produced nothing usable.
+ *
+ * The tool's own stderr is the first thing a person would want to see, and a line that broke the
+ * contract is named as such — a tool that starts printing prose on stdout must not look like an
+ * empty answer.
+ */
+function siteprobeProblem(result: { code: number | null; malformed: string[]; stderr: string }): string {
+  const parts: string[] = [];
+  if (result.malformed.length > 0) {
+    parts.push(`${result.malformed.length} line(s) were not part of the contract: `
+      + result.malformed.slice(0, 2).join(' | '));
+  }
+  if (result.stderr.trim()) {
+    parts.push(result.stderr.trim().split('\n').slice(-3).join(' '));
+  }
+  if (parts.length === 0) {
+    parts.push(`the tool exited with code ${result.code ?? 'null'} and said nothing`);
+  }
+  return parts.join(' — ');
+}
+
 export interface ApiAppOptions {
   assetRoot?: string;
   /** Live database path, used for the merge backup snapshot. */
   databasePath?: string;
+  /** The launcher's log file, whose tail the System page can show and copy. */
+  systemLogPath?: string;
+  /**
+   * T³'s writable data root. The SiteProbe home is `<dataDir>/siteprobe`, which is where the tool
+   * itself puts its adapters, exports and sessions (guidance §34). Defaults to `dirname(databasePath)`.
+   */
+  dataDir?: string;
+  /**
+   * Where the SiteProbe tool and its interpreter are, when they are not discoverable (or in a
+   * test). Tests inject a stub tool here so no suite needs a real virtualenv or a network.
+   */
+  siteprobe?: { tool?: string; python?: string; home?: string };
+  /**
+   * The SiteProbe runtime the launcher already built, so it can shut the runs down with the server.
+   * When omitted (tests, embedders) one is created from `dataDir` and `siteprobe` above.
+   */
+  siteprobeRuntime?: SiteprobeRuntime;
+  /**
+   * How "open the adapter folder" reaches the machine's file manager. Tests replace it, because a
+   * real one opens a window on whatever computer runs the suite.
+   */
+  revealSiteprobeFolder?: typeof revealFolder;
   /**
    * Catalog providers used by Source maintenance runs. The production server
    * wires the live providers; tests inject fixture-backed ones so no test
@@ -380,6 +480,27 @@ const itemRecordSchema = sourceMaintenanceItemRecordSchema;
 export function createApiApp(database: T3Database, options: ApiAppOptions = {}): Hono {
   const app = new Hono();
 
+  // Where the local SiteProbe tool is, and the one store of the runs it is doing. Resolved once per
+  // app: the tool's location cannot change while the server is up, and a job outliving the request
+  // that started it is the point of the store. The launcher passes its own runtime in so it can
+  // close it on shutdown; tests inject a stub tool through `siteprobe`.
+  const dataDir = options.dataDir
+    ?? (options.databasePath ? dirname(options.databasePath) : join(process.cwd(), '.data'));
+  const siteprobeRuntime = options.siteprobeRuntime
+    ?? createSiteprobeRuntime({ dataDir, ...(options.siteprobe ? { overrides: options.siteprobe } : {}) });
+  const tooling = siteprobeRuntime.tooling;
+  const siteprobeJobs: SiteprobeJobStore = siteprobeRuntime.jobs;
+  const siteprobeExportRoot = join(tooling.home, 'export');
+
+  // The lowest-level surface: what this desktop can say about itself, the library-wide backup
+  // and restore, and the settings the launcher reads before the server starts.
+  registerSystemRoutes(app, {
+    database,
+    dataDir,
+    ...(options.databasePath ? { databasePath: options.databasePath } : {}),
+    ...(options.systemLogPath ? { logPath: options.systemLogPath } : {}),
+  });
+
   app.use('/api/*', cors({
     origin: (origin) => /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/u.test(origin)
       ? origin
@@ -390,7 +511,32 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
 
   app.post('/api/entries', async (context) => {
     const input = await parseJson(context.req.raw, createEntryRequestSchema);
-    return context.json(entryRecordSchema.parse(createEntry(database, input)), 201);
+    const result = createOnlineEntry(database, input);
+    if (result.status === 'conflict') {
+      return context.json(errorPayload('CONFLICT', 'Entry creation identity belongs to another request'), 409);
+    }
+    return context.json(entryRecordSchema.parse(result.entry), result.status === 'created' ? 201 : 200);
+  });
+
+  app.put('/api/entries/:entryId/media/order', async (context) => {
+    if (!options.assetRoot) {
+      return context.json(errorPayload('CONFLICT', 'Managed media storage is unavailable'), 409);
+    }
+    const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+    const input = await parseJson(context.req.raw, setEntryMediaOrderRequestSchema);
+    try {
+      // The online door is an ordinary REST write like the upload above: the
+      // caller just read this list, and the versioned replay path is what
+      // carries the reviewed base for offline clients.
+      return context.json(entryRecordSchema.parse(
+        await applyEntryMediaOrder(database, options.assetRoot, entryId, input.refs),
+      ));
+    } catch (error) {
+      return context.json(errorPayload(
+        'VALIDATION_ERROR',
+        error instanceof Error ? error.message : 'Entry media could not be reordered',
+      ), 400);
+    }
   });
 
   app.put('/api/entries/:entryId/media/:kind', async (context) => {
@@ -479,6 +625,312 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     return context.json(preview);
   });
 
+  // The same preview for an export the server can already reach — the case where T³ started the
+  // crawl itself. No upload: the files are in the tool's own tree, inside the export root.
+  app.post('/api/imports/site-probe/preview-path', async (context) => {
+    const input = await parseJson(context.req.raw, siteprobeExportPreviewRequestSchema);
+    const preview = await previewSiteProbeExportPath(siteprobeExportRoot, input.metadataPath);
+    return context.json(preview);
+  });
+
+  // Commit reads the export's media from disk. The browser never holds those files for a
+  // server-started crawl, so this is where the cover and preview actually reach the library.
+  app.post('/api/imports/commit-path', async (context) => {
+    const input = await parseJson(context.req.raw, importCommitRequestSchema);
+    const result = await commitSiteProbeExportPath(database, options.assetRoot, siteprobeExportRoot, input);
+    return context.json(result, 201);
+  });
+
+  app.get('/api/siteprobe/status', (context) => context.json(siteprobeStatus(tooling)));
+
+  /**
+   * One pasted link, read with no site rule: title and cover, or a reason and a next step.
+   *
+   * 200 in every case, including a failure: the answer *is* the message the form shows, and a miss
+   * here is a normal outcome of a generic reader (measured on seven work pages: title 7/7, cover
+   * 7/7, but a page that is a client-rendered shell yields neither). Only an unavailable tool is an
+   * HTTP error, because then nothing was asked of any page.
+   */
+  app.post('/api/siteprobe/link-meta', async (context) => {
+    const input = await parseJson(context.req.raw, siteprobeLinkRequestSchema);
+    if (!tooling.ok) {
+      return context.json(errorPayload('CONFLICT', tooling.detail ?? 'SiteProbe is unavailable'), 503);
+    }
+    const meta = await readLinkMeta(input.url, { tooling, dataDir });
+    return context.json(siteprobeLinkMetaSchema.parse(meta));
+  });
+
+  app.get('/api/siteprobe/status', (context) => context.json(siteprobeStatus(tooling)));
+
+  /**
+   * One pasted link, read with no site rule: title and cover, or a reason and a next step.
+   *
+   * 200 in every case, including a failure: the answer *is* the message the form shows, and a miss
+   * here is a normal outcome of a generic reader (measured on seven work pages: title 7/7, cover
+   * 7/7, but a page that is a client-rendered shell yields neither). Only an unavailable tool is an
+   * HTTP error, because then nothing was asked of any page.
+   */
+  app.post('/api/siteprobe/link-meta', async (context) => {
+    const input = await parseJson(context.req.raw, siteprobeLinkRequestSchema);
+    if (!tooling.ok) {
+      return context.json(errorPayload('CONFLICT', tooling.detail ?? 'SiteProbe is unavailable'), 503);
+    }
+    const meta = await readLinkMeta(input.url, { tooling, dataDir });
+    return context.json(siteprobeLinkMetaSchema.parse(meta));
+  });
+
+  /// The tool's own site registry: the menu, the target kinds and the labels all come from here, so
+  /// nothing about any site is written in TypeScript (guidance §33).
+  app.get('/api/siteprobe/sites', async (context) => {
+    if (!tooling.ok) {
+      return context.json(errorPayload('CONFLICT', tooling.detail ?? 'SiteProbe is unavailable'), 503);
+    }
+    const result = await runSiteprobeOnce(tooling, ['sites']);
+    const event = result.events.find((candidate) => candidate.event === 'sites');
+    if (!event || result.code !== 0) {
+      return context.json(errorPayload('INTERNAL_ERROR', siteprobeProblem(result)), 502);
+    }
+    return context.json(event);
+  });
+
+  /// "Who claims this input?" A miss answers with `matched: false` and 200: it is the answer to a
+  /// question the clipboard flow asks, not a failure.
+  app.post('/api/siteprobe/resolve', async (context) => {
+    const input = await parseJson(context.req.raw, siteprobeResolveRequestSchema);
+    if (!tooling.ok) {
+      return context.json(errorPayload('CONFLICT', tooling.detail ?? 'SiteProbe is unavailable'), 503);
+    }
+    const args = ['resolve', input.input];
+    if (input.site) args.push('--site', input.site);
+    if (input.kind) args.push('--kind', input.kind);
+    const result = await runSiteprobeOnce(tooling, args);
+    const event = result.events.find((candidate) => candidate.event === 'resolve');
+    if (!event) {
+      return context.json(errorPayload('INTERNAL_ERROR', siteprobeProblem(result)), 502);
+    }
+    return context.json(event);
+  });
+
+  /**
+   * Open the folder an adapter goes into, in the machine's file manager.
+   *
+   * The caller names a layer and never a path: the body schema is an enum, and the folder is chosen
+   * from the tool's home on this side. 200 with the path even when the window did not open — the
+   * person can then open it themselves, which is what the UI offers — and only an unavailable tool is
+   * an error, because then there is no home to name.
+   */
+  app.post('/api/siteprobe/reveal-folder', async (context) => {
+    const input = await parseJson(context.req.raw, siteprobeRevealFolderRequestSchema);
+    const outcome = await (options.revealSiteprobeFolder ?? revealFolder)(tooling, input.folder);
+    if (outcome.detail) {
+      return context.json(errorPayload('INTERNAL_ERROR',
+        `the file manager did not open: ${outcome.detail} (folder: ${outcome.result.path})`), 502);
+    }
+    return context.json(siteprobeRevealFolderSchema.parse(outcome.result));
+  });
+
+  /// One site's own description of itself, read from its adapter folder when somebody opens it.
+  app.get('/api/siteprobe/readme', async (context) => {
+    const site = context.req.query('site');
+    if (!site) {
+      return context.json(errorPayload('VALIDATION_ERROR', 'A site is required'), 400);
+    }
+    if (!tooling.ok) {
+      return context.json(errorPayload('CONFLICT', tooling.detail ?? 'SiteProbe is unavailable'), 503);
+    }
+    const result = await runSiteprobeOnce(tooling, ['readme', '--site', site]);
+    const event = result.events.find((candidate) => candidate.event === 'readme');
+    if (!event) {
+      // The tool answers an unknown site with an error event; a caller asking about a site the menu
+      // just showed should not have to tell that apart from a broken tool.
+      return context.json(errorPayload('NOT_FOUND', siteprobeProblem(result)), 404);
+    }
+    return context.json(siteprobeReadmeSchema.parse({
+      site: event.site, source: event.source, text: event.text,
+    }));
+  });
+
+  /**
+   * The export tree, served to the browser — the review page and everything it needs beside it.
+   *
+   * The canonical URL is the file's own **path** inside `<home>/export/`, and that is the whole
+   * point: a review page references its cards' covers relatively (`review_media/cover_1474863.webp`),
+   * which resolved while the page was opened as a `file://` document and stopped the moment it came
+   * from one query endpoint — the browser resolved every cover against `/api/siteprobe/`, and a real
+   * 18comic search page showed up with no covers at all (measured 2026-09-22).
+   *
+   * A `file:///` link could not be kept either: a browser refuses that navigation from an http page,
+   * and it asked the person to know where the tool keeps things. So the tree is served, under the
+   * same guard as the import and the media route (resolved, inside the export root, `..` refused).
+   */
+  app.get('/api/siteprobe/export-file', async (context) => {
+    const requested = context.req.query('path');
+    if (!requested) {
+      return context.json(errorPayload('VALIDATION_ERROR', 'A path is required'), 400);
+    }
+    // The query form is how a caller holding an absolute path asks for it (the client builds its
+    // link from the path a run reported). Answered with the canonical path URL, because that is what
+    // makes the page's own relative references resolve: a redirect is a real navigation, so the
+    // document's base URL becomes the path form.
+    let relativePath: string;
+    let resolved: string;
+    try {
+      resolved = await resolveExistingInsideExportRoot(siteprobeExportRoot, requested);
+      relativePath = relative(siteprobeExportRoot, resolved);
+    } catch (error) {
+      return context.json(errorPayload('VALIDATION_ERROR', (error as Error).message), 400);
+    }
+    const selectionRunId = context.req.query('selectionRunId');
+    let selectionQuery = '';
+    if (selectionRunId) {
+      const job = siteprobeJobs.get(selectionRunId);
+      const review = job?.events.find((event) => event.event === 'review');
+      if (!review || resolve(review.review_html) !== resolved) {
+        return context.json(errorPayload('VALIDATION_ERROR',
+          'The selection run does not own this review page'), 400);
+      }
+      selectionQuery = `?selectionRunId=${encodeURIComponent(selectionRunId)}`;
+    }
+    try {
+      if (!(await stat(resolved)).isFile()) {
+        return context.json(errorPayload('NOT_FOUND', 'Export file not found'), 404);
+      }
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' || code === 'ENOTDIR') {
+        return context.json(errorPayload('NOT_FOUND', 'Export file not found'), 404);
+      }
+      throw error;
+    }
+    return context.redirect(
+      `/api/siteprobe/export-file/${relativePath.split(sep).map(encodeURIComponent).join('/')}${selectionQuery}`, 302);
+  });
+
+  app.get('/api/siteprobe/export-file/*', async (context) => {
+    const tail = context.req.path.replace(/^\/api\/siteprobe\/export-file\//u, '');
+    let requested: string;
+    try {
+      requested = decodeURIComponent(tail);
+    } catch {
+      return context.json(errorPayload('VALIDATION_ERROR', 'That path is not URL-encoded'), 400);
+    }
+    let resolved: string;
+    try {
+      // The guard resolves `..` before checking, so a traversal is refused rather than followed —
+      // the same rule the import and the media route use.
+      resolved = await resolveExistingInsideExportRoot(
+        siteprobeExportRoot,
+        join(siteprobeExportRoot, requested),
+      );
+    } catch (error) {
+      return context.json(errorPayload('VALIDATION_ERROR', (error as Error).message), 400);
+    }
+    const selectionRunId = context.req.query('selectionRunId');
+    if (selectionRunId) {
+      const job = siteprobeJobs.get(selectionRunId);
+      const review = job?.events.find((event) => event.event === 'review');
+      if (!review || resolve(review.review_html) !== resolved) {
+        return context.json(errorPayload('VALIDATION_ERROR',
+          'The selection run does not own this review page'), 400);
+      }
+    }
+    try {
+      if (!(await stat(resolved)).isFile()) {
+        return context.json(errorPayload('NOT_FOUND', 'No such export file'), 404);
+      }
+      return context.body(Uint8Array.from(await readInsideExportRoot(siteprobeExportRoot, resolved)), 200, {
+        'Content-Type': mimeTypeOf(resolved),
+        'Cache-Control': 'no-store',
+      });
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' || code === 'ENOTDIR') {
+        return context.json(errorPayload('NOT_FOUND', 'No such export file'), 404);
+      }
+      if (error instanceof Error && isExportDataError(error)) {
+        return context.json(errorPayload('VALIDATION_ERROR', error.message), 400);
+      }
+      throw error;
+    }
+  });
+
+  app.get('/api/siteprobe/runs', (context) => context.json({
+    runs: siteprobeJobs.list().map((job) => siteprobeRunSchema.parse(job)),
+  }));
+
+  app.post('/api/siteprobe/runs', async (context) => {
+    const request = await parseJson(context.req.raw, siteprobeRunRequestSchema);
+    if (!tooling.ok) {
+      return context.json(errorPayload('CONFLICT', tooling.detail ?? 'SiteProbe is unavailable'), 503);
+    }
+    // One crawl at a time: two runs of one site would race over the same listing directory and the
+    // same crawl state, and the tool is written for a person doing one thing at a time. The running
+    // run's id is in the message so a caller can follow it instead.
+    const running = siteprobeJobs.list().find((job) => job.status === 'running');
+    if (running) {
+      return context.json(
+        errorPayload('CONFLICT', `another SiteProbe run is still going: ${running.id}`), 409);
+    }
+    return context.json(siteprobeRunSchema.parse(siteprobeJobs.start(request)), 201);
+  });
+
+  app.get('/api/siteprobe/runs/:runId', (context) => {
+    const job = siteprobeJobs.get(context.req.param('runId'));
+    if (!job) {
+      return context.json(errorPayload('NOT_FOUND', 'Unknown SiteProbe run'), 404);
+    }
+    return context.json(siteprobeRunSchema.parse(job));
+  });
+
+  /**
+   * A selection the browser downloaded, put where the run's watch is looking.
+   *
+   * The review page saves its selection by downloading a file, and where a download lands is the
+   * browser's business: hitomi's own page uses a plain `<a download>`, so its selection goes to the
+   * Downloads folder and never appears beside the page — measured on the user's machine, where the
+   * second half of the flow simply never started. This is the door for that: the file's bytes come
+   * here instead, and the watch picks them up as it would its own.
+   */
+  app.post('/api/siteprobe/runs/:runId/selection', async (context) => {
+    const runId = context.req.param('runId');
+    if (!siteprobeJobs.get(runId)) {
+      return context.json(errorPayload('NOT_FOUND', 'Unknown SiteProbe run'), 404);
+    }
+    const input = await parseJson(context.req.raw, siteprobeSelectionUploadSchema);
+    try {
+      return context.json(siteprobeRunSchema.parse(siteprobeJobs.acceptSelection(runId, input)));
+    } catch (error) {
+      return context.json(errorPayload('VALIDATION_ERROR', (error as Error).message), 400);
+    }
+  });
+
+  /**
+   * "I have signed in."
+   *
+   * The login door waits for one line on stdin, and this is that line: the person is looking at the
+   * browser and at T³, not at a console window, so the answer has to come from here.
+   */
+  app.post('/api/siteprobe/runs/:runId/login-done', (context) => {
+    const runId = context.req.param('runId');
+    if (!siteprobeJobs.get(runId)) {
+      return context.json(errorPayload('NOT_FOUND', 'Unknown SiteProbe run'), 404);
+    }
+    try {
+      return context.json(siteprobeRunSchema.parse(siteprobeJobs.finishLogin(runId)));
+    } catch (error) {
+      return context.json(errorPayload('CONFLICT', (error as Error).message), 409);
+    }
+  });
+
+  app.post('/api/siteprobe/runs/:runId/cancel', (context) => {
+    const id = context.req.param('runId');
+    if (!siteprobeJobs.get(id)) {
+      return context.json(errorPayload('NOT_FOUND', 'Unknown SiteProbe run'), 404);
+    }
+    siteprobeJobs.cancel(id);
+    return context.json(siteprobeRunSchema.parse(siteprobeJobs.get(id)));
+  });
+
   app.post('/api/imports/commit', async (context) => {
     const raw: unknown = await context.req.raw.json();
     if (typeof raw !== 'object' || raw === null || !('batch' in raw) || !('mapping' in raw)) {
@@ -501,8 +953,22 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
 
   app.post('/api/taxonomy-aliases/import', async (context) => {
     const { aliases } = await parseJson(context.req.raw, importTaxonomyAliasesRequestSchema);
-    return context.json(taxonomyAliasSchema.array().parse(importTaxonomyAliases(database, aliases)), 201);
+    return context.json(
+      taxonomyAliasImportResultSchema.parse(importTaxonomyAliases(database, aliases)), 201,
+    );
   });
+
+  /**
+   * Bring every site's dictionary across from the tool's own export tree.
+   *
+   * The one-time move, and the only door the export tree needs: each crawl has been writing
+   * `<export>/<group>/taxonomy_dictionary.json` all along, and until now the only way to use it was to
+   * find the file and hand it over. After this runs the alias table *is* the dictionary, so it is a
+   * migration rather than something the import flow depends on.
+   */
+  app.post('/api/taxonomy-aliases/import-site-dictionaries', (context) => context.json(
+    siteDictionaryImportResultSchema.parse(importSiteDictionaries(database, siteprobeExportRoot)),
+  ));
 
   app.delete('/api/taxonomy-aliases/:aliasId', (context) => {
     const { aliasId } = taxonomyAliasIdParamsSchema.parse({ aliasId: context.req.param('aliasId') });
@@ -513,6 +979,19 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
   app.get('/api/galleries', (context) => context.json(
     gallerySummarySchema.array().parse(listGalleries(database)),
   ));
+
+  /**
+   * The order the sidebar lists Galleries in.
+   *
+   * The whole list comes back, and the whole list goes in: the sidebar's exchange control sends every
+   * Gallery after a move, so what a person sees is exactly what is stored.
+   */
+  app.put('/api/galleries/order', async (context) => {
+    const input = await parseJson(context.req.raw, setGalleryOrderRequestSchema);
+    return context.json(galleryOrderResponseSchema.parse({
+      types: setGalleryOrder(database, input.types),
+    }));
+  });
 
   app.get('/api/entry-tags', (context) => {
     const { entryType } = entryTypeQuerySchema.parse(context.req.query());
@@ -596,6 +1075,24 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     });
     const input = await parseJson(context.req.raw, updateCollectionRequestSchema);
     return context.json(collectionRecordSchema.parse(updateCollection(database, collectionId, input)));
+  });
+
+  app.get('/api/entries/:entryId/conversion-context', (context) => {
+    const {entryId}=entryIdParamsSchema.parse({entryId:context.req.param('entryId')});
+    return context.json(entryConversionContext(database,entryId));
+  });
+
+  app.get('/api/collections/:collectionId/common-tag-context', (context) => {
+    const {collectionId}=collectionIdParamsSchema.parse({collectionId:context.req.param('collectionId')});
+    const name=context.req.query('name');if(!name || name.length>500)return context.json(errorPayload('VALIDATION_ERROR','Missing Tag name'),400);
+    return context.json(collectionCommonTagContext(database,collectionId,name));
+  });
+
+  app.get('/api/collections/:collectionId/sync-identity' , (context) => {
+    const {collectionId}=collectionIdParamsSchema.parse({collectionId:context.req.param('collectionId')});
+    const identity=collectionDeleteIdentity(database,collectionId);
+    if (!identity) return context.json(errorPayload('NOT_FOUND','Collection not found'),404);
+    return context.json(syncCollectionIdentitySchema.parse(identity));
   });
 
   app.delete('/api/collections/:collectionId', (context) => {
@@ -747,6 +1244,31 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
   });
 
 
+  app.get('/api/galleries/:entryType/partition-context', (context) => {
+    const { entryType } = entryTypeParamsSchema.parse({ entryType: context.req.param('entryType') });
+    const owner = database.prepare(`SELECT scope.sync_uid AS syncUid, scope.sync_version AS syncVersion,
+      COALESCE(setting.nsfw,0) AS nsfw FROM gallery_partition_scopes AS scope
+      LEFT JOIN gallery_settings AS setting ON setting.entry_type=scope.entry_type
+      WHERE scope.entry_type=? AND EXISTS(SELECT 1 FROM entries WHERE type=scope.entry_type)`)
+      .get(entryType) as {syncUid:string;syncVersion:number;nsfw:number}|undefined;
+    if (!owner) return context.json(errorPayload('NOT_FOUND','Gallery partition owner not found'),404);
+    const predecessorOpId=context.req.query('predecessorOpId');
+    let predecessor:import('@t3/shared').SyncGalleryPartitionContext['predecessor'];
+    if(predecessorOpId){
+      const proof=database.prepare(`SELECT receipt.result_json AS resultJson, change.seq AS serverSeq,
+        change.entity_kind AS entityKind, change.entity_uid AS entityUid, change.resource_version AS resourceVersion,
+        change.change_kind AS changeKind, change.record_json AS recordJson
+        FROM sync_operation_receipts AS receipt JOIN sync_changes AS change ON change.seq=receipt.server_seq
+        WHERE receipt.op_id=?`).get(predecessorOpId) as {resultJson:string;serverSeq:number;entityKind:string;entityUid:string;resourceVersion:number;changeKind:string;recordJson:string}|undefined;
+      if(proof){
+        const receipt=JSON.parse(proof.resultJson),record=JSON.parse(proof.recordJson);
+        if(receipt.status==='applied' && receipt.opId===predecessorOpId && receipt.resourceVersion===proof.resourceVersion && receipt.serverSeq===proof.serverSeq && proof.entityKind==='gallery_partition' && proof.entityUid===owner.syncUid && proof.changeKind==='update' && record.entryType===entryType && typeof record.nsfw==='boolean')predecessor={opId:predecessorOpId,entityUid:proof.entityUid,resourceVersion:proof.resourceVersion,serverSeq:proof.serverSeq,entryType,nsfw:record.nsfw};
+      }
+      if(!predecessor)return context.json(errorPayload('NOT_FOUND','Partition predecessor proof not found'),404);
+    }
+    return context.json(syncGalleryPartitionContextSchema.parse({...getSyncIdentity(database),entryType,...owner,nsfw:owner.nsfw===1,...(predecessor ? {predecessor} : {})}));
+  });
+
   app.put('/api/galleries/:entryType/partition', async (context) => {
     const { entryType } = entryTypeParamsSchema.parse({ entryType: context.req.param('entryType') });
     const input = await parseJson(context.req.raw, galleryPartitionRequestSchema);
@@ -769,7 +1291,7 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
 
   app.delete('/api/entries/:entryId', async (context) => {
     const { entryId } = entryIdParamsSchema.parse(context.req.param());
-    deleteEntry(database, entryId);
+    deleteEntry(database, entryId, { retainRelatedRecords: true });
     if (options.assetRoot) {
       await deleteEntryMedia(options.assetRoot, entryId);
     }
@@ -968,6 +1490,41 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     const input = await parseJson(context.req.raw, createRatingSlotRequestSchema);
     const slot = createEntryRatingSlot(database, { entryId, name: input.name });
     return context.json(ratingSlotSchema.parse(slot), 201);
+  });
+
+  app.get('/api/entries/:entryId/rating-layout-context', (context) => {
+    const {entryId} = entryIdParamsSchema.parse({entryId:context.req.param('entryId')});
+    const owner = database.prepare(`SELECT layout.sync_uid AS syncUid, layout.sync_version AS syncVersion, entry.type AS entryType
+      FROM entries AS entry JOIN rating_slot_layouts AS layout ON layout.entry_type=entry.type AND layout.subject_kind='entry' WHERE entry.id=?`).get(entryId) as {syncUid:string;syncVersion:number;entryType:string}|undefined;
+    if(!owner)return context.json(errorPayload('NOT_FOUND','Entry rating layout owner not found'),404);
+    const slots=database.prepare(`SELECT id,sync_uid AS syncUid,name,sort_order AS sortOrder FROM rating_slots WHERE subject_kind='entry' AND entry_type=? ORDER BY sort_order,id`).all(owner.entryType);
+    const opId=context.req.query('predecessorOpId');
+    let predecessor:import('@t3/shared').SyncEntryRatingLayoutContext['predecessor'];
+    if(opId){
+      const proof=database.prepare(`SELECT receipt.result_json AS resultJson, change.seq AS serverSeq, change.resource_version AS resourceVersion, change.record_json AS recordJson
+        FROM sync_operation_receipts AS receipt JOIN sync_changes AS change ON change.seq=receipt.server_seq
+        WHERE receipt.op_id=? AND change.entity_kind='rating_layout' AND change.entity_uid=? AND change.change_kind='update'`).get(opId,owner.syncUid) as {resultJson:string;serverSeq:number;resourceVersion:number;recordJson:string}|undefined;
+      if(proof){const receipt=JSON.parse(proof.resultJson),record=JSON.parse(proof.recordJson);
+        if(receipt.status==='applied' && receipt.opId===opId && receipt.resourceVersion===proof.resourceVersion && receipt.serverSeq===proof.serverSeq && record.syncUid===owner.syncUid && record.syncVersion===proof.resourceVersion && record.subjectKind==='entry' && record.entryType===owner.entryType)predecessor={opId,entityUid:owner.syncUid,resourceVersion:proof.resourceVersion,serverSeq:proof.serverSeq,subjectKind:'entry',entryType:record.entryType};}
+      if(!predecessor)return context.json(errorPayload('NOT_FOUND','Entry rating layout own journal not found'),404);
+    }
+    return context.json(syncEntryRatingLayoutContextSchema.parse({...getSyncIdentity(database),entryId,...owner,slots,...(predecessor ? {predecessor} : {})}));
+  });
+
+  app.delete('/api/entries/:entryId/rating-slots/:slotId', (context) => {
+    const { entryId, slotId } = entryRatingSlotIdParamsSchema.parse({
+      entryId: context.req.param('entryId'),
+      slotId: context.req.param('slotId'),
+    });
+    try {
+      deleteEntryRatingSlot(database, { entryId, slotId });
+    } catch (error) {
+      return context.json(errorPayload(
+        'VALIDATION_ERROR',
+        error instanceof Error ? error.message : 'The rating dimension could not be deleted',
+      ), 400);
+    }
+    return context.json(mutationSuccessResponseSchema.parse({ ok: true }));
   });
 
   app.put('/api/entries/:entryId/ratings', async (context) => {
@@ -1258,6 +1815,73 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     return context.json(z.array(templateSummarySchema).parse(summaries));
   });
 
+  /**
+   * One Gallery's Content kinds: its built-ins plus whatever kinds its works use.
+   *
+   * The same list the template file carries, exposed on its own so the entry editor can offer the
+   * kinds a work of this Gallery may carry without loading every Gallery's template.
+   */
+  app.get('/api/content-kinds/:entryType', (context) => {
+    const { entryType } = entryTypeParamsSchema.parse(context.req.param());
+    return context.json(contentKindsResponseSchema.parse({
+      entryType,
+      kinds: contentKindsForType(database, entryType),
+    }));
+  });
+
+  /// The common template every Gallery can start from: repository content, shown beside the
+  /// Galleries' own so a person can see what "use the common template" will give them.
+  app.get('/api/templates/common', (context) => (
+    context.json(commonTemplateSchema.parse(COMMON_TEMPLATE))
+  ));
+
+  /**
+   * Apply the common template to a Gallery that has none.
+   *
+   * The import review needs a canonical tag Facet to commit at all, and a new Gallery has none — so
+   * this is the one-click way out. It copies rather than links: the Sections and Facets become the
+   * Gallery's own rows and the person can rename them, empty them or delete them afterwards.
+   */
+  /**
+   * Back-fill the common template's rating dimensions into a Gallery that applied the template
+   * before it carried slots. Idempotent (`createRatingSlot` returns the existing slot), so it is
+   * also the safe answer when the person is not sure whether the slot is already there.
+   */
+  app.post('/api/templates/common/rating-slots/apply', async (context) => {
+    const { entryType } = await parseJson(context.req.raw, applyCommonTemplateRequestSchema);
+    const ratingSlotCount = applyCommonRatingSlots(database, entryType);
+    return context.json(applyCommonTemplateResponseSchema.parse({
+      entryType, sectionCount: 0, facetCount: 0, ratingSlotCount, templateFiles: null,
+    }));
+  });
+
+  app.post('/api/templates/common/apply', async (context) => {
+    const { entryType } = await parseJson(context.req.raw, applyCommonTemplateRequestSchema);
+    const backupPath = options.databasePath === undefined
+      ? null
+      : `${options.databasePath}.template-backup-${new Date()
+        .toISOString()
+        .replace(/[-:]/gu, '')
+        .replace(/\.\d{3}/u, '')}`;
+    if (backupPath !== null) {
+      await database.backup(backupPath);
+    }
+
+    const result = applyCommonTemplate(database, entryType);
+    const templateFiles = refreshTemplateFiles(entryType);
+    const foreignKeyIssues = database.pragma('foreign_key_check') as unknown as unknown[];
+    const doctor = inspectDatabase(database);
+    if (foreignKeyIssues.length > 0 || !doctor.ok) {
+      throw new Error('the common template left the database inconsistent; the backup is at '
+        + String(backupPath));
+    }
+
+    return context.json(applyCommonTemplateResponseSchema.parse({
+      ...result,
+      templateFiles,
+    }));
+  });
+
   app.post('/api/entries/:entryId/template/apply', async (context) => {
     const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
     const entry = database.prepare('SELECT type FROM entries WHERE id = ?')
@@ -1386,9 +2010,47 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     const { producerId } = producerIdParamsSchema.parse({
       producerId: context.req.param('producerId'),
     });
-    const input = await parseJson(context.req.raw, createRatingSlotRequestSchema);
-    const slot = createProducerRatingSlot(database, { producerId, name: input.name });
+    const input = await parseJson(context.req.raw, createAuthorRatingSlotRequestSchema);
+    const slot = createProducerRatingSlot(database, {
+      producerId,
+      name: input.name,
+      kind: input.subjectKind,
+    });
     return context.json(ratingSlotSchema.parse(slot), 201);
+  });
+
+  app.put('/api/producers/:producerId/gallery-anchor', async (context) => {
+    const { producerId } = producerIdParamsSchema.parse({
+      producerId: context.req.param('producerId'),
+    });
+    const input = await parseJson(context.req.raw, setProducerGalleryAnchorRequestSchema);
+    try {
+      return context.json(setProducerGalleryAnchor(database, {
+        producerId,
+        galleryType: input.galleryType,
+      }));
+    } catch (error) {
+      return context.json(errorPayload(
+        'VALIDATION_ERROR',
+        error instanceof Error ? error.message : 'The author could not be anchored',
+      ), 400);
+    }
+  });
+
+  app.delete('/api/producers/:producerId/rating-slots/:slotId', (context) => {
+    const { producerId, slotId } = authorRatingSlotIdParamsSchema.parse({
+      producerId: context.req.param('producerId'),
+      slotId: context.req.param('slotId'),
+    });
+    try {
+      deleteAuthorRatingSlot(database, { producerId, slotId });
+    } catch (error) {
+      return context.json(errorPayload(
+        'VALIDATION_ERROR',
+        error instanceof Error ? error.message : 'The rating dimension could not be deleted',
+      ), 400);
+    }
+    return context.json(mutationSuccessResponseSchema.parse({ ok: true }));
   });
 
   app.put('/api/producers/:producerId/ratings', async (context) => {
@@ -1429,16 +2091,68 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     ));
   });
 
+  app.get('/api/producers/:producerId/sync-identity', (context) => {
+    const { producerId } = producerIdParamsSchema.parse({ producerId: context.req.param('producerId') });
+    const row = database.prepare('SELECT id, sync_uid AS syncUid, sync_version AS syncVersion FROM producers WHERE id = ?').get(producerId);
+    if (!row) return context.json(errorPayload('NOT_FOUND', 'Author not found'), 404);
+    return context.json(syncEntryIdentitySchema.parse({ ...getSyncIdentity(database), ...row }));
+  });
+
+  app.get('/api/entries/:entryId/sync-identity', (context) => {
+    const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+    const row = database.prepare('SELECT id, sync_uid AS syncUid, sync_version AS syncVersion FROM entries WHERE id = ?')
+      .get(entryId);
+    if (!row) return context.json(errorPayload('NOT_FOUND', 'Entry not found'), 404);
+    return context.json(syncEntryIdentitySchema.parse({ ...getSyncIdentity(database), ...row }));
+  });
+
   app.get('/api/sync/snapshot', (context) => {
     const { media } = z.object({ media: z.enum(['none', 'thumbnails']).optional().default('none') })
       .parse(context.req.query());
     const snapshot = buildSyncSnapshot(database, { media });
+    rememberSnapshot(database, snapshot, media);
     return context.json(syncSnapshotSchema.parse(snapshot));
   });
 
+  app.post('/api/sync/delta', async (context) => {
+    const input = await parseJson(context.req.raw, syncDeltaRequestSchema);
+    return context.json(syncDeltaPageSchema.parse(readSnapshotDelta(database, input)));
+  });
+
+  app.get('/api/sync/changes', (context) => {
+    const raw = context.req.query();
+    const input = syncChangesQuerySchema.parse({
+      ...raw, protocolVersion: Number(raw.protocolVersion),
+      afterSeq: Number(raw.afterSeq), limit: raw.limit === undefined ? 100 : Number(raw.limit),
+    });
+    return context.json(syncChangesResponseSchema.parse(readSyncChanges(database, input)));
+  });
+
+  app.post('/api/sync/ack', async (context) => {
+    const input = await parseJson(context.req.raw, syncAckRequestSchema);
+    return context.json(syncAckResponseSchema.parse(ackSyncChanges(database, input)));
+  });
+
   app.post('/api/sync/replay', async (context) => {
-    const operation = await parseJson(context.req.raw, syncReplayOperationSchema);
-    return context.json(syncReplayResultSchema.parse(replaySyncOperation(database, operation)));
+    const operation = await parseJson(context.req.raw, syncReplayRequestSchema);
+    // Media order moves files, so it is applied outside the synchronous replay
+    // transaction; every other operation stays where it was.
+    if (operation.operationKind === 'entry.media.set') {
+      if (!options.assetRoot) {
+        return context.json(errorPayload('CONFLICT', 'Managed media storage is unavailable'), 409);
+      }
+      return context.json(syncReplayResultSchema.parse(
+        await replayEntryMediaOperation(database, options.assetRoot, operation),
+      ));
+    }
+    const result = syncReplayResultSchema.parse(replaySyncOperation(database, operation));
+    // Commit/receipt is authoritative even if post-commit file cleanup fails.
+    // An exact retry may safely repeat cleanup; a conflict/collision must not.
+    if (operation.operationKind === 'entry.delete' && result.status === 'applied' && result.entityId && options.assetRoot
+      && !database.prepare('SELECT 1 FROM entries WHERE id = ?').get(result.entityId)) {
+      try { await deleteEntryMedia(options.assetRoot, result.entityId); } catch { /* Retain the applied receipt; retry cleanup on exact replay. */ }
+    }
+    return context.json(result);
   });
 
   app.put('/api/sync/media/:uploadId', async (context) => {
@@ -1558,6 +2272,12 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     void executeSearchRun(database, runId, {
       adapter: getSourceAdapter(run.adapterKey)!,
       ...(options.catalogProviders === undefined ? {} : { catalogProviders: options.catalogProviders }),
+    }).catch((error: unknown) => {
+      console.error(`Source maintenance run ${runId} failed`, error);
+      const current = getRun(database, runId);
+      if (current?.status === 'running' || current?.status === 'draft') {
+        updateRunStatus(database, runId, 'paused');
+      }
     });
     return context.json(runRecordSchema.parse(getRun(database, runId)!));
   });
@@ -1583,6 +2303,12 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     void executeSearchRun(database, runId, {
       adapter: getSourceAdapter(run.adapterKey)!,
       ...(options.catalogProviders === undefined ? {} : { catalogProviders: options.catalogProviders }),
+    }).catch((error: unknown) => {
+      console.error(`Source maintenance run ${runId} failed`, error);
+      const current = getRun(database, runId);
+      if (current?.status === 'running' || current?.status === 'draft') {
+        updateRunStatus(database, runId, 'paused');
+      }
     });
     return context.json(runRecordSchema.parse(getRun(database, runId)!));
   });
@@ -1659,7 +2385,7 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     return context.json(errorPayload('NOT_FOUND', 'Route not found'), 404);
   });
 
-  app.onError((error, context) => {
+  app.onError(async (error, context) => {
     if (error instanceof ZodError || error instanceof SyntaxError) {
       const details = error instanceof ZodError ? error.issues : undefined;
       return context.json(errorPayload('VALIDATION_ERROR', 'Invalid request', details), 400);
@@ -1670,13 +2396,39 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     if (error instanceof Error && error.message.includes('not found')) {
       return context.json(errorPayload('NOT_FOUND', error.message), 404);
     }
+    if (error instanceof SyncFeedConflict) {
+      return context.json(errorPayload('CONFLICT', error.message), 409);
+    }
     if (error instanceof CommitStaleError || error instanceof CommitConflictError) {
       return context.json(errorPayload('CONFLICT', error.message), 409);
     }
     if (isSqliteConstraintError(error) || isDomainConflictError(error)) {
       return context.json(errorPayload('CONFLICT', 'Request conflicts with current data'), 409);
     }
-    return context.json(errorPayload('INTERNAL_ERROR', 'Internal server error'), 500);
+    // Logged, because the client only ever sees the line above. Measured on a real migration: a
+    // dictionary import answered 500 with nothing written anywhere, so the cause — one pair whose two
+    // sides contradicted the library — had to be found by reproducing it from scratch.
+    console.error(`${context.req.method} ${context.req.path} failed:`, error);
+    // And written down, for the same reason the tool's faults are: a report needs its evidence, and
+    // the evidence lives here. Measured again on a phone's import that answered 500: the browser said
+    // "Internal server error", the console had the stack, and nothing on disk did — so a failure that
+    // could not be reproduced on the machine it was reported from had no way to be reported at all.
+    // The response names the file, which is the app's own convention for a fault a person can hand back.
+    let logPath: string | null = null;
+    if (dataDir !== undefined) {
+      try {
+        logPath = await writeSiteprobeErrorLog(dataDir, {
+          kind: 'http',
+          context: { method: context.req.method, path: context.req.path },
+          error,
+          environment: { tool: tooling.tool, python: tooling.python, home: tooling.home },
+        });
+      } catch {
+        // A log that cannot be written must not replace the fault it was describing.
+      }
+    }
+    return context.json(errorPayload('INTERNAL_ERROR',
+      logPath === null ? 'Internal server error' : `Internal server error — log: ${logPath}`), 500);
   });
 
   return app;

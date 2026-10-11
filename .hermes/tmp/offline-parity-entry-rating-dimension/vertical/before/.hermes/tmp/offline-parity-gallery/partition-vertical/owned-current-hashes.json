@@ -1,0 +1,15 @@
+{
+  "apps/web/src/offline/offline-api.ts": "40cf359cf53b2633c55d0ec9c594cbfd84114aea92a1f85a2f2c853863da7eae",
+  "apps/web/src/offline/pending-work-restore.ts": "622939341596f363c6426b148c878930162e3bb0b9e993c1f5d1e81c4860411c",
+  "apps/web/src/offline/sync-mutation-plan.ts": "9a179e7cfeedb87dcd5d10c3be7704b6ae792783ad51f27316f8ce4da4cf8aba",
+  "packages/shared/src/schemas/sync.ts": "08e3b192f704114601106757836e32e59d50e0c317c458a8449868bb4fa1e3a8",
+  "packages/shared/src/schemas/native-mutation-contract.ts": "3f6c83465014c58509f5f9d37a7c76a0b6ee05b05995c7dfa09591562809d140",
+  "apps/server/src/repositories/partition-repository.ts": "173c5b392bae4adc3c4c292ccd6d18841167c4aff9b740c56a9653e7df6df571",
+  "apps/server/src/sync/replay-service.ts": "256a64394e42fbd30fa708799e21c09fa37d4a0b972b103fddb9ef672bde0aa6",
+  "apps/server/src/sync/sync-service.ts": "fb7dfb58bae4e21a47468ca78c89a13f0d23df8d6455b103ca8416dba0e68160",
+  "apps/web/tests/offline-api.test.ts": "38e61d06d8e3d30c5ed659da93acbeb0ade427de3346f5b1d1efaeab0501939b",
+  "apps/server/src/database/doctor.ts": "221aade0d7f46871f6e13f97f571de8c4098cac1401b85e1bccb6f0a47883eb6",
+  "apps/server/src/database/probe.ts": "10bb06fb4fae08d7251648d5bd77cdaa52c5a66ddfff02980a96f14e571c3e0e",
+  "apps/server/tests/integration/migration-runner.integration.test.ts": "07d0d28fbad1ce7e5f928c6411033c8668372a53afa2b18e215c27cb8d08835b",
+  "apps/server/tests/integration/sync.integration.test.ts": "a5f62cf97bf7817ca10c1f37b62b2f20f2c2c7440dd7010381a0504e53de8c5b"
+}

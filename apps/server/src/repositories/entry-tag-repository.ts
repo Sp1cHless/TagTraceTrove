@@ -9,7 +9,8 @@ import {
   type UsageSort,
 } from '@t3/shared';
 import type { T3Database } from '../database/connection.js';
-import { listRatingSlots, type RatingSlotRecord } from './rating-repository.js';
+import { toSimplified } from '../taxonomy/simplify.js';
+import { findRatingSlotId, listRatingSlots, type RatingSlotRecord, type RatingSubjectKind } from './rating-repository.js';
 import { rankSearchResults } from './search-ranking.js';
 import { buildUsageFilterClauses } from './usage-repository.js';
 
@@ -106,6 +107,7 @@ export interface EntrySummary {
   previewRefs: string[];
   uploadDate: string | null;
   pageCount: number | null;
+  durationSeconds: number | null;
   viewCount: number;
   likeCount: number;
   lastViewedAt: string | null;
@@ -146,8 +148,17 @@ interface AssignmentRow {
   facet_id: number;
 }
 
+/**
+ * A tag name as the library stores it: normalised, and **simplified**.
+ *
+ * Both writers of a tag name go through here (`assignEntryTag`, `renameEntryTag`), so a name typed in
+ * Traditional Chinese cannot become a second tag beside the Simplified one an import created. It is the
+ * same conversion the import path applies through `resolveTaxonomyName`, and it is the only one of the
+ * three scripts that can be done without asking anybody — English is a translation, and the alias
+ * dictionary is where that happens.
+ */
 function cleanDisplayName(value: string): string {
-  return value.normalize('NFKC').trim().replace(/\s+/gu, ' ');
+  return toSimplified(value.normalize('NFKC').trim().replace(/\s+/gu, ' '));
 }
 
 export function assignEntryTag(
@@ -371,6 +382,7 @@ const entrySummarySelect = `
       entry.preview_refs AS previewRefs,
       entry.upload_date AS uploadDate,
       entry.page_count AS pageCount,
+      entry.duration_seconds AS durationSeconds,
       COALESCE(entry_usage.view_count, 0) AS viewCount,
       COALESCE(entry_usage.like_count, 0) AS likeCount,
       entry_usage.last_viewed_at AS lastViewedAt
@@ -388,6 +400,7 @@ function mapEntrySummaryRows(rows: unknown[]): EntrySummary[] {
     previewRefs: parseSummaryPreviewRefs(summary.previewRefs, summary.previewRef),
     uploadDate: summary.uploadDate,
     pageCount: summary.pageCount,
+    durationSeconds: summary.durationSeconds,
     viewCount: summary.viewCount,
     likeCount: summary.likeCount,
     lastViewedAt: summary.lastViewedAt,
@@ -513,7 +526,13 @@ export function listFacetFilterOptions(
     allTags: [...allTags.values()]
       .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })),
     authors: listFacetFilterAuthors(database, type, authorId),
-    ratingSlots: listRatingSlots(database, 'entry', type),
+    // What a person picks: the work's own dimensions, and the author's own. The works summary is
+    // deliberately absent — a work's own dimension already reads as "its own value, else the
+    // Authors' summary of the same name", so offering the summary as a second option was the same
+    // number twice under two names.
+    ratingSlots: (['entry', 'author_self'] as const).flatMap((kind) => (
+      listRatingSlots(database, kind, type).map((slot) => ({ ...slot, subjectKind: kind }))
+    )),
   };
 }
 
@@ -556,7 +575,6 @@ export function findEntriesByFacetFilters(
   const query = buildFacetFilterQuery(database, input, 'title-asc');
   return mapEntrySummaryRows(database.prepare(`
     ${entrySummarySelect}
-    ${query.ratingSortJoin}
     WHERE ${query.whereSql}
     ${query.orderSql}
   `).all(...query.itemParameters));
@@ -565,31 +583,41 @@ export function findEntriesByFacetFilters(
 interface BuiltFacetFilterQuery {
   whereSql: string;
   whereParameters: Array<string | number>;
-  ratingSortJoin: string;
   itemParameters: Array<string | number>;
   orderSql: string;
 }
 
 /**
- * The value an Entry sorts by when the Author rating is applied: its own value
- * for the selected dimension, otherwise the highest value among its Authors for
- * the same-named Author dimension. A work with four or more Authors never
- * inherits an Author rating, because an anthology has no single Author score.
- * The returned parameters belong to the ORDER BY clause and must be supplied
- * once per SQL occurrence.
+ * What one work is worth on one rating dimension — the expression both the rating filter and the
+ * rating sort compare and order by, so the two can never disagree about what "this work's value" is.
+ *
+ * The three classes answer it in two ways, and that difference is the whole point of having classes:
+ *
+ *   'entry' / 'producer'
+ *                  the work's own value, and where it has none, the highest value its Authors carry
+ *                  for the works summary of the same name — one question, not two. A work with four
+ *                  or more Authors inherits nothing (an anthology has no single Author score), so
+ *                  its missing value stays missing.
+ *   'author_self'  the author's own dimension: the highest value among the work's Authors, and never
+ *                  the work's own — this says what the author is like, not what the work is worth.
+ *
+ * The summary is not a choice the caller makes: `ratingSort.applyAuthorRating`, the older way of
+ * asking for it, changes nothing here, and the filter bar does not offer it as its own dimension.
+ *
+ * The SQL is a scalar expression over `entry.id`, so it works in WHERE and in ORDER BY alike, and
+ * its parameters must be supplied once per SQL occurrence.
  */
-function authorRatingSortValueSql(
+function ratingValueSql(
   database: T3Database,
   entryType: string,
-  slotId: number,
+  slot: { id: number; kind: RatingSubjectKind; name: string },
 ): { sql: string; parameters: Array<string | number> } {
-  const slotName = listRatingSlots(database, 'entry', entryType)
-    .find((slot) => slot.id === slotId)?.name;
-  if (slotName === undefined) {
-    throw new Error('rating slot not found');
-  }
-  return {
-    sql: `COALESCE(rating_sort.stars, CASE
+  const ownValue = `(
+          SELECT own.stars FROM entry_rating_values AS own
+          WHERE own.entry_id = entry.id AND own.slot_id = ?
+        )`;
+  // The class is a bound parameter, not interpolated: one expression text, three classes.
+  const completedByAuthors = (): string => `CASE
           WHEN (
             SELECT COUNT(*) FROM entry_producers AS author_count
             WHERE author_count.entry_id = entry.id
@@ -602,13 +630,27 @@ function authorRatingSortValueSql(
             JOIN rating_slots AS author_slot
               ON author_slot.id = author_value.slot_id
             WHERE author_link.entry_id = entry.id
-              AND author_slot.subject_kind = 'producer'
+              AND author_slot.subject_kind = ?
               AND author_slot.entry_type = ?
               AND author_slot.name = ?
               AND author_value.stars IS NOT NULL
           )
-        END)`,
-    parameters: [entryType, slotName],
+        END`;
+  if (slot.kind === 'author_self') {
+    return {
+      sql: completedByAuthors(),
+      parameters: ['author_self', entryType, slot.name],
+    };
+  }
+  // A work's own dimension, and the summary of the same name, are one question: the work's own value
+  // first, the Authors' summary where the work carries none. Nobody selects the summary — asking for
+  // it separately was always the same number, so the fallback is simply how a work dimension reads.
+  const ownSlotId = slot.kind === 'entry'
+    ? slot.id
+    : findRatingSlotId(database, 'entry', entryType, slot.name) ?? -1;
+  return {
+    sql: `COALESCE(${ownValue}, ${completedByAuthors()})`,
+    parameters: [ownSlotId, 'producer', entryType, slot.name],
   };
 }
 
@@ -747,51 +789,40 @@ function buildFacetFilterQuery(
     parameters.push(...uniqueAuthorIds);
   }
 
-  // Rating conditions narrow within the type's shared slots: eq/gt/lt compare
-  // the given stars (an unrated NULL never satisfies a comparison), unrated
-  // matches entries whose slot has no value yet.
+  // Rating conditions compare what the work is worth on one dimension, whichever class that
+  // dimension belongs to (see `ratingValueSql`): eq/gt/lt compare the given stars, and a missing
+  // value never satisfies a comparison — `unrated` is exactly that missing value.
   for (const condition of input.ratingConditions ?? []) {
     if (!entryType) throw new Error('entryType is required for rating filters');
-    requireRatingSlot(database, condition.slotId, entryType);
+    const slot = requireRatingSlot(database, condition.slotId, entryType);
+    const value = ratingValueSql(database, entryType, slot);
     if (condition.operator === 'unrated') {
-      clauses.push(`NOT EXISTS (
-        SELECT 1 FROM entry_rating_values AS rating
-        WHERE rating.entry_id = entry.id
-          AND rating.slot_id = ?
-          AND rating.stars IS NOT NULL
-      )`);
-      parameters.push(condition.slotId);
+      clauses.push(`(${value.sql}) IS NULL`);
+      parameters.push(...value.parameters);
       continue;
     }
     const comparison = condition.operator === 'eq' ? '=' : condition.operator === 'gt' ? '>' : '<';
-    clauses.push(`EXISTS (
-      SELECT 1 FROM entry_rating_values AS rating
-      WHERE rating.entry_id = entry.id
-        AND rating.slot_id = ?
-        AND rating.stars ${comparison} ?
-    )`);
+    clauses.push(`(${value.sql}) ${comparison} ?`);
     // The schema refine guarantees stars is non-null for eq/gt/lt.
-    parameters.push(condition.slotId, condition.stars as number);
+    parameters.push(...value.parameters, condition.stars as number);
   }
 
   // Rating sort: high to low with unrated sinking below every rated entry.
   const ratingSort = input.ratingSort ?? null;
-  let ratingSortJoin = '';
   let orderClause = entryListOrderSql(sort);
-  let ratingSortParameters: Array<string | number> = [];
   let ratingSortOrderParameters: Array<string | number> = [];
   if (ratingSort) {
     if (!entryType) throw new Error('entryType is required for rating sort');
-    requireRatingSlot(database, ratingSort.slotId, entryType);
-    ratingSortJoin = 'LEFT JOIN entry_rating_values AS rating_sort\n      ON rating_sort.entry_id = entry.id AND rating_sort.slot_id = ?';
-    ratingSortParameters = [ratingSort.slotId];
-    const sortValue = ratingSort.applyAuthorRating
-      ? authorRatingSortValueSql(database, entryType, ratingSort.slotId)
-      : { sql: 'rating_sort.stars', parameters: [] as Array<string | number> };
-    if (ratingSort.applyAuthorRating) {
-      // The expression appears twice (IS NULL test and the value itself).
-      ratingSortOrderParameters = [...sortValue.parameters, ...sortValue.parameters];
-    }
+    const requested = requireRatingSlot(database, ratingSort.slotId, entryType);
+    // `applyAuthorRating` is the older way of saying "sort by the works summary of this name": it
+    // names a work dimension and asks for its summary. A summary slot named directly says the same
+    // thing, and both end up in the same expression.
+    const slot = requested.kind === 'entry' && ratingSort.applyAuthorRating
+      ? { ...requested, kind: 'producer' as const }
+      : requested;
+    const sortValue = ratingValueSql(database, entryType, slot);
+    // The expression appears twice (the IS NULL test and the value itself).
+    ratingSortOrderParameters = [...sortValue.parameters, ...sortValue.parameters];
     orderClause = `ORDER BY (${sortValue.sql} IS NULL) ASC, ${sortValue.sql} DESC, entry.title COLLATE NOCASE, entry.id`;
   }
 
@@ -825,12 +856,10 @@ function buildFacetFilterQuery(
   return {
     whereSql: clauses.length > 0 ? clauses.join('\n      AND ') : '1 = 1',
     whereParameters: parameters,
-    ratingSortJoin,
     itemParameters: [
-      ...ratingSortParameters,
       ...parameters,
       ...orderParameters,
-      ...ratingSortOrderParameters,
+      ...(!input.usageSort ? ratingSortOrderParameters : []),
     ],
     orderSql: orderClause,
   };
@@ -863,7 +892,6 @@ export function queryEntryPage(
   const offset = (input.page - 1) * input.pageSize;
   const items = mapEntrySummaryRows(database.prepare(`
     ${entrySummarySelect}
-    ${query.ratingSortJoin}
     WHERE ${query.whereSql}
     ${query.orderSql}
     LIMIT ? OFFSET ?
@@ -921,21 +949,29 @@ export function searchEntryTags(
   return rankSearchResults(hits, query, (hit) => hit.name);
 }
 
+/**
+ * The rating dimension a filter or a sort names, and the class it belongs to.
+ *
+ * Any class of the work's Gallery is allowed — the work's own dimension, the author's works summary,
+ * or the author's own — because what a filter means by "this work's value" is answered per class in
+ * `ratingValueSql`. A slot of another Gallery is refused: its numbers are not comparable.
+ */
 function requireRatingSlot(
   database: T3Database,
   slotId: number,
   entryType: string,
-): void {
+): { id: number; kind: RatingSubjectKind; name: string } {
   const row = database.prepare(`
-    SELECT 1
+    SELECT id, subject_kind AS kind, name
     FROM rating_slots
-    WHERE id = ? AND subject_kind = 'entry' AND entry_type = ?
-  `).get(slotId, entryType);
+    WHERE id = ? AND entry_type = ?
+  `).get(slotId, entryType) as { id: number; kind: RatingSubjectKind; name: string } | undefined;
   if (!row) {
     throw new Error(
-      `cannot filter: rating slot ${slotId} does not belong to the entry Gallery "${entryType}"`,
+      `cannot filter: rating slot ${slotId} does not belong to the Gallery "${entryType}"`,
     );
   }
+  return row;
 }
 
 /**

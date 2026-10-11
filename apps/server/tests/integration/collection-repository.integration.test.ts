@@ -4,6 +4,7 @@ import { createApiApp } from '../../src/http/app.js';
 import { assignEntryTag, listEntryTags } from '../../src/repositories/entry-tag-repository.js';
 import { createFacet, createSection } from '../../src/repositories/layout-repository.js';
 import { createEntry } from '../../src/repositories/entry-repository.js';
+import { setGalleryPartition } from '../../src/repositories/partition-repository.js';
 import { createProducer } from '../../src/repositories/producer-repository.js';
 import {
   addCollectionEntry,
@@ -106,7 +107,48 @@ describe('collections (real SQL)', () => {
     expect(listCollectionIdsForEntry(database, work.id)).toEqual([]);
   });
 
-  it('manages producer collections, titles, nsfw, and ordering', () => {
+  it('returns nested folder counts and previews in the compact online Collection list', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const work = createEntry(database, { title: 'Nested Work', type: 'comic' });
+    const nsfwWork = createEntry(database, { title: 'Hidden Nested Work', type: 'hentai' });
+    setGalleryPartition(database, 'hentai', true);
+    const preview = `entries/${work.id}/preview.webp`;
+    database.prepare('UPDATE entries SET cover_ref = NULL, preview_refs = ? WHERE id = ?')
+      .run(JSON.stringify([preview]), work.id);
+    const parent = createCollection(database, { kind: 'entry', title: 'Shelf' });
+    const child = createCollection(database, { kind: 'entry', title: 'Subfolder', parentId: parent.id });
+    addCollectionEntry(database, child.id, work.id);
+    addCollectionEntry(database, child.id, nsfwWork.id);
+
+    const app = createApiApp(database);
+    const response = await app.request('/api/collections?kind=entry&compact=true&includeNsfw=true');
+    expect(response.status).toBe(200);
+    const [record] = await response.json() as Array<{ children: Array<{
+      id: number; entryCount: number; entries: Array<{ id: number; coverRef: string | null; previewRefs: string[] }>;
+    }> }>;
+    expect(record!.children[0]).toMatchObject({
+      id: child.id,
+      entryCount: 2,
+      entries: [
+        { id: work.id, coverRef: null, previewRefs: [preview] },
+        { id: nsfwWork.id },
+      ],
+    });
+
+    const sfwResponse = await app.request('/api/collections?kind=entry&compact=true&includeNsfw=false');
+    expect(sfwResponse.status).toBe(200);
+    const [sfwRecord] = await sfwResponse.json() as Array<{ children: Array<{
+      id: number; entryCount: number; entries: Array<{ id: number }>;
+    }> }>;
+    expect(sfwRecord!.children[0]).toMatchObject({
+      id: child.id,
+      entryCount: 1,
+      entries: [{ id: work.id }],
+    });
+  });
+
+  it('manages producer collections, titles, nsfw, and ordering', async () => {
     const database = createMigratedMemoryDatabase();
     databases.push(database);
     const author = createProducer(database, { name: 'Favourite Author' });

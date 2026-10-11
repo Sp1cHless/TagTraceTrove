@@ -1,0 +1,45 @@
+{
+  "entities": {
+    "Q106447820": {
+      "pageid": 100000001,
+      "ns": 0,
+      "title": "Q106447820",
+      "lastrevid": 2300000001,
+      "modified": "2026-09-01T00:00:00Z",
+      "type": "item",
+      "labels": {
+        "en": { "language": "en", "value": "Blue Box" },
+        "ja": { "language": "ja", "value": "アオのハコ" },
+        "zh-hans": { "language": "zh-hans", "value": "青春之箱" },
+        "zh-hant": { "language": "zh-hant", "value": "青春之箱" }
+      },
+      "aliases": {
+        "en": [
+          { "language": "en", "value": "Ao no Hako" }
+        ],
+        "ja": [
+          { "language": "ja", "value": "藍箱" }
+        ],
+        "zh": [
+          { "language": "zh", "value": "青色之箱" },
+          { "language": "zh", "value": "蓝箱" }
+        ]
+      },
+      "claims": {
+        "P2003": [
+          {
+            "mainsnak": {
+              "snaktype": "value",
+              "property": "P2003",
+              "datavalue": {
+                "value": "b7d0f5e3-51b1-4b13-9f6a-3aa2efc91234",
+                "type": "string"
+              }
+            },
+            "rank": "normal"
+          }
+        ]
+      }
+    }
+  }
+}

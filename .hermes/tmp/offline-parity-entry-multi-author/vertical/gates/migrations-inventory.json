@@ -1,0 +1,217 @@
+[
+  {
+    "path": "apps/server/src/database/migrations/001_initial.sql",
+    "size": 7112,
+    "sha256": "9123e6d3e7ad8c351b40e0e3216b6502f7dae65f8d40eb334a58400fbea06c88"
+  },
+  {
+    "path": "apps/server/src/database/migrations/002_author_directories.sql",
+    "size": 1235,
+    "sha256": "164210864a476f553655ece99a6350618fe2ac1ae326babd4dc304b7980ee36e"
+  },
+  {
+    "path": "apps/server/src/database/migrations/003_taxonomy_aliases.sql",
+    "size": 675,
+    "sha256": "cfd3fd76a5f588f0cef00ac5318ea1380d886869f86b619737b78bc7a43c0cce"
+  },
+  {
+    "path": "apps/server/src/database/migrations/004_entry_page_media.sql",
+    "size": 451,
+    "sha256": "4f5ed64d701614e03cf6a4fc25b7c8dec5f2e12a31f6c3717b7eb75bac75ebb0"
+  },
+  {
+    "path": "apps/server/src/database/migrations/005_taxonomy_alias_partitions.sql",
+    "size": 1654,
+    "sha256": "eea511b8894faabda110e38fab6d664dde6455913fc5ea3512a112637e7b948c"
+  },
+  {
+    "path": "apps/server/src/database/migrations/006_rating_slots.sql",
+    "size": 2214,
+    "sha256": "ea54f0125ee20307e168abf84320d7a8212f49421424f71d2648819bf611a686"
+  },
+  {
+    "path": "apps/server/src/database/migrations/007_entry_usage.sql",
+    "size": 684,
+    "sha256": "6dbbac0948b9da611e9f5978e985ad63b0409695eed235da590496bc95a3fd5b"
+  },
+  {
+    "path": "apps/server/src/database/migrations/008_entry_likes.sql",
+    "size": 323,
+    "sha256": "6b79ff96e93685a246fde11eb73c213f1c0c793ea3ae65c4b5d78f23bd7cfabe"
+  },
+  {
+    "path": "apps/server/src/database/migrations/009_gallery_partitions.sql",
+    "size": 441,
+    "sha256": "d6bbc15345a42c9d3c6f7a992722b1220a21c2fd09ff6f3f9f3fdea9892b638f"
+  },
+  {
+    "path": "apps/server/src/database/migrations/010_collections.sql",
+    "size": 1874,
+    "sha256": "1ebb26812b1f10ebd47fcb399f1c4079ad44c501541b945236b54c18e4d9ea63"
+  },
+  {
+    "path": "apps/server/src/database/migrations/011_view_later.sql",
+    "size": 561,
+    "sha256": "d64d1a4eb1bfcabcc337c9213b9006f7171772df3963579ade8cadafc424aa9a"
+  },
+  {
+    "path": "apps/server/src/database/migrations/012_view_later_producers.sql",
+    "size": 504,
+    "sha256": "2832c3fadb619eb2c1d8b7cf099b145275495f204c22b26059d67c256d18940f"
+  },
+  {
+    "path": "apps/server/src/database/migrations/013_entry_page_indexes.sql",
+    "size": 398,
+    "sha256": "a38756593cf59d021a5c3bc2ab0d9343b8951626044e24b7c3f87e4cc7442353"
+  },
+  {
+    "path": "apps/server/src/database/migrations/014_source_maintenance.sql",
+    "size": 1947,
+    "sha256": "bc8eb6c1e3d1189613bab8deaadb13382aec66de6a33e4fdd6c31f6e31c4ef05"
+  },
+  {
+    "path": "apps/server/src/database/migrations/015_sync_metadata.sql",
+    "size": 707,
+    "sha256": "d2922e34f08a1b7704b076356611eac8a696dbdf0e07c6721ddc663358a723c3"
+  },
+  {
+    "path": "apps/server/src/database/migrations/016_sync_foundation.sql",
+    "size": 8152,
+    "sha256": "73599105570ab40c0b5c7734ea1d19a7e3a1e8dc73c0acba8a30e61afec62638"
+  },
+  {
+    "path": "apps/server/src/database/migrations/017_collection_gallery_scope.sql",
+    "size": 1530,
+    "sha256": "306bce096fa8b3b4728e45a8345390c111f9be983f7a05cbff0670ea2dc01929"
+  },
+  {
+    "path": "apps/server/src/database/migrations/018_prune_workless_authors.sql",
+    "size": 777,
+    "sha256": "8b263684c9cc7598ce08d205096febffd2b8cf016ccf8887496613d2fa6d527c"
+  },
+  {
+    "path": "apps/server/src/database/migrations/019_clear_orphan_author_memberships.sql",
+    "size": 580,
+    "sha256": "6df7373782d9d987f842e42e205e4d21657ae96c4b7496dadb8553687d7ac0a4"
+  },
+  {
+    "path": "apps/server/src/database/migrations/020_prune_unused_tags.sql",
+    "size": 801,
+    "sha256": "68c5b45f98e2f0a128f4a2442efeacd8a4fd7681dd9424951a6dcbcaec2103f7"
+  },
+  {
+    "path": "apps/server/src/database/migrations/021_site_crawl_state.sql",
+    "size": 2885,
+    "sha256": "683e990c6a6987eaafff6df66e9f1e4ca32fd11e9ca8bae1fba6f9209c091763"
+  },
+  {
+    "path": "apps/server/src/database/migrations/022_sync_media_receipts.sql",
+    "size": 635,
+    "sha256": "8f546c30f1272a42a2996020f8e5d7ba2b3a470b026280aa27dc00bf2a2678be"
+  },
+  {
+    "path": "apps/server/src/database/migrations/023_sync_offline_created_entries.sql",
+    "size": 451,
+    "sha256": "55f308b35886ccc261d5f2ba10cc83db410f6cd354de6ceb7fc5e93d662f04ec"
+  },
+  {
+    "path": "apps/server/src/database/migrations/024_rating_slot_sync_identity.sql",
+    "size": 787,
+    "sha256": "c64c7992358651620562009a004ba639150442f4a74d61a682e49df586bb2764"
+  },
+  {
+    "path": "apps/server/src/database/migrations/025_producer_view_later_sync.sql",
+    "size": 10035,
+    "sha256": "b6768553f9d498c8b3dbf8889d0096c5e2f4528467a0e71b5efa2c1782761927"
+  },
+  {
+    "path": "apps/server/src/database/migrations/026_producer_rating_sync.sql",
+    "size": 815,
+    "sha256": "db0c88f8b988da3bae947200a895389761db0fc52fb9118b06ac7c4c41cec805"
+  },
+  {
+    "path": "apps/server/src/database/migrations/027_producer_tags_sync.sql",
+    "size": 2581,
+    "sha256": "edbddfd62a51f252063bcf922020ae56cae0bb47c277690457abb7e40fa86727"
+  },
+  {
+    "path": "apps/server/src/database/migrations/028_author_resource_sync.sql",
+    "size": 25354,
+    "sha256": "a9b86901b93087165ae9d1c4f574e15f3697266100d44091eee5f44a1a3f85fe"
+  },
+  {
+    "path": "apps/server/src/database/migrations/029_entry_author_links_sync.sql",
+    "size": 1831,
+    "sha256": "568484f098146e4c13007e1e0f2074543f4303cf627c83d36b680cb489bcfe70"
+  },
+  {
+    "path": "apps/server/src/database/migrations/030_entry_tags_sync.sql",
+    "size": 2227,
+    "sha256": "ba694a33ade255c2632785f41527e356588ec74772e0c0ebebb2483489be4c9e"
+  },
+  {
+    "path": "apps/server/src/database/migrations/031_sync_change_feed_ack.sql",
+    "size": 509,
+    "sha256": "62a4d13dc2ccd61281cd0c206a3d0764f293816e1f80c9c07d89e33ca7eb83d0"
+  },
+  {
+    "path": "apps/server/src/database/migrations/032_online_entry_create_claims.sql",
+    "size": 610,
+    "sha256": "686a1c617f984954579185d4f833989cc47e985510fa26330cb5f005127e8307"
+  },
+  {
+    "path": "apps/server/src/database/migrations/033_offline_producer_origins.sql",
+    "size": 322,
+    "sha256": "1db6bebff2053d2a638e91c6ff3a815dc0f583dee2c46ed0c3125e14d99b6390"
+  },
+  {
+    "path": "apps/server/src/database/migrations/034_offline_entry_tag_vocabulary.sql",
+    "size": 7815,
+    "sha256": "32a387ff89faf94b8cfb58843520468dc26dd3b41d9d3e6bb60d9c36bd8a4779"
+  },
+  {
+    "path": "apps/server/src/database/migrations/035_entry_vocabulary_plural_origins.sql",
+    "size": 1747,
+    "sha256": "bb87fc6996b7ae6de2d12be6955e7a30544c9a6202255825827f496127c14cae"
+  },
+  {
+    "path": "apps/server/src/database/migrations/036_gallery_order.sql",
+    "size": 905,
+    "sha256": "8a7fba1a346f1b35d47a6ecc38d4ba18109558384553915acdea8623d8390789"
+  },
+  {
+    "path": "apps/server/src/database/migrations/037_gallery_order_sync.sql",
+    "size": 38817,
+    "sha256": "39904508f711bf9c1ac7bcc8bcb6a6eb72b8c968a5065e275bc62c2368649c68"
+  },
+  {
+    "path": "apps/server/src/database/migrations/038_entry_duration.sql",
+    "size": 795,
+    "sha256": "da29f7b0dad2804081c9134a0ad4537c608da5b192e08087760edfbf93b513ef"
+  },
+  {
+    "path": "apps/server/src/database/migrations/039_rating_classes_and_author_anchor.sql",
+    "size": 12055,
+    "sha256": "b744b53cdbf330f6c1c68a847cf9850e010f6f02ee13a7da5f80227fe8158e45"
+  },
+  {
+    "path": "apps/server/src/database/migrations/040_entry_rating_layout_triggers.sql",
+    "size": 2836,
+    "sha256": "9e3e32ed5c0e68e903ec893d341a71c7ae0f6de654210414e034fde4e6bd0d9f"
+  },
+  {
+    "path": "apps/server/src/database/migrations/041_works_summary_follows_gallery.sql",
+    "size": 1732,
+    "sha256": "10e3ba5bbaf2a8db2832c5124d601d4344b3618760214fdbc118bbcbd5802ccf"
+  },
+  {
+    "path": "apps/server/src/database/migrations/042_standalone_author_directory_seed.sql",
+    "size": 1249,
+    "sha256": "ee9dccd44efe6cf383633d7e44ebab39368a58a9e8c1da0f6d971c362cdbb008"
+  },
+  {
+    "path": "apps/server/src/database/migrations/043_gallery_partition_sync.sql",
+    "size": 42903,
+    "sha256": "8a7c4844593fbae3a3d3e0dedfb6fd5958f6e4d24458e808791a560ecc22cfe8"
+  }
+]

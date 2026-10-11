@@ -53,7 +53,16 @@ function submit(): void {
 .author-fields { display: grid; align-content: start; gap: 1rem; }
 .author-fields label { display: grid; gap: .4rem; }
 .author-fields textarea { font: inherit; resize: vertical; }
-@media (max-width: 760px) {
+/* The single-column form, and why the breakpoint is this wide.
+ *
+ * The two-column form needs 584px (a 240px media column, a 280px fields column, their gap and the
+ * card's padding), and the shell keeps its 288px sidebar until 44rem — so a two-column form needs a
+ * **936px** viewport before it has room. Measured on a real window: at 768, 844 and 920 the page laid
+ * out 936px wide in the viewport and the document scrolled sideways (34 elements past the edge, the
+ * field inputs at 852). This page's own breakpoint used to be 760px, which is the width *the form*
+ * wants in a world without the sidebar — hence the 761-936px window where the page was neither.
+ * Phones are unaffected: measured at 320, 360, 390 and 430 with no overflow either way. */
+@media (max-width: 60rem) {
   .add-page-toolbar { align-items: flex-start; flex-wrap: wrap; }
   .add-page-toolbar h2 { flex-basis: 100%; }
   .author-card-editor { grid-template-columns: 1fr; padding: 0.8rem; gap: 1rem; }

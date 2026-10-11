@@ -1,0 +1,47 @@
+{
+  "manifestSha256": "e9a686f36a6929862662d92f6af94cec24a24b430efdd01a839e4810fabc477d",
+  "entriesVerified": 106,
+  "allLiveSavedBytesAndShaEqual": true,
+  "originalTestPrefixUnchanged": true,
+  "outsideHelperAndRestoreCollectionBlocksUnchanged": true,
+  "allFinalScopeGuardsStable": true,
+  "finalGates": {
+    "collection-closed": {
+      "exit": 0,
+      "numPassedTests": 25,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "failed": []
+    },
+    "nearest-integration-closed": {
+      "exit": 0,
+      "numPassedTests": 56,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "failed": []
+    },
+    "nearest-default-closed": {
+      "exit": 0,
+      "numPassedTests": 104,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "failed": []
+    },
+    "shared-types-final": {
+      "exit": 0
+    },
+    "server-types-final": {
+      "exit": 0
+    },
+    "web-types-closed": {
+      "exit": 0
+    },
+    "owned-lint-closed": {
+      "exit": 0
+    },
+    "scoped-diff-closed": {
+      "exit": 0
+    }
+  },
+  "writingStopped": true
+}

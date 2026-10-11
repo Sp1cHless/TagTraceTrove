@@ -83,7 +83,7 @@ describe('ehentai adapter', () => {
   it('maps bans and quota errors to explicit failures', async () => {
     const banned = createEhentaiAdapter((() => Promise.resolve(new Response('no', { status: 403 }))) as unknown as typeof fetch);
     await expect(banned.search({ title: 'x', signal: AbortSignal.timeout(1000) }))
-      .rejects.toThrow(/banned/);
+      .rejects.toThrow(/rate limited/);
     const quota = createEhentaiAdapter((() => Promise.resolve(new Response('509', { status: 509 }))) as unknown as typeof fetch);
     await expect(quota.search({ title: 'x', signal: AbortSignal.timeout(1000) }))
       .rejects.toThrow(/rate limited/);

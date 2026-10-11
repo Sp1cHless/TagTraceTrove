@@ -1,0 +1,22 @@
+{
+  "entryType": "template专用",
+  "generatedAt": "2026-10-03T15:52:21.261Z",
+  "sections": [
+    {
+      "name": "Basic Infomation",
+      "facets": [
+        "",
+        "Type",
+        "Character",
+        "Language"
+      ]
+    },
+    {
+      "name": "Tag",
+      "facets": [
+        "",
+        "All tags"
+      ]
+    }
+  ]
+}

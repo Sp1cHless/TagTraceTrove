@@ -1,0 +1,20 @@
+--- original/apps/web/src/offline/sync-mutation-plan.ts
++++ live/apps/web/src/offline/sync-mutation-plan.ts
+@@ -25,6 +25,8 @@
+  return flags;
+ }
+ export function referencedEntityKeys(operation: SyncReplayRequest): string[] {
++ if(operation.operationKind==='entry.authors.set')return [...new Set([...operation.baseValues.producerUids,...operation.payload.producerUids])].map(uid=>`producer:${uid.toLowerCase()}`);
++ if(operation.operationKind==='entry.author.create-and-link')return [...new Set([...operation.baseValues.producerUids,operation.payload.producerUid])].map(uid=>`producer:${uid.toLowerCase()}`);
+  if(operation.operationKind==='collection.create')return operation.payload.parentUid===null?[]:[`collection:${operation.payload.parentUid}`];
+  if(operation.operationKind==='collection.entry.set')return [`entry:${operation.payload.entryUid}`];
+  if(operation.operationKind==='author.directories.set')return [...new Set([...operation.baseValues.directories,...operation.payload.directories].flatMap(directory=>directory.entries.map(entry=>`entry:${entry.syncUid}`)))];
+@@ -72,7 +74,7 @@
+   const refs=referencedEntityKeys(operation).map(key=>key.toLowerCase());const slots=referencedRatingSlotUids(operation).map(uid=>uid.toLowerCase());
+   for(const source of rows.slice(0,order)) {
+    const op=parsed.get(source.opId);if(!op || source.clientId!==row.clientId || source.libraryId!==row.libraryId || source.syncEpoch!==row.syncEpoch)continue;
+-   if((operation.operationKind==='entry.delete' && referencedEntityKeys(op).map(key=>key.toLowerCase()).includes(ownerKey)) || refs.includes(`${op.entityKind}:${op.entityUid.toLowerCase()}`) || newlyCreatedRatingSlotUids(op).some(uid=>slots.includes(uid.toLowerCase())))deps.add(op.opId);
++   if(((operation.operationKind==='entry.delete' || operation.operationKind==='producer.delete') && referencedEntityKeys(op).map(key=>key.toLowerCase()).includes(ownerKey)) || refs.includes(`${op.entityKind}:${op.entityUid.toLowerCase()}`) || newlyCreatedRatingSlotUids(op).some(uid=>slots.includes(uid.toLowerCase())))deps.add(op.opId);
+   }
+   // Missing/inactive sources are never invented as applied cache proofs.
+   const eligible=operation.operationKind!=='entry.media.set' && row.status==='pending' && [...deps].every(id=>rows.some(source=>source.opId.toLowerCase()===id.toLowerCase() && source.status==='pending' && result.get(source.opId)?.eligible===true && source.clientId===row.clientId && source.libraryId===row.libraryId && source.syncEpoch===row.syncEpoch));

@@ -1,0 +1,23 @@
+{
+  "data": [
+    {
+      "id": "51111",
+      "type": "manga",
+      "attributes": {
+        "canonicalTitle": "Blue Box",
+        "titles": { "en": "Blue Box", "en_jp": "Ao no Hako", "ja": "アオのハコ" },
+        "abbreviatedTitles": ["AoHako"],
+        "subtype": "manga"
+      }
+    },
+    {
+      "id": "52222",
+      "type": "manga",
+      "attributes": {
+        "canonicalTitle": "Ao no Hako",
+        "titles": { "en_jp": "Ao no Hako" },
+        "subtype": "oneshot"
+      }
+    }
+  ]
+}

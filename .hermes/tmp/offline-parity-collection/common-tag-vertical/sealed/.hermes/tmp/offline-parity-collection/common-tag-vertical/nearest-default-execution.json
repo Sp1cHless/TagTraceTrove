@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "apps/web/tests/collection-tree.test.ts",
+    "apps/web/tests/collections-page.test.ts",
+    "apps/web/tests/native-mutation-plan.test.ts",
+    "apps/web/tests/pending-work-restore-atomic.test.ts",
+    "apps/web/tests/pending-work-restore.test.ts",
+    "packages/shared/tests",
+    "--maxWorkers=2",
+    "--testTimeout=30000",
+    "--reporter=json",
+    "--outputFile=D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\common-tag-vertical\\nearest-default.json"
+  ],
+  "exitCode": 0,
+  "timeoutSeconds": 180
+}

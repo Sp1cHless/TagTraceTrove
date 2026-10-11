@@ -1,0 +1,14 @@
+{
+  "inheritedRows": 719,
+  "changed": [
+    "apps/server/src/repositories/entry-multi-author-repository.ts",
+    "apps/server/src/sync/replay-service.ts",
+    "apps/server/src/sync/sync-service.ts",
+    "packages/shared/src/schemas/native-mutation-contract.ts",
+    "packages/shared/src/schemas/sync.ts"
+  ],
+  "authorizedNew": [
+    "apps/server/tests/integration/entry-multi-author-sync.integration.test.ts"
+  ],
+  "outsideDrift": []
+}

@@ -1,0 +1,10 @@
+[
+  "caller/cold/cascade/replay+ACKloss",
+  "connected-noCopy+oldCopy",
+  "root-child-Author-empty scope",
+  "concurrent child add/edit rejection",
+  "held predecessor + independent Entry",
+  "capabilities false/absent + legacy unknown",
+  "restore export/exact + later write refusal",
+  "corrupt/foreign authority zero cleanup"
+]

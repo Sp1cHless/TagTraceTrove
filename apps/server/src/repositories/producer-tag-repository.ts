@@ -40,6 +40,8 @@ export interface ProducerSummary {
 export interface AuthorFilterOptions {
   authorTags: Array<{ tagId: number; name: string }>;
   workTags: Array<{ tagId: number; name: string }>;
+  /** The Authors' own dimensions, each with the Gallery it belongs to. */
+  ratingSlots: Array<{ id: number; name: string; sortOrder: number; entryType: string }>;
 }
 
 export interface ListAuthorFilterOptionsInput {
@@ -54,22 +56,47 @@ const HAS_LINKED_ENTRY_SQL = `EXISTS (
 )`;
 
 /**
- * The Entry type with the most works for one Producer — the Author's home
- * Gallery badge. Tie-breaks by type name for stability.
+ * The Gallery an Author belongs to: their home badge, and the partition both of their rating
+ * classes live in (`'producer'` = the works summary, `'author_self'` = the author themselves).
+ *
+ * A stored anchor first and a derivation second. It used to be derived on every read — the type
+ * with the most works — which meant one new work in another Gallery could silently move an Author
+ * to a different rating partition and take every dimension they had been rated on out of sight.
+ * `039` anchored every existing Author; the derivation still answers for one that has no anchor yet
+ * (brand new, or with no works at all). Tie-breaks by type name for stability.
  */
+/**
+ * An Author's Gallery as SQL, for one alias of `producers`: the stored anchor, else the Entry type
+ * with the most works.
+ *
+ * One definition, because there were two and they came to disagree: the badge and the rating
+ * partitions read the anchor while the Author list still derived it, so re-anchoring an Author moved
+ * their ratings without moving their row in the list.
+ */
+function galleryTypeForProducerSql(alias: string): string {
+  return `COALESCE(
+      ${alias}.gallery_anchor,
+      (
+        SELECT entry.type
+        FROM entry_producers AS relation
+        JOIN entries AS entry ON entry.id = relation.entry_id
+        WHERE relation.producer_id = ${alias}.id
+        GROUP BY entry.type
+        ORDER BY COUNT(*) DESC, entry.type COLLATE NOCASE
+        LIMIT 1
+      )
+    )`;
+}
+
 export function galleryTypeForProducer(
   database: T3Database,
   producerId: number,
 ): string | null {
   const row = database.prepare(`
-    SELECT entry.type AS entry_type
-    FROM entry_producers AS relation
-    JOIN entries AS entry ON entry.id = relation.entry_id
-    WHERE relation.producer_id = ?
-    GROUP BY entry.type
-    ORDER BY COUNT(*) DESC, entry.type COLLATE NOCASE
-    LIMIT 1
-  `).get(producerId) as { entry_type: string } | undefined;
+    SELECT ${galleryTypeForProducerSql('anchor')} AS entry_type
+    FROM producers AS anchor
+    WHERE anchor.id = ?
+  `).get(producerId) as { entry_type: string | null } | undefined;
   return row?.entry_type ?? null;
 }
 
@@ -221,7 +248,7 @@ export function listAuthorFilterOptions(
     .filter((author) => (input.includeNsfw ?? true) || !author.nsfw)
     .filter((author) => input.entryType === undefined || author.galleryType === input.entryType)
     .map((author) => author.id);
-  if (eligibleProducerIds.length === 0) return { authorTags: [], workTags: [] };
+  if (eligibleProducerIds.length === 0) return { authorTags: [], workTags: [], ratingSlots: [] };
   const placeholders = eligibleProducerIds.map(() => '?').join(', ');
   const authorTags = database.prepare(`
     SELECT DISTINCT tag.id AS tag_id, tag.name
@@ -238,9 +265,30 @@ export function listAuthorFilterOptions(
     WHERE relation.producer_id IN (${placeholders})
     ORDER BY tag.normalized_name, tag.id
   `).all(...eligibleProducerIds) as Array<{ tag_id: number; name: string }>;
+  // The Authors' own dimensions, each with the Gallery it belongs to: a dimension lives in the
+  // partition of the Gallery its Authors are anchored to, so another Gallery's dimension has no row
+  // for them. Deliberately NOT limited to dimensions somebody has already been rated on — a
+  // dimension just created is exactly the one a person wants to filter by (`unrated` finds its
+  // Authors), and hiding it read as "the feature is missing".
+  const ratingSlots = database.prepare(`
+    SELECT slot.id AS id, slot.name, slot.sort_order, slot.entry_type
+    FROM rating_slots AS slot
+    WHERE slot.subject_kind = 'author_self'
+      AND slot.entry_type IN (
+        SELECT ${galleryTypeForProducerSql('producer')}
+        FROM producers AS producer
+        WHERE producer.id IN (${placeholders})
+      )
+    ORDER BY slot.entry_type COLLATE NOCASE, slot.sort_order, slot.id
+  `).all(...eligibleProducerIds) as Array<{
+    id: number; name: string; sort_order: number; entry_type: string;
+  }>;
   return {
     authorTags: authorTags.map((tag) => ({ tagId: tag.tag_id, name: tag.name })),
     workTags: workTags.map((tag) => ({ tagId: tag.tag_id, name: tag.name })),
+    ratingSlots: ratingSlots.map((slot) => ({
+      id: slot.id, name: slot.name, sortOrder: slot.sort_order, entryType: slot.entry_type,
+    })),
   };
 }
 
@@ -363,6 +411,30 @@ export function findProducers(
   });
 }
 
+/**
+ * An Author's own value on one dimension, as a scalar expression over `producer_candidates.id`.
+ *
+ * Both the rating filter and the rating order use it, so they cannot drift apart; its parameter is
+ * the dimension's slot id, supplied once per occurrence.
+ */
+const AUTHOR_RATING_VALUE_SQL =
+  '(SELECT own.stars FROM producer_rating_values AS own'
+  + ' JOIN rating_slots AS slot ON slot.id = own.slot_id'
+  + " WHERE own.producer_id = producer_candidates.id AND own.slot_id = ?"
+  + " AND slot.subject_kind = 'author_self' AND slot.entry_type = producer_candidates.gallery_type)";
+
+/** Only the Author's own class belongs in this list's filter: a works summary is about their works. */
+function requireAuthorRatingSlot(database: T3Database, slotId: number): void {
+  const row = database.prepare(`
+    SELECT 1 FROM rating_slots WHERE id = ? AND subject_kind = 'author_self'
+  `).get(slotId);
+  if (!row) {
+    throw new Error(
+      `cannot filter: rating slot ${slotId} is not an Author's own rating dimension`,
+    );
+  }
+}
+
 export function queryProducerPage(
   database: T3Database,
   input: ProducerPageQueryRequest,
@@ -460,15 +532,7 @@ export function queryProducerPage(
              COALESCE(producer_usage.view_count, 0) AS view_count,
              COALESCE(producer_usage.like_count, 0) AS like_count,
              producer_usage.last_viewed_at,
-             (
-               SELECT entry.type
-               FROM entry_producers AS relation
-               JOIN entries AS entry ON entry.id = relation.entry_id
-               WHERE relation.producer_id = producer.id
-               GROUP BY entry.type
-               ORDER BY COUNT(*) DESC, entry.type COLLATE NOCASE, entry.type
-               LIMIT 1
-             ) AS gallery_type,
+             ${galleryTypeForProducerSql('producer')} AS gallery_type,
              EXISTS (
                SELECT 1
                FROM entry_producers AS relation
@@ -489,6 +553,21 @@ export function queryProducerPage(
     pageParameters.push(input.entryType);
   }
   if (!input.includeNsfw) pageClauses.push('nsfw = 0');
+  // The Author's OWN rating, the only class this list filters by: what their works inherit is a
+  // question about a work. The expression is the same one the sort orders by, so a filter and an
+  // order can never disagree about an Author's value.
+  for (const condition of input.ratingConditions ?? []) {
+    requireAuthorRatingSlot(database, condition.slotId);
+    if (condition.operator === 'unrated') {
+      pageClauses.push(`${AUTHOR_RATING_VALUE_SQL} IS NULL`);
+      pageParameters.push(condition.slotId);
+      continue;
+    }
+    const comparison = condition.operator === 'eq' ? '=' : condition.operator === 'gt' ? '>' : '<';
+    pageClauses.push(`${AUTHOR_RATING_VALUE_SQL} ${comparison} ?`);
+    // The schema refine guarantees stars is non-null for eq/gt/lt.
+    pageParameters.push(condition.slotId, condition.stars as number);
+  }
   const pageWhere = pageClauses.length > 0 ? `WHERE ${pageClauses.join(' AND ')}` : '';
 
   const orderParameters: Array<string | number> = [];
@@ -508,6 +587,17 @@ export function queryProducerPage(
   } else if (input.sort === 'relevance' && searchIds !== null) {
     orderSql = 'ORDER BY COALESCE((SELECT CAST(key AS INTEGER) FROM json_each(?) WHERE value = id), 2147483647), id';
     orderParameters.push(JSON.stringify(searchIds));
+  }
+
+  if (input.ratingSort !== null && input.ratingSort !== undefined) {
+    requireAuthorRatingSlot(database, input.ratingSort.slotId);
+    // The rating comes first, and the list's own sort control then decides the order within one
+    // rating — including `random`, which is exactly how Authors of the same stars get theirs. An
+    // Author with no value for the dimension sinks below every rated one.
+    const tieBreak = orderSql.replace(/^ORDER BY /u, '');
+    orderSql = `ORDER BY (${AUTHOR_RATING_VALUE_SQL} IS NULL) ASC,`
+      + ` ${AUTHOR_RATING_VALUE_SQL} DESC, ${tieBreak}`;
+    orderParameters.unshift(input.ratingSort.slotId, input.ratingSort.slotId);
   }
 
   const allFilterParameters = [...baseParameters, ...pageParameters];

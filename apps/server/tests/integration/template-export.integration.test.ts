@@ -8,9 +8,11 @@ import {
   assignEntryTag,
   findEntriesByFacetFilters,
 } from '../../src/repositories/entry-tag-repository.js';
-import { createFacet, createSection } from '../../src/repositories/layout-repository.js';
+import { createFacet, createSection, listLayout } from '../../src/repositories/layout-repository.js';
 import { commitImportBatch } from '../../src/import/commit.js';
+import { createEntryContent } from '../../src/repositories/entry-content-repository.js';
 import { listTemplateSummaries, writeTemplateFiles } from '../../src/repositories/template-export.js';
+import { COMMON_TEMPLATE, applyCommonTemplate } from '../../src/repositories/common-template.js';
 
 type TestDatabase = ReturnType<typeof createMigratedMemoryDatabase>;
 
@@ -20,6 +22,46 @@ afterEach(() => {
   for (const database of databases.splice(0)) {
     database.close();
   }
+});
+
+describe('the common template (repository content, copied into a Gallery)', () => {
+  it('gives a Gallery with no template one, as its own Sections and Facets', () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+
+    const result = applyCommonTemplate(database, 'novel');
+
+    expect(result.sectionCount).toBe(COMMON_TEMPLATE.sections.length);
+    expect(result.facetCount).toBe(
+      COMMON_TEMPLATE.sections.reduce((total, section) => total + section.facets.length, 0));
+    // The template's rating dimensions become this Gallery's own entry slots: a Gallery without one
+    // cannot rate anything, and the template was built with a General Rating.
+    expect(result.ratingSlotCount).toBe(COMMON_TEMPLATE.ratingSlots.length);
+    const slots = database.prepare(
+      "SELECT name FROM rating_slots WHERE subject_kind = 'entry' AND entry_type = ?",
+    ).all('novel') as Array<{ name: string }>;
+    expect(slots.map((slot) => slot.name)).toEqual(COMMON_TEMPLATE.ratingSlots);
+    // The rows are the Gallery's own: that is what makes this "common" rather than "default" — the
+    // editor can rename, empty or delete them like anything the person typed themselves.
+    const layout = listLayout(database, 'novel');
+    expect(layout.map((section) => section.name))
+      .toEqual(COMMON_TEMPLATE.sections.map((section) => section.name));
+    // Every real Section also carries the app's unnamed default Facet (name ''), which the UI hides.
+    expect(layout.flatMap((section) => section.facets.map((facet) => facet.name))
+      .filter((name) => name !== ''))
+      .toEqual(COMMON_TEMPLATE.sections.flatMap((section) => section.facets));
+    databases.at(-1)?.close();
+  });
+
+  it('refuses a Gallery that already has a template', () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    createSection(database, { entryType: 'novel', name: '基本信息' });
+
+    // Sections are the person's own decisions about their Gallery; adding three more to a structure
+    // somebody built is how a template stops being theirs.
+    expect(() => applyCommonTemplate(database, 'novel')).toThrow(/already has a template/);
+  });
 });
 
 describe('formal gallery templates (real SQL + files)', () => {
@@ -81,6 +123,19 @@ describe('formal gallery templates (real SQL + files)', () => {
     expect(freshPlacement.facet_name).toBe('');
   });
 
+  it('refuses Gallery names containing path traversal before writing template files', () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const dir = mkdtempSync(join(tmpdir(), 't3-template-escape-'));
+    try {
+      for (const unsafeType of ['../outside', '..\\outside']) {
+        expect(() => writeTemplateFiles(database, unsafeType, dir)).toThrow(/entryType|Gallery|filename/i);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('writes formal template files and lists summaries', () => {
     const database = createMigratedMemoryDatabase();
     databases.push(database);
@@ -114,6 +169,56 @@ describe('formal gallery templates (real SQL + files)', () => {
       expect(summaries[0]!.templatePath).toBe(written.templatePath);
       expect(summaries[0]!.tagLayoutPath).toBe(written.tagLayoutPath);
       expect(summaries[0]!.tagLayoutExists).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('carries the Gallery’s Content kinds in the template file and in the summary', () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    createSection(database, { entryType: 'comic', name: 'Basic Information' });
+
+    const first = createEntry(database, { title: 'First', type: 'comic' });
+    createEntryContent(database, { entryId: first.id, contentType: 'description', content: 'A synopsis' });
+    createEntryContent(database, { entryId: first.id, contentType: 'Source URL', content: 'https://x.test/1' });
+    createEntryContent(database, { entryId: first.id, contentType: 'comment', content: 'Mine' });
+    const second = createEntry(database, { title: 'Second', type: 'comic' });
+    createEntryContent(database, { entryId: second.id, contentType: 'source url', content: 'https://x.test/2' });
+
+    const dir = mkdtempSync(join(tmpdir(), 't3-content-kinds-'));
+    try {
+      const written = writeTemplateFiles(database, 'comic', dir);
+      const file = JSON.parse(readFileSync(written.templatePath, 'utf8')) as {
+        sections: unknown;
+        contentKinds: string[];
+      };
+      // The two built-ins lead in their own order, and the spelling the works actually use wins
+      // (`Source URL` on one work, `source url` on the other — the person's own words, not ours);
+      // then every other kind the Gallery's works use, including one added on a single work.
+      expect(file.contentKinds).toEqual(['Source URL', 'description', 'comment']);
+      expect(file.sections).toBeDefined();
+      // Advanced editing reads the same helper, so the view cannot disagree with the file it shows.
+      const summary = listTemplateSummaries(database, dir).find((row) => row.entryType === 'comic');
+      expect(summary?.contentKinds).toEqual(file.contentKinds);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('gives a Gallery with no works the built-in Content kinds and writes no Content row', () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    createSection(database, { entryType: 'novel', name: 'Basic Information' });
+
+    const dir = mkdtempSync(join(tmpdir(), 't3-content-kinds-empty-'));
+    try {
+      const written = writeTemplateFiles(database, 'novel', dir);
+      const file = JSON.parse(readFileSync(written.templatePath, 'utf8')) as { contentKinds: string[] };
+      // `Source URL` and `description` come with every Gallery — nothing created them, and a work
+      // shows a row only when it has text, so the kinds are a vocabulary rather than empty rows.
+      expect(file.contentKinds).toEqual(['Source URL', 'description']);
+      expect(database.prepare('SELECT COUNT(*) AS n FROM entry_contents').get()).toEqual({ n: 0 });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

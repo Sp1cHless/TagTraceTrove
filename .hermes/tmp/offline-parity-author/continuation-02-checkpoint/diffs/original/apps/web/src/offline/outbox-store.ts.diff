@@ -1,0 +1,14 @@
+--- original/apps/web/src/offline/outbox-store.ts
++++ live/apps/web/src/offline/outbox-store.ts
+@@ -143,8 +143,9 @@
+   return value as Array<{producerUid:string;createOpId:string}>;
+ }
+ function matchesProducerParent(child: PendingSyncOperation, parent: PendingSyncOperation, dep: {producerUid:string;createOpId:string}): boolean {
+-  return parent.entityKind === 'entry' && parent.operationKind === 'entry.author.create-and-link' && parent.opId.toLowerCase() === dep.createOpId.toLowerCase()
+-    && typeof parent.payload.producerUid === 'string' && parent.payload.producerUid.toLowerCase() === dep.producerUid.toLowerCase() && parent.clientId === child.clientId
++  return ((parent.entityKind === 'producer' && parent.operationKind === 'producer.create' && parent.entityUid.toLowerCase() === dep.producerUid.toLowerCase())
++    || (parent.entityKind === 'entry' && parent.operationKind === 'entry.author.create-and-link' && typeof parent.payload.producerUid === 'string' && parent.payload.producerUid.toLowerCase() === dep.producerUid.toLowerCase()))
++    && parent.opId.toLowerCase() === dep.createOpId.toLowerCase() && parent.clientId === child.clientId
+     && parent.libraryId === child.libraryId && parent.syncEpoch === child.syncEpoch;
+ }
+ export function validatePendingParent(operation: PendingSyncOperation, operations: PendingSyncOperation[]): void {

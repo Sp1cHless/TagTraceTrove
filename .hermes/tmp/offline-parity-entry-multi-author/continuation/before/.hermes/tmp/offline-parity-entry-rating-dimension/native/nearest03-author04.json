@@ -1,0 +1,99 @@
+{
+  "argv": [
+    "cmd.exe",
+    "/c",
+    "gradlew.bat",
+    "--no-daemon",
+    "--console=plain",
+    "-I",
+    "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\isolated.gradle",
+    "testDebugUnitTest",
+    "--tests",
+    "com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest",
+    "--tests",
+    "com.speechless666.t3.spike.NativeGalleryFiniteJvmTest.g1",
+    "--tests",
+    "com.speechless666.t3.spike.NativeGalleryRepairJvmTest.g2",
+    "--tests",
+    "com.speechless666.t3.spike.NativeGalleryRepairJvmTest.g4"
+  ],
+  "exit": 0,
+  "seconds": 130.31541919708252,
+  "xml": [
+    {
+      "path": ".hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\gradle-output\\nearest03-author04\\app\\test-results\\testDebugUnitTest\\TEST-com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest.xml",
+      "name": "com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest",
+      "tests": "3",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-10T09:35:57.765Z",
+      "hostname": "LAPTOP-70QV4MNN",
+      "time": "52.359",
+      "cases": [
+        {
+          "name": "profileEditDeleteColdRetention",
+          "classname": "com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest",
+          "time": "20.005",
+          "failure": null
+        },
+        {
+          "name": "directoryHoldEntryProgressColdExactRetry",
+          "classname": "com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest",
+          "time": "16.285",
+          "failure": null
+        },
+        {
+          "name": "collectionHoldEntryProgressColdExactRetry",
+          "classname": "com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest",
+          "time": "16.069",
+          "failure": null
+        }
+      ]
+    },
+    {
+      "path": ".hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\gradle-output\\nearest03-author04\\app\\test-results\\testDebugUnitTest\\TEST-com.speechless666.t3.spike.NativeGalleryFiniteJvmTest.xml",
+      "name": "com.speechless666.t3.spike.NativeGalleryFiniteJvmTest",
+      "tests": "1",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-10T09:36:50.840Z",
+      "hostname": "LAPTOP-70QV4MNN",
+      "time": "19.463",
+      "cases": [
+        {
+          "name": "g1",
+          "classname": "com.speechless666.t3.spike.NativeGalleryFiniteJvmTest",
+          "time": "19.463",
+          "failure": null
+        }
+      ]
+    },
+    {
+      "path": ".hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\gradle-output\\nearest03-author04\\app\\test-results\\testDebugUnitTest\\TEST-com.speechless666.t3.spike.NativeGalleryRepairJvmTest.xml",
+      "name": "com.speechless666.t3.spike.NativeGalleryRepairJvmTest",
+      "tests": "2",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-10T09:37:11.026Z",
+      "hostname": "LAPTOP-70QV4MNN",
+      "time": "35.545",
+      "cases": [
+        {
+          "name": "g2",
+          "classname": "com.speechless666.t3.spike.NativeGalleryRepairJvmTest",
+          "time": "17.912",
+          "failure": null
+        },
+        {
+          "name": "g4",
+          "classname": "com.speechless666.t3.spike.NativeGalleryRepairJvmTest",
+          "time": "17.633",
+          "failure": null
+        }
+      ]
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import { rateLimitFromResponse } from '../catalog-provider.js';
 import { JSDOM } from 'jsdom';
 
 /**
@@ -101,9 +102,9 @@ export async function fetchPage(
     throw new Error(`request failed (${cause instanceof Error ? cause.message : String(cause)})`);
   }
   if (signal.aborted) throw signal.reason ?? new Error('aborted');
-  if (response.status === 403) throw new Error('access denied (HTTP 403)');
+  if (response.status === 403) throw rateLimitFromResponse(response);
   if (response.status === 429 || response.status === 503 || response.status === 509) {
-    throw new Error(`rate limited (HTTP ${response.status})`);
+    throw rateLimitFromResponse(response);
   }
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const buffer = await response.arrayBuffer();

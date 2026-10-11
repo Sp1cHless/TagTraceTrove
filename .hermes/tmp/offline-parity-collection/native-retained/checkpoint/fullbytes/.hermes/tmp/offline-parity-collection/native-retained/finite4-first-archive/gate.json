@@ -1,0 +1,61 @@
+{
+  "start": "2026-10-10T02:36:18.131725+00:00",
+  "command": [
+    "cmd.exe",
+    "/c",
+    "gradlew.bat",
+    "--offline",
+    "--no-daemon",
+    "--console=plain",
+    "--project-cache-dir",
+    "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\native-retained\\gradle-cache",
+    "-I",
+    "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\native-retained\\isolated.init.gradle",
+    ":app:testDebugUnitTest",
+    "--tests",
+    "com.speechless666.t3.spike.NativeCollectionTimelineJvmTest"
+  ],
+  "exit": 1,
+  "summaries": [
+    {
+      "suite": {
+        "name": "com.speechless666.t3.spike.NativeCollectionTimelineJvmTest",
+        "tests": "4",
+        "skipped": "0",
+        "failures": "4",
+        "errors": "0",
+        "timestamp": "2026-10-10T02:36:43.427Z",
+        "hostname": "LAPTOP-70QV4MNN",
+        "time": "69.843"
+      },
+      "cases": [
+        {
+          "name": "c1",
+          "classname": "com.speechless666.t3.spike.NativeCollectionTimelineJvmTest",
+          "time": "21.773"
+        },
+        {
+          "name": "c2",
+          "classname": "com.speechless666.t3.spike.NativeCollectionTimelineJvmTest",
+          "time": "16.005"
+        },
+        {
+          "name": "c3",
+          "classname": "com.speechless666.t3.spike.NativeCollectionTimelineJvmTest",
+          "time": "16.087"
+        },
+        {
+          "name": "c4",
+          "classname": "com.speechless666.t3.spike.NativeCollectionTimelineJvmTest",
+          "time": "15.978"
+        }
+      ],
+      "failures": [
+        "java.lang.AssertionError\n\tat org.junit.Assert.fail(Assert.java:87)\n\tat org.junit.Assert.assertTrue(Assert.java:42)\n\tat org.junit.Assert.assertTrue(Assert.java:53)\n\tat com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.capCell(NativeCollectionTimelineJvmTest.java:58)\n\tat com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.c1(NativeCollectionTimelineJvmTest.java:73)\n\tat java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)\n\tat java.base/java.lang.reflect.Method.invoke(Method.java:580)\n\tat org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)\n\tat org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)\n\tat org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)\n\tat org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)\n\tat org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)\n\tat org.robolectric.RobolectricTestRunner$HelperTestRunner$1.evaluate(RobolectricTestRunner.java:502)\n\tat org.robolectric.internal.SandboxTestRunner$2.lambda$evaluate$2(SandboxTestRunner.java:285)\n\tat org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:104)\n\tat java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)\n\tat java.base/java.lang.Thread.run(Thread.java:1583)\n",
+        "java.lang.AssertionError\n\tat org.junit.Assert.fail(Assert.java:87)\n\tat org.junit.Assert.assertTrue(Assert.java:42)\n\tat org.junit.Assert.assertTrue(Assert.java:53)\n\tat com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.capCell(NativeCollectionTimelineJvmTest.java:58)\n\tat com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.c2(NativeCollectionTimelineJvmTest.java:74)\n\tat java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)\n\tat java.base/java.lang.reflect.Method.invoke(Method.java:580)\n\tat org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)\n\tat org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)\n\tat org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)\n\tat org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)\n\tat org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)\n\tat org.robolectric.RobolectricTestRunner$HelperTestRunner$1.evaluate(RobolectricTestRunner.java:502)\n\tat org.robolectric.internal.SandboxTestRunner$2.lambda$evaluate$2(SandboxTestRunner.java:285)\n\tat org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:104)\n\tat java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)\n\tat java.base/java.lang.Thread.run(Thread.java:1583)\n",
+        "org.junit.ComparisonFailure: {\"opId\":\"3e31ebc6-09f4-4ff5-b382-249be4fa1616\",\"clientId\":\"e73ce987-cb5c-4dea-8d83-77ceba6aab66\",\"libraryId\":\"f77be43e-cf9c-4470-8a20-dcbb7ffbfd22\",\"syncEpoch\":\"4ff62b51-269f-4ec3-8db4-bf9dbfcf0734\",\"entityUid\":\"bd517ef9-23d3-46f3-981c-b50b7deb68cb\",\"clientCreatedAt\":\"2026-10-10T02:37:22.111Z\",\"entityKind\":\"collection\",\"operationKind\":\"collection.common-tag.add\",\"baseVersion\":2,\"baseValues\":{\"scope\":{\"kind\":\"entry\",\"parentUid\":null,\"children\":[]},\"members\":[{\"syncUid\":\"b4658948-67b5-4d67-bbf4-1d2364b769f0\",\"syncVersion\":1,\"entryType\":\"Comic\",\"present\":false}],\"types\":[{\"entryType\":\"Comic\",\"layoutUid\":\"b0cccd8b-5a55-422b-8eb1-dc639990c402\",\"layoutVersion\":3,\"facetId\":2,\"facetUid\":\"1d1a7237-7f7d-4530-8197-d592ec5d218f\",\"sectionUid\":\"04d9aba8-f84a-4b86-a617-b2ba16892e05\",\"placements\":[]}],\"tag\":null},\"payload\":{\"name\":\"Native tag\",\"tagUid\":\"700a07e3-17e2-45a0-83a6-83528ceaa821\"}} expected:<[complete]d> but was:<[hel]d>\n\tat org.junit.Assert.assertEquals(Assert.java:117)\n\tat com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.phase(NativeCollectionTimelineJvmTest.java:46)\n\tat com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.c3(NativeCollectionTimelineJvmTest.java:85)\n\tat java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)\n\tat java.base/java.lang.reflect.Method.invoke(Method.java:580)\n\tat org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)\n\tat org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)\n\tat org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)\n\tat org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)\n\tat org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)\n\tat org.robolectric.RobolectricTestRunner$HelperTestRunner$1.evaluate(RobolectricTestRunner.java:502)\n\tat org.robolectric.internal.SandboxTestRunner$2.lambda$evaluate$2(SandboxTestRunner.java:285)\n\tat org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:104)\n\tat java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)\n\tat java.base/java.lang.Thread.run(Thread.java:1583)\n",
+        "java.lang.AssertionError\n\tat org.junit.Assert.fail(Assert.java:87)\n\tat org.junit.Assert.assertTrue(Assert.java:42)\n\tat org.junit.Assert.assertTrue(Assert.java:53)\n\tat com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.c4(NativeCollectionTimelineJvmTest.java:96)\n\tat java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)\n\tat java.base/java.lang.reflect.Method.invoke(Method.java:580)\n\tat org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)\n\tat org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)\n\tat org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)\n\tat org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)\n\tat org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)\n\tat org.robolectric.RobolectricTestRunner$HelperTestRunner$1.evaluate(RobolectricTestRunner.java:502)\n\tat org.robolectric.internal.SandboxTestRunner$2.lambda$evaluate$2(SandboxTestRunner.java:285)\n\tat org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:104)\n\tat java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)\n\tat java.base/java.lang.Thread.run(Thread.java:1583)\n"
+      ]
+    }
+  ]
+}

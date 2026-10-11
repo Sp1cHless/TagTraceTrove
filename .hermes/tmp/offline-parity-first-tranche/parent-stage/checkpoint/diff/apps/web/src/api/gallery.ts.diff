@@ -1,0 +1,33 @@
+--- apps/web/src/api/gallery.ts.parent-start
++++ apps/web/src/api/gallery.ts.current
+@@ -144,7 +144,9 @@
+   type SourceStatusPatch,
+   type SourceStatusRecordDto,
+   type NavigationCounts,
+-  type SyncCapabilities,
++  type SyncCapabilities,
++  syncEntryIdentitySchema,
++  type SyncEntryIdentity,
+   type SyncChangesQuery,
+   type SyncMediaUploadMetadata,
+   type SyncMediaUploadResult,
+@@ -432,7 +434,8 @@
+   getEntry(entryId: number): Promise<EntryDetailResponse>;
+   listEntrySources(entryId: number): Promise<EntrySourceRecordDto[]>;
+   listSourceLibrary(): Promise<SourceLibraryRecordDto[]>;
+-  getSyncCapabilities(options?: { replay?: boolean }): Promise<SyncCapabilities>;
++  getSyncCapabilities(options?: { replay?: boolean }): Promise<SyncCapabilities>;
++  getEntrySyncIdentity?(entryId: number): Promise<SyncEntryIdentity>;
+   /** Stable sync client identity for operation receipts; the online browser keeps one in localStorage. */
+   getClientId?(): Promise<string>;
+   /** Read-only bounded journal transport; records are NOT a complete snapshot projection. */
+@@ -1011,6 +1014,9 @@
+     async getSyncCapabilities() {
+       return syncCapabilitiesSchema.parse(await client.request('sync/capabilities'));
+     },
++    async getEntrySyncIdentity(entryId) {
++      return syncEntryIdentitySchema.parse(await client.request(`entries/${entryId}/sync-identity`));
++    },
+     async getClientId() {
+       return stableBrowserClientId();
+     },

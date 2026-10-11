@@ -1,0 +1,11 @@
+{
+  "newOwnedFiles": [
+    "packages/shared/src/collection-common-tag.ts",
+    "apps/server/src/sync/collection-common-tag.ts",
+    "apps/web/src/offline/collection-common-tag.ts"
+  ],
+  "notTouched": [
+    "apps/web/src/CollectionsPage.vue",
+    "apps/web/tests/offline-collection-delete.integration.test.ts"
+  ]
+}

@@ -1,0 +1,23 @@
+--- before/apps/web/src/offline/pending-work-restore.ts
++++ apps/web/src/offline/pending-work-restore.ts
+@@ -267,9 +267,17 @@
+   }
+   if (op.operationKind==='collection.delete') {
+     const owner=payload.collections.find(row=>same(row.syncUid,op.entityUid));
+-    requireRef(!!owner && owner.kind===op.baseValues.kind);
+-    const children=payload.collections.filter(row=>row.parentId===owner?.id);
+-    requireRef(children.length===op.baseValues.children.length && children.every(row=>row.syncUid && row.syncVersion!==undefined && op.baseValues.children.some(child=>same(row.syncUid,child.syncUid))));
++    const origin=prior.find(row=>row.operationKind==='collection.create' && same(row.entityUid,op.entityUid));
++    requireRef((owner?.kind ?? origin?.payload.kind)===op.baseValues.kind);
++    const parentUid=owner ? (owner.parentId===null?null:payload.collections.find(row=>row.id===owner.parentId)?.syncUid) : origin?.payload.parentUid;
++    requireRef(parentUid===op.baseValues.parentUid);
++    // Freeze the complete direct-child scope from canonical rows plus prior,
++    // validated same-device creates; missing optional old identities stay unknown.
++    const children=new Set(payload.collections.filter(row=>owner && row.parentId===owner.id).map(row=>row.syncUid?.toLowerCase()));
++    for (const row of prior) if (row.operationKind==='collection.create' && typeof row.payload.parentUid==='string' && same(row.payload.parentUid,op.entityUid)) {
++      requireRef(row.payload.kind==='entry');children.add(row.entityUid.toLowerCase());
++    }
++    requireRef(!children.has(undefined) && children.size===op.baseValues.children.length && op.baseValues.children.every(child=>children.has(child.syncUid.toLowerCase())));
+   }
+   if (op.operationKind==='collection.create' && op.payload.parentUid) {
+     const parent = payload.collections.find(row=>same(row.syncUid,op.payload.parentUid!));

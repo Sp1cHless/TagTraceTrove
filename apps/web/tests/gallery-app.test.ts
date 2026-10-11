@@ -10,7 +10,7 @@ enableAutoUnmount(afterEach);
 vi.stubGlobal('scrollTo', vi.fn());
 
 const suggestionDebounce = (ms = 220) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-import { multiAuthorProducerName } from '@t3/shared';
+import { multiAuthorProducerName, tagSuggestionQuerySchema } from '@t3/shared';
 import type { GalleryApi } from '../src/api/gallery.js';
 import { setLocale } from '../src/i18n.js';
 import { createMemorySnapshotStore } from '../src/offline/snapshot-store.js';
@@ -171,6 +171,21 @@ function createMemoryApi(options: {
     assetUrl(path) {
       return path;
     },
+    async siteprobeReadme(site: string) {
+      return { site, source: 'installed', text: `# ${site}` };
+    },
+    async revealSiteprobeFolder(folder: string) {
+      return { folder, path: `/home/siteprobe/${folder}` } as never;
+    },
+    async uploadSiteprobeSelection(runId: string) {
+      return { id: runId } as never;
+    },
+    async siteprobeLoginDone(runId: string) {
+      return { id: runId } as never;
+    },
+    siteprobeExportFileUrl(path: string) {
+      return `/api/siteprobe/export-file?path=${encodeURIComponent(path)}`;
+    },
     async suggestTags(input: Parameters<GalleryApi['suggestTags']>[0]) {
       const query = String(input.q).trim().toLocaleLowerCase();
       const excluded = new Set<number>(
@@ -190,9 +205,9 @@ function createMemoryApi(options: {
     },
     async getSyncCapabilities() {
       return {
-        libraryId: 'memory', syncEpoch: 'memory', sqliteSchemaVersion: 15,
+        libraryId: 'memory', syncEpoch: 'memory', sqliteSchemaVersion: 32,
         snapshotFormatVersion: 1, syncProtocolVersion: 1, serverBuild: 'test',
-        featureFlags: { readOnlySnapshot: true, offlineMutations: false },
+        featureFlags: { readOnlySnapshot: true, offlineMutations: false, onlineEntryCreateClaim: true },
       };
     },
     async fetchSyncSnapshot() {
@@ -340,8 +355,20 @@ function createMemoryApi(options: {
     async deleteTag(input: { vocabulary: 'entry' | 'producer'; tagId: number }) {
       return { tagId: input.tagId, tagName: 'stub', removedAssignments: 0, deletedTags: 1 };
     },
+    async commonTemplate() {
+      return { name: 'common', sections: [{ name: 'Basic', facets: [] }], ratingSlots: [] };
+    },
+    async applyCommonTemplate(entryType: string) {
+      return { entryType, sectionCount: 1, facetCount: 0, ratingSlotCount: 0, templateFiles: null };
+    },
+    async applyCommonTemplateRatingSlots(entryType: string) {
+      return { entryType, sectionCount: 0, facetCount: 0, ratingSlotCount: 1, templateFiles: null };
+    },
     async listTemplates() {
       return [];
+    },
+    async listContentKinds() {
+      return ['source url', 'description'];
     },
     async listAuthorAliasGroups() {
       return [];
@@ -468,6 +495,9 @@ function createMemoryApi(options: {
       if (index >= 0) authors.splice(index, 1);
       viewLaterAuthorStore = viewLaterAuthorStore.filter((id) => id !== authorId);
     },
+    async setGalleryOrder(types) {
+      return types;
+    },
     async listGalleries() {
       const counts = new Map<string, number>();
       for (const entry of entries) {
@@ -561,7 +591,13 @@ function createMemoryApi(options: {
           { tagId: 3, name: 'Fantasy' },
         ],
         authors: [{ authorId: 9, name: 'Hypergryph' }],
-        ratingSlots: [{ id: 40, name: 'Quality', sortOrder: 0 }],
+        // What the server offers: the work's own dimensions, and the author's own. The works summary
+        // is absent on purpose — a work dimension already falls back to it (pinned in
+        // `facet-filter.integration.test.ts`).
+        ratingSlots: [
+          { id: 40, name: 'Quality', sortOrder: 0 },
+          { id: 42, name: 'Charisma', sortOrder: 0, subjectKind: 'author_self' },
+        ],
       };
     },
 
@@ -627,7 +663,39 @@ function createMemoryApi(options: {
     async previewSiteProbeFolder() {
       throw new Error('Not implemented in memory API');
     },
+    async previewSiteProbeExportPath() {
+      throw new Error('Not implemented in memory API');
+    },
     async commitImport() {
+      throw new Error('Not implemented in memory API');
+    },
+    async commitImportPath() {
+      throw new Error('Not implemented in memory API');
+    },
+    async siteprobeStatus() {
+      throw new Error('Not implemented in memory API');
+    },
+    async fetchSiteProbeLinkMeta() {
+      throw new Error('Not implemented in memory API');
+    },
+    async siteprobeSites() {
+      throw new Error('Not implemented in memory API');
+    },
+    async siteprobeResolve() {
+      throw new Error('Not implemented in memory API');
+    },
+    async startSiteprobeRun() {
+      throw new Error('Not implemented in memory API');
+    },
+    async getSiteprobeRun() {
+      throw new Error('Not implemented in memory API');
+    },
+    // A list, so "the server is holding nothing" is the truthful default rather than a throw: the
+    // panels ask this on mount to take back a run they started before the person left the page.
+    async listSiteprobeRuns() {
+      return [];
+    },
+    async cancelSiteprobeRun() {
       throw new Error('Not implemented in memory API');
     },
     async listTaxonomyAliases() {
@@ -637,7 +705,12 @@ function createMemoryApi(options: {
       throw new Error('Not implemented in memory API');
     },
     async importTaxonomyAliases() {
-      return [];
+      return { aliases: [], skipped: [] };
+    },
+    async importSiteDictionaries() {
+      return {
+        sites: 0, imported: 0, pending: 0, skipped: 0, rewritten: 0, merged: 0, conflicts: [],
+      };
     },
     async deleteTaxonomyAlias() {},
     async listRatingSlots() {
@@ -668,6 +741,15 @@ function createMemoryApi(options: {
       throw new Error('Not implemented in memory API');
     },
     async setAuthorRating() {
+      throw new Error('Not implemented in memory API');
+    },
+    async setAuthorGalleryAnchor() {
+      throw new Error('Not implemented in memory API');
+    },
+    async deleteEntryRatingSlot() {
+      throw new Error('Not implemented in memory API');
+    },
+    async deleteAuthorRatingSlot() {
       throw new Error('Not implemented in memory API');
     },
     async reorderAuthorRatingSlots() {
@@ -838,6 +920,9 @@ function createMemoryApi(options: {
       assignedTagName = input.name.trim();
       assignedTagEntryId = entryId;
       assignedTagFacetId = input.facetId;
+      // The server answers with the tag it just linked; the fixture serves the
+      // same tag (id 14) from the Entry it returns on the next read.
+      return { tagId: 14, name: assignedTagName, normalizedName: assignedTagName.toLowerCase(), facetId: input.facetId };
     },
     async moveEntryTag(_entryId, _tagId, targetFacetId) {
       movedTagFacetId = targetFacetId;
@@ -850,6 +935,7 @@ function createMemoryApi(options: {
     },
     async listAuthorFilterOptions() {
       return {
+        ratingSlots: [],
         authorTags: authorTags.map((tag) => ({ tagId: tag.tagId, name: tag.name })),
         workTags: [
           { tagId: 1, name: 'Action' },
@@ -1073,6 +1159,12 @@ function createMemoryApi(options: {
     async deleteFacet() {
       // no-op in the in-memory fixture
     },
+    async renameSection() {
+      throw new Error('Not implemented in memory API');
+    },
+    async deleteSection() {
+      throw new Error('Not implemented in memory API');
+    },
   };
 }
 
@@ -1080,6 +1172,25 @@ function createMemoryApi(options: {
 async function openGalleryType(wrapper: VueWrapper, type = 'game'): Promise<void> {
   await wrapper.get(`[data-gallery-type="${type}"]`).trigger('click');
   await flushPromises();
+}
+
+/**
+ * The folder and batch doors now live on the Add Entry page's "Import files" tab.
+ *
+ * The page grew four tabs (quick / advanced / rules / files) so that the quick form — the one the
+ * phone uses — is not buried under the desktop import machinery. A test that drives an import
+ * therefore opens that tab first; everything it does afterwards is unchanged.
+ */
+async function openAddEntryFilesTab(wrapper: VueWrapper): Promise<void> {
+  // The page finishes opening asynchronously (it loads the Galleries and Authors it needs), and its
+  // tab state lives in the page component: settling that work first is what keeps the click from
+  // landing on a page that is about to be replaced.
+  await flushPromises();
+  await wrapper.get('[data-testid="add-entry-tab-files"]').trigger('click');
+  await flushPromises();
+  if (!wrapper.find('[data-testid="add-entry-files"]').exists()) {
+    throw new Error('DEBUG section missing');
+  }
 }
 
 async function openEntryForEditing(wrapper: VueWrapper, entryId: number): Promise<void> {
@@ -1111,6 +1222,83 @@ describe('GalleryApp', () => {
     expect(wrapper.get('[data-testid="offline-mode-banner"]').text()).toContain('offline copy');
   });
 
+  it('shows switching progress and an explicit unavailable state instead of an empty library', async () => {
+    const wrapper = mount(GalleryApp, { props: {
+      api: createMemoryApi(),
+      offlineState: { mode: 'online', lastFallbackAt: null, connectionPhase: 'switching' },
+    } });
+    expect(wrapper.get('[data-testid="offline-connection-status"]').text()).toContain('switching to offline');
+    await flushPromises();
+    await wrapper.setProps({
+      offlineState: { mode: 'online', lastFallbackAt: null, connectionPhase: 'no-copy' },
+    });
+    expect(wrapper.get('[data-testid="offline-unavailable"]').text()).toContain('not an empty library');
+  });
+
+  it('waits for the local snapshot pointer before beginning home reads', async () => {
+    let release!: () => void;
+    const startupReady = new Promise<void>((resolve) => { release = resolve; });
+    const api = createMemoryApi();
+    const listGalleries = vi.spyOn(api, 'listGalleries');
+    const wrapper = mount(GalleryApp, { props: {
+      api, startupReady,
+      offlineState: { mode: 'online', lastFallbackAt: null, connectionPhase: 'checking' },
+    } });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="offline-connection-status"]').text()).toContain('Checking');
+    expect(listGalleries).not.toHaveBeenCalled();
+    release();
+    await flushPromises();
+    expect(listGalleries).toHaveBeenCalled();
+  });
+
+  it('opens the saved offline Gallery without requesting online-only sidebar counts', async () => {
+    const api = createMemoryApi();
+    api.getNavigationCounts = vi.fn(() => new Promise<never>(() => undefined));
+    const wrapper = mount(GalleryApp, { props: {
+      api,
+      offlineState: { mode: 'offline', lastFallbackAt: null },
+    } });
+
+    await flushPromises();
+    expect(wrapper.find('[data-testid="sidebar-home"]').exists()).toBe(true);
+    expect(wrapper.get('[data-gallery-type="game"]').text()).toContain('game');
+    expect(api.getNavigationCounts).not.toHaveBeenCalled();
+  });
+
+  it('renders Galleries while a noncritical sidebar count request is still pending', async () => {
+    const api = createMemoryApi();
+    api.getNavigationCounts = vi.fn(() => new Promise<never>(() => undefined));
+    const wrapper = mount(GalleryApp, { props: { api } });
+
+    await flushPromises();
+    expect(wrapper.find('[data-testid="sidebar-home"]').exists()).toBe(true);
+    expect(wrapper.get('[data-gallery-type="game"]').text()).toContain('game');
+  });
+
+  it('opens a saved Gallery before slower Author and View-later lists settle', async () => {
+    const api = createMemoryApi();
+    const readAuthors = api.listAuthors.bind(api);
+    const readViewLater = api.getViewLaterState.bind(api);
+    let releaseSupplementary!: () => void;
+    const supplementaryGate = new Promise<void>((resolve) => { releaseSupplementary = resolve; });
+    api.listAuthors = vi.fn(async () => { await supplementaryGate; return readAuthors(); });
+    api.getViewLaterState = vi.fn(async () => { await supplementaryGate; return readViewLater(); });
+    const wrapper = mount(GalleryApp, { props: {
+      api,
+      offlineState: { mode: 'offline', lastFallbackAt: null },
+    } });
+
+    await flushPromises();
+    expect(wrapper.find('[data-testid="sidebar-home"]').exists()).toBe(true);
+    expect(wrapper.get('[data-gallery-type="game"]').text()).toContain('game');
+    expect(wrapper.find('[data-testid="author-navigation"]').exists()).toBe(false);
+
+    releaseSupplementary();
+    await flushPromises();
+    expect(wrapper.find('[data-testid="author-navigation"]').exists()).toBe(true);
+  });
+
   it('shows a copyable runtime report for offline mutation diagnosis', async () => {
     const offlineStore = createMemorySnapshotStore();
     await offlineStore.writeMeta('activeGeneration', '7');
@@ -1118,6 +1306,29 @@ describe('GalleryApp', () => {
     await offlineStore.writeMeta('capability.offlineUsageEvents', '0');
     await offlineStore.writeMeta('capability.offlineEntryViewLater', '1');
     await offlineStore.writeMeta('capability.offlineEntryRating', '1');
+    await offlineStore.writeMeta('capability.offlineEntryAuthors', '1');
+    await offlineStore.writeMeta('capability.offlineAuthorCreate', '1');
+    await offlineStore.writeMeta('capability.offlineEntryTags', '1');
+    await offlineStore.writeMeta('capability.offlinePendingEntryTags', '1');
+    for (const flag of ['offlineEntryFacetCreate', 'offlineEntryTagVocabulary', 'offlinePendingEntryTagCreation']) await offlineStore.writeMeta(`capability.${flag}`, '1');
+    await offlineStore.writeMeta('capability.offlinePendingEntryAuthors', '1');
+    await offlineStore.writeMeta('capability.offlinePendingEntryMetadata', '1');
+    await offlineStore.writeMeta('capability.offlinePendingEntryContents', '1');
+    await offlineStore.writeMeta('capability.offlinePendingEntryAuthorCreate', '1');
+    await offlineStore.writeMeta('capability.offlineCrossEntryPendingAuthors', '1');
+    await offlineStore.writeMeta('capability.offlineProducerViewLater', '0');
+    await offlineStore.writeMeta('capability.offlineProducerRating', '1');
+    await offlineStore.writeMeta('capability.offlineProducerProfile', '1');
+    await offlineStore.writeMeta('capability.offlineProducerTags', '1');
+    await offlineStore.writeMeta('capability.offlineCollectionManagement', '0');
+    await Promise.all([
+      offlineStore.writeMeta('capability.offlineMutations', '1'),
+      offlineStore.writeMeta('capability.offlineEntryUpdate', '1'),
+      offlineStore.writeMeta('capability.completeSnapshotDelta', '1'),
+      offlineStore.writeMeta('capability.offlineMediaUpload', '1'),
+      offlineStore.writeMeta('capability.offlineMediaMultiplePreviews', '1'),
+      offlineStore.writeMeta('capability.existingEntryMedia', '1'),
+    ]);
     const wrapper = mount(GalleryApp, {
       props: {
         api: createMemoryApi(),
@@ -1128,7 +1339,11 @@ describe('GalleryApp', () => {
           pendingCount: 0,
           lastCapabilityProbe: {
             at: '2026-09-21T00:00:00Z', status: 'success', serverBuild: 'test',
-            offlineUsageEvents: false, offlineEntryViewLater: true, offlineEntryRating: true, error: null,
+            offlineUsageEvents: false, offlineEntryViewLater: true, offlineEntryRating: true,
+            offlineEntryAuthors: true, offlineAuthorCreate: true, offlineEntryTags: true, offlineEntryContents: true, offlineProducerViewLater: false, offlineProducerRating: true,
+            offlineProducerProfile: true, offlineProducerTags: true,
+            offlineRatingSlotLayout: false, offlineCollectionProducerMembership: false,
+            offlineCollectionManagement: false, offlineAuthorDirectories: false, error: null,
           },
           lastMutationDiagnostic: {
             at: '2026-09-21T00:01:00Z', action: 'like', modeBefore: 'offline', modeAfter: 'offline',
@@ -1139,12 +1354,36 @@ describe('GalleryApp', () => {
       },
     });
 
+    await flushPromises();
     await wrapper.get('[data-testid="offline-diagnostics-toggle"]').trigger('click');
     await flushPromises();
     const report = wrapper.get('[data-testid="offline-diagnostics"]').text();
-    expect(report).toContain('0.0.8-c2-offline-rating');
+    expect(report).toContain('0.0.49-c3-offline-parity');
+    expect(report).toMatch(/"snapshotReadyAtMs":\s*\d+/u);
+    expect(report).toMatch(/"galleriesReadyAtMs":\s*\d+/u);
+    expect(report).toContain('"offlineAuthorCreate": "1"');
+    expect(report).toContain('"offlineEntryTags": "1"');
+    expect(report).toContain('"offlinePendingEntryTags": "1"');
+    for (const flag of ['offlineEntryFacetCreate', 'offlineEntryTagVocabulary', 'offlinePendingEntryTagCreation']) expect(report).toContain(`"${flag}": "1"`);
+    expect(report).toContain('"offlinePendingEntryAuthors": "1"');
+    expect(report).toContain('"offlinePendingEntryMetadata": "1"');
+    expect(report).toContain('"offlinePendingEntryContents": "1"');
+    expect(report).toContain('"offlinePendingEntryAuthorCreate": "1"');
+    expect(report).toContain('"offlineCrossEntryPendingAuthors": "1"');
     expect(report).toContain('"offlineUsageEvents": "0"');
     expect(report).toContain('"offlineEntryRating": "1"');
+    expect(report).toContain('"offlineEntryAuthors": "1"');
+    expect(report).toContain('"offlineProducerViewLater": "0"');
+    expect(report).toContain('"offlineProducerRating": "1"');
+    expect(report).toContain('"offlineProducerProfile": "1"');
+    expect(report).toContain('"offlineProducerTags": "1"');
+    expect(report).toContain('"offlineCollectionManagement": "0"');
+    expect(report).toContain('"offlineMutations": "1"');
+    expect(report).toContain('"offlineEntryUpdate": "1"');
+    expect(report).toContain('"completeSnapshotDelta": "1"');
+    expect(report).toContain('"offlineMediaUpload": "1"');
+    expect(report).toContain('"offlineMediaMultiplePreviews": "1"');
+    expect(report).toContain('"existingEntryMedia": "1"');
     expect(report).toContain('"action": "like"');
     expect(report).toContain('"activeGeneration": "7"');
   });
@@ -1184,6 +1423,40 @@ describe('GalleryApp', () => {
     expect(wrapper.get('[data-testid="offline-failed-count"]').text()).toContain('failed validation');
   });
 
+  it('keeps the offline copy on the Advanced function page and out of the Settings sheet', async () => {
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    await flushPromises();
+    await wrapper.get('[data-testid="settings-button"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="offline-settings"]').exists()).toBe(false);
+    // The entry to the Advanced function page sits in the sheet; it closes as
+    // that page opens.
+    await wrapper.get('[data-testid="advanced-entry"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="advanced-page"]').text()).toContain('Advanced function');
+    expect(wrapper.find('[data-testid="advanced-offline"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="advanced-tab-offline"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="advanced-offline"]').text()).toContain('Offline library');
+  });
+
+  it('gives the mobile connection block one title and one row of two buttons', async () => {
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    await flushPromises();
+    await wrapper.get('[data-testid="settings-button"]').trigger('click');
+    await flushPromises();
+    const block = wrapper.get('[data-testid="secure-pairing-settings"]');
+    expect(block.text()).toContain('Connect to APP');
+    expect(block.text()).not.toContain('Encrypted mobile connection');
+    const actions = block.get('.pairing-actions');
+    const labels = actions.findAll('button').map((node) => node.text());
+    expect(labels).toEqual([
+      'Create pairing QR (expires in 2 minutes)',
+      'Authorized devices',
+    ]);
+    expect(actions.findAll('button').every((node) => node.classes().includes('secondary-button'))).toBe(true);
+  });
+
   it('opens Settings and switches all UI copy between English and Chinese', async () => {
     const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
     await flushPromises();
@@ -1191,15 +1464,21 @@ describe('GalleryApp', () => {
     expect(wrapper.get('h1').text()).toBe('Galleries');
     await wrapper.get('[data-testid="settings-button"]').trigger('click');
     expect(wrapper.get('[data-testid="settings-panel"]').text()).toContain('Language');
-    expect(wrapper.get('[data-testid="offline-settings"]').text()).toContain('Offline library');
+    // The offline copy is a function, not a quick setting: it lives on the
+    // Advanced function page now, so the sheet must not carry it.
+    expect(wrapper.find('[data-testid="offline-settings"]').exists()).toBe(false);
 
     await wrapper.get('[data-testid="language-select"]').setValue('zh-CN');
 
-    expect(wrapper.get('h1').text()).toBe('画廊');
+    expect(wrapper.get('h1').text()).toBe('记忆空间');
     expect(wrapper.get('[data-testid="settings-panel"]').text()).toContain('语言');
     expect(wrapper.get('[data-testid="add-entry-navigation"]').text()).toContain('新建条目');
     await wrapper.get('[data-testid="settings-button"]').trigger('click');
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    expect(wrapper.get('[data-testid="add-entry-page"]').text()).toContain('快速导入');
+    expect(wrapper.get('[data-testid="add-entry-page"]').text()).toContain('链接导入');
+    await openAddEntryFilesTab(wrapper);
     expect(wrapper.get('[data-testid="add-entry-page"]').text()).toContain('导入导出文件夹');
     expect(wrapper.get('[data-testid="add-entry-page"]').text()).not.toContain('Canonical Tags');
     expect(window.localStorage.getItem('t3.locale')).toBe('zh-CN');
@@ -1222,7 +1501,7 @@ describe('GalleryApp', () => {
     expect(root.attributes('data-accent')).toBe('blue');
   });
 
-  it('manages generic taxonomy aliases from the Advanced editing page', async () => {
+  it('manages generic taxonomy aliases from the Advanced function page', async () => {
     const api = createMemoryApi();
     const aliases: Array<{
       id: number;
@@ -1269,12 +1548,15 @@ describe('GalleryApp', () => {
 
     // Groups start collapsed: the list body is hidden until expanded.
     expect(wrapper.find('[data-testid="taxonomy-alias-list"]').exists()).toBe(false);
-    expect(wrapper.get('[data-testid="taxonomy-group-unpartitioned"]').text()).toContain('2');
-    await wrapper.get('[data-testid="taxonomy-group-unpartitioned"]').trigger('click');
+    // The dictionary has two lists now — decided and not yet — rather than the tool's sections, which
+    // no generic adapter can fill and which the database never distinguished anyway. The saved mapping
+    // is in the first; `alice`, which nobody has mapped, is in the second.
+    expect(wrapper.get('[data-testid="taxonomy-group-pending"]').text()).toContain('1');
+    expect(wrapper.get('[data-testid="taxonomy-group-mapped"]').text()).toContain('1');
+    await wrapper.get('[data-testid="taxonomy-group-mapped"]').trigger('click');
     expect(wrapper.get('[data-testid="taxonomy-alias-list"]').text()).toContain('Bob → 鲍勃');
     expect(api.upsertTaxonomyAlias).toHaveBeenCalledWith({
       vocabulary: 'entry',
-      partition: '',
       alias: 'Bob',
       canonicalName: '鲍勃',
     });
@@ -1286,9 +1568,35 @@ describe('GalleryApp', () => {
     const unmatchedText = wrapper.get('[data-testid="taxonomy-alias-list"]').text();
     expect(unmatchedText).toContain('alice →');
     expect(unmatchedText).not.toContain('鲍勃');
+
+    // 无需映射: a name that needs no translation (`2B`) leaves the queue instead of sitting in it for
+    // ever. A row mapping a name to itself would say nothing — the built-in conversion already covers
+    // the one case where a name really does change — so the answer is to have no row at all.
+    await wrapper.get('[data-testid="taxonomy-unmatched-only"]').setValue(false);
+    await flushPromises();
+    // The filter expanded every group, so the pending list is already open.
+    const keptId = aliases.find((alias) => alias.alias === 'alice')!.id;
+    await wrapper.get(`[data-testid="taxonomy-keep-${keptId}"]`).trigger('click');
+    await flushPromises();
+    expect(api.deleteTaxonomyAlias).toHaveBeenCalledWith(keptId);
+    expect(wrapper.find('[data-testid="taxonomy-group-pending"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="taxonomy-import-summary"]').text()).toContain('alice');
+
+    // The one-time move off the tool's export tree: every crawl has been writing a dictionary per
+    // site all along, and until this button the only way to use one was to find the file and hand it
+    // over — which stopped happening once a work went from a crawl to the library by itself.
+    api.importSiteDictionaries = vi.fn(async () => ({
+      sites: 7, imported: 2015, pending: 11, skipped: 1914, rewritten: 0, merged: 0,
+      conflicts: [],
+    }));
+    await wrapper.get('[data-testid="taxonomy-import-site-dictionaries"]').trigger('click');
+    await flushPromises();
+    expect(api.importSiteDictionaries).toHaveBeenCalled();
+    expect(wrapper.get('[data-testid="taxonomy-import-summary"]').text())
+      .toContain('2015');
   });
 
-  it('saves an author alias group from Advanced editing and lists existing groups', async () => {
+  it('saves an author alias group from Advanced function and lists existing groups', async () => {
     const api = createMemoryApi();
     const groups: Array<{
       canonicalName: string;
@@ -1368,6 +1676,11 @@ describe('GalleryApp', () => {
       tagNames: ['pirate cat', '海盜貓'],
     });
     expect(wrapper.get('[data-testid="author-alias-notice"]').text()).toContain('海盗猫');
+    // The saved groups stay closed until asked for: they are what you come back to check, not what
+    // you came to read, and an always-open list pushed the form that saves one off a phone screen.
+    expect(wrapper.find('[data-testid="author-alias-group-list"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="author-alias-groups-toggle"]').text()).toContain('1');
+    await wrapper.get('[data-testid="author-alias-groups-toggle"]').trigger('click');
     expect(wrapper.get('[data-testid="author-alias-group-list"]').text()).toContain('pirate cat');
   });
 
@@ -1380,6 +1693,9 @@ describe('GalleryApp', () => {
         { name: '', facets: ['Tags'] },
       ],
       mappings: [{ tag: '奇幻', section: '信息', facet: 'Series' }],
+      // The Content scope comes from the works themselves: the two built-ins every Gallery has, plus
+      // a kind somebody added on one work.
+      contentKinds: ['source url', 'description', '短评'],
       templatePath: 'C:/t3/templates/comic.template.json',
       tagLayoutPath: 'C:/t3/templates/comic.tag-layout.json',
       templateExists: true,
@@ -1408,11 +1724,16 @@ describe('GalleryApp', () => {
     expect(preview).toContain('信息');
     expect(preview).toContain('Series');
     expect(wrapper.find('[data-testid="gallery-template-mappings-comic"]').exists()).toBe(false);
-    // Full card sketch: Ratings with the gallery's shared slots, then Content.
+    // Full card sketch: Ratings with the gallery's shared slots, then Content — and the Content rows
+    // are this Gallery's own kinds, not a fixed one: a kind added on a single work is part of it.
     expect(preview).toContain('Ratings');
     expect(preview).toContain('画力');
     expect(preview).toContain('Content');
     expect(preview).toContain('source url');
+    expect(preview).toContain('description');
+    expect(preview).toContain('短评');
+    expect(wrapper.get('[data-testid="gallery-template-content-kinds-comic"]').text())
+      .toContain('3');
     const files = wrapper.get('[data-testid="gallery-template-files-comic"]').text();
     expect(files).toContain('comic.template.json');
     expect(files).toContain('File not written yet');
@@ -1567,8 +1888,11 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
 
-    await wrapper.get('[data-testid="sidebar-search-input"]').setValue('end');
-    await wrapper.get('[data-testid="sidebar-search-form"]').trigger('submit');
+    // The sidebar's search is an icon now, and the field it opens belongs to the Search page itself.
+    await wrapper.get('[data-testid="sidebar-search"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="search-main-input"]').setValue('end');
+    await wrapper.get('[data-testid="search-main-form"]').trigger('submit');
     await flushPromises();
 
     expect(wrapper.get('[data-testid="search-page"]').text()).toContain('Endfield');
@@ -1600,8 +1924,11 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
 
-    await wrapper.get('[data-testid="sidebar-search-input"]').setValue('end');
-    await wrapper.get('[data-testid="sidebar-search-form"]').trigger('submit');
+    // The sidebar's search is an icon now, and the field it opens belongs to the Search page itself.
+    await wrapper.get('[data-testid="sidebar-search"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="search-main-input"]').setValue('end');
+    await wrapper.get('[data-testid="search-main-form"]').trigger('submit');
     await flushPromises();
     await wrapper.get('[data-testid="search-result-entry-1"]').trigger('click');
     await flushPromises();
@@ -1638,8 +1965,10 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
 
-    await wrapper.get('[data-testid="sidebar-search-input"]').setValue('sha');
-    await wrapper.get('[data-testid="sidebar-search-form"]').trigger('submit');
+    await wrapper.get('[data-testid="sidebar-search"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="search-main-input"]').setValue('sha');
+    await wrapper.get('[data-testid="search-main-form"]').trigger('submit');
     await flushPromises();
     await wrapper.get('[data-testid="search-scope-tags"]').trigger('click');
     await flushPromises();
@@ -1703,8 +2032,10 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
 
-    await wrapper.get('[data-testid="sidebar-search-input"]').setValue('ishikei');
-    await wrapper.get('[data-testid="sidebar-search-form"]').trigger('submit');
+    await wrapper.get('[data-testid="sidebar-search"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="search-main-input"]').setValue('ishikei');
+    await wrapper.get('[data-testid="search-main-form"]').trigger('submit');
     await flushPromises();
     await wrapper.get('[data-testid="search-scope-producers"]').trigger('click');
     await flushPromises();
@@ -1737,15 +2068,21 @@ describe('GalleryApp', () => {
 
     expect(wrapper.find('[data-testid="create-entry-form"]').exists()).toBe(false);
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await flushPromises();
     expect(wrapper.get('[data-testid="add-entry-page"]').text()).toContain('New Entry');
+    // What opens is the quick page: a cover dropzone, and no preview box until a cover exists.
     expect(wrapper.find('[data-testid="entry-cover-dropzone"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="entry-preview-dropzone"]').exists()).toBe(false);
+    // The folder door lives on its own page now.
+    await openAddEntryFilesTab(wrapper);
     expect(wrapper.find('input[webkitdirectory]').exists()).toBe(true);
     expect(wrapper.get('[data-testid="desktop-entry-import"]').classes()).toContain('desktop-entry-import');
 
     await wrapper.get('[data-testid="add-entry-back"]').trigger('click');
-    await wrapper.get('[data-testid="add-author-navigation"]').trigger('click');
-    expect(wrapper.get('[data-testid="add-author-page"]').text()).toContain('New Author');
+    // The "+ Author" door is gone from the sidebar and from Home: it took a row of its own in a
+    // drawer whose space belongs to the common actions. An Author is still created from the Entry
+    // editor, where it is part of linking one.
+    expect(wrapper.find('[data-testid="add-author-navigation"]').exists()).toBe(false);
   });
 
   it('files an export whose works were all already imported, through the plain folder import', async () => {
@@ -1793,6 +2130,8 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
     Object.defineProperty(file, 'webkitRelativePath', { value: 'folder_42/items/42/metadata.json' });
     const input = wrapper.get('[data-testid="desktop-entry-import"] input[webkitdirectory]');
@@ -1856,7 +2195,11 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import-toggle .secondary-button').trigger('click');
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const batchTypeInput = wrapper.get('.batch-import input[list="add-entry-gallery-types"]');
     await batchTypeInput.setValue('Comic');
     await batchTypeInput.trigger('change');
@@ -1864,10 +2207,14 @@ describe('GalleryApp', () => {
 
     const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
     Object.defineProperty(file, 'webkitRelativePath', { value: 'folder_42/items/99/metadata.json' });
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const batchInput = wrapper.get('.batch-import input[webkitdirectory]');
     Object.defineProperty(batchInput.element, 'files', { value: [file] });
     await batchInput.trigger('change');
     await flushPromises();
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import .primary-button').trigger('click');
     await flushPromises();
 
@@ -1987,20 +2334,6 @@ describe('GalleryApp', () => {
     expect(apply).not.toHaveBeenCalled();
   });
 
-  it('returns from Add Author to the Authors page', async () => {
-    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
-    await flushPromises();
-    await wrapper.get('[data-testid="author-navigation"]').trigger('click');
-    expect(wrapper.find('[data-testid="author-page"]').exists()).toBe(true);
-
-    await wrapper.get('[data-testid="add-author-navigation"]').trigger('click');
-    expect(wrapper.find('[data-testid="add-author-page"]').exists()).toBe(true);
-    await wrapper.get('[data-testid="add-author-page"] .back-button').trigger('click');
-
-    expect(wrapper.find('[data-testid="author-page"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="add-author-page"]').exists()).toBe(false);
-  });
-
   it('previews and commits a reviewed site export folder from the Add Entry page', async () => {
     setLocale('zh-CN');
     const api = createMemoryApi();
@@ -2043,6 +2376,8 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     const metadata = new File(['{}'], 'metadata.json', { type: 'application/json' });
     Object.defineProperty(metadata, 'webkitRelativePath', { value: 'export/metadata.json' });
     const input = wrapper.get('input[webkitdirectory]');
@@ -2098,11 +2433,17 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import-toggle .secondary-button').trigger('click');
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const batchTypeInput = wrapper.get('.batch-import input[list="add-entry-gallery-types"]');
     await batchTypeInput.setValue('game');
     await batchTypeInput.trigger('change');
     await flushPromises();
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const batchInput = wrapper.get('.batch-import input[webkitdirectory]');
     const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
     Object.defineProperty(file, 'webkitRelativePath', {
@@ -2112,6 +2453,8 @@ describe('GalleryApp', () => {
     await batchInput.trigger('change');
     await flushPromises();
 
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import .primary-button').trigger('click');
     await flushPromises();
 
@@ -2144,6 +2487,8 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     const metadata = new File(['{}'], 'metadata.json', { type: 'application/json' });
     Object.defineProperty(metadata, 'webkitRelativePath', { value: 'export/metadata.json' });
     const input = wrapper.get('input[webkitdirectory]');
@@ -2230,6 +2575,8 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     const input = wrapper.get('.folder-dropzone input[webkitdirectory]');
     Object.defineProperty(input.element, 'files', { value: files });
     await input.trigger('change');
@@ -2241,6 +2588,134 @@ describe('GalleryApp', () => {
     expect(uploadEntryMedia.mock.calls[0]?.slice(0, 2)).toEqual([99, 'cover']);
     expect(uploadEntryMedia.mock.calls[0]?.[2]).toBe(files[2]);
     expect(uploadEntryMedia.mock.calls[0]?.[2]).not.toBe(files[1]);
+  });
+
+  it('leaves the person on the page they moved to while an import was being prepared', async () => {
+    const api = createMemoryApi();
+    api.listLayout = vi.fn(async () => [{
+      id: 10, name: 'Tags', sortOrder: 0, facets: [{ id: 11, name: '', sortOrder: 0 }],
+    }]);
+    // Preparing a folder takes a moment, and this holds it open so the person can move away in
+    // between — which is the whole point: the review used to take over the import page
+    // unconditionally, pulling them out of whatever page they had gone to.
+    let release: (() => void) | null = null;
+    api.previewSiteProbeFolder = vi.fn(() => new Promise((resolve) => {
+      release = () => resolve({
+        source: 'hitomi.la',
+        entryCount: 0,
+        tagAssignmentCount: 0,
+        uniqueTagCount: 0,
+        entriesMissingCover: 0,
+        warnings: [],
+        batch: { source: 'hitomi.la', warnings: [], entries: [] },
+      });
+    })) as unknown as typeof api.previewSiteProbeFolder;
+
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
+    const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
+    Object.defineProperty(file, 'webkitRelativePath', { value: 'folder_42/items/42/metadata.json' });
+    const input = wrapper.get('[data-testid="desktop-entry-import"] input[webkitdirectory]');
+    Object.defineProperty(input.element, 'files', { value: [file] });
+    await input.trigger('change');
+
+    // Away to another page while the preview is still being read.
+    await wrapper.get('[data-testid="add-entry-tab-quick"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(true);
+
+    release!();
+    await flushPromises();
+
+    // Still there. The review is waiting on the import page, and going back to it finds it.
+    expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="add-entry-import"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="add-entry-tab-import"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="import-review"]').exists()).toBe(true);
+  });
+
+  it('finishes the pictures of a work an interrupted import left behind', async () => {
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:test') });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+    const api = createMemoryApi();
+    api.previewSiteProbeFolder = vi.fn(async () => ({
+      source: 'hitomi.la',
+      entryCount: 1,
+      tagAssignmentCount: 0,
+      uniqueTagCount: 0,
+      entriesMissingCover: 0,
+      warnings: [],
+      batch: {
+        source: 'hitomi.la',
+        warnings: [],
+        entries: [{
+          externalKey: 'hitomi.la:42',
+          title: 'Known work',
+          cover: 'items/42/cover/cover.webp',
+        }],
+      },
+    }));
+    api.listLayout = vi.fn(async () => [{
+      id: 10, name: 'Tags', sortOrder: 0, facets: [{ id: 11, name: '', sortOrder: 0 }],
+    }]);
+    // The rows were committed and the tab was closed before the pictures went up: the work is in the
+    // library with no cover, and the import that follows it *skips* the work rather than passing over
+    // it, so this is the only chance its pictures have.
+    api.commitImport = vi.fn(async () => ({
+      entries: [],
+      entryCount: 0,
+      skippedExistingEntryCount: 1,
+      existingEntryIds: [42],
+      skippedExisting: [{ entryId: 42, externalKey: 'hitomi.la:42', title: 'Known work' }],
+      createdProducerCount: 0,
+      producerLinkCount: 0,
+      tagAssignmentCount: 0,
+      contentCount: 0,
+      authorRatingCount: 0,
+      warnings: [],
+    }));
+    api.getEntry = vi.fn(async () => ({
+      id: 42, title: 'Known work', type: 'game',
+      coverRef: null, previewRef: null, previewRefs: [],
+      uploadDate: null, pageCount: null,
+    })) as unknown as typeof api.getEntry;
+    const uploadEntryMedia = vi.fn<GalleryApi['uploadEntryMedia']>(async () => ({
+      id: 42, title: 'Known work', type: 'game',
+      coverRef: '/api/assets/entries/42/cover.webp', previewRef: null, previewRefs: [],
+      uploadDate: null, pageCount: null,
+    }));
+    api.uploadEntryMedia = uploadEntryMedia;
+
+    const files = [
+      new File(['{}'], 'metadata.json', { type: 'application/json' }),
+      new File(['cover'], 'cover.webp', { type: 'image/webp' }),
+    ];
+    for (const [file, path] of files.map((file, index) => [file, [
+      'export/metadata.json',
+      'export/items/42/cover/cover.webp',
+    ][index]!] as const)) {
+      Object.defineProperty(file, 'webkitRelativePath', { value: path });
+    }
+
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
+    const input = wrapper.get('.folder-dropzone input[webkitdirectory]');
+    Object.defineProperty(input.element, 'files', { value: files });
+    await input.trigger('change');
+    await flushPromises();
+    await wrapper.get('[data-testid="import-review"] .primary-button').trigger('click');
+    await flushPromises();
+
+    expect(uploadEntryMedia).toHaveBeenCalledTimes(1);
+    expect(uploadEntryMedia.mock.calls[0]?.slice(0, 2)).toEqual([42, 'cover']);
+    expect(uploadEntryMedia.mock.calls[0]?.[2]).toBe(files[1]);
   });
 
   it('auto-assigns supported fields to the matching template Facets on import', async () => {
@@ -2298,6 +2773,8 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     const metadata = new File(['{}'], 'metadata.json', { type: 'application/json' });
     Object.defineProperty(metadata, 'webkitRelativePath', { value: '3220586/metadata.json' });
     const input = wrapper.get('input[webkitdirectory]');
@@ -2382,6 +2859,8 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     const metadata = new File(['{}'], 'metadata.json', { type: 'application/json' });
     Object.defineProperty(metadata, 'webkitRelativePath', { value: '99737/metadata.json' });
     const folderInput = wrapper.get('input[webkitdirectory]');
@@ -2389,10 +2868,18 @@ describe('GalleryApp', () => {
     await folderInput.trigger('change');
     await flushPromises();
 
-    const typeSelect = wrapper.get<HTMLSelectElement>('[data-testid="import-review"] select[name="importType"]');
-    expect(Array.from(typeSelect.element.options).map((option) => option.value)).toEqual(['Comic', 'Hentai']);
-    expect(typeSelect.element.value).toBe('Comic');
-    await typeSelect.setValue('Hentai');
+    const typeField = wrapper.get<HTMLInputElement>('[data-testid="import-type-input"]');
+    // The field takes a type that does not exist yet, so it is an input; the list is behind the
+    // arrow (the same control the quick page uses) rather than a `<select>` with a closed set.
+    expect(typeField.element.value).toBe('Comic');
+    await wrapper.get('[data-testid="import-type-toggle"]').trigger('click');
+    // The list follows the app's SFW preference, like the sidebar and the quick page's own field —
+    // and a Gallery that is not listed is still reachable by typing its name, which is the whole
+    // reason this is an input.
+    expect(wrapper.findAll('[data-testid="import-type-list"] [data-gallery-option]')
+      .map((option) => option.attributes('data-gallery-option'))).toEqual(['Comic']);
+    await typeField.setValue('Hentai');
+    await typeField.trigger('change');
     await flushPromises();
 
     expect(api.listLayout).toHaveBeenLastCalledWith('Hentai');
@@ -2482,6 +2969,8 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     const metadata = new File(['{}'], 'metadata.json', { type: 'application/json' });
     Object.defineProperty(metadata, 'webkitRelativePath', { value: '1/metadata.json' });
     const folderInput = wrapper.get('input[webkitdirectory]');
@@ -2570,8 +3059,12 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import-toggle .secondary-button').trigger('click');
 
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const batchTypeInput = wrapper.get('.batch-import input[list="add-entry-gallery-types"]');
     await batchTypeInput.setValue('Comic');
     await batchTypeInput.trigger('change');
@@ -2580,6 +3073,8 @@ describe('GalleryApp', () => {
     // The Comic template has a Type Facet, so the batch-wide input shows.
     await wrapper.get('[data-testid="batch-content-type"] input').setValue('doujinshi');
 
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const batchInput = wrapper.get('.batch-import input[webkitdirectory]');
     const files = ['100089', '102331'].map((itemId) => {
       const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
@@ -2592,6 +3087,8 @@ describe('GalleryApp', () => {
     await batchInput.trigger('change');
     await flushPromises();
 
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import .primary-button').trigger('click');
     await flushPromises();
 
@@ -2660,8 +3157,12 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import-toggle .secondary-button').trigger('click');
 
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const batchInput = wrapper.get('.batch-import input[webkitdirectory]');
     const files = ['100089', '102331', '102440'].map((itemId) => {
       const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
@@ -2674,6 +3175,8 @@ describe('GalleryApp', () => {
     await batchInput.trigger('change');
     await flushPromises();
 
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import .primary-button').trigger('click');
     await flushPromises();
 
@@ -2754,6 +3257,8 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     const metadata = new File(['{}'], 'metadata.json', { type: 'application/json' });
     Object.defineProperty(metadata, 'webkitRelativePath', { value: 'playlist/items/77/metadata.json' });
     const input = wrapper.get('input[webkitdirectory]');
@@ -2949,6 +3454,78 @@ describe('GalleryApp', () => {
 
     expect(wrapper.get('[data-testid="create-author-duplicate-warning"]').text())
       .toContain('Hypergryph');
+  });
+
+  it('mounted Entry Author selector uses stable staged UUID after genuine online recovery',async()=>{
+    const {createOfflineAwareGalleryApi}=await import('../src/offline/offline-api.js');
+    const {createMemoryOutboxStore}=await import('../src/offline/outbox-store.js');
+    const {createMemoryMediaOutboxStore}=await import('../src/offline/media-outbox-store.js');
+    const {offlineSnapshot}=await import('./fixtures/pending-entry-tags.js');
+    const outbox=createMemoryOutboxStore(),store={...createMemorySnapshotStore(),...outbox,...createMemoryMediaOutboxStore(op=>outbox.enqueue(op))};
+    await store.writeGeneration(1,JSON.stringify(offlineSnapshot()));await store.writeMeta((await import('../src/offline/snapshot-store.js')).ACTIVE_GENERATION_KEY,'1');
+    for(const flag of ['offlineEntryCreate','offlineEntryAuthors','offlinePendingEntryAuthors','offlineAuthorCreate','offlinePendingEntryAuthorCreate','offlineCrossEntryPendingAuthors']) await store.writeMeta(`capability.${flag}`,'1');
+    const online=createMemoryApi({withAuthors:false}),get=vi.spyOn(online,'getEntry'),link=vi.spyOn(online,'linkEntryAuthor');
+    const api=createOfflineAwareGalleryApi(online,store,{clientId:'mounted-cross'});
+    const a=await api.enqueueOfflineEntryCreate!({title:'Source',type:'game',uploadDate:null,pageCount:null,ratings:[],viewLater:false,coverFile:null,previewFile:null});
+    const author=await api.enqueueOfflinePendingEntryAuthorCreate!(a.localKey,'Staged Cross Author');
+    const source=(await store.list())[1]!;
+    online.fetchSyncSnapshot=vi.fn().mockResolvedValue(offlineSnapshot());await api.fetchSyncSnapshot();
+    const wrapper=mount(GalleryApp,{props:{api}});await flushPromises();await openEntryForEditing(wrapper,1);
+    expect(get).toHaveBeenCalledWith(1);
+    await wrapper.get('[data-testid="link-entry-author"]').trigger('click');
+    await wrapper.get('[name="existingAuthorName"]').trigger('focus');
+    await wrapper.get('[name="existingAuthorName"]').setValue('Staged');await suggestionDebounce();
+    await wrapper.get('[data-testid="link-existing-author-form"] [role="option"] button').trigger('click');await flushPromises();
+    expect(link).not.toHaveBeenCalled();
+    expect((await store.list()).at(-1)).toMatchObject({operationKind:'entry.authors.set',payload:{producerUids:expect.arrayContaining([author.producerUid]),producerCreates:[{producerUid:author.producerUid,createOpId:source.opId}]}});
+  });
+
+  it('mounted Entry editor unlinks staged Author after genuine online recovery',async()=>{
+    const {createOfflineAwareGalleryApi}=await import('../src/offline/offline-api.js');
+    const {createMemoryOutboxStore}=await import('../src/offline/outbox-store.js');
+    const {createMemoryMediaOutboxStore}=await import('../src/offline/media-outbox-store.js');
+    const {offlineSnapshot}=await import('./fixtures/pending-entry-tags.js');
+    const outbox=createMemoryOutboxStore(),store={...createMemorySnapshotStore(),...outbox,...createMemoryMediaOutboxStore(op=>outbox.enqueue(op))};
+    await store.writeGeneration(1,JSON.stringify(offlineSnapshot()));await store.writeMeta((await import('../src/offline/snapshot-store.js')).ACTIVE_GENERATION_KEY,'1');
+    for(const flag of ['offlineEntryCreate','offlineEntryAuthors','offlinePendingEntryAuthors','offlineAuthorCreate','offlinePendingEntryAuthorCreate','offlineCrossEntryPendingAuthors']) await store.writeMeta(`capability.${flag}`,'1');
+    const online=createMemoryApi({withAuthors:false}),get=vi.spyOn(online,'getEntry'),link=vi.spyOn(online,'linkEntryAuthor'),unlink=vi.spyOn(online,'unlinkEntryAuthor').mockRejectedValue(new Error('negative numeric Author forbidden'));
+    const api=createOfflineAwareGalleryApi(online,store,{clientId:'mounted-cross'});
+    const a=await api.enqueueOfflineEntryCreate!({title:'Source',type:'game',uploadDate:null,pageCount:null,ratings:[],viewLater:false,coverFile:null,previewFile:null});
+    const author=await api.enqueueOfflinePendingEntryAuthorCreate!(a.localKey,'Staged Cross Author');
+    const source=(await store.list())[1]!;
+    online.fetchSyncSnapshot=vi.fn().mockResolvedValue(offlineSnapshot());await api.fetchSyncSnapshot();
+    const wrapper=mount(GalleryApp,{props:{api}});await flushPromises();await openEntryForEditing(wrapper,1);
+    expect(get).toHaveBeenCalledWith(1);
+    await wrapper.get('[data-testid="link-entry-author"]').trigger('click');
+    await wrapper.get('[name="existingAuthorName"]').trigger('focus');
+    await wrapper.get('[name="existingAuthorName"]').setValue('Staged');await suggestionDebounce();
+    await wrapper.get('[data-testid="link-existing-author-form"] [role="option"] button').trigger('click');await flushPromises();
+    expect(link).not.toHaveBeenCalled();
+    expect((await store.list()).at(-1)).toMatchObject({operationKind:'entry.authors.set',payload:{producerUids:expect.arrayContaining([author.producerUid]),producerCreates:[{producerUid:author.producerUid,createOpId:source.opId}]}});
+    const before=await store.list();
+    const authorId=Number(wrapper.get('[data-unlink-author-id^="-"]').attributes('data-unlink-author-id'));
+    expect(authorId).toBeLessThan(0);
+    const remainingUids=(before.at(-1)!.payload.producerUids as string[]).filter(uid=>uid!==author.producerUid);
+    await api.fetchSyncSnapshot();get.mockClear();await api.getEntry(1);expect(get).toHaveBeenCalledWith(1);
+    await wrapper.get(`[data-unlink-author-id="${authorId}"]`).trigger('click');await flushPromises();
+    expect(unlink).not.toHaveBeenCalled();
+    expect(await store.list()).toHaveLength(before.length+1);
+    expect((await store.list()).at(-1)).toMatchObject({entityUid:before.at(-1)!.entityUid,operationKind:'entry.authors.set',baseValues:{producerUids:before.at(-1)!.payload.producerUids},payload:{producerUids:remainingUids,producerCreates:[{producerUid:author.producerUid,createOpId:source.opId}]}});
+    expect((await store.list()).slice(0,before.length)).toEqual(before);
+    expect(wrapper.find(`[data-unlink-author-id="${authorId}"]`).exists()).toBe(false);
+    expect((await api.listPendingOfflineEntryCreates!()).find(row=>row.localKey===a.localKey)?.authors).toContainEqual(author);
+  });
+
+  it('selects a staged Author via the actual synced Entry RelationSuggestion callback', async () => {
+    const api=createMemoryApi();
+    vi.spyOn(api,'suggestProducers').mockResolvedValue([{id:-42,name:'Staged Cross Author',sameContextUsageCount:0,totalUsageCount:0}]);
+    const link=vi.spyOn(api,'linkEntryAuthor').mockResolvedValue(undefined);
+    const wrapper=mount(GalleryApp,{props:{api}});await flushPromises();await openEntryForEditing(wrapper,1);
+    await wrapper.get('[data-testid="link-entry-author"]').trigger('click');
+    await wrapper.get('[name="existingAuthorName"]').trigger('focus');
+    await wrapper.get('[name="existingAuthorName"]').setValue('Staged');await suggestionDebounce();
+    await wrapper.get('[data-testid="link-existing-author-form"] [role="option"] button').trigger('click');await flushPromises();
+    expect(link).toHaveBeenCalledWith(1,-42);
   });
 
   it('unlinks one Author inline from Entry edit mode', async () => {
@@ -3389,7 +3966,7 @@ describe('GalleryApp', () => {
     expect(convertEntryAuthors).not.toHaveBeenCalled();
   });
 
-  it('plans and applies title shortening from Advanced editing', async () => {
+  it('plans and applies title shortening from Advanced function', async () => {
     const api = createMemoryApi();
     const applyTitleShortening = vi.spyOn(api, 'applyTitleShortening');
     // The plan is reviewed before anything is written, so the fixtures carry
@@ -3403,8 +3980,10 @@ describe('GalleryApp', () => {
     await wrapper.get('[data-testid="settings-button"]').trigger('click');
     await wrapper.get('[data-testid="advanced-entry"]').trigger('click');
     await flushPromises();
-    await wrapper.get('[data-testid="advanced-tab-titles"]').trigger('click');
+    // Title shortening is a block inside the Templates tab, not a tab of its own.
+    await wrapper.get('[data-testid="advanced-tab-templates"]').trigger('click');
     await flushPromises();
+    expect(wrapper.get('[data-testid="advanced-templates"]').find('[data-testid="advanced-titles"]').exists()).toBe(true);
 
     await wrapper.get('[data-testid="title-plan-button"]').trigger('click');
     await flushPromises();
@@ -3517,6 +4096,91 @@ describe('GalleryApp', () => {
     expect(created.text()).toContain('Worth replaying');
   });
 
+  it('offers the Gallery’s Content kinds as one-click labels, and refuses an empty row', async () => {
+    const api = createMemoryApi();
+    // The kinds this Gallery already uses: the two built-ins plus one somebody added on a work.
+    api.listContentKinds = vi.fn(async () => ['source url', 'description', '短评']);
+    const createContent = vi.spyOn(api, 'createEntryContent');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    await wrapper.get('[data-testid="add-content-button"]').trigger('click');
+    await flushPromises();
+    // A work's `description` is a click rather than a spelling exercise, and the chips are this
+    // Gallery's kinds — asked for on the Entry's own type.
+    expect(api.listContentKinds).toHaveBeenCalledWith('game');
+    const chips = wrapper.get('[data-testid="content-kind-chips"]');
+    expect(chips.text()).toContain('description');
+    expect(chips.text()).toContain('短评');
+
+    await chips.get('[data-content-kind="短评"]').trigger('click');
+    const form = wrapper.get('[data-testid="create-content-form"]');
+    expect((form.get('[name="contentType"]').element as HTMLInputElement).value).toBe('短评');
+
+    // An empty Content row is a slot, not content: it would render as a blank line on the work, so
+    // the form asks for text instead of writing one.
+    await form.trigger('submit');
+    await flushPromises();
+    expect(createContent).not.toHaveBeenCalled();
+    expect(wrapper.get('[role="alert"]').text()).toContain('empty row');
+
+    await form.get('[name="content"]').setValue('好看');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(createContent).toHaveBeenCalledWith(1, expect.objectContaining({
+      contentType: '短评',
+      content: '好看',
+    }));
+  });
+
+  it('does not show a Content row with no text until the Entry is being edited', async () => {
+    const api = createMemoryApi();
+    const baseGetEntry = api.getEntry;
+    api.getEntry = vi.fn(async (entryId: number) => {
+      const detail = await baseGetEntry(entryId);
+      // Entry 1: a filled row plus a built-in kind a crawl left empty; entry 2: only the empty kind.
+      if (entryId === 1) {
+        return {
+          ...detail,
+          contents: [...detail.contents, {
+            id: 98, contentType: 'description', content: '   ', sortOrder: 6,
+          }],
+        };
+      }
+      if (entryId === 2) {
+        return {
+          ...detail,
+          contents: [{ id: 97, contentType: 'description', content: '', sortOrder: 0 }],
+        };
+      }
+      return detail;
+    });
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    // Home lists only recently viewed works, and entry 2 was never opened: use the Gallery grid.
+    await openGalleryType(wrapper);
+
+    // A work whose only Content is empty shows no Content section at all, rather than an empty box.
+    await wrapper.get('[data-entry-id="2"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.content-section').exists()).toBe(false);
+    await wrapper.get('[data-testid="floating-back"]').trigger('click');
+    await flushPromises();
+
+    await wrapper.get('[data-entry-id="1"]').trigger('click');
+    await flushPromises();
+    // Reading: a kind with nothing in it is not shown at all — that is the rule for the built-in
+    // kinds, and it is why nothing writes an empty row for a work that has nothing to say.
+    expect(wrapper.find('[data-content-id="13"]').exists()).toBe(true);
+    expect(wrapper.find('[data-content-id="98"]').exists()).toBe(false);
+
+    await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');
+    await flushPromises();
+    // Editing: the row is there, so it can be filled or removed.
+    expect(wrapper.get('[data-content-id="98"]').text()).toContain('description');
+  });
+
   it('edits one Content row inline in the Entry edit view', async () => {
     const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
     await flushPromises();
@@ -3612,7 +4276,9 @@ describe('GalleryApp', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await openEntryForEditing(wrapper, 1);
-    expect(wrapper.find('[data-facet-id="16"]').exists()).toBe(false);
+    // Editing shows every named Facet, so the empty one is on screen already;
+    // the point is that typing its name again does not create a duplicate.
+    expect(wrapper.get('[data-facet-id="16"]').text()).toContain('Series');
 
     await wrapper.get('[data-add-facet-section-id="10"]').trigger('click');
     const input = wrapper.get('[name="facetName"]');
@@ -3765,7 +4431,8 @@ describe('GalleryApp', () => {
     await flushPromises();
 
     const source = wrapper.get('[data-detail-tag-id="12"]');
-    expect(wrapper.get('[data-testid="tag-move-hint"]').text()).toContain('Tap a Tag');
+    // A device with a pointer drags; the tap wording belongs to a touch screen (next test).
+    expect(wrapper.get('[data-testid="tag-move-hint"]').text()).toContain('Drag a Tag');
     expect(source.attributes('aria-pressed')).toBe('false');
     expect(wrapper.find('[data-move-selected-tag-to-facet-id="16"]').exists()).toBe(false);
 
@@ -3833,12 +4500,10 @@ describe('GalleryApp', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     await openEntryForEditing(wrapper, 1);
 
-    // Edit mode shows the four vertical actions: done, save template,
-    // empty-facet toggle, delete.
+    // Edit mode shows the three vertical actions: done, save template, delete.
     for (const testId of [
       'finish-entry-editing',
       'save-template-button',
-      'toggle-empty-facets',
       'delete-entry',
     ]) {
       expect(wrapper.find(`[data-testid="${testId}"]`).exists()).toBe(true);
@@ -3851,11 +4516,6 @@ describe('GalleryApp', () => {
     await flushPromises();
     expect(apply).toHaveBeenCalledWith(1);
     expect(wrapper.get('[data-testid="template-notice"]').text()).toContain('Template applied');
-
-    // The empty-facet toggle flips its label and reveals empty named Facets.
-    const toggle = wrapper.get('[data-testid="toggle-empty-facets"]');
-    await toggle.trigger('click');
-    expect(wrapper.get('[data-testid="toggle-empty-facets"]').text()).toContain('Hide empty facets');
   });
 
   it('clears a template success notice before another Entry or Gallery is opened', async () => {
@@ -3923,8 +4583,7 @@ describe('GalleryApp', () => {
     await openEntryForEditing(wrapper, 2);
 
     // Entry two carries the named "Genre" Facet (id 15), which is empty by
-    // default — reveal it through the empty-facet toggle first.
-    await wrapper.get('[data-testid="toggle-empty-facets"]').trigger('click');
+    // default — editing shows it without any toggle.
     // Two-step confirmation on the small delete chip: × arms, 确认 runs.
     await wrapper.get('[data-delete-facet-id="15"]').trigger('click');
     expect(removeFacet).not.toHaveBeenCalled();
@@ -4006,6 +4665,34 @@ describe('Facet filter bar', () => {
     expect(wrapper.get('[data-testid="filter-tag-chip"]').text()).toContain('Sci-fi');
     expect(wrapper.get('[data-testid="entry-list"]').text()).toContain('Endfield');
     expect(wrapper.get('[data-testid="entry-list"]').text()).not.toContain('Hades II');
+  });
+
+  it('builds the filter row when an Entry gains its first tag and is closed', async () => {
+    const api = createMemoryApi();
+    const readOptions = api.listFacetFilterOptions.bind(api);
+    let reads = 0;
+    api.listFacetFilterOptions = vi.fn<GalleryApi['listFacetFilterOptions']>(async (type) => {
+      reads += 1;
+      const options = await readOptions(type);
+      // The sequence that showed the defect: the Gallery had nothing to filter by,
+      // the Entry was opened and tagged, and coming back has to show the row that
+      // now exists. Only the first read is empty, so a stale row stays invisible.
+      return reads === 1 ? { ...options, facets: [], allTags: [] } : options;
+    });
+
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openGameGallery(wrapper);
+    expect(wrapper.find('[data-testid="facet-filter-bar"]').exists()).toBe(false);
+
+    await wrapper.get('[data-entry-id="1"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="entry-detail"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="top-bar-back"]').trigger('click');
+    await flushPromises();
+
+    expect(reads).toBe(2);
+    expect(wrapper.find('[data-testid="facet-filter-bar"]').exists()).toBe(true);
   });
 
   it('combines rows with AND and clears everything back to the full gallery', async () => {
@@ -4209,9 +4896,10 @@ describe('Facet filter bar', () => {
     await wrapper.get('[data-testid="add-rating-filter"]').trigger('click');
     await wrapper.get('[data-testid="rating-slot-select"]').setValue(40);
     await flushPromises();
-    // Default row: Quality equals 3 stars → only Hades II matches.
-    expect(wrapper.get('[data-testid="entry-list"]').text()).not.toContain('Endfield');
-    expect(wrapper.get('[data-testid="entry-list"]').text()).toContain('Hades II');
+    // A freshly added row asks "greater than 3 stars" — the question a rating filter is usually
+    // put to ("show me the ones I liked"). Endfield carries 5, Hades II carries exactly 3.
+    expect(wrapper.get('[data-testid="entry-list"]').text()).toContain('Endfield');
+    expect(wrapper.get('[data-testid="entry-list"]').text()).not.toContain('Hades II');
 
     await wrapper.get('[data-testid="rating-operator-select"]').setValue('gt');
     await flushPromises();
@@ -4245,7 +4933,10 @@ describe('Facet filter bar', () => {
     expect(wrapper.get('[data-testid="entry-list"]').text()).toContain('Hades II');
   });
 
-  it('offers the Author-rating mode inside the rating sort control', async () => {
+  it('sorts by one option per dimension, with the Author’s summary already in it', async () => {
+    // There is no second mode to choose: a work dimension reads as its own value and, where it has
+    // none, its Author's works summary. The flag still travels — the offline copy sorts by it, so a
+    // phone orders the same way the desktop does — but it no longer changes what the control offers.
     const api = createMemoryApi();
     const queryEntryPage = vi.spyOn(api, 'queryEntryPage');
     const wrapper = mount(GalleryApp, { props: { api } });
@@ -4253,25 +4944,80 @@ describe('Facet filter bar', () => {
     await openGameGallery(wrapper);
 
     const sortSelect = wrapper.get('[data-testid="rating-sort-select"]');
-    expect(sortSelect.findAll('option').map((option) => option.text())).toContain('Quality ↓ 👤');
-    expect(sortSelect.attributes('title')).toBe(
-      'Works without their own rating sort by their Author rating',
-    );
-
-    await sortSelect.setValue('40:author');
-    await flushPromises();
-    expect(queryEntryPage.mock.calls.at(-1)?.[0]).toMatchObject({
-      ratingSort: { slotId: 40, direction: 'desc', applyAuthorRating: true },
-    });
+    const options = sortSelect.findAll('option').map((option) => option.text());
+    expect(options).toContain('Quality ↓');
+    // Not the works summary as its own option, and not the old shorthand either.
+    expect(options.some((label) => label.includes('Works summary'))).toBe(false);
+    expect(options.some((label) => label.includes('\u{1F464}'))).toBe(false);
 
     await sortSelect.setValue('40');
     await flushPromises();
     expect(queryEntryPage.mock.calls.at(-1)?.[0]).toMatchObject({
-      ratingSort: { slotId: 40, direction: 'desc', applyAuthorRating: false },
+      ratingSort: { slotId: 40, direction: 'desc', applyAuthorRating: true },
     });
   });
 
-  it('applies a rating chosen on the manual entry form after creating the entry', async () => {
+  it('offers each rating class as a dimension of its own, named after its class', async () => {
+    // A bare name is not enough any more: the works summary carries the work dimensions' names, so
+    // the same name appears once per class and means a different number each time. The class rides
+    // the slot id from here on — the server answers "what is this work worth on it" per class.
+    const api = createMemoryApi();
+    const queryEntryPage = vi.spyOn(api, 'queryEntryPage');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openGameGallery(wrapper);
+
+    await wrapper.get('[data-testid="add-rating-filter"]').trigger('click');
+    const slotSelect = wrapper.get('[data-testid="rating-slot-select"]');
+    const labels = slotSelect.findAll('option').map((option) => option.text());
+    // The work's own dimensions unlabelled, the author's own named after their class — and no
+    // "Works summary" row: that is what a work dimension already falls back to.
+    expect(labels).toContain('Quality');
+    expect(labels).toContain('Charisma · The author');
+    expect(labels.some((label) => label.includes('Works summary'))).toBe(false);
+
+    await slotSelect.setValue(42);
+    await wrapper.get('[data-testid="rating-operator-select"]').setValue('gt');
+    await flushPromises();
+    expect(queryEntryPage.mock.calls.at(-1)?.[0]).toMatchObject({
+      ratingConditions: [{ slotId: 42, operator: 'gt', stars: 3 }],
+    });
+  });
+
+  it('takes a runtime on the quick page, in any of the shapes a site writes', async () => {
+    // The three facts about the work keep the row (a page count, a date, a runtime); the View later
+    // box is a library flag, so it moved to its own line rather than taking the runtime's place.
+    const api = createMemoryApi();
+    const createEntry = vi.spyOn(api, 'createEntry');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    expect(form.get('[data-testid="manual-entry-duration"]').attributes('placeholder')).toBe('h:mm:ss');
+    expect(form.find('[data-testid="manual-entry-view-later"]').exists()).toBe(true);
+
+    // A shape that is none of the accepted ones is refused where the box is — dropping it silently
+    // is the one outcome a person cannot see. (Checked before the valid one: creating the work
+    // leaves this page behind, and the form with it.)
+    await form.get('input[name="title"]').setValue('A video');
+    await form.get('input[name="duration"]').setValue('1 hour 2 minutes');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="manual-entry-duration-error"]').text()).toContain('h:mm:ss');
+    expect(createEntry).not.toHaveBeenCalled();
+
+    // What a card or a player's own label says, parsed into the unit the Entry stores.
+    await form.get('input[name="duration"]').setValue('13:25');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(createEntry).toHaveBeenCalledWith(expect.objectContaining({ durationSeconds: 805 }));
+  });
+
+  it('creates a manual entry without a rating, because the quick page no longer asks for one', async () => {
+    // Ratings are a judgement made about a work once it exists — they are edited on the Entry, and
+    // the quick page is kept to what a person can answer from the page in front of them. This pins
+    // that shape: the form has no rating control, and creating an Entry sends none.
     const api = createMemoryApi();
     const setRating = vi.fn(async (_entryId: number, slotId: number, stars: number | null) => ({
       slotId,
@@ -4285,28 +5031,118 @@ describe('Facet filter bar', () => {
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
 
     const form = wrapper.get('[data-testid="manual-entry-form"]');
-    const typeInput = form.get('input[name="type"]');
-    await typeInput.setValue('game');
-    await typeInput.trigger('change');
-    await flushPromises();
-
-    const ratingsArea = wrapper.get('[data-testid="manual-entry-ratings"]');
-    await ratingsArea.get('select').setValue('5');
+    expect(wrapper.find('[data-testid="manual-entry-ratings"]').exists()).toBe(false);
+    // The date is back (a work's own date is part of it) and takes partial values, so its hint and
+    // placeholder say which shapes it accepts.
+    const dateField = wrapper.get('[data-testid="manual-entry-upload-date"]');
+    expect(dateField.attributes('placeholder')).toBe('yyyy-mm-dd');
+    expect(form.text()).toContain('yyyy-mm');
 
     await form.get('input[name="title"]').setValue('Rated New Work');
     await form.trigger('submit');
     await flushPromises();
 
-    expect(setRating).toHaveBeenCalledTimes(1);
-    const [entryId, slotId, stars] = setRating.mock.calls[0]!;
-    expect(slotId).toBe(40);
-    expect(stars).toBe(5);
-    expect(entryId).toBeGreaterThan(0);
+    expect(setRating).not.toHaveBeenCalled();
+  });
+
+  it('retries failed manual media on the original Entry without creating another', async () => {
+    const api = createMemoryApi();
+    const create = vi.spyOn(api, 'createEntry');
+    const upload = vi.spyOn(api, 'uploadEntryMedia');
+    upload.mockRejectedValueOnce(new Error('media unavailable'));
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Retry media');
+    await form.get('input[name="type"]').setValue('game');
+    const file = new File(['image'], 'cover.png', { type: 'image/png' });
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL = vi.fn(() => 'blob:cover');
+      static revokeObjectURL = vi.fn();
+    });
+    const input = form.get('[data-testid="entry-cover-dropzone"] input');
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] });
+    await input.trigger('change');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(upload).toHaveBeenCalledTimes(1);
+    const entryId = upload.mock.calls[0]![0];
+    expect(wrapper.get('[data-testid="retry-entry-media"]').text()).toContain(String(entryId));
+    await wrapper.get('[data-testid="retry-entry-media"]').trigger('click');
+    await flushPromises();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(upload).toHaveBeenCalledTimes(2);
+    expect(upload.mock.calls[1]).toEqual([entryId, 'cover', file]);
+    expect(wrapper.find('[data-testid="retry-entry-media"]').exists()).toBe(false);
+  });
+
+  it('uses the old online create shape when the server does not advertise a claim', async () => {
+    const api = createMemoryApi();
+    const capabilities = await api.getSyncCapabilities();
+    vi.spyOn(api, 'getSyncCapabilities').mockResolvedValue({ ...capabilities, sqliteSchemaVersion: 31,
+      featureFlags: { readOnlySnapshot: true, offlineMutations: false } });
+    const create = vi.spyOn(api, 'createEntry');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Legacy work');
+    await form.get('input[name="type"]').setValue('game');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0]?.[0]).not.toHaveProperty('syncUid');
+  });
+
+  it('keeps a legacy uncertain-response create visible without creating an offline twin', async () => {
+    const api = createMemoryApi();
+    const capabilities = await api.getSyncCapabilities();
+    vi.spyOn(api, 'getSyncCapabilities').mockResolvedValue({ ...capabilities, sqliteSchemaVersion: 31,
+      featureFlags: { readOnlySnapshot: true, offlineMutations: false } });
+    const create = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    api.createEntry = create;
+    const enqueue = vi.fn();
+    api.enqueueOfflineEntryCreate = enqueue;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Ambiguous legacy work');
+    await form.get('input[name="type"]').setValue('game');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0]?.[0]).not.toHaveProperty('syncUid');
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('Check the desktop library before creating again');
+  });
+
+  it('queues safely when the capability probe fails before any create request is sent', async () => {
+    const api = createMemoryApi();
+    vi.spyOn(api, 'getSyncCapabilities').mockRejectedValue(new TypeError('Failed to fetch'));
+    const create = vi.spyOn(api, 'createEntry');
+    const enqueue = vi.fn().mockResolvedValue({ localKey: 'local:22222222-2222-4222-8222-222222222222' });
+    api.enqueueOfflineEntryCreate = enqueue;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Probe-down work');
+    await form.get('input[name="type"]').setValue('game');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(create).not.toHaveBeenCalled();
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue.mock.calls[0]?.[1]).toBeInstanceOf(TypeError);
   });
 
   it('queues the manual Entry when the initial create transport fails without running online follow-ups', async () => {
     const api = createMemoryApi();
-    api.createEntry = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    const onlineCreate = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    api.createEntry = onlineCreate;
     const enqueue = vi.fn().mockResolvedValue({
       localKey: 'local:22222222-2222-4222-8222-222222222222',
     });
@@ -4336,10 +5172,136 @@ describe('Facet filter bar', () => {
       previewFile: null,
     });
     expect(enqueue.mock.calls[0]?.[1]).toBeInstanceOf(TypeError);
+    expect(onlineCreate).toHaveBeenCalledTimes(1);
+    expect(onlineCreate.mock.calls[0]?.[0]?.syncUid).toMatch(/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i);
+    expect(enqueue.mock.calls[0]?.[0]?.syncUid).toBe(onlineCreate.mock.calls[0]?.[0]?.syncUid);
     expect(upload).not.toHaveBeenCalled();
     expect(rating).not.toHaveBeenCalled();
     expect(viewLater).not.toHaveBeenCalled();
     expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(false);
+  });
+
+  it('hands every chosen Preview to the offline queue without a partial-media warning', async () => {
+    const api = createMemoryApi();
+    const enqueue = vi.fn().mockResolvedValue({
+      localKey: 'local:22222222-2222-4222-8222-222222222222',
+    });
+    api.enqueueOfflineEntryCreate = enqueue;
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL = vi.fn(() => 'blob:preview');
+      static revokeObjectURL = vi.fn();
+    });
+    const wrapper = mount(GalleryApp, { props: { api, offlineState: {
+      mode: 'offline', lastFallbackAt: null, pendingCount: 0,
+      conflictCount: 0, failedCount: 0, lastReplayError: null,
+    } } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Multi preview draft');
+    await form.get('input[name="type"]').setValue('game');
+    const cover = new File(['cover'], 'cover.png', { type: 'image/png' });
+    const first = new File(['first'], 'first.png', { type: 'image/png' });
+    const second = new File(['second'], 'second.png', { type: 'image/png' });
+    await form.get('[data-testid="entry-cover-dropzone"]').trigger('drop', {
+      dataTransfer: { files: [cover, first, second] },
+    });
+    await flushPromises();
+    await form.trigger('submit');
+    await flushPromises();
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue.mock.calls[0]![0]).toMatchObject({ coverFile: cover,
+      previewFiles: [first, second] });
+    expect(wrapper.text()).not.toContain('Only the first Preview');
+  });
+
+  it('reuses the original online UID when a failed fallback enqueue is retried in offline mode', async () => {
+    const api = createMemoryApi();
+    const onlineCreate = vi.fn().mockRejectedValue(new TypeError('response lost'));
+    api.createEntry = onlineCreate;
+    const enqueue = vi.fn()
+      .mockRejectedValueOnce(new Error('storage full'))
+      .mockResolvedValueOnce({ localKey: 'local:22222222-2222-4222-8222-222222222222' });
+    api.enqueueOfflineEntryCreate = enqueue;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Interrupted local save');
+    await form.get('input[name="type"]').setValue('game');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(wrapper.text()).toContain('storage full');
+    expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(true);
+    const firstUid = onlineCreate.mock.calls[0]?.[0]?.syncUid;
+    expect(firstUid).toMatch(/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i);
+    expect(enqueue.mock.calls[0]?.[0]?.syncUid).toBe(firstUid);
+
+    await wrapper.setProps({ offlineState: {
+      mode: 'offline', lastFallbackAt: null, pendingCount: 0,
+      conflictCount: 0, failedCount: 0, lastReplayError: null,
+    } });
+    await form.trigger('submit');
+    await flushPromises();
+    expect(onlineCreate).toHaveBeenCalledTimes(1);
+    expect(enqueue.mock.calls[1]?.[0]?.syncUid).toBe(firstUid);
+    expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(false);
+  });
+
+  it('reuses the online UID on retry and refuses a legacy POST after an uncertain claimed create', async () => {
+    const api = createMemoryApi();
+    const capabilities = await api.getSyncCapabilities();
+    const probe = vi.spyOn(api, 'getSyncCapabilities')
+      .mockResolvedValueOnce(capabilities)
+      .mockResolvedValueOnce({ ...capabilities,
+        featureFlags: { readOnlySnapshot: true, offlineMutations: false },
+      });
+    const onlineCreate = vi.fn().mockRejectedValue(new TypeError('response lost'));
+    api.createEntry = onlineCreate;
+    const enqueue = vi.fn().mockRejectedValue(new Error('storage full'));
+    api.enqueueOfflineEntryCreate = enqueue;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Server changed');
+    await form.get('input[name="type"]').setValue('game');
+    await form.trigger('submit');
+    await flushPromises();
+    const firstUid = onlineCreate.mock.calls[0]?.[0]?.syncUid;
+    expect(firstUid).toBeTruthy();
+    await form.trigger('submit');
+    await flushPromises();
+    expect(probe).toHaveBeenCalledTimes(2);
+    expect(onlineCreate).toHaveBeenCalledTimes(1);
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain('Check the desktop library before creating again');
+    expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(true);
+  });
+
+  it('reuses the same UID on a second online POST if both the response and first fallback save failed', async () => {
+    const api = createMemoryApi();
+    const onlineCreate = vi.fn().mockRejectedValue(new TypeError('response lost'));
+    api.createEntry = onlineCreate;
+    const enqueue = vi.fn()
+      .mockRejectedValueOnce(new Error('storage full'))
+      .mockResolvedValueOnce({ localKey: 'local:22222222-2222-4222-8222-222222222222' });
+    api.enqueueOfflineEntryCreate = enqueue;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Retry unchanged');
+    await form.get('input[name="type"]').setValue('game');
+    await form.trigger('submit');
+    await flushPromises();
+    await form.trigger('submit');
+    await flushPromises();
+    expect(onlineCreate).toHaveBeenCalledTimes(2);
+    const firstUid = onlineCreate.mock.calls[0]?.[0]?.syncUid;
+    expect(firstUid).toBeTruthy();
+    expect(onlineCreate.mock.calls[1]?.[0]?.syncUid).toBe(firstUid);
+    expect(enqueue.mock.calls[1]?.[0]?.syncUid).toBe(firstUid);
   });
 
   it('queues a manual Entry immediately when snapshot mode is already active', async () => {
@@ -4363,6 +5325,8 @@ describe('Facet filter bar', () => {
     const form = wrapper.get('[data-testid="manual-entry-form"]');
     await form.get('input[name="title"]').setValue('Immediate offline work');
     await form.get('input[name="type"]').setValue('game');
+    await form.get('[data-testid="manual-initial-content-type"]').setValue('Source URL');
+    await form.get('[data-testid="manual-initial-content-text"]').setValue('https://example.test/new');
 
     await form.trigger('submit');
     await flushPromises();
@@ -4372,9 +5336,351 @@ describe('Facet filter bar', () => {
     expect(enqueue.mock.calls[0]?.[0]).toMatchObject({
       title: 'Immediate offline work',
       type: 'game',
+      contents: [{ contentType: 'Source URL', content: 'https://example.test/new' }],
     });
     expect(enqueue.mock.calls[0]).toHaveLength(1);
     expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(false);
+  });
+
+  it('queues the manual Source URL before initial Content without an unsaved-address warning', async () => {
+    const api = createMemoryApi();
+    const createEntry = vi.spyOn(api, 'createEntry');
+    const createContent = vi.spyOn(api, 'createEntryContent');
+    const enqueue = vi.fn().mockResolvedValue({ localKey: 'local:22222222-2222-4222-8222-222222222222' });
+    api.enqueueOfflineEntryCreate = enqueue;
+    const wrapper = mount(GalleryApp, { props: { api, offlineState: {
+      mode: 'offline', lastFallbackAt: null, pendingCount: 0, conflictCount: 0,
+      failedCount: 0, lastReplayError: null,
+    } } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Offline Source work');
+    await form.get('input[name="type"]').setValue('game');
+    await form.get('[data-testid="entry-source-url"]').setValue('https://example.test/read#page-2');
+    await form.get('[data-testid="manual-initial-content-type"]').setValue('Notes');
+    await form.get('[data-testid="manual-initial-content-text"]').setValue('Keep this note');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue.mock.calls[0]?.[0].contents).toEqual([
+      { contentType: 'Source URL', content: 'https://example.test/read#page-2' },
+      { contentType: 'Notes', content: 'Keep this note' },
+    ]);
+    expect(createEntry).not.toHaveBeenCalled();
+    expect(createContent).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(false);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('retains the Source URL draft when an offline Content-capability refusal rejects saving', async () => {
+    const api = createMemoryApi();
+    const createEntry = vi.spyOn(api, 'createEntry');
+    const enqueue = vi.fn().mockRejectedValue(new Error('Offline initial Content requires a supporting server'));
+    api.enqueueOfflineEntryCreate = enqueue;
+    const wrapper = mount(GalleryApp, { props: { api, offlineState: {
+      mode: 'offline', lastFallbackAt: null, pendingCount: 0, conflictCount: 0,
+      failedCount: 0, lastReplayError: null,
+    } } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Keep Source draft');
+    await form.get('input[name="type"]').setValue('game');
+    await form.get('[data-testid="entry-source-url"]').setValue('https://example.test/keep');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(enqueue.mock.calls[0]?.[0].contents).toEqual([
+      { contentType: 'Source URL', content: 'https://example.test/keep' },
+    ]);
+    expect(createEntry).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-testid="entry-source-url"]').element).toHaveProperty('value', 'https://example.test/keep');
+    expect(wrapper.get('[role="alert"]').text()).toContain('initial Content');
+    wrapper.unmount();
+  });
+
+  it('preserves the Source URL when a claimed online create falls back after response loss', async () => {
+    const api = createMemoryApi();
+    const capabilities = await api.getSyncCapabilities();
+    vi.spyOn(api, 'getSyncCapabilities').mockResolvedValue({ ...capabilities,
+      featureFlags: { ...capabilities.featureFlags, onlineEntryCreateClaim: true } });
+    const createEntry = vi.spyOn(api, 'createEntry').mockRejectedValue(new TypeError('response lost'));
+    const createContent = vi.spyOn(api, 'createEntryContent');
+    const enqueue = vi.fn().mockResolvedValue({ localKey: 'local:22222222-2222-4222-8222-222222222222' });
+    api.enqueueOfflineEntryCreate = enqueue;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Lost response Source');
+    await form.get('input[name="type"]').setValue('game');
+    await form.get('[data-testid="entry-source-url"]').setValue('https://example.test/lost');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue.mock.calls[0]?.[0]).toMatchObject({
+      syncUid: createEntry.mock.calls[0]?.[0].syncUid,
+      contents: [{ contentType: 'Source URL', content: 'https://example.test/lost' }],
+    });
+    expect(createContent).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(false);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('creates an Entry online through one atomic create command when the server advertises it', async () => {
+    const api = createMemoryApi();
+    const capabilities = await api.getSyncCapabilities();
+    vi.spyOn(api, 'getSyncCapabilities').mockResolvedValue({ ...capabilities,
+      featureFlags: { ...capabilities.featureFlags, onlineEntryCreateCommand: true } });
+    const createEntry = vi.spyOn(api, 'createEntry');
+    const createContent = vi.spyOn(api, 'createEntryContent');
+    const setRating = vi.spyOn(api, 'setEntryRating');
+    const replay = vi.fn().mockResolvedValue({
+      opId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', status: 'applied', entityId: 1,
+      resourceVersion: 2, serverSeq: 9,
+    });
+    api.replaySyncOperation = replay;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Commanded work');
+    await form.get('input[name="type"]').setValue('game');
+    await form.get('[data-testid="entry-source-url"]').setValue('https://example.test/command');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(replay).toHaveBeenCalledTimes(1);
+    const operation = replay.mock.calls[0]?.[0];
+    expect(operation).toMatchObject({
+      operationKind: 'entry.create', entityKind: 'entry', baseVersion: 0, baseValues: {},
+      payload: {
+        title: 'Commanded work', type: 'game', uploadDate: null, pageCount: null,
+        ratings: [], viewLater: false,
+        contents: [{ contentType: 'Source URL', content: 'https://example.test/command' }],
+      },
+    });
+    expect(operation?.payload.contents?.[0]?.syncUid).toEqual(expect.any(String));
+    expect(operation?.entityUid).toMatch(/^[0-9a-f-]{36}$/);
+    expect(createEntry).not.toHaveBeenCalled();
+    expect(createContent).not.toHaveBeenCalled();
+    expect(setRating).not.toHaveBeenCalled();
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('falls back to the legacy create for a newly typed Gallery when the command receipt refuses it', async () => {
+    const api = createMemoryApi();
+    const capabilities = await api.getSyncCapabilities();
+    vi.spyOn(api, 'getSyncCapabilities').mockResolvedValue({ ...capabilities,
+      featureFlags: { ...capabilities.featureFlags, onlineEntryCreateCommand: true } });
+    const createEntry = vi.spyOn(api, 'createEntry');
+    const createContent = vi.spyOn(api, 'createEntryContent');
+    const replay = vi.fn().mockResolvedValue({
+      opId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', status: 'failed',
+      errorCode: 'invalid-create', detail: 'Offline creation requires an existing Gallery',
+    });
+    api.replaySyncOperation = replay;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Brand new gallery work');
+    await form.get('input[name="type"]').setValue('G1');
+    await form.get('[data-testid="entry-source-url"]').setValue('https://example.test/new-gallery');
+    await form.trigger('submit');
+    await flushPromises();
+    // One failed receipt, then the legacy request shape; no second command.
+    expect(replay).toHaveBeenCalledTimes(1);
+    expect(createEntry).toHaveBeenCalledTimes(1);
+    // The fallback reuses the attempt's identity, so the online claim and any
+    // later offline fallback still converge on the same Entry.
+    expect(createEntry.mock.calls[0]?.[0].syncUid).toBe(replay.mock.calls[0]?.[0].entityUid);
+    expect(createEntry.mock.calls[0]?.[0].type).toBe('G1');
+    expect(createContent).toHaveBeenCalledWith(expect.any(Number), {
+      contentType: 'Source URL', content: 'https://example.test/new-gallery',
+    });
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('shows a create failure beside the submit button, not only at the top of the page', async () => {
+    const api = createMemoryApi();
+    api.createEntry = vi.fn().mockRejectedValue(new Error('Gallery write refused'));
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Doomed draft');
+    await form.get('input[name="type"]').setValue('game');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="entry-create-error"]').text()).toContain('Gallery write refused');
+    expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('shows an explicit pairing screen when the native shell is unpaired', async () => {
+    const meta = Object.assign(document.createElement('meta'), { name: 't3-native-shell', content: 'android' });
+    document.head.appendChild(meta);
+    const calls: Array<[string, string]> = [];
+    (window as unknown as { Capacitor: unknown }).Capacitor = {
+      nativePromise: async (plugin: string, method: string) => {
+        calls.push([plugin, method]);
+        return method === 'status' ? { paired: false } : {};
+      },
+    };
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="pairing-gate"]').text()).toContain('Pair to your desktop library');
+    await wrapper.get('[data-testid="pairing-gate-scan"]').trigger('click');
+    expect(calls).toContainEqual(['T3PairedTransport', 'pair']);
+    wrapper.unmount();
+    meta.remove();
+    delete (window as unknown as { Capacitor?: unknown }).Capacitor;
+  });
+
+  it('does not show the pairing screen once the shell is paired', async () => {
+    const meta = Object.assign(document.createElement('meta'), { name: 't3-native-shell', content: 'android' });
+    document.head.appendChild(meta);
+    (window as unknown as { Capacitor: unknown }).Capacitor = {
+      nativePromise: async () => ({ paired: true, libraryId: 'test' }),
+    };
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="pairing-gate"]').exists()).toBe(false);
+    wrapper.unmount();
+    meta.remove();
+    delete (window as unknown as { Capacitor?: unknown }).Capacitor;
+  });
+
+  it('queues the identical create command offline when the online command response is lost', async () => {
+    const api = createMemoryApi();
+    const capabilities = await api.getSyncCapabilities();
+    vi.spyOn(api, 'getSyncCapabilities').mockResolvedValue({ ...capabilities,
+      featureFlags: { ...capabilities.featureFlags, onlineEntryCreateCommand: true } });
+    const createEntry = vi.spyOn(api, 'createEntry');
+    api.replaySyncOperation = vi.fn().mockRejectedValue(new TypeError('response lost'));
+    const enqueue = vi.fn().mockResolvedValue({ localKey: 'local:22222222-2222-4222-8222-222222222222' });
+    api.enqueueOfflineEntryCreate = enqueue;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Lost command');
+    await form.get('input[name="type"]').setValue('game');
+    await form.get('[data-testid="entry-source-url"]').setValue('https://example.test/lost-command');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    const input = enqueue.mock.calls[0]?.[0];
+    expect(input.presetCreateOperation).toMatchObject({
+      operationKind: 'entry.create', baseVersion: 0,
+      payload: {
+        title: 'Lost command', type: 'game',
+        contents: [{ contentType: 'Source URL', content: 'https://example.test/lost-command' }],
+      },
+    });
+    // The queued create must replay under the attempt's own identity, or the
+    // server receipt could not answer whether the command already committed.
+    expect(input.syncUid).toBe(input.presetCreateOperation.entityUid);
+    expect(createEntry).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(false);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('retries an uncertain create command under the same identity on the next submit', async () => {
+    const api = createMemoryApi();
+    const capabilities = await api.getSyncCapabilities();
+    vi.spyOn(api, 'getSyncCapabilities').mockResolvedValue({ ...capabilities,
+      featureFlags: { ...capabilities.featureFlags, onlineEntryCreateCommand: true } });
+    const replay = vi.fn()
+      .mockRejectedValueOnce(new TypeError('response lost'))
+      .mockResolvedValue({ opId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', status: 'applied', entityId: 1, resourceVersion: 2, serverSeq: 9 });
+    api.replaySyncOperation = replay;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Retried command');
+    await form.get('input[name="type"]').setValue('game');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(replay).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="manual-entry-form"]').trigger('submit');
+    await flushPromises();
+    expect(replay).toHaveBeenCalledTimes(2);
+    expect(replay.mock.calls[0]?.[0].opId).toBe(replay.mock.calls[1]?.[0].opId);
+    expect(replay.mock.calls[0]?.[0].entityUid).toBe(replay.mock.calls[1]?.[0].entityUid);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('saves a manually entered initial Content row on the online creation path', async () => {
+    const api = createMemoryApi();
+    const createContent = vi.spyOn(api, 'createEntryContent');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Online initial notes');
+    await form.get('input[name="type"]').setValue('game');
+    await form.get('[data-testid="manual-initial-content-type"]').setValue('Source URL');
+    await form.get('[data-testid="manual-initial-content-text"]').setValue('https://example.test/online');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(createContent).toHaveBeenCalledWith(expect.any(Number), {
+      contentType: 'Source URL', content: 'https://example.test/online',
+    });
+  });
+
+  it('does not leave a retryable create form after the server created an Entry but initial Content failed', async () => {
+    const api = createMemoryApi();
+    const createEntry = vi.spyOn(api, 'createEntry');
+    api.createEntryContent = vi.fn().mockRejectedValue(new Error('Content upload failed'));
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    const form = wrapper.get('[data-testid="manual-entry-form"]');
+    await form.get('input[name="title"]').setValue('Online partial work');
+    await form.get('input[name="type"]').setValue('game');
+    await form.get('[data-testid="manual-initial-content-type"]').setValue('Notes');
+    await form.get('[data-testid="manual-initial-content-text"]').setValue('save me');
+    await form.trigger('submit');
+    await flushPromises();
+
+    expect(createEntry).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Entry was created');
+    expect(wrapper.text()).toContain('Content upload failed');
+  });
+
+  it.each([
+    ['failed', 'Sync failed'], ['conflict', 'Sync conflict'],
+  ] as const)('shows a blocked offline create as %s with its reason rather than pending sync', async (status, label) => {
+    const api = createMemoryApi();
+    api.listPendingOfflineEntryCreates = vi.fn().mockResolvedValue([{
+      localKey: 'local:22222222-2222-4222-8222-222222222222', title: 'Blocked draft', type: 'game',
+      uploadDate: null, pageCount: null, status, lastError: 'The saved creation needs review',
+      canAppendContent: true,
+    }]);
+    api.enqueueOfflinePendingEntryContent = vi.fn();
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="sidebar-search"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="search-main-input"]').setValue('Blocked draft');
+    await wrapper.get('[data-testid="search-main-form"]').trigger('submit');
+    await flushPromises();
+    const card = wrapper.get('[data-testid="search-pending-entry-local:22222222-2222-4222-8222-222222222222"]');
+    expect(card.text()).toContain(label);
+    expect(card.text()).toContain('The saved creation needs review');
+    expect(card.text()).not.toContain('Pending sync');
+    expect(card.find('[data-testid="pending-add-content"]').exists()).toBe(false);
+    wrapper.unmount();
   });
 
   it('shows an offline-created Entry in global search without inventing a numeric id', async () => {
@@ -4386,18 +5692,277 @@ describe('Facet filter bar', () => {
       uploadDate: null,
       pageCount: null,
       status: 'pending',
+      canAppendContent: false,
+      contents: [{ contentType: 'Notes', content: 'saved offline note' }],
     }]);
+    api.enqueueOfflinePendingEntryContent = vi.fn(async () => undefined);
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
 
-    await wrapper.get('[data-testid="sidebar-search-input"]').setValue('test1');
-    await wrapper.get('[data-testid="sidebar-search-form"]').trigger('submit');
+    await wrapper.get('[data-testid="sidebar-search"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="search-main-input"]').setValue('test1');
+    await wrapper.get('[data-testid="search-main-form"]').trigger('submit');
     await flushPromises();
 
     const pending = wrapper.get('[data-testid="search-pending-entry-local:22222222-2222-4222-8222-222222222222"]');
     expect(pending.text()).toContain('test1');
     expect(pending.text()).toContain('Pending sync');
+    expect(pending.text()).toContain('Notes: saved offline note');
     expect(pending.find('button').exists()).toBe(false);
+  });
+
+  it.each([
+    ['pending', 'Pending sync'], ['failed', 'Sync failed'], ['conflict', 'Sync conflict'],
+  ] as const)('shows the individual %s state of later Content on a pending Entry', async (status, label) => {
+    const api = createMemoryApi();
+    api.listPendingOfflineEntryCreates = vi.fn().mockResolvedValue([{
+      localKey: 'local:22222222-2222-4222-8222-222222222222', title: 'Child state draft', type: 'game',
+      uploadDate: null, pageCount: null, status: 'pending', canAppendContent: false,
+      contents: [
+        { contentType: 'Notes', content: 'initial' },
+        { contentType: 'Notes', content: 'later', status, lastError: 'Later Content needs review' },
+      ],
+    }]);
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="sidebar-search"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="search-main-input"]').setValue('Child state draft');
+    await wrapper.get('[data-testid="search-main-form"]').trigger('submit');
+    await flushPromises();
+    const card = wrapper.get('[data-testid="search-pending-entry-local:22222222-2222-4222-8222-222222222222"]');
+    expect(card.get('[data-testid="pending-content-status"]').text()).toContain(label);
+    expect(card.text()).toContain('Notes: initial');
+    expect(card.text()).toContain('Notes: later');
+    expect(card.find('[data-testid="pending-content-error"]').exists()).toBe(status !== 'pending');
+    if (status !== 'pending') expect(card.get('[data-testid="pending-content-error"]').text()).toContain('Later Content needs review');
+    wrapper.unmount();
+  });
+
+  it('adds, moves and removes cached Tags on a pending Entry through separate local-key writes', async () => {
+    const api = createMemoryApi();
+    const localKey = 'local:22222222-2222-4222-8222-222222222222' as const;
+    let assigned: Array<{ name: string; facetId: number }> = [];
+    api.listPendingOfflineEntryCreates = vi.fn(async () => [{
+      localKey, title: 'Pending tag work', type: 'game', uploadDate: null, pageCount: null,
+      status: 'pending' as const, canEditTags: true, tags: assigned.map((tag) => ({ ...tag })),
+    }]);
+    api.getPendingOfflineEntryTagOptions = vi.fn(async () => ({
+      facets: [{ id: 1, name: 'Genre' }, { id: 2, name: 'Theme' }],
+      tags: assigned.map((tag) => ({ ...tag })), availableTags: [{ id: 10, name: 'RPG' }],
+    }));
+    const enqueue = vi.fn(async (_key: string, desired: Array<{ name: string; facetId: number }>) => {
+      assigned = desired.map((tag) => ({ ...tag }));
+    });
+    api.enqueueOfflinePendingEntryTags = enqueue;
+    vi.spyOn(api, 'suggestTags').mockResolvedValue([
+      { id: 10, name: 'RPG', sameContextUsageCount: 1, totalUsageCount: 1 },
+      { id: 99, name: 'RPG new remote Tag', sameContextUsageCount: 1, totalUsageCount: 1 },
+    ]);
+    const createEntry = vi.spyOn(api, 'createEntry');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="sidebar-search"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="search-main-input"]').setValue('Pending tag work');
+    await wrapper.get('[data-testid="search-main-form"]').trigger('submit');
+    await flushPromises();
+    const card = () => wrapper.get(`[data-testid="search-pending-entry-${localKey}"]`);
+    const edit = async () => {
+      await card().get('[data-testid="pending-edit-tags"]').trigger('click');
+      await flushPromises();
+      return card().get('[data-testid="pending-tag-form"]');
+    };
+    let form = await edit();
+    await form.get('input[name="pending-entry-tag"]').setValue('RP');
+    await form.get('input[name="pending-entry-tag"]').trigger('focus');
+    await vi.waitFor(() => expect(form.find('[role="option"]').exists()).toBe(true));
+    expect(form.findAll('[role="option"]')).toHaveLength(1);
+    expect(tagSuggestionQuerySchema.safeParse(vi.mocked(api.suggestTags).mock.calls[0]?.[0]).success).toBe(true);
+    await form.get('[role="option"] button').trigger('click');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(enqueue).toHaveBeenNthCalledWith(1, localKey, [{ name: 'RPG', facetId: 1 }]);
+    expect(card().text()).toContain('RPG');
+    form = await edit();
+    await form.get('[data-testid="pending-tag-row-facet"]').setValue('2');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(enqueue).toHaveBeenNthCalledWith(2, localKey, [{ name: 'RPG', facetId: 2 }]);
+    form = await edit();
+    await form.get('[data-testid="pending-tag-remove"]').trigger('click');
+    await form.trigger('submit');
+    await flushPromises();
+    expect(enqueue).toHaveBeenNthCalledWith(3, localKey, []);
+    expect(createEntry).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('releases the pending Tag write lock after its editor unmounts during a Search change', async () => {
+    const api = createMemoryApi();
+    const firstKey = 'local:22222222-2222-4222-8222-222222222222' as const;
+    const secondKey = 'local:33333333-3333-4333-8333-333333333333' as const;
+    api.listPendingOfflineEntryCreates = vi.fn().mockResolvedValue([
+      { localKey: firstKey, title: 'First tag work', type: 'game', uploadDate: null, pageCount: null, status: 'pending', canEditTags: true },
+      { localKey: secondKey, title: 'Second tag work', type: 'game', uploadDate: null, pageCount: null, status: 'pending', canEditTags: true },
+    ]);
+    api.getPendingOfflineEntryTagOptions = vi.fn(async (key) => ({
+      facets: [{ id: 1, name: 'Genre' }, { id: 2, name: 'Theme' }],
+      tags: key === firstKey ? [{ name: 'RPG', facetId: 1 }] : [], availableTags: [{ id: 10, name: 'RPG' }],
+    }));
+    let finish!: () => void;
+    const writing = new Promise<void>((resolve) => { finish = resolve; });
+    api.enqueueOfflinePendingEntryTags = vi.fn(() => writing);
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    const search = async (text: string) => {
+      if (!wrapper.find('[data-testid="search-main-input"]').exists()) {
+        await wrapper.get('[data-testid="sidebar-search"]').trigger('click');
+        await flushPromises();
+      }
+      await wrapper.get('[data-testid="search-main-input"]').setValue(text);
+      await wrapper.get('[data-testid="search-main-form"]').trigger('submit');
+      await flushPromises();
+    };
+    await search('First tag work');
+    await wrapper.get('[data-testid="pending-edit-tags"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="pending-tag-row-facet"]').setValue('2');
+    await wrapper.get('[data-testid="pending-tag-form"]').trigger('submit');
+    await flushPromises();
+    await search('Second tag work');
+    expect(wrapper.get('[data-testid="pending-edit-tags"]').attributes('disabled')).toBeDefined();
+    finish();
+    await flushPromises();
+    expect(wrapper.get('[data-testid="pending-edit-tags"]').attributes('disabled')).toBeUndefined();
+    await wrapper.get('[data-testid="pending-edit-tags"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="pending-tag-row-facet"]').exists()).toBe(false);
+    expect(api.enqueueOfflinePendingEntryTags).toHaveBeenCalledTimes(1);
+    expect(api.enqueueOfflinePendingEntryTags).toHaveBeenCalledWith(firstKey, [{ name: 'RPG', facetId: 2 }]);
+    wrapper.unmount();
+  });
+
+  it('keeps a confirmed pending Tag save closed when the local card refresh fails', async () => {
+    const api = createMemoryApi();
+    const localKey = 'local:22222222-2222-4222-8222-222222222222' as const;
+    const pending = { localKey, title: 'Saved tag work', type: 'game', uploadDate: null,
+      pageCount: null, status: 'pending' as const, canEditTags: true, tags: [{ name: 'RPG', facetId: 1 }] };
+    let assigned = pending.tags;
+    api.listPendingOfflineEntryCreates = vi.fn().mockResolvedValueOnce([pending]).mockRejectedValue(new Error('projection read failed'));
+    api.getPendingOfflineEntryTagOptions = vi.fn(async () => ({
+      facets: [{ id: 1, name: 'Genre' }, { id: 2, name: 'Theme' }],
+      tags: assigned.map((tag) => ({ ...tag })), availableTags: [{ id: 10, name: 'RPG' }],
+    }));
+    api.enqueueOfflinePendingEntryTags = vi.fn(async (_key: string, tags: Array<{ name: string; facetId: number }>) => { assigned = tags.map((tag) => ({ ...tag })); });
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="sidebar-search"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="search-main-input"]').setValue('Saved tag work');
+    await wrapper.get('[data-testid="search-main-form"]').trigger('submit');
+    await flushPromises();
+    await wrapper.get('[data-testid="pending-edit-tags"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="pending-tag-row-facet"]').setValue('2');
+    await wrapper.get('[data-testid="pending-tag-form"]').trigger('submit');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="pending-tag-form"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Tags saved offline');
+    expect(api.enqueueOfflinePendingEntryTags).toHaveBeenCalledTimes(1);
+    await wrapper.get('[data-testid="pending-edit-tags"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="pending-tag-row-facet"]').element).toHaveProperty('value', '2');
+    await wrapper.get('[data-testid="pending-tag-form"]').trigger('submit');
+    await flushPromises();
+    expect(api.enqueueOfflinePendingEntryTags).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+  });
+
+  it('lets a pending Entry append Content without re-submitting the original create', async () => {
+    setLocale('en');
+    const api = createMemoryApi();
+    const localKey = 'local:22222222-2222-4222-8222-222222222222' as const;
+    const contents = [{ contentType: 'Notes', content: 'initial' }];
+    api.listPendingOfflineEntryCreates = vi.fn(async () => [{
+      localKey, title: 'test1', type: 'game', uploadDate: null, pageCount: null,
+      status: 'pending' as const, canAppendContent: true, contents: [...contents],
+    }]);
+    const append = vi.fn(async (_key: string, row: { contentType: string; content: string }) => {
+      contents.push(row);
+    });
+    (api as GalleryApi & { enqueueOfflinePendingEntryContent: typeof append }).enqueueOfflinePendingEntryContent = append;
+    const create = vi.spyOn(api, 'createEntry');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="sidebar-search"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="search-main-input"]').setValue('test1');
+    await wrapper.get('[data-testid="search-main-form"]').trigger('submit');
+    await flushPromises();
+    const pending = wrapper.get(`[data-testid="search-pending-entry-${localKey}"]`);
+    await pending.get('[data-testid="pending-add-content"]').trigger('click');
+    await pending.get('[data-testid="pending-content-type"]').setValue('Notes');
+    await pending.get('[data-testid="pending-content-text"]').setValue('later appended');
+    await pending.get('[data-testid="pending-content-submit"]').trigger('submit');
+    await flushPromises();
+    expect(append).toHaveBeenCalledOnce();
+    expect(append).toHaveBeenCalledWith(localKey, { contentType: 'Notes', content: 'later appended' });
+    expect(create).not.toHaveBeenCalled();
+    expect(pending.text()).toContain('Notes: later appended');
+  });
+
+  it('does not carry a pending Content draft onto another local Entry', async () => {
+    const api = createMemoryApi();
+    api.listPendingOfflineEntryCreates = vi.fn(async () => [
+      { localKey: 'local:22222222-2222-4222-8222-222222222222' as const, title: 'test1', type: 'game', uploadDate: null, pageCount: null, status: 'pending' as const, canAppendContent: true },
+      { localKey: 'local:33333333-3333-4333-8333-333333333333' as const, title: 'test2', type: 'game', uploadDate: null, pageCount: null, status: 'pending' as const, canAppendContent: true },
+    ]);
+    const append = vi.fn(async () => undefined);
+    (api as GalleryApi & { enqueueOfflinePendingEntryContent: typeof append }).enqueueOfflinePendingEntryContent = append;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="sidebar-search"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="search-main-input"]').setValue('test');
+    await wrapper.get('[data-testid="search-main-form"]').trigger('submit');
+    await flushPromises();
+    const first = wrapper.get('[data-testid="search-pending-entry-local:22222222-2222-4222-8222-222222222222"]');
+    const second = wrapper.get('[data-testid="search-pending-entry-local:33333333-3333-4333-8333-333333333333"]');
+    await first.get('[data-testid="pending-add-content"]').trigger('click');
+    await first.get('[data-testid="pending-content-type"]').setValue('Private note');
+    await first.get('[data-testid="pending-content-text"]').setValue('belongs to first');
+    await second.get('[data-testid="pending-add-content"]').trigger('click');
+    expect(second.get('[data-testid="pending-content-type"]').element).toHaveProperty('value', '');
+    expect(second.get('[data-testid="pending-content-text"]').element).toHaveProperty('value', '');
+  });
+
+  it('does not offer a second submit if a committed pending append cannot refresh its card', async () => {
+    setLocale('en');
+    const api = createMemoryApi();
+    const localKey = 'local:22222222-2222-4222-8222-222222222222' as const;
+    api.listPendingOfflineEntryCreates = vi.fn()
+      .mockResolvedValueOnce([{ localKey, title: 'test1', type: 'game', uploadDate: null, pageCount: null, status: 'pending', canAppendContent: true }])
+      .mockRejectedValueOnce(new Error('local read failed'));
+    const append = vi.fn(async () => undefined);
+    api.enqueueOfflinePendingEntryContent = append;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="sidebar-search"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="search-main-input"]').setValue('test1');
+    await wrapper.get('[data-testid="search-main-form"]').trigger('submit');
+    await flushPromises();
+    const pending = wrapper.get(`[data-testid="search-pending-entry-${localKey}"]`);
+    await pending.get('[data-testid="pending-add-content"]').trigger('click');
+    await pending.get('[data-testid="pending-content-type"]').setValue('Notes');
+    await pending.get('[data-testid="pending-content-text"]').setValue('saved');
+    await pending.get('[data-testid="pending-content-submit"]').trigger('submit');
+    await flushPromises();
+    expect(append).toHaveBeenCalledOnce();
+    expect(pending.find('[data-testid="pending-content-submit"]').exists()).toBe(false);
+    expect(pending.get('[role="alert"]').text()).toContain('Content was saved');
   });
 
   it('keeps the composer open when Template ready is used without a server', async () => {
@@ -4418,7 +5983,7 @@ describe('Facet filter bar', () => {
 
     expect(enqueue).not.toHaveBeenCalled();
     expect(wrapper.find('[data-testid="manual-entry-form"]').exists()).toBe(true);
-    expect(wrapper.get('[role="alert"]').text()).toContain('Advanced editing requires a connection');
+    expect(wrapper.get('[role="alert"]').text()).toContain('Advanced functions require a connection');
     expect(wrapper.find('[data-testid="home-page"]').exists()).toBe(false);
   });
 
@@ -4469,8 +6034,12 @@ describe('Facet filter bar', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import-toggle .secondary-button').trigger('click');
 
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const batchTypeInput = wrapper.get('.batch-import input[list="add-entry-gallery-types"]');
     await batchTypeInput.setValue('game');
     await batchTypeInput.trigger('change');
@@ -4479,6 +6048,8 @@ describe('Facet filter bar', () => {
     // Imports no longer rate works: the batch dialog has no rating block, and
     // choosing the folder reviews the Authors the batch will touch.
     expect(wrapper.find('[data-testid="batch-ratings"]').exists()).toBe(false);
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const batchInput = wrapper.get('.batch-import input[webkitdirectory]');
     const files = ['100089', '102331'].map((itemId) => {
       const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
@@ -4499,6 +6070,8 @@ describe('Facet filter bar', () => {
     // The batch button, not the single-work one, commits this run.
     expect(wrapper.find('[data-testid="batch-review-hint"]').exists()).toBe(true);
 
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import .primary-button').trigger('click');
     await flushPromises();
 
@@ -4978,6 +6551,8 @@ describe('Facet filter bar', () => {
     await wrapper.get('[data-testid="random-navigation"]').trigger('click');
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
 
     const metadata = new File(['{}'], 'metadata.json', { type: 'application/json' });
     Object.defineProperty(metadata, 'webkitRelativePath', {
@@ -5000,13 +6575,19 @@ describe('Facet filter bar', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import-toggle .secondary-button').trigger('click');
 
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const batchTypeInput = wrapper.get('.batch-import input[list="add-entry-gallery-types"]');
     await batchTypeInput.setValue('game');
     await batchTypeInput.trigger('change');
     await flushPromises();
 
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const batchInput = wrapper.get('.batch-import input[webkitdirectory]');
     const files = ['100089', '102331'].map((itemId) => {
       const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
@@ -5084,6 +6665,8 @@ describe('Facet filter bar', () => {
         }],
       },
     }));
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import .primary-button').trigger('click');
     await flushPromises();
     // The temporary review group lists exactly the just-committed cards.
@@ -5099,15 +6682,22 @@ describe('Facet filter bar', () => {
 
     // Run another batch to exercise the Entry drill-down/back lifecycle.
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import-toggle .secondary-button').trigger('click');
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const secondTypeInput = wrapper.get('.batch-import input[list="add-entry-gallery-types"]');
     await secondTypeInput.setValue('game');
     await secondTypeInput.trigger('change');
     await flushPromises();
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const secondBatchInput = wrapper.get('.batch-import input[webkitdirectory]');
     Object.defineProperty(secondBatchInput.element, 'files', { value: files });
     await secondBatchInput.trigger('change');
     await flushPromises();
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import .primary-button').trigger('click');
     await flushPromises();
 
@@ -5194,11 +6784,17 @@ describe('Facet filter bar', () => {
     }));
 
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import-toggle .secondary-button').trigger('click');
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const typeInput = wrapper.get('.batch-import input[list="add-entry-gallery-types"]');
     await typeInput.setValue('game');
     await typeInput.trigger('change');
     await flushPromises();
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const batchInput = wrapper.get('.batch-import input[webkitdirectory]');
     const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
     Object.defineProperty(file, 'webkitRelativePath', {
@@ -5207,6 +6803,8 @@ describe('Facet filter bar', () => {
     Object.defineProperty(batchInput.element, 'files', { value: [file] });
     await batchInput.trigger('change');
     await flushPromises();
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import .primary-button').trigger('click');
     await flushPromises();
 
@@ -5293,11 +6891,17 @@ describe('Facet filter bar', () => {
 
     const runBatch = async (itemIds: string[]) => {
       await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
       await wrapper.get('.batch-import-toggle .secondary-button').trigger('click');
+      // The batch controls live on the files page; the review lives on its own.
+      await openAddEntryFilesTab(wrapper);
       const typeInput = wrapper.get('.batch-import input[list="add-entry-gallery-types"]');
       await typeInput.setValue('game');
       await typeInput.trigger('change');
       await flushPromises();
+      // The batch controls live on the files page; the review lives on its own.
+      await openAddEntryFilesTab(wrapper);
       const batchInput = wrapper.get('.batch-import input[webkitdirectory]');
       Object.defineProperty(batchInput.element, 'files', {
         value: itemIds.map((itemId) => {
@@ -5310,6 +6914,8 @@ describe('Facet filter bar', () => {
       });
       await batchInput.trigger('change');
       await flushPromises();
+      // The batch controls live on the files page; the review lives on its own.
+      await openAddEntryFilesTab(wrapper);
       await wrapper.get('.batch-import .primary-button').trigger('click');
       await flushPromises();
     };
@@ -5336,15 +6942,21 @@ describe('Facet filter bar', () => {
     const wrapper = mount(GalleryApp, { props: { api } });
     await flushPromises();
     await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import-toggle .secondary-button').trigger('click');
 
     // Typing `GAME` is legitimate: the import resolves it to the stored `game`
     // Gallery case-insensitively, so the review must look at the same type.
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const batchTypeInput = wrapper.get('.batch-import input[list="add-entry-gallery-types"]');
     await batchTypeInput.setValue('GAME');
     await batchTypeInput.trigger('change');
     await flushPromises();
 
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     const batchInput = wrapper.get('.batch-import input[webkitdirectory]');
     const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
     Object.defineProperty(file, 'webkitRelativePath', {
@@ -5414,6 +7026,8 @@ describe('Facet filter bar', () => {
       },
     }));
 
+    // The batch controls live on the files page; the review lives on its own.
+    await openAddEntryFilesTab(wrapper);
     await wrapper.get('.batch-import .primary-button').trigger('click');
     await flushPromises();
 
@@ -5444,7 +7058,7 @@ describe('Home page', () => {
     expect(wrapper.find('[data-testid="home-page"]').exists()).toBe(false);
 
     // The sidebar Home entry returns to the welcome page.
-    await wrapper.get('[data-testid="home-navigation"]').trigger('click');
+    await wrapper.get('[data-testid="sidebar-home"]').trigger('click');
     await flushPromises();
     expect(wrapper.find('[data-testid="home-page"]').exists()).toBe(true);
   });
@@ -5517,6 +7131,154 @@ describe('Home page', () => {
     await wrapper.get('[data-testid="entry-back"]').trigger('click');
     await flushPromises();
     expect(wrapper.find('[data-testid="home-page"]').exists()).toBe(true);
+  });
+
+  it('orders Galleries with the exchange control, and stores the whole list', async () => {
+    // A Gallery is a projection of `entries.type`, so it had no order of its own: the sidebar listed
+    // them by name and there was no way to move one — measured on a real library with seven galleries,
+    // the two used every day sat wherever their spelling put them. The control is a *mode* (its button
+    // keeps the applied look), and the arrows only exist while it is on.
+    const api = createMemoryApi();
+    const written: string[][] = [];
+    api.setGalleryOrder = vi.fn(async (types: string[]) => { written.push(types); return types; });
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="gallery-move-up-game"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="sidebar-exchange"]').attributes('aria-pressed')).toBe('false');
+    await wrapper.get('[data-testid="sidebar-exchange"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="sidebar-exchange"]').attributes('aria-pressed')).toBe('true');
+
+    const types = wrapper.findAll('[data-gallery-type]').map((row) => row.attributes('data-gallery-type')!);
+    expect(types.length).toBeGreaterThan(1);
+    await wrapper.get(`[data-testid="gallery-move-up-${types[1]}"]`).trigger('click');
+    await flushPromises();
+
+    const expected = [types[1], types[0], ...types.slice(2)];
+    // The list moved, and the *whole* order was written — a swap of two rows would leave every other
+    // Gallery in the alphabet, which is an order nobody could predict from looking at it.
+    expect(wrapper.findAll('[data-gallery-type]').map((row) => row.attributes('data-gallery-type')))
+      .toEqual(expected);
+    expect(written.at(-1)).toEqual(expected);
+
+    // Turning the mode off takes the arrows away again and leaves the order alone.
+    await wrapper.get('[data-testid="sidebar-exchange"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find(`[data-testid="gallery-move-up-${types[1]}"]`).exists()).toBe(false);
+    expect(written).toHaveLength(1);
+  });
+
+  it('offline Exchange moves visible neighbours while preserving the hidden Gallery slot', async () => {
+    const { createOfflineAwareGalleryApi } = await import('../src/offline/offline-api.js');
+    const { createMemoryOutboxStore } = await import('../src/offline/outbox-store.js');
+    const { offlineSnapshot } = await import('./fixtures/pending-entry-tags.js');
+    const snapshot = offlineSnapshot();
+    const original = snapshot.payload.entries[0]!;
+    snapshot.payload.entries = [original, { ...original, id: 2, type: 'hidden', syncUid: '22222222-2222-4222-8222-222222222222' }, { ...original, id: 3, type: 'manga', syncUid: '33333333-3333-4333-8333-333333333333' }];
+    snapshot.payload.gallerySettings = [{ entryType: 'hidden', nsfw: true }];
+    snapshot.payload.galleryOrder = { syncUid: '00000000-0000-4000-8000-000000000037', syncVersion: 1, orderedTypes: ['game', 'hidden', 'manga'] };
+    const store = { ...createMemorySnapshotStore(), ...createMemoryOutboxStore() };
+    await store.writeGeneration(1, JSON.stringify(snapshot));
+    await store.writeMeta('activeGeneration', '1');
+    for (const flag of ['offlineMutations', 'offlineGalleryOrder']) await store.writeMeta(`capability.${flag}`, '1');
+    const online = createMemoryApi();
+    const write = vi.spyOn(online, 'setGalleryOrder');
+    const api = createOfflineAwareGalleryApi(online, store, { clientId: 'gallery-ui' });
+    await api.preferOfflineSnapshot!();
+    showNsfw.value = false;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="sidebar-exchange"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="gallery-move-up-manga"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('[data-gallery-type]').map(row => row.attributes('data-gallery-type'))).toEqual(['manga', 'game']);
+    expect(write).not.toHaveBeenCalled();
+    expect((await store.list())[0]!.payload).toEqual({ orderedTypes: ['manga', 'hidden', 'game'] });
+    wrapper.unmount();
+    const cold = createOfflineAwareGalleryApi(online, store, { clientId: 'gallery-ui' });
+    await cold.preferOfflineSnapshot!();
+    expect((await cold.listGalleries()).map(row => row.type)).toEqual(['manga', 'hidden', 'game']);
+  });
+
+  it('re-reads Home when the app comes back online, instead of keeping the snapshot it opened with', async () => {
+    // A cold start deliberately opens the offline copy first, and Home's read can be answered from it —
+    // including the *recent* list, which the copy holds as of its last sync. Measured on this symptom:
+    // Home showed the same few works from days ago on every fresh open, and was right the moment the
+    // page was left and entered again. The shell already re-reads its visible surfaces on a mode
+    // change; Home was the one it did not know about.
+    const api = createMemoryApi();
+    // The real answer both times; only the title differs, so the assertion is about *when* the read
+    // happened rather than about the shape of a hand-made fixture.
+    const real = api.queryEntryPage.bind(api);
+    let reads = 0;
+    const query = vi.fn(async (input: Parameters<typeof real>[0]) => {
+      const page = await real(input);
+      reads += 1;
+      return reads === 1
+        ? page
+        : { ...page, items: page.items.map((item) => ({ ...item, title: 'From the server' })) };
+    });
+    api.queryEntryPage = query as unknown as typeof api.queryEntryPage;
+
+    const offlineState = (mode: 'offline' | 'online') => ({
+      mode, lastFallbackAt: null, pendingCount: 0, conflictCount: 0, failedCount: 0,
+      lastReplayError: null,
+    });
+    const wrapper = mount(GalleryApp, { props: { api, offlineState: offlineState('offline') } });
+    await flushPromises();
+    // Endfield is the fixture's only recently-viewed work — the answer the snapshot would give.
+    expect(wrapper.get('[data-testid="home-recent"]').text()).toContain('Endfield');
+    const readsBefore = query.mock.calls.length;
+
+    // The capability probe succeeds without any Wi-Fi event.
+    await wrapper.setProps({ offlineState: offlineState('online') });
+    await flushPromises();
+
+    expect(query.mock.calls.length).toBeGreaterThan(readsBefore);
+    expect(wrapper.get('[data-testid="home-recent"]').text()).toContain('From the server');
+  });
+
+  it('reports a failed import beside the button, not at the top of a 2600px page', async () => {
+    // Measured on a phone: the review is about 2600px tall and the Import button is the last thing on
+    // it. The failure used to render in the header, hundreds of pixels above the finger, so a commit
+    // that refused looked exactly like a tap that did nothing — the person's report was "clicking
+    // import does nothing". `role="alert"` alone does not help when the message is off-screen.
+    const api = createMemoryApi();
+    api.listLayout = vi.fn(async () => [{
+      id: 10, name: 'Tags', sortOrder: 0, facets: [{ id: 11, name: '', sortOrder: 0 }],
+    }]);
+    api.previewSiteProbeFolder = vi.fn(async () => ({
+      source: 'hitomi.la', entryCount: 1, tagAssignmentCount: 0, uniqueTagCount: 0,
+      entriesMissingCover: 0, warnings: [],
+      batch: {
+        source: 'hitomi.la', warnings: [],
+        entries: [{ externalKey: 'hitomi.la:42', title: 'A work', tags: [],
+                    sources: [{ label: 'hitomi', url: 'https://hitomi.la/g/42.html' }] }],
+      },
+    })) as unknown as typeof api.previewSiteProbeFolder;
+    api.commitImport = vi.fn(async () => { throw new Error('the commit was refused'); });
+
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+    await openAddEntryFilesTab(wrapper);
+    await openAddEntryFilesTab(wrapper);
+    const file = new File(['{}'], 'metadata.json', { type: 'application/json' });
+    Object.defineProperty(file, 'webkitRelativePath', { value: 'folder_42/items/42/metadata.json' });
+    const input = wrapper.get('[data-testid="desktop-entry-import"] input[webkitdirectory]');
+    Object.defineProperty(input.element, 'files', { value: [file] });
+    await input.trigger('change');
+    await flushPromises();
+    await wrapper.get('[data-testid="import-review"] .primary-button').trigger('click');
+    await flushPromises();
+
+    const reported = wrapper.get('[data-testid="import-commit-error"]');
+    expect(reported.text()).toContain('the commit was refused');
+    // And it is the element right before the button, so it is on screen when the button is.
+    expect(reported.element.nextElementSibling?.tagName).toBe('BUTTON');
+    expect(reported.element.nextElementSibling?.textContent).toContain('Import');
   });
 
   it('rotates the ambient summary through its dots', async () => {
@@ -5776,6 +7538,25 @@ describe('Card grid pagination', () => {
     }
   });
 
+  it('does not show the previous Gallery entries when switching to a Gallery fails to load', async () => {
+    const api = createMemoryApi();
+    const query = api.queryEntryPage.bind(api);
+    api.queryEntryPage = vi.fn(async (input) => {
+      if (input.entryType === 'manga') throw new Error('Gallery unavailable');
+      return query(input);
+    });
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-gallery-type="game"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-entry-id="1"]').exists()).toBe(true);
+
+    await wrapper.get('[data-gallery-type="manga"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Gallery unavailable');
+    expect(wrapper.find('[data-testid="entry-list"] [data-entry-id]').exists()).toBe(false);
+  });
+
   it('requests the current Gallery page from the server', async () => {
     const api = createLargeApi(40);
     const query = vi.spyOn(api, 'queryEntryPage');
@@ -5864,4 +7645,761 @@ describe('Card grid pagination', () => {
     rowsPerPage.value = 5;
     window.localStorage.clear();
   });
+});
+
+describe('Section controls', () => {
+  // A Section is the heading above its Facets. Until now it could be created and never renamed or
+  // removed — the one part of the information board with no controls — so these pin the two actions
+  // and, just as important, that they stay out of the way when the Entry is not being edited.
+  it('renames a Section in place from its heading', async () => {
+    const api = createMemoryApi();
+    const renameSection = vi.fn(async () => undefined);
+    api.renameSection = renameSection;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    await wrapper.get('[data-rename-section-button="10"]').trigger('click');
+    const input = wrapper.get('[data-rename-section-id="10"]');
+    await input.setValue('  Details  ');
+    await input.trigger('keydown.enter');
+    await flushPromises();
+
+    // Trimmed on the way out, and the heading is back to being a heading afterwards.
+    expect(renameSection).toHaveBeenCalledWith(10, 'Details');
+    expect(wrapper.find('[data-rename-section-id="10"]').exists()).toBe(false);
+  });
+
+  it('deletes a Section only on the second click, the way a Facet does', async () => {
+    const api = createMemoryApi();
+    const deleteSection = vi.fn(async () => undefined);
+    api.deleteSection = deleteSection;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    await wrapper.get('[data-delete-section-button="10"]').trigger('click');
+    expect(deleteSection).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-delete-section-button="10"]').text()).toBe('Confirm');
+
+    await wrapper.get('[data-delete-section-button="10"]').trigger('click');
+    await flushPromises();
+    expect(deleteSection).toHaveBeenCalledWith(10);
+  });
+
+  it('names the Section that still has tags instead of repeating the server sentence', async () => {
+    const api = createMemoryApi();
+    api.deleteSection = vi.fn(async () => {
+      throw new Error('cannot delete a section that contains assigned tags');
+    });
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    await wrapper.get('[data-delete-section-button="10"]').trigger('click');
+    await wrapper.get('[data-delete-section-button="10"]').trigger('click');
+    await flushPromises();
+
+    const alert = wrapper.get('[role="alert"]');
+    expect(alert.text()).toContain('Basics');
+    expect(alert.text()).toContain('tags');
+  });
+
+  it('offers neither action while the Entry is only being read', async () => {
+    const api = createMemoryApi();
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openGalleryType(wrapper, 'game');
+    await wrapper.get('[data-entry-id="1"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="entry-information-board"]').exists()).toBe(true);
+    expect(wrapper.find('[data-rename-section-button]').exists()).toBe(false);
+    expect(wrapper.find('[data-delete-section-button]').exists()).toBe(false);
+  });
+});
+
+
+describe('the work\u2019s date and page count', () => {
+  /** The entry detail the board reads, with both values present and a basic Section to hold them. */
+  async function apiWithStats(
+    pageCount: number | null,
+    uploadDate: string | null,
+    durationSeconds?: number | null,
+  ) {
+    const api = createMemoryApi();
+    const base = await api.getEntry(1);
+    api.getEntry = vi.fn(async (entryId: number) => (entryId === 1
+      ? {
+        ...base,
+        pageCount,
+        uploadDate,
+        ...(durationSeconds === undefined ? {} : { durationSeconds }),
+        sections: [{ id: 10, name: 'Basic Information', sortOrder: 0, facets: [] }],
+      }
+      : base));
+    return api;
+  }
+
+  it('shows a video\u2019s runtime as h:mm:ss and accepts any spelling it is typed in', async () => {
+    // 805 seconds is hanime1's `og:video:duration` for the video measured on 2026-10-08, and the
+    // card on the same page writes it `13:25`. Both mean the same Entry value.
+    const api = await apiWithStats(175, '2026-09-10', 805);
+    const update = vi.fn(async () => (await api.getEntry(1)));
+    api.updateEntry = update;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    expect(wrapper.get('[data-testid="duration-value"]').text()).toContain('0:13:25');
+
+    // Typing it the way the page wrote it is enough — the box reads every accepted shape.
+    await wrapper.get('[data-testid="duration-value"]').trigger('dblclick');
+    const input = wrapper.get('[data-testid="duration-input"]');
+    expect((input.element as HTMLInputElement).value).toBe('0:13:25');
+    await input.setValue('13:25');
+    await input.trigger('keydown.enter');
+    await flushPromises();
+    // The same value, so nothing is sent; then a different one is.
+    expect(update).not.toHaveBeenCalled();
+    await wrapper.get('[data-testid="duration-value"]').trigger('dblclick');
+    await wrapper.get('[data-testid="duration-input"]').setValue('1:02:36');
+    await wrapper.get('[data-testid="duration-input"]').trigger('keydown.enter');
+    await flushPromises();
+    expect(update).toHaveBeenCalledWith(1, { durationSeconds: 3756 });
+  });
+
+  it('refuses a runtime it cannot read, and clears one on an empty box', async () => {
+    const api = await apiWithStats(175, '2026-09-10', 805);
+    const update = vi.fn(async () => (await api.getEntry(1)));
+    api.updateEntry = update;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    // Something that is not a duration keeps the editor open with the reason rather than storing it.
+    await wrapper.get('[data-testid="duration-value"]').trigger('dblclick');
+    await wrapper.get('[data-testid="duration-input"]').setValue('1 hour 2 minutes');
+    await wrapper.get('[data-testid="duration-input"]').trigger('keydown.enter');
+    await flushPromises();
+    expect(update).not.toHaveBeenCalled();
+    expect(wrapper.get('[role="alert"]').text()).toContain('h:mm:ss');
+
+    // A runtime is nullable, so an empty box clears it — unlike the page count, which can only be
+    // changed, never removed.
+    await wrapper.get('[data-testid="duration-input"]').setValue('');
+    await wrapper.get('[data-testid="duration-input"]').trigger('keydown.enter');
+    await flushPromises();
+    expect(update).toHaveBeenCalledWith(1, { durationSeconds: null });
+  });
+
+  it('says nothing about a runtime while reading an Entry that has none', async () => {
+    const api = await apiWithStats(null, null, null);
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openGalleryType(wrapper, 'game');
+    await wrapper.get('[data-entry-id="1"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="duration-value"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="add-duration"]').exists()).toBe(false);
+
+    // Editing offers it beside the page count and the date, as the third chip of the same row.
+    await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="add-duration"]').text()).toContain('+');
+  });
+
+  it('saves a page count typed over the value in place', async () => {
+    const api = await apiWithStats(175, '2026-09-10');
+    const update = vi.fn(async () => (await api.getEntry(1)));
+    api.updateEntry = update;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    await wrapper.get('[data-testid="page-count-value"]').trigger('dblclick');
+    const input = wrapper.get('[data-testid="page-count-input"]');
+    await input.setValue('200');
+    await input.trigger('keydown.enter');
+    await flushPromises();
+    expect(update).toHaveBeenCalledWith(1, { pageCount: 200 });
+  });
+
+  it('saves a date that is only a year, and refuses a shape it cannot store', async () => {
+    const api = await apiWithStats(175, '2026-09-10');
+    const update = vi.fn(async () => (await api.getEntry(1)));
+    api.updateEntry = update;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    // A film's year is often all there is, so a prefix is a complete answer.
+    await wrapper.get('[data-testid="upload-date-value"]').trigger('dblclick');
+    const input = wrapper.get('[data-testid="upload-date-input"]');
+    await input.setValue('2019');
+    await input.trigger('keydown.enter');
+    await flushPromises();
+    expect(update).toHaveBeenCalledWith(1, { uploadDate: '2019' });
+
+    // Anything else keeps the editor open and says what is accepted, rather than storing it.
+    update.mockClear();
+    await wrapper.get('[data-testid="upload-date-value"]').trigger('dblclick');
+    const again = wrapper.get('[data-testid="upload-date-input"]');
+    await again.setValue('19-2');
+    await again.trigger('keydown.enter');
+    await flushPromises();
+    expect(update).not.toHaveBeenCalled();
+    expect(wrapper.get('[role="alert"]').text()).toContain('yyyy-mm-dd');
+  });
+
+  it('offers an empty page count and date to editing, says nothing to reading', async () => {
+    const api = await apiWithStats(null, null);
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openGalleryType(wrapper, 'game');
+    await wrapper.get('[data-entry-id="1"]').trigger('click');
+    await flushPromises();
+
+    // Reading: nothing to say about a work with no values, so the row says nothing.
+    expect(wrapper.find('[data-testid="add-page-count"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="add-upload-date"]').exists()).toBe(false);
+
+    // Editing offers both, without any toggle: two chips, styled like "+ Tag".
+    await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');
+    await flushPromises();
+    const pagesChip = wrapper.get('[data-testid="add-page-count"]');
+    expect(pagesChip.text()).toContain('+');
+    expect(pagesChip.classes()).toContain('add-button');
+    expect(wrapper.get('[data-testid="add-upload-date"]').text()).toContain('+');
+
+    // Typing into the chip it opens saves straight away.
+    const update = vi.fn(async () => (await api.getEntry(1)));
+    api.updateEntry = update;
+    await pagesChip.trigger('click');
+    const input = wrapper.get('[data-testid="page-count-input"]');
+    await input.setValue('42');
+    await input.trigger('keydown.enter');
+    await flushPromises();
+    expect(update).toHaveBeenCalledWith(1, { pageCount: 42 });
+  });
+
+  it('leaves the values alone on a double-click when the Entry is not being edited', async () => {
+    const api = await apiWithStats(175, '2026-09-10');
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openGalleryType(wrapper, 'game');
+    await wrapper.get('[data-entry-id="1"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="page-count-value"]').text()).toContain('175');
+    await wrapper.get('[data-testid="page-count-value"]').trigger('dblclick');
+    expect(wrapper.find('[data-testid="page-count-input"]').exists()).toBe(false);
+  });
+});
+
+
+describe('hints and rows for the device in hand', () => {
+  /** Pretend the browser has no hover, which is what a phone reports. */
+  function withTouchScreen(): void {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(hover: none)',
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+    touchScreenRestore = () => { window.matchMedia = original; };
+  }
+  let touchScreenRestore: (() => void) | null = null;
+
+  afterEach(() => {
+    if (touchScreenRestore) touchScreenRestore();
+    touchScreenRestore = null;
+  });
+
+  it('tells a touch screen to tap, and a pointer to drag', async () => {
+    withTouchScreen();
+    const api = createMemoryApi();
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+    expect(wrapper.get('[data-testid="tag-move-hint"]').text()).toContain('Tap a Tag');
+  });
+
+  it('puts the row at the right of the first Section, whatever that Section is called', async () => {
+    // The reported inconsistency: a Section named "Basic Information" got the row while one named
+    // "tag" did not, because the rule matched a name. The rule is a position now.
+    const api = createMemoryApi();
+    const base = await api.getEntry(1);
+    api.getEntry = vi.fn(async (entryId: number) => (entryId === 1
+      ? {
+        ...base,
+        pageCount: null,
+        uploadDate: null,
+        sections: [
+          { id: 141, name: 'tag', sortOrder: 0, facets: [] },
+          { id: 142, name: 'later', sortOrder: 1, facets: [] },
+        ],
+      }
+      : base));
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openGalleryType(wrapper, 'game');
+    await wrapper.get('[data-entry-id="1"]').trigger('click');
+    await flushPromises();
+
+    // Reading: nothing to say about a work with no values…
+    expect(wrapper.find('[data-testid="entry-stats-row"]').exists()).toBe(false);
+    // …editing offers the row, without any toggle.
+    await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');
+    await flushPromises();
+    const first = wrapper.get('[data-section-id="141"]');
+    expect(first.find('[data-testid="add-page-count"]').exists()).toBe(true);
+    expect(first.find('[data-testid="add-upload-date"]').exists()).toBe(true);
+    // The second Section has none: one place, the first one.
+    expect(wrapper.get('[data-section-id="142"]').find('[data-testid="entry-stats-row"]').exists())
+      .toBe(false);
+    expect(wrapper.findAll('[data-testid="entry-stats-row"]')).toHaveLength(1);
+  });
+
+  it('keeps that place even when the work has no Section at all', async () => {
+    const api = createMemoryApi();
+    const base = await api.getEntry(1);
+    api.getEntry = vi.fn(async (entryId: number) => (entryId === 1
+      ? { ...base, pageCount: 12, uploadDate: '2020', sections: [] }
+      : base));
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    // No Sections to hang them on, so they are shown above the (empty) Section list — the same
+    // position a first Section's header would have had.
+    const row = wrapper.get('[data-testid="entry-stats-row"]');
+    expect(row.find('[data-testid="page-count-value"]').text()).toContain('12');
+    expect(row.find('[data-testid="upload-date-value"]').text()).toContain('2020');
+  });
+
+  it('keeps the values in the first Section header where they have always been', async () => {
+    const api = createMemoryApi();
+    const base = await api.getEntry(1);
+    api.getEntry = vi.fn(async (entryId: number) => (entryId === 1
+      ? {
+        ...base,
+        pageCount: 175,
+        uploadDate: '2026-09-10',
+        sections: [{ id: 10, name: 'Basic Information', sortOrder: 0, facets: [] }],
+      }
+      : base));
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+
+    const section = wrapper.get('[data-section-id="10"]');
+    expect(section.find('[data-testid="page-count-value"]').text()).toContain('175');
+    expect(section.find('[data-testid="upload-date-value"]').text()).toContain('2026-09-10');
+    // Not twice: the work-level row stays out of the way when a Section carries them.
+    expect(wrapper.findAll('[data-testid="entry-stats-row"]')).toHaveLength(1);
+  });
+});
+
+
+// Measured on the device: the tag was recorded in 230 ms, but the row only
+// showed it after the whole Entry had been re-read over the network (1.2 s with
+// a live server, up to the read timeout when the connection was bad) — the
+// user's "sometimes it does not refresh and you have to wait".
+it('shows a new tag from the write itself without waiting for the Entry re-read', async () => {
+  const api = createMemoryApi();
+  const wrapper = mount(GalleryApp, { props: { api } });
+  await flushPromises();
+  await openEntryForEditing(wrapper, 1);
+  // The refresh that used to gate the row never settles.
+  vi.spyOn(api, 'getEntry').mockImplementation(() => new Promise(() => {}));
+  await wrapper.get('[data-add-tag-facet-id="11"]').trigger('click');
+  wrapper.getComponent({ name: 'SuggestionInput' }).vm.$emit('submit-text', 'Instant Tag');
+  await flushPromises();
+  expect(wrapper.find('[data-create-tag-facet-id="11"]').exists()).toBe(false);
+  const chip = wrapper.findAll('[data-remove-entry-tag-id]').map((node) => node.attributes('aria-label'));
+  expect(chip.join(' ')).toContain('Instant Tag');
+});
+
+it('falls back to the Entry re-read when the write cannot name the tag', async () => {
+  const api = createMemoryApi();
+  const wrapper = mount(GalleryApp, { props: { api } });
+  await flushPromises();
+  await openEntryForEditing(wrapper, 1);
+  // The write still records the tag; it just cannot name it back.
+  const assign = api.assignEntryTag.bind(api);
+  vi.spyOn(api, 'assignEntryTag').mockImplementation(async (entryId, input) => {
+    await assign(entryId, input);
+    return null;
+  });
+  await wrapper.get('[data-add-tag-facet-id="11"]').trigger('click');
+  wrapper.getComponent({ name: 'SuggestionInput' }).vm.$emit('submit-text', 'Refetched Tag');
+  await flushPromises();
+  // The fixture serves the tag from the next read, so it lands there anyway.
+  const chip = wrapper.findAll('[data-remove-entry-tag-id]').map((node) => node.attributes('aria-label'));
+  expect(chip.join(' ')).toContain('Refetched Tag');
+});
+
+it('owns an awaited Tag creation lock above the Gallery editor and never re-enqueues on committed refresh failure', async () => {
+  const api = createMemoryApi(); let finish!: () => void;
+  const assign = vi.spyOn(api, 'assignEntryTag').mockImplementation(() => new Promise<null>(resolve => { finish = () => resolve(null); }));
+  const wrapper = mount(GalleryApp, { props: { api } }); await flushPromises(); await openEntryForEditing(wrapper, 1);
+  await wrapper.get('[data-add-tag-facet-id="11"]').trigger('click');
+  const picker = wrapper.getComponent({ name: 'SuggestionInput' });
+  picker.vm.$emit('submit-text', 'New Tag'); picker.vm.$emit('submit-text', 'New Tag'); await flushPromises();
+  expect(assign).toHaveBeenCalledTimes(1);
+  vi.spyOn(api, 'getEntry').mockRejectedValueOnce(new Error('projection refresh failed'));
+  finish(); await flushPromises();
+  expect(wrapper.find('[data-create-tag-facet-id="11"]').exists()).toBe(false);
+  expect(wrapper.text()).toContain('Tags saved');
+  expect(assign).toHaveBeenCalledTimes(1);
+});
+
+// Found on the phone: a work created from the composer did not appear in the
+// Gallery it belonged to until the page was left and entered again — the card
+// list stays mounted behind the detail and was never reloaded.
+// The Settings panel downloads, clears or restores the offline copy while the
+// rest of the app keeps its old lists on screen; it must ask for a re-read
+// (found on the phone: the sidebar's per-Gallery count lagged behind the copy).
+// The offline create returns early (nothing was sent to the server), and that
+// early return skipped the refresh: the work only appeared after switching
+// galleries. Found on the phone after the committed path was already fixed.
+it('reloads the mounted Gallery list after an offline create too', async () => {
+  const api = createMemoryApi();
+  api.enqueueOfflineEntryCreate = vi.fn(async () => ({ localKey: 'local-1' }));
+  const reads: string[] = [];
+  const original = api.queryEntryPage.bind(api);
+  api.queryEntryPage = vi.fn(async (input: Parameters<GalleryApi['queryEntryPage']>[0]) => {
+    reads.push(input.entryType ?? '?');
+    return original(input);
+  }) as GalleryApi['queryEntryPage'];
+  const wrapper = mount(GalleryApp, {
+    props: { api, offlineState: { mode: 'offline', connectionPhase: null, lastFallbackAt: null } as never },
+  });
+  await flushPromises();
+  await wrapper.get('[data-gallery-type="game"]').trigger('click');
+  await flushPromises();
+  const before = reads.length;
+  await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+  const form = wrapper.get('[data-testid="manual-entry-form"]');
+  await form.get('input[name="title"]').setValue('Queued offline work');
+  await form.get('input[name="type"]').setValue('game');
+  await form.trigger('submit');
+  await flushPromises();
+  expect(api.enqueueOfflineEntryCreate).toHaveBeenCalled();
+  expect(reads.length).toBeGreaterThan(before);
+});
+
+it('re-reads the visible surfaces when the offline copy changes', async () => {
+  const api = createMemoryApi();
+  const wrapper = mount(GalleryApp, { props: { api } });
+  await flushPromises();
+  await wrapper.get('[data-testid="settings-button"]').trigger('click');
+  await flushPromises();
+  await wrapper.get('[data-testid="advanced-entry"]').trigger('click');
+  await flushPromises();
+  await wrapper.get('[data-testid="advanced-tab-offline"]').trigger('click');
+  await flushPromises();
+  const galleries = vi.spyOn(api, 'listGalleries');
+  const offline = wrapper.findComponent({ name: 'OfflineLibrarySettings' });
+  expect(offline.exists()).toBe(true);
+  offline.vm.$emit('updated');
+  await flushPromises();
+  expect(galleries).toHaveBeenCalled();
+});
+
+it('reloads the mounted Gallery list after creating a work', async () => {
+  const api = createMemoryApi();
+  const reads: string[] = [];
+  const original = api.queryEntryPage.bind(api);
+  api.queryEntryPage = vi.fn(async (input: Parameters<GalleryApi['queryEntryPage']>[0]) => {
+    reads.push(input.entryType ?? '?');
+    return original(input);
+  }) as GalleryApi['queryEntryPage'];
+  const wrapper = mount(GalleryApp, { props: { api } });
+  await flushPromises();
+  await wrapper.get('[data-gallery-type="game"]').trigger('click');
+  await flushPromises();
+  const before = reads.length;
+  await wrapper.get('[data-testid="add-entry-navigation"]').trigger('click');
+  const form = wrapper.get('[data-testid="manual-entry-form"]');
+  await form.get('input[name="title"]').setValue('Fresh Work');
+  await form.get('input[name="type"]').setValue('game');
+  await form.trigger('submit');
+  await flushPromises();
+  expect(reads.length).toBeGreaterThan(before);
+});
+
+// Seen on the phone: the action row sits in the top-right corner, and the
+// stylesheet's phone rule anchored the menu's left edge to the trigger — half
+// of it ended up past the right edge of the screen.
+describe('the Add-to-collection menu is placed from its trigger', () => {
+  async function openMenuWithTriggerAt(right: number) {
+    const api = createMemoryApi();
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-entry-id="1"]').trigger('click');
+    await flushPromises();
+    const root = wrapper.get('[data-testid="entry-add-to-collection"]').element as HTMLElement;
+    root.getBoundingClientRect = () => ({
+      top: 100, bottom: 144, left: right - 44, right, width: 44, height: 44, x: right - 44, y: 100,
+      toJSON: () => ({}),
+    }) as DOMRect;
+    Object.defineProperty(window, 'innerWidth', { value: 360, configurable: true, writable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 764, configurable: true, writable: true });
+    await wrapper.get('[data-testid="entry-add-to-collection"] button').trigger('click');
+    await flushPromises();
+    return wrapper.get('.add-to-collection-menu');
+  }
+
+  it("anchors to the trigger's right edge when the trigger is near the right edge", async () => {
+    const menu = await openMenuWithTriggerAt(340);
+    expect(menu.attributes('style')).toContain('right: 0');
+    // 340px of room to the left of the trigger, capped at the menu's own width.
+    expect(menu.attributes('style')).toContain('max-width: 192px');
+  });
+
+  it("anchors to the trigger's left edge when the trigger is near the left edge", async () => {
+    const menu = await openMenuWithTriggerAt(60);
+    expect(menu.attributes('style')).toContain('left: 0');
+    expect(menu.attributes('style')).toContain('max-width: 192px');
+  });
+});
+
+// The user's report: on the phone the Settings sheet was a few pixels narrower
+// than the page card behind it and shifted left, so a sliver of that card showed
+// along the right edge. It repeats the card's box now, measured, so the width
+// always matches whatever the layout does.
+it("gives the phone Settings sheet the page card's own box", async () => {
+  const api = createMemoryApi();
+  const wrapper = mount(GalleryApp, { props: { api } });
+  await flushPromises();
+  const card = wrapper.get('.content-panel').element as HTMLElement;
+  card.getBoundingClientRect = () => ({
+    top: 96, bottom: 900, left: 12, right: 348, width: 336, height: 804, x: 12, y: 96,
+    toJSON: () => ({}),
+  }) as DOMRect;
+  Object.defineProperty(window, 'innerWidth', { value: 360, configurable: true, writable: true });
+  Object.defineProperty(window, 'innerHeight', { value: 764, configurable: true, writable: true });
+  await wrapper.get('[data-testid="settings-button"]').trigger('click');
+  await flushPromises();
+  const style = wrapper.get('[data-testid="settings-panel"]').attributes('style') ?? '';
+  expect(style).toContain('left: 12px');
+  expect(style).toContain('width: 336px');
+  expect(style).toContain('top: 96px');
+  expect(style).toContain('right: auto');
+});
+
+describe('Entry media strip, expand mode, and adding images', () => {
+  /** The detail view the memory API returns; media state is what each test varies. */
+  function withEntryMedia(api: GalleryApi, media: { coverRef: string | null; previewRefs: string[] }): void {
+    const original = api.getEntry.bind(api);
+    api.getEntry = (async (entryId: number) => ({
+      ...await original(entryId),
+      coverRef: media.coverRef,
+      previewRef: media.previewRefs[0] ?? null,
+      previewRefs: media.previewRefs,
+    })) as GalleryApi['getEntry'];
+  }
+  async function openDetail(wrapper: VueWrapper, entryId: number): Promise<void> {
+    if (!wrapper.find(`[data-entry-id="${entryId}"]`).exists()) {
+      await wrapper.get('[data-testid="gallery-home"]').trigger('click');
+      await flushPromises();
+    }
+    await wrapper.get(`[data-entry-id="${entryId}"]`).trigger('click');
+    await flushPromises();
+  }
+
+  it('offers no expand control for a single image and keeps the pager out of the way', async () => {
+    const api = createMemoryApi();
+    withEntryMedia(api, { coverRef: '/api/assets/entries/1/cover.webp', previewRefs: [] });
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openDetail(wrapper, 1);
+    expect(wrapper.find('[data-testid="media-expand"]').exists()).toBe(false);
+    expect(wrapper.find('.media-count').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('expands every image into one strip with the collapse control inside the last one', async () => {
+    const api = createMemoryApi();
+    withEntryMedia(api, {
+      coverRef: '/api/assets/entries/1/cover.webp',
+      previewRefs: ['/api/assets/entries/1/preview.webp', '/api/assets/entries/1/preview-2.webp'],
+    });
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openDetail(wrapper, 1);
+    expect(wrapper.find('.media-count').text()).toContain('1 / 3');
+    const expand = wrapper.get('[data-testid="media-expand"]');
+    await expand.trigger('click');
+    await flushPromises();
+    const slides = wrapper.findAll('.entry-media-slide');
+    expect(slides).toHaveLength(3);
+    // The collapse control lives inside the last slide, not beside the strip.
+    expect(slides[2]!.find('[data-testid="media-collapse"]').exists()).toBe(true);
+    expect(slides[0]!.find('[data-testid="media-collapse"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="media-collapse"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.entry-media-slide').exists()).toBe(false);
+    expect(wrapper.find('.media-count').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('shows the add slot only while editing and only below four images', async () => {
+    const api = createMemoryApi();
+    withEntryMedia(api, {
+      coverRef: '/api/assets/entries/1/cover.webp',
+      previewRefs: ['/api/assets/entries/1/preview.webp'],
+    });
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openDetail(wrapper, 1);
+    expect(wrapper.find('[data-testid="media-add-slot"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="media-add-slot"]').exists()).toBe(true);
+    wrapper.unmount();
+
+    const four = createMemoryApi();
+    withEntryMedia(four, {
+      coverRef: '/api/assets/entries/1/cover.webp',
+      previewRefs: ['/a.webp', '/b.webp', '/c.webp'],
+    });
+    const capped = mount(GalleryApp, { props: { api: four } });
+    await flushPromises();
+    await openDetail(capped, 1);
+    await capped.get('[data-testid="start-entry-editing"]').trigger('click');
+    await flushPromises();
+    expect(capped.find('[data-testid="media-add-slot"]').exists()).toBe(false);
+    expect(capped.find('[data-testid="media-expand"]').exists()).toBe(true);
+    capped.unmount();
+  });
+
+  it('wears an empty-cover placeholder and uploads the first image as the cover', async () => {
+    const api = createMemoryApi();
+    const uploadEntryMedia = vi.fn(async () => (await api.getEntry(1)));
+    api.uploadEntryMedia = uploadEntryMedia as unknown as GalleryApi['uploadEntryMedia'];
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openDetail(wrapper, 1);
+    await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');
+    await flushPromises();
+    const placeholder = wrapper.get('[data-testid="media-add-empty"]');
+    await placeholder.trigger('click');
+    const input = wrapper.get('[data-testid="media-add-file"]');
+    const file = new File(['x'], 'cover.webp', { type: 'image/webp' });
+    Object.defineProperty(input.element, 'files', { value: [file] });
+    await input.trigger('change');
+    await flushPromises();
+    expect(uploadEntryMedia).toHaveBeenCalledTimes(1);
+    expect(uploadEntryMedia.mock.calls[0]?.slice(0, 2)).toEqual([1, 'cover']);
+    wrapper.unmount();
+  });
+
+  it.each([false,true])('disables uncertain or pending preview deletion before click with a reason and preserves add controls (pending=%s)', async pending => {
+    const api=createMemoryApi();withEntryMedia(api,{coverRef:'/cover.png',previewRefs:['blob:preview#t3-upload=original']});
+    Object.assign(api,{getEntryMediaRemovalBlockReason:async()=> 'Native upload attempted or uncertain; use foreground Update before deleting'});
+    if(pending){const getEntry=api.getEntry;api.getEntry=async id=>({...await getEntry(id),id:-1});}
+    const setOrder=vi.fn();api.setEntryMediaOrder=setOrder;
+    const wrapper=mount(GalleryApp,{props:{api}});await flushPromises();await openDetail(wrapper,1);
+    await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');await flushPromises();
+    await wrapper.get('[data-testid="media-edit-toggle"]').trigger('click');await flushPromises();
+    expect(wrapper.get('[data-testid="media-delete"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.text()).toContain(pending ? 'This Entry has no server row yet' : 'Native upload attempted or uncertain');
+    expect(wrapper.find('[data-testid="media-add-slot"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="media-delete"]').trigger('click');expect(setOrder).not.toHaveBeenCalled();
+  });
+
+  it('deletes and reorders by handing the whole list to one command', async () => {
+    const api = createMemoryApi();
+    withEntryMedia(api, {
+      coverRef: '/api/assets/entries/1/cover.webp',
+      previewRefs: ['/api/assets/entries/1/preview.webp', '/api/assets/entries/1/preview-2.webp'],
+    });
+    const setOrder = vi.fn(async () => (await api.getEntry(1)));
+    api.setEntryMediaOrder = setOrder;
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openDetail(wrapper, 1);
+    await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');
+    await flushPromises();
+    // The controls appear only once the media editor is asked for.
+    expect(wrapper.find('[data-testid="media-delete"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="media-edit-toggle"]').trigger('click');
+    await flushPromises();
+    const remove = wrapper.findAll('[data-testid="media-delete"]');
+    expect(remove).toHaveLength(1);
+    await remove[0]!.trigger('click');
+    await flushPromises();
+    expect(setOrder).toHaveBeenLastCalledWith(1, [
+      '/api/assets/entries/1/preview.webp', '/api/assets/entries/1/preview-2.webp',
+    ]);
+    // Moving is the same command with two refs swapped, and only exists in the
+    // strip, where the order is visible.
+    setOrder.mockClear();
+    await wrapper.get('[data-testid="media-expand"]').trigger('click');
+    await flushPromises();
+    await wrapper.findAll('[data-testid="media-move-next"]')[0]!.trigger('click');
+    await flushPromises();
+    expect(setOrder).toHaveBeenLastCalledWith(1, [
+      '/api/assets/entries/1/preview.webp', '/api/assets/entries/1/cover.webp', '/api/assets/entries/1/preview-2.webp',
+    ]);
+    wrapper.unmount();
+  });
+
+  it('gives a phone the floating add control and no strip mode', async () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(hover: none)', media: query, onchange: null,
+      addEventListener: () => undefined, removeEventListener: () => undefined,
+      addListener: () => undefined, removeListener: () => undefined,
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+    try {
+      const api = createMemoryApi();
+      withEntryMedia(api, {
+        coverRef: '/api/assets/entries/1/cover.webp',
+        previewRefs: ['/api/assets/entries/1/preview.webp'],
+      });
+      const wrapper = mount(GalleryApp, { props: { api } });
+      await flushPromises();
+      await openDetail(wrapper, 1);
+      await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');
+      await flushPromises();
+      expect(wrapper.find('[data-testid="media-expand"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="media-add-slot"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="media-add-floating"]').exists()).toBe(true);
+      // Delete rides with the floating add on a phone: no strip, so no move
+      // arrows either.
+      await wrapper.get('[data-testid="media-edit-toggle"]').trigger('click');
+      await flushPromises();
+      expect(wrapper.find('[data-testid="media-delete"]').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="media-move-next"]').exists()).toBe(false);
+      wrapper.unmount();
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+});
+
+
+it.each(['en', 'zh-CN'] as const)('keeps the original sidebar creation layout without standalone Author in %s', async (locale) => {
+  setLocale(locale);
+  const api = createMemoryApi();
+  const wrapper = mount(GalleryApp, { props: { api } });
+  await flushPromises();
+  const actions = wrapper.get('.sidebar .create-actions');
+  expect(actions.findAll('button').map(button => button.attributes('data-testid'))).toEqual(['add-entry-navigation']);
+  expect(wrapper.find('[data-testid="new-author"]').exists()).toBe(false);
+  expect(api.createAuthor).toBeTypeOf('function');
+  await actions.get('[data-testid="add-entry-navigation"]').trigger('click');
+  await flushPromises();
+  expect(wrapper.find('[data-testid="add-entry-page"]').exists()).toBe(true);
 });

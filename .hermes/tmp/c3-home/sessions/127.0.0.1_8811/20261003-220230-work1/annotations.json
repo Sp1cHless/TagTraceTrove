@@ -1,0 +1,88 @@
+{
+  "url": "http://127.0.0.1:8811/work/1.html",
+  "mode": "annotate",
+  "fields": {
+    "cover": "http://127.0.0.1:8811/img/cover1.png",
+    "title": "作品一",
+    "creator": "作者甲",
+    "tags": [
+      "标签A",
+      "标签B",
+      "标签C"
+    ]
+  },
+  "picks": {
+    "cover": "cand_0001",
+    "title": "cand_0002",
+    "creator": "cand_0009",
+    "tags": "cand_0003"
+  },
+  "verdicts": {},
+  "absent": [],
+  "hypotheses": {
+    "title": {
+      "value": "作品一",
+      "score": 5,
+      "rule": {
+        "from": "html",
+        "document": "page",
+        "select": "h1.work-title",
+        "text": true,
+        "matches": 1
+      },
+      "from": [
+        "markup",
+        "markup"
+      ],
+      "candidate_id": "cand_0002"
+    },
+    "creator": {
+      "value": "作者甲",
+      "score": 1,
+      "rule": {
+        "from": "html",
+        "document": "page",
+        "select": "a.author",
+        "text": true,
+        "matches": 1
+      },
+      "from": [
+        "markup"
+      ],
+      "candidate_id": "cand_0009"
+    },
+    "cover": {
+      "value": "http://127.0.0.1:8811/img/cover1.png",
+      "score": 6,
+      "rule": {
+        "from": "meta",
+        "document": "page",
+        "property": "og:image"
+      },
+      "from": [
+        "markup",
+        "markup"
+      ],
+      "candidate_id": "cand_0001"
+    },
+    "tags": {
+      "value": [
+        "标签A",
+        "标签B",
+        "标签C"
+      ],
+      "score": 3,
+      "rule": {
+        "from": "html",
+        "document": "page",
+        "select": "a.tag",
+        "text": true,
+        "list": true
+      },
+      "from": [
+        "markup"
+      ],
+      "candidate_id": "cand_0003"
+    }
+  }
+}

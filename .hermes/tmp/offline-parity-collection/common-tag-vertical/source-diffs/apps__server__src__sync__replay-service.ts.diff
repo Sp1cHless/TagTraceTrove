@@ -1,0 +1,22 @@
+--- apps/server/src/sync/replay-service.ts fresh-before
++++ apps/server/src/sync/replay-service.ts latest
+@@ -1,3 +1,4 @@
++import { collectionCommonTagContext, applyCollectionCommonTag } from './collection-common-tag.js';
+ import { collectionDeleteIdentity } from './collection-delete.js';
+ import { setGalleryOrder } from '../repositories/gallery-order-repository.js';
+ import { createHash } from 'node:crypto';
+@@ -869,6 +870,14 @@
+       });
+     }
+ 
++    if (operation.operationKind === 'collection.common-tag.add') {
++      const id=database.prepare('SELECT id FROM collections WHERE sync_uid=? COLLATE NOCASE').pluck().get(operation.entityUid) as number|undefined;
++      if(id===undefined)return saveReceipt(database,operation,requestHash,{opId:operation.opId,status:'failed',errorCode:'entity-not-found',detail:'Collection missing'});
++      const current=collectionCommonTagContext(database,id,operation.payload.name);
++      if(current.syncVersion!==operation.baseVersion || JSON.stringify(current.baseValues)!==JSON.stringify(operation.baseValues))return saveReceipt(database,operation,requestHash,{opId:operation.opId,status:'conflict',currentVersion:current.syncVersion,currentValues:{},serverSeq:maxServerSeq(database)});
++      const collectionCommonTag=applyCollectionCommonTag(database,id,operation);
++      return saveReceipt(database,operation,requestHash,{opId:operation.opId,status:'applied',entityId:id,resourceVersion:operation.baseVersion+1,serverSeq:maxServerSeq(database),collectionCommonTag});
++    }
+     if (operation.operationKind === 'collection.delete') {
+       const id=database.prepare('SELECT id FROM collections WHERE sync_uid=? COLLATE NOCASE').pluck().get(operation.entityUid) as number|undefined;
+       if (id===undefined) return saveReceipt(database,operation,requestHash,{opId:operation.opId,status:'failed',errorCode:'entity-not-found',detail:'Collection is absent; only the original immutable receipt proves deletion'});

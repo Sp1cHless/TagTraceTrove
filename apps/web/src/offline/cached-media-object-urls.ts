@@ -78,6 +78,20 @@ export class CachedMediaObjectUrlRegistry {
     entry.objectUrls.revokeObjectURL(entry.objectUrl);
   }
 
+  /**
+   * Forgets everything whose source URL matches. Media is addressed by
+   * position (`cover.png`, `preview-2.png`), so an edited list reuses URLs for
+   * different pictures; without this the registry keeps serving the bytes that
+   * URL used to hold.
+   */
+  evictMatching(matches: (sourceUrl: string) => boolean): void {
+    for (const [sourceUrl, entry] of [...this.entries]) {
+      if (!matches(sourceUrl)) continue;
+      this.entries.delete(sourceUrl);
+      entry.objectUrls.revokeObjectURL(entry.objectUrl);
+    }
+  }
+
   clear(): void {
     this.epoch += 1;
     for (const entry of this.entries.values()) entry.objectUrls.revokeObjectURL(entry.objectUrl);

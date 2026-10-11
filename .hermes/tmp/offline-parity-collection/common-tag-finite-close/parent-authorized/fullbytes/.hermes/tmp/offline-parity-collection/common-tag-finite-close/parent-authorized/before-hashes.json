@@ -1,0 +1,4 @@
+{
+  "apps/web/src/offline/pending-work-restore.ts": "110cb17e5215e1085aeeb440584d2754b6aea2485118c5732962845a0fef57dc",
+  "apps/web/tests/offline-collection-common-tag.integration.test.ts": "b0228bc00fc51b2590972629a3c2ae64455bf59182d0a0cf3538961b452e4f52"
+}

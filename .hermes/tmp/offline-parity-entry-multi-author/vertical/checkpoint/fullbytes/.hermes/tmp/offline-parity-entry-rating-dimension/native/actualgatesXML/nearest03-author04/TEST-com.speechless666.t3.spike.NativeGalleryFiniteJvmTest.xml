@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.speechless666.t3.spike.NativeGalleryFiniteJvmTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-10T09:36:50.840Z" hostname="LAPTOP-70QV4MNN" time="19.463">
+  <properties/>
+  <testcase name="g1" classname="com.speechless666.t3.spike.NativeGalleryFiniteJvmTest" time="19.463"/>
+  <system-out><![CDATA[REAL_SQL_EXISTING_ABSENCE completed exact body receipts=1
+ORIGIN_SHARED_PLAN {"version":1,"opId":"d02a9b2b-08d2-46d4-ac2a-babfacb14bb1","ownerKey":"entry:fea21d99-9c6d-4b35-bd94-a4d0ac4a532e","order":0,"requiredFlags":["offlineMutations","offlineEntryCreate","offlineGalleryPartitionOrigins"],"dependencies":[],"eligible":true}
+ORIGIN_NATIVE_FLAGS ["offlineMutations","offlineEntryCreate","offlineGalleryPartitionOrigins"]
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

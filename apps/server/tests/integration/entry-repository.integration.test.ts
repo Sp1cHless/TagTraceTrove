@@ -17,6 +17,7 @@ describe('entry repository', () => {
         title: '  Example Game  ',
         type: ' game ',
         coverRef: 'cover.webp',
+        durationSeconds: 805,
       });
 
       expect(created).toEqual({
@@ -28,6 +29,7 @@ describe('entry repository', () => {
         previewRefs: [],
         uploadDate: null,
         pageCount: null,
+        durationSeconds: 805,
       });
       expect(updateEntry(database, created.id, {
         title: 'Updated Game',
@@ -43,7 +45,13 @@ describe('entry repository', () => {
         previewRefs: ['preview.webp'],
         uploadDate: '2026-08-30',
         pageCount: null,
+        // Untouched by a patch that never mentions it.
+        durationSeconds: 805,
       });
+      // A runtime is frequently wrong or unknown, so it is clearable — unlike a page count, which
+      // is optional-not-nullable and can only ever be left alone.
+      expect(updateEntry(database, created.id, { durationSeconds: null }).durationSeconds).toBeNull();
+      expect(getEntryDetail(database, created.id)?.durationSeconds).toBeNull();
       expect(getEntryDetail(database, created.id)?.title).toBe('Updated Game');
     } finally {
       database.close();
@@ -99,6 +107,7 @@ describe('entry repository', () => {
         previewRefs: [],
         uploadDate: null,
         pageCount: null,
+        durationSeconds: null,
         producers: [
           {
             id: 1,

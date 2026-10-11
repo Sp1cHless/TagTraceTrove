@@ -1,0 +1,327 @@
+--- apps/web/src/offline/offline-api.ts fresh-before
++++ apps/web/src/offline/offline-api.ts latest
+@@ -1,3 +1,5 @@
++import { applyCommonTagProjection, bulkTouchesEntry, validateCommonTagReceipt, verifyCommonTagJournal } from './collection-common-tag.js';
++import { commonTagCounts, snapshotCommonTagContext, type CollectionCommonTagOperation } from '@t3/shared';
+ import { snapshotCollectionIdentity, validateCollectionDeleteReceipt, verifyCollectionDeleteJournal, type CollectionDeleteOperation, type CollectionDeleteReceipt } from './collection-delete.js';
+ import {
+   normalizeTag,
+@@ -389,6 +391,7 @@
+ function isCollectionManagementOperation(operation: SyncReplayRequest): boolean {
+   return operation.operationKind === 'collection.create'
+     || operation.operationKind === 'collection.delete'
++    || operation.operationKind === 'collection.common-tag.add'
+     || operation.operationKind === 'collection.update'
+     || operation.operationKind === 'collection.entry.set'
+     || operation.operationKind === 'collection.order.set';
+@@ -529,7 +532,8 @@
+     + [...desired.keys()].filter((name) => !base.has(name)).length;
+ }
+ 
+-function entryVersionDelta(operation: SyncReplayRequest): number {
++function entryVersionDelta(operation: SyncReplayRequest): number {
++  if(operation.operationKind==='collection.common-tag.add')return 1;
+   if ((operation.operationKind === 'entry.update' || operation.operationKind === 'entry.contents.set')
+     && operation.payload.parentCreateOpId !== undefined) return 0;
+   if (operation.operationKind === 'entry.author.create-and-link') return operation.payload.parentCreateOpId === undefined ? 1 : 0;
+@@ -577,6 +581,14 @@
+   snapshot: SyncSnapshot,
+   operations: PendingSyncOperation[],
+ ): SyncSnapshot {
++  // Split the projection at each bulk so later Entry edits see its assignments;
++  // no per-Entry queue or vocabulary create is introduced.
++  const bulkIndex=operations.findIndex(row=>row.operationKind==='collection.common-tag.add' && syncReplayRequestSchema.safeParse(transportOperation(row)).success);
++  if(bulkIndex>=0){
++    const prior=snapshotWithOverlays(snapshot,operations.slice(0,bulkIndex));
++    const bulk=transportOperation(operations[bulkIndex]!) as CollectionCommonTagOperation;
++    return snapshotWithOverlays(applyCommonTagProjection(prior,bulk),operations.slice(bulkIndex+1));
++  }
+   snapshot = {...snapshot,payload:{...snapshot.payload,
+     entries:snapshot.payload.entries.map(row=>({...row,...(row.syncUid ? {syncUid:row.syncUid.toLowerCase()} : {})})),
+     producers:snapshot.payload.producers.map(row=>({...row,...(row.syncUid ? {syncUid:row.syncUid.toLowerCase()} : {})}))}};
+@@ -653,8 +665,10 @@
+     && collectionProducerOperations.length === 0) return snapshot;
+ 
+   const entries = snapshot.payload.entries.map((entry) => {
+-    const patches = entryOperations.filter((operation) => operation.entityUid === entry.syncUid);
+-    return patches.reduce((current, operation) => applyEntryPatch(current, operation.payload), entry);
++    const patches = entryOperations.filter((operation) => bulkTouchesEntry(operation, entry.syncUid));
++    const current=patches.reduce((current, operation) => applyEntryPatch(current, operation.payload), entry);
++    const delta=parsed.filter(op=>op.entityUid===entry.syncUid).reduce((total,op)=>total+entryVersionDelta(op),0);
++    return {...current,...(entry.syncVersion===undefined?{}:{syncVersion:entry.syncVersion+delta})};
+   });
+   const producerCreates = parsed.filter((row): row is Extract<SyncReplayRequest,{operationKind:'producer.create'}> => row.operationKind === 'producer.create');
+   const producerRows = [...snapshot.payload.producers];
+@@ -1658,9 +1672,9 @@
+     const parsed = parsedEntryOperations(operations);
+     const earlier = parsed
+       .filter(isEntryUpdateOperation)
+-      .filter((operation) => operation.entityUid === original.syncUid);
++      .filter((operation) => bulkTouchesEntry(operation, original.syncUid));
+     const versionAdvances = parsed
+-      .filter((operation) => operation.entityUid === original.syncUid)
++      .filter((operation) => bulkTouchesEntry(operation, original.syncUid))
+       .reduce((total, operation) => total + entryVersionDelta(operation), 0);
+     const current = earlier.reduce((entry, operation) => applyEntryPatch(entry, operation.payload), original);
+     if (input.durationSeconds !== undefined && (await store.readMeta('capability.offlineEntryDuration') !== '1' || active.snapshot.header.sqliteSchemaVersion < 38 || current.durationSeconds === undefined)) {
+@@ -1772,7 +1786,7 @@
+       .some((membership) => membership.subjectId === entryId);
+     if (present === desiredPresent) return viewLaterStateFromSnapshot(projectedBefore);
+     const versionAdvances = parsed
+-      .filter((operation) => operation.entityUid === original.syncUid)
++      .filter((operation) => bulkTouchesEntry(operation, original.syncUid))
+       .reduce((total, operation) => total + entryVersionDelta(operation), 0);
+     const operation = createPendingSyncOperation({
+       clientId,
+@@ -1799,7 +1813,7 @@
+ 
+   async function enqueueDurably(operation: PendingSyncOperation): Promise<void> {
+     if (!hasOutbox(store)) throw new Error('Offline mutation storage is unavailable');
+-    if ((operation.entityKind === 'entry' || operation.entityKind === 'producer') && (await store.list()).some(row => row.operationKind === `${operation.entityKind}.delete` && row.entityUid === operation.entityUid)) {
++    if ((operation.entityKind === 'entry' || operation.entityKind === 'producer') && (await store.list()).some(row => row.operationKind === `${operation.entityKind}.delete` && bulkTouchesEntry(row, operation.entityUid))) {
+       throw new Error('Entry deletion is already queued; retain its original operation before editing');
+     }
+     // Only NEW envelopes acquire the complete crossqueue Entry revision.
+@@ -1808,7 +1822,7 @@
+       const owner = active?.snapshot.payload.entries.find(row => row.syncUid === operation.entityUid);
+       if (owner?.syncVersion !== undefined) {
+         const prior = await store.list();
+-        const advances = parsedEntryOperations(prior).filter(row => row.entityUid === operation.entityUid).reduce((total,row)=>total+entryVersionDelta(row),0)
++        const advances = parsedEntryOperations(prior).filter(row => bulkTouchesEntry(row, operation.entityUid)).reduce((total,row)=>total+entryVersionDelta(row),0)
+           + parsedMediaOrderOperations(prior).filter(row=>row.entityUid===operation.entityUid).length;
+         const media = (await store.listMedia()).filter(row=>row.entryUid===operation.entityUid && row.existingEntry);
+         operation = {...operation,baseVersion:owner.syncVersion+advances+media.length};
+@@ -2482,7 +2496,7 @@
+       syncEpoch: active.snapshot.header.syncEpoch, entityKind: 'entry', entityUid: entry.syncUid,
+       operationKind: 'entry.author.create-and-link',
+       baseVersion: entry.syncVersion + parsedEntryOperations(pending)
+-        .filter((row) => row.entityKind === 'entry' && row.entityUid === entry.syncUid)
++        .filter((row) => row.entityKind === 'entry' && bulkTouchesEntry(row, entry.syncUid))
+         .reduce((total, row) => total + entryVersionDelta(row), 0),
+       baseValues: { producerUids }, payload: { producerUid, name },
+     }, { randomUUID });
+@@ -2538,7 +2552,7 @@
+     if (JSON.stringify(baseProducerUids) === JSON.stringify(desiredProducerUids)) return;
+ 
+     const priorVersionAdvances = parsed
+-      .filter((operation) => operation.entityKind === 'entry' && operation.entityUid === original.syncUid)
++      .filter((operation) => operation.entityKind === 'entry' && bulkTouchesEntry(operation, original.syncUid))
+       .reduce((count, operation) => count + entryVersionDelta(operation), 0);
+     const operation = createPendingSyncOperation({
+       clientId,
+@@ -2585,6 +2599,7 @@
+       const source = operations.find(row => row.operationKind === 'entry.tag.create' && row.entityKind === 'entry_tag'
+         && row.entityUid.toLowerCase() === value.tagUid!.toLowerCase() && row.clientId === clientId
+         && row.libraryId === snapshot.header.libraryId && row.syncEpoch === snapshot.header.syncEpoch);
++      if(!source && operations.some(row=>row.operationKind==='collection.common-tag.add' && row.payload.tagUid===value.tagUid && row.status==='pending' && row.clientId===clientId && row.libraryId===snapshot.header.libraryId && row.syncEpoch===snapshot.header.syncEpoch))continue;
+       if (!source || source.status !== 'pending') throw new Error('Pending Tag source is missing or blocked; refresh and retry');
+       tagCreates.push({ tagUid: value.tagUid, createOpId: source.opId });
+     }
+@@ -2711,7 +2726,7 @@
+       return { slotId, name: slot.name, stars: desiredStars };
+     }
+     const versionAdvances = parsed
+-      .filter((operation) => operation.entityUid === original.syncUid)
++      .filter((operation) => bulkTouchesEntry(operation, original.syncUid))
+       .reduce((total, operation) => total + entryVersionDelta(operation), 0);
+     const operation = createPendingSyncOperation({
+       clientId,
+@@ -2771,7 +2786,7 @@
+     if (JSON.stringify(baseContents) === JSON.stringify(desiredContents)) return before;
+ 
+     const versionAdvances = parsed
+-      .filter((operation) => operation.entityUid === original.syncUid)
++      .filter((operation) => bulkTouchesEntry(operation, original.syncUid))
+       .reduce((total, operation) => total + entryVersionDelta(operation), 0);
+     const operation = createPendingSyncOperation({
+       clientId,
+@@ -3435,13 +3450,13 @@
+           ...(() => {
+             const sameIdentity = active !== null && stored.clientId === clientId && stored.libraryId === active.snapshot.header.libraryId
+               && stored.syncEpoch === active.snapshot.header.syncEpoch;
+-            const edits = operations.filter(row => row.entityKind === 'entry' && row.entityUid === operation.entityUid
++            const edits = operations.filter(row => row.entityKind === 'entry' && bulkTouchesEntry(row, operation.entityUid)
+               && row.clientId === stored.clientId && row.libraryId === stored.libraryId && row.syncEpoch === stored.syncEpoch
+               && row.operationKind === 'entry.update' && row.payload.parentCreateOpId === operation.opId);
+             const last = edits.at(-1);
+             return { ...(sameIdentity ? pendingMetadataValues(operation, active!.snapshot, operations) : {title:operation.payload.title,uploadDate:operation.payload.uploadDate,pageCount:operation.payload.pageCount}),
+               ...(metadataEnabled || last ? { canEditMetadata: metadataEnabled && sameIdentity && stored.status === 'pending'
+-                && !operations.some(row => row.entityKind === 'entry' && row.entityUid === operation.entityUid && row.clientId === clientId
++                && !operations.some(row => row.entityKind === 'entry' && bulkTouchesEntry(row, operation.entityUid) && row.clientId === clientId
+                   && row.libraryId === stored.libraryId && row.syncEpoch === stored.syncEpoch && row.status !== 'pending'),
+                 ...(last ? { metadataEditStatus: last.status, metadataEditError: last.lastError ?? null } : {}) } : {}) };
+           })(),
+@@ -3450,7 +3465,7 @@
+           status: stored.status,
+           ...(stored.lastError ? { lastError: stored.lastError } : {}),
+           ...(() => {
+-            const siblings = operations.filter(row => row.entityUid === operation.entityUid
++            const siblings = operations.filter(row => bulkTouchesEntry(row, operation.entityUid)
+               && row.clientId === clientId && row.libraryId === operation.libraryId && row.syncEpoch === operation.syncEpoch);
+             const tagEdits = siblings.filter(row => row.operationKind === 'entry.tags.set'
+               && (row.payload as { parentCreateOpId?: string }).parentCreateOpId === operation.opId);
+@@ -3467,7 +3482,7 @@
+                 && !siblings.some(row => row.status !== 'pending') };
+           })(),
+           ...(() => {
+-            const siblings = operations.filter(row => row.entityUid === operation.entityUid && row.clientId === clientId
++            const siblings = operations.filter(row => bulkTouchesEntry(row, operation.entityUid) && row.clientId === clientId
+               && row.libraryId === operation.libraryId && row.syncEpoch === operation.syncEpoch);
+             const edits = siblings.filter(row => (row.operationKind === 'entry.authors.set' || row.operationKind === 'entry.author.create-and-link')
+               && row.payload.parentCreateOpId === operation.opId);
+@@ -3489,7 +3504,7 @@
+                 && !siblings.some(row => row.status !== 'pending') };
+           })(),
+           ...(() => {
+-            const siblings = operations.filter(row => row.entityKind === 'entry' && row.entityUid === operation.entityUid
++            const siblings = operations.filter(row => row.entityKind === 'entry' && bulkTouchesEntry(row, operation.entityUid)
+               && row.clientId === stored.clientId && row.libraryId === stored.libraryId && row.syncEpoch === stored.syncEpoch);
+             const edits = siblings.filter(row => row.operationKind === 'entry.contents.set' && row.payload.parentCreateOpId === operation.opId);
+             if (!contentEnabled && edits.length === 0) return {};
+@@ -3550,7 +3565,8 @@
+       const replayBase = store.captureSnapshot ? await store.captureSnapshot() : undefined;
+       const activeBeforeReplay = replayBase ? replayBase.active : await readActiveSnapshot(store);
+       const appliedOperations: SyncReplayRequest[] = [];
+-      const collectionDeleteReceipts=new Map<string,CollectionDeleteReceipt>();
++      const collectionDeleteReceipts=new Map<string,CollectionDeleteReceipt>();
++      const commonTagReceipts=new Map<string,Extract<import('@t3/shared').SyncReplayResult,{status:'applied'}>>();
+       const entryDeleteReceipts = new Map<string, {entityId:number; resourceVersion:number; serverSeq:number}>();
+       const producerDeleteReceipts = new Map<string, {entityId:number; resourceVersion:number; serverSeq:number}>();
+       const appliedReceipts = new Map<string, {entityId:number | undefined; resourceVersion:number; serverSeq:number}>();
+@@ -3851,6 +3867,7 @@
+           operation = authorIdentityView(operation);
+           if (result.status === 'applied') {
+             if (result.opId.toLowerCase() !== operation.opId.toLowerCase()) throw new Error('Replay receipt identity mismatch');
++            if(operation.operationKind==='collection.common-tag.add'){validateCommonTagReceipt(operation,result);commonTagReceipts.set(operation.opId,result);}
+             if (operation.operationKind === 'collection.delete') {
+               validateCollectionDeleteReceipt(operation,result);collectionDeleteReceipts.set(operation.entityUid,result);
+             }
+@@ -4016,10 +4033,18 @@
+           let candidate = store.captureSnapshot && store.installSnapshot && store.compareSnapshotMeta && online.fetchSnapshotDelta && online.ackSnapshotDelta
+             ? await fetchSnapshotCandidate(online, activeBeforeReplay, await online.getSyncCapabilities(), clientId, await readSnapshotMediaMode(store))
+             : { snapshot: await online.fetchSyncSnapshot() };
+-          if ((entryDeleteReceipts.size || producerDeleteReceipts.size || collectionDeleteReceipts.size) && !candidate.acknowledgement && online.fetchSnapshotDelta && online.ackSnapshotDelta) {
++          if ((entryDeleteReceipts.size || producerDeleteReceipts.size || collectionDeleteReceipts.size || commonTagReceipts.size) && !candidate.acknowledgement && online.fetchSnapshotDelta && online.ackSnapshotDelta) {
+             candidate = await fetchSnapshotCandidate(online, { generationId: 0, snapshot: candidate.snapshot }, await online.getSyncCapabilities(), clientId, await readSnapshotMediaMode(store));
+           }
+           const snapshot = candidate.snapshot;
++          for(const [opId,receipt] of commonTagReceipts){
++            const operation=appliedOperations.find((row):row is CollectionCommonTagOperation=>row.operationKind==='collection.common-tag.add' && row.opId===opId)!;
++            if(!candidate.acknowledgement)throw new Error('Common-tag cleanup needs durable ACK');
++            validateCommonTagReceipt(operation,receipt);
++            const proofKey='collectionCommonTagProof.'+opId;
++            const proof=JSON.stringify({receipt,fingerprint:operationFingerprint(operations.find(row=>row.opId===opId)!)});
++            if(await store.readMeta(proofKey)!==proof){await verifyCommonTagJournal(online,operation,receipt,snapshot,candidate.acknowledgement.protocolVersion,clientId);await store.writeMeta(proofKey,proof);}
++          }
+           for (const [uid,receipt] of collectionDeleteReceipts) {
+             const operation=appliedOperations.find((row):row is CollectionDeleteOperation=>row.operationKind==='collection.delete' && row.entityUid===uid)!;
+             if (!candidate.acknowledgement) throw new Error('Collection deletion needs durable ACK support');
+@@ -4078,7 +4103,7 @@
+             const deletion = entryDeleteReceipts.get(operation.entityUid);
+             if (!deletion || operation.entityKind !== 'entry' || operation.operationKind === 'entry.delete') return false;
+             const receipt = appliedReceipts.get(operation.opId);
+-            const last = appliedOperations.findIndex(row => row.operationKind === 'entry.delete' && row.entityUid === operation.entityUid);
++            const last = appliedOperations.findIndex(row => row.operationKind === 'entry.delete' && bulkTouchesEntry(row, operation.entityUid));
+             if (!receipt || appliedOperations.indexOf(operation) >= last || receipt.serverSeq >= deletion.serverSeq
+               || receipt.resourceVersion >= deletion.resourceVersion) throw new Error('Entry deletion cannot settle a noncausal predecessor');
+             return true;
+@@ -4088,7 +4113,7 @@
+             const deletion = producerDeleteReceipts.get(operation.entityUid);
+             if (!deletion) return false;
+             const receipt = appliedReceipts.get(operation.opId);
+-            const last = appliedOperations.findIndex(row => row.operationKind === 'producer.delete' && row.entityUid === operation.entityUid);
++            const last = appliedOperations.findIndex(row => row.operationKind === 'producer.delete' && bulkTouchesEntry(row, operation.entityUid));
+             const original = operations.find(row => row.opId === operation.opId);
+             const ownerId = receipt?.entityId ?? activeBeforeReplay?.snapshot.payload.producers.find(row => row.syncUid === operation.entityUid)?.id;
+             if (!original || original.entityKind !== 'producer' || original.entityUid !== operation.entityUid
+@@ -4121,11 +4146,11 @@
+                 || snapshot.payload.authorDirectories.some(row => row.producerId === scope.producerId)) throw new Error('Author deletion cannot settle a foreign or noncausal Directory predecessor');
+             } else {
+               const set = snapshot.payload.authorDirectorySets?.find(row => row.syncUid === operation.entityUid);
+-              const later = appliedOperations.some(row => row.operationKind === 'author.directories.set' && row.entityUid === operation.entityUid && appliedOperations.indexOf(row) > appliedOperations.indexOf(operation));
++              const later = appliedOperations.some(row => row.operationKind === 'author.directories.set' && bulkTouchesEntry(row, operation.entityUid) && appliedOperations.indexOf(row) > appliedOperations.indexOf(operation));
+               const desired = operation.payload.directories.map(directory => ({...directory,entries:directory.entries.filter(entry => {
+                 const deleted = entryDeleteReceipts.get(entry.syncUid);
+                 if (!deleted) return true;
+-                const last = appliedOperations.findIndex(row => row.operationKind === 'entry.delete' && row.entityUid === entry.syncUid);
++                const last = appliedOperations.findIndex(row => row.operationKind === 'entry.delete' && bulkTouchesEntry(row, entry.syncUid));
+                 if (appliedOperations.indexOf(operation) >= last || receipt.serverSeq >= deleted.serverSeq) throw new Error('Entry deletion cannot settle a noncausal Directory membership');
+                 return false;
+               })}));
+@@ -4251,7 +4276,7 @@
+           }
+           const lastAppliedAuthors = new Map<string, string[]>();
+           for (const operation of appliedOperations) {
+-            if (operation.operationKind === 'entry.authors.set' && (operation.payload.parentCreateOpId !== undefined || operation.payload.producerCreates !== undefined || appliedOperations.some(row => row.operationKind === 'entry.author.create-and-link' && row.entityUid === operation.entityUid))) {
++            if (operation.operationKind === 'entry.authors.set' && (operation.payload.parentCreateOpId !== undefined || operation.payload.producerCreates !== undefined || appliedOperations.some(row => row.operationKind === 'entry.author.create-and-link' && bulkTouchesEntry(row, operation.entityUid)))) {
+               lastAppliedAuthors.set(operation.entityUid, [...operation.payload.producerUids]);
+             }
+             if (operation.operationKind === 'entry.author.create-and-link') {
+@@ -4496,9 +4521,40 @@
+ 
+   void setReplayStateFromStore().catch(() => undefined);
+ 
++  let commonTagStaging:Promise<unknown>=Promise.resolve();
+   const collectionDeleteInFlight = new Map<number,Promise<void>>();
+   const facade: GalleryApi = {
+     ...online,
++    async addCollectionTag(collectionId,name) {
++      const stage=async()=>{
++        if(!hasOutbox(store))throw new Error('Common-tag needs a durable local queue');
++        await ensureClientIdentity();
++        if(isOnlineMode())await facade.getSyncCapabilities({replay:false});
++        for(const flag of ['offlineMutations','offlineCollectionManagement','offlineCollectionCommonTag'])if(await store.readMeta('capability.'+flag)!=='1')throw new Error('Common-tag is not available under offline');
++        const active=await readActiveSnapshot(store);const rows=await store.list();let context:import('@t3/shared').SyncCollectionCommonTagContext;
++        if(isOnlineMode()){
++          if(!online.getCollectionCommonTagContext)throw new Error('Missing bounded common-tag preflight');
++          context=await online.getCollectionCommonTagContext(collectionId,name);
++          if(active && (active.snapshot.header.libraryId!==context.libraryId || active.snapshot.header.syncEpoch!==context.syncEpoch))throw new Error('Foreign common-tag library');
++          if(rows.length)throw new Error('Reconcile queued predecessors before connected common-tag preflight');
++        }else{
++          if(!active)throw new Error('Missing saved common-tag context');
++          const projected=snapshotWithOverlays(active.snapshot,rows);
++          // Validates saved / local-create origin on every Collection in the scope.
++          snapshotCollectionIdentity(projected,collectionId,parsedEntryOperations(rows),clientId);
++          context=snapshotCommonTagContext(projected,collectionId,name);
++        }
++        if(rows.some(row=>row.libraryId!==context.libraryId || row.syncEpoch!==context.syncEpoch))throw new Error('Retain queued identity');
++        if(rows.some(row=>row.operationKind==='collection.delete' && [context.syncUid,...context.baseValues.scope.children.map(row=>row.syncUid)].includes(row.entityUid)))throw new Error('Collection deletion already queued');
++        const operation=createPendingSyncOperation({clientId,libraryId:context.libraryId,syncEpoch:context.syncEpoch,entityKind:'collection',entityUid:context.syncUid,operationKind:'collection.common-tag.add',baseVersion:context.syncVersion,baseValues:context.baseValues,payload:{name:name,tagUid:context.baseValues.tag?.syncUid??randomUUID()}},{randomUUID});
++        // One durable enqueue is the entire local commit boundary.
++        await enqueueDurably(operation);invalidateOfflineLibrary();await setReplayStateFromStore();
++        const result={tagId:context.baseValues.tag?active?.snapshot.payload.tags.find(row=>row.syncUid===context.baseValues.tag!.syncUid)?.id??null:null,...commonTagCounts(context.baseValues)};
++        if(isOnlineMode())await replayPendingOperations();
++        return result;
++      };
++      const task=commonTagStaging.then(stage,stage);commonTagStaging=task.catch(()=>undefined);return task;
++    },
+     async deleteCollection(collectionId) {
+       const existing=collectionDeleteInFlight.get(collectionId);
+       if (existing) return existing;
+@@ -4641,7 +4697,7 @@
+         const prior = rows.filter(row => row.entryUid === entry.syncUid);
+         if (prior.some(row => !row.existingEntry || row.status !== 'pending')) throw new Error('Earlier media needs review before adding images');
+         const operations = await store.list();
+-        const predecessor = parsedMediaOrderOperations(operations).filter(row => row.entityUid === entry.syncUid).at(-1);
++        const predecessor = parsedMediaOrderOperations(operations).filter(row => bulkTouchesEntry(row, entry.syncUid)).at(-1);
+         const canonical = predecessor ? renamedEntryMediaRefs(entry.id, predecessor.payload.refs) : [entry.coverRef, ...entry.previewRefs];
+         let cover = canonical[0] ?? null;
+         const previews = canonical.slice(1).filter((ref): ref is string => ref !== null);
+@@ -4750,7 +4806,7 @@
+           await setReplayStateFromStore();
+           return (await loadOfflineLibrary())!.getEntry(entryId);
+         }
+-        const predecessor = parsedMediaOrderOperations(operations).filter(row => row.entityUid === entry.syncUid).at(-1);
++        const predecessor = parsedMediaOrderOperations(operations).filter(row => bulkTouchesEntry(row, entry.syncUid)).at(-1);
+         const wireBase = predecessor ? renamedEntryMediaRefs(entry.id, predecessor.payload.refs) : [...(entry.coverRef ? [entry.coverRef] : []), ...entry.previewRefs];
+         const extensions = {'image/avif':'avif','image/gif':'gif','image/jpeg':'jpg','image/png':'png','image/webp':'webp'};
+         for (const row of staged) {
+@@ -4811,7 +4867,7 @@
+         const result = await online.getSyncCapabilities();
+         if(result.featureFlags?.offlineMutations !== undefined)await store.writeMeta('capability.offlineMutations',result.featureFlags.offlineMutations === true ? '1' : '0');
+         if(result.featureFlags?.offlineEntryUpdate !== undefined)await store.writeMeta('capability.offlineEntryUpdate',result.featureFlags.offlineEntryUpdate === true ? '1' : '0');
+-         for (const flag of ['offlineCollectionDelete', 'offlineStandaloneAuthorDirectorySeed', 'offlineAuthorDelete', 'offlineStandaloneAuthorCreate', 'offlineEntryDelete', 'offlineEntryDuration', 'offlineAuthorSelfRatings', 'offlineRatingSlotDelete']) {
++         for (const flag of ['offlineCollectionCommonTag', 'offlineCollectionDelete', 'offlineStandaloneAuthorDirectorySeed', 'offlineAuthorDelete', 'offlineStandaloneAuthorCreate', 'offlineEntryDelete', 'offlineEntryDuration', 'offlineAuthorSelfRatings', 'offlineRatingSlotDelete']) {
+            await store.writeMeta(`capability.${flag}`, result.featureFlags?.offlineMutations === true && result.featureFlags[flag] === true ? '1' : '0');
+          }
+         await store.writeMeta(GALLERY_ORDER_CAPABILITY_KEY, result.featureFlags?.offlineMutations === true && result.featureFlags.offlineGalleryOrder === true ? '1' : '0');

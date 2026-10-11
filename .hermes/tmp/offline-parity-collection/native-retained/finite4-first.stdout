@@ -1,0 +1,126 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14.3/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+
+> Configure project :app
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+
+> Configure project :capacitor-cordova-android-plugins
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+COLLECTION03_ISOLATED : -> D:\Project\TagTraceTrove\.hermes\tmp\offline-parity-collection\native-retained\gradle-output\finite4-first\root
+COLLECTION03_ISOLATED :app -> D:\Project\TagTraceTrove\.hermes\tmp\offline-parity-collection\native-retained\gradle-output\finite4-first\project-app
+COLLECTION03_ISOLATED :capacitor-android -> D:\Project\TagTraceTrove\.hermes\tmp\offline-parity-collection\native-retained\gradle-output\finite4-first\project-capacitor-android
+COLLECTION03_ISOLATED :capacitor-cordova-android-plugins -> D:\Project\TagTraceTrove\.hermes\tmp\offline-parity-collection\native-retained\gradle-output\finite4-first\project-capacitor-cordova-android-plugins
+COLLECTION03_TASK_GRAPH :app:generateNativeMutationContract,:app:preBuild,:app:preDebugBuild,:app:javaPreCompileDebug,:capacitor-android:preBuild,:capacitor-android:preDebugBuild,:capacitor-android:writeDebugAarMetadata,:capacitor-cordova-android-plugins:preBuild,:capacitor-cordova-android-plugins:preDebugBuild,:capacitor-cordova-android-plugins:writeDebugAarMetadata,:app:checkDebugAarMetadata,:capacitor-android:processDebugNavigationResources,:capacitor-cordova-android-plugins:processDebugNavigationResources,:app:processDebugNavigationResources,:app:compileDebugNavigationResources,:app:generateDebugResValues,:capacitor-android:generateDebugResValues,:capacitor-android:generateDebugResources,:capacitor-android:packageDebugResources,:capacitor-cordova-android-plugins:generateDebugResValues,:capacitor-cordova-android-plugins:generateDebugResources,:capacitor-cordova-android-plugins:packageDebugResources,:app:mapDebugSourceSetPaths,:app:generateDebugResources,:app:mergeDebugResources,:app:packageDebugResources,:app:parseDebugLocalResources,:app:createDebugCompatibleScreenManifests,:app:extractDeepLinksDebug,:capacitor-android:extractDeepLinksDebug,:capacitor-android:processDebugManifest,:capacitor-cordova-android-plugins:extractDeepLinksDebug,:capacitor-cordova-android-plugins:processDebugManifest,:app:processDebugMainManifest,:app:processDebugManifest,:app:processDebugManifestForPackage,:capacitor-android:compileDebugLibraryResources,:capacitor-android:parseDebugLocalResources,:capacitor-android:generateDebugRFile,:capacitor-cordova-android-plugins:compileDebugLibraryResources,:capacitor-cordova-android-plugins:parseDebugLocalResources,:capacitor-cordova-android-plugins:generateDebugRFile,:app:processDebugResources,:capacitor-android:javaPreCompileDebug,:capacitor-android:compileDebugJavaWithJavac,:capacitor-android:bundleLibCompileToJarDebug,:capacitor-cordova-android-plugins:javaPreCompileDebug,:capacitor-cordova-android-plugins:compileDebugJavaWithJavac,:capacitor-cordova-android-plugins:bundleLibCompileToJarDebug,:app:compileDebugJavaWithJavac,:app:bundleDebugClassesToRuntimeJar,:app:bundleDebugClassesToCompileJar,:app:preDebugUnitTestBuild,:app:javaPreCompileDebugUnitTest,:app:compileDebugUnitTestJavaWithJavac,:app:mergeDebugShaders,:app:compileDebugShaders,:app:generateDebugAssets,:capacitor-android:mergeDebugShaders,:capacitor-android:compileDebugShaders,:capacitor-android:generateDebugAssets,:capacitor-android:mergeDebugAssets,:capacitor-cordova-android-plugins:mergeDebugShaders,:capacitor-cordova-android-plugins:compileDebugShaders,:capacitor-cordova-android-plugins:generateDebugAssets,:capacitor-cordova-android-plugins:mergeDebugAssets,:app:mergeDebugAssets,:app:packageDebugUnitTestForUnitTest,:app:processDebugUnitTestManifest,:app:generateDebugUnitTestConfig,:app:processDebugJavaRes,:app:processDebugUnitTestJavaRes,:capacitor-android:bundleLibRuntimeToJarDebug,:capacitor-android:processDebugJavaRes,:capacitor-cordova-android-plugins:bundleLibRuntimeToJarDebug,:capacitor-cordova-android-plugins:processDebugJavaRes,:app:testDebugUnitTest
+
+> Task :app:generateNativeMutationContract
+> Task :app:preBuild
+> Task :app:preDebugBuild
+> Task :capacitor-android:preBuild UP-TO-DATE
+> Task :capacitor-android:preDebugBuild UP-TO-DATE
+> Task :app:javaPreCompileDebug
+> Task :capacitor-cordova-android-plugins:preBuild UP-TO-DATE
+> Task :capacitor-cordova-android-plugins:preDebugBuild UP-TO-DATE
+> Task :capacitor-android:writeDebugAarMetadata
+> Task :capacitor-cordova-android-plugins:writeDebugAarMetadata
+> Task :capacitor-android:processDebugNavigationResources
+> Task :capacitor-cordova-android-plugins:processDebugNavigationResources
+> Task :app:checkDebugAarMetadata
+> Task :app:processDebugNavigationResources
+> Task :app:generateDebugResValues
+> Task :capacitor-android:generateDebugResValues
+> Task :app:compileDebugNavigationResources
+> Task :capacitor-android:generateDebugResources
+> Task :capacitor-android:packageDebugResources
+> Task :capacitor-cordova-android-plugins:generateDebugResValues
+> Task :capacitor-cordova-android-plugins:generateDebugResources
+> Task :capacitor-cordova-android-plugins:packageDebugResources
+> Task :app:mapDebugSourceSetPaths
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:mergeDebugResources
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :capacitor-android:extractDeepLinksDebug
+> Task :capacitor-cordova-android-plugins:extractDeepLinksDebug
+> Task :capacitor-cordova-android-plugins:compileDebugLibraryResources
+> Task :capacitor-android:compileDebugLibraryResources
+> Task :capacitor-android:javaPreCompileDebug
+> Task :app:preDebugUnitTestBuild
+> Task :capacitor-cordova-android-plugins:javaPreCompileDebug
+> Task :capacitor-cordova-android-plugins:parseDebugLocalResources
+> Task :app:javaPreCompileDebugUnitTest
+> Task :capacitor-android:parseDebugLocalResources
+> Task :app:parseDebugLocalResources
+> Task :app:mergeDebugShaders
+> Task :capacitor-android:processDebugManifest
+> Task :capacitor-cordova-android-plugins:processDebugManifest
+> Task :capacitor-android:generateDebugRFile
+> Task :capacitor-cordova-android-plugins:generateDebugRFile
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+
+> Task :capacitor-android:compileDebugJavaWithJavac
+注: 某些输入文件使用了未经检查或不安全的操作。
+注: 有关详细信息, 请使用 -Xlint:unchecked 重新编译。
+
+> Task :capacitor-cordova-android-plugins:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :capacitor-cordova-android-plugins:bundleLibCompileToJarDebug
+> Task :capacitor-android:mergeDebugShaders
+> Task :capacitor-android:compileDebugShaders NO-SOURCE
+> Task :capacitor-android:generateDebugAssets UP-TO-DATE
+> Task :capacitor-android:bundleLibCompileToJarDebug
+> Task :capacitor-android:mergeDebugAssets
+> Task :capacitor-cordova-android-plugins:mergeDebugShaders
+> Task :capacitor-cordova-android-plugins:compileDebugShaders NO-SOURCE
+> Task :capacitor-cordova-android-plugins:generateDebugAssets UP-TO-DATE
+> Task :capacitor-cordova-android-plugins:mergeDebugAssets
+> Task :app:mergeDebugAssets
+> Task :app:processDebugUnitTestManifest
+> Task :app:processDebugJavaRes NO-SOURCE
+> Task :app:processDebugUnitTestJavaRes NO-SOURCE
+> Task :capacitor-android:processDebugJavaRes NO-SOURCE
+> Task :capacitor-cordova-android-plugins:processDebugJavaRes NO-SOURCE
+> Task :capacitor-cordova-android-plugins:bundleLibRuntimeToJarDebug
+> Task :app:processDebugManifestForPackage
+> Task :capacitor-android:bundleLibRuntimeToJarDebug
+> Task :app:processDebugResources
+> Task :app:compileDebugJavaWithJavac
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:packageDebugUnitTestForUnitTest
+> Task :app:compileDebugUnitTestJavaWithJavac
+> Task :app:generateDebugUnitTestConfig
+
+> Task :app:testDebugUnitTest
+
+NativeCollectionTimelineJvmTest > c1 FAILED
+    java.lang.AssertionError at NativeCollectionTimelineJvmTest.java:58
+
+NativeCollectionTimelineJvmTest > c2 FAILED
+    java.lang.AssertionError at NativeCollectionTimelineJvmTest.java:58
+
+NativeCollectionTimelineJvmTest > c3 FAILED
+    org.junit.ComparisonFailure at NativeCollectionTimelineJvmTest.java:46
+
+NativeCollectionTimelineJvmTest > c4 FAILED
+    java.lang.AssertionError at NativeCollectionTimelineJvmTest.java:96
+
+4 tests completed, 4 failed
+
+> Task :app:testDebugUnitTest FAILED
+
+[Incubating] Problems report is available at: file:///D:/Project/TagTraceTrove/.hermes/tmp/offline-parity-collection/native-retained/gradle-output/finite4-first/root/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:testDebugUnitTest'.
+> There were failing tests. See the report at: file:///D:/Project/TagTraceTrove/.hermes/tmp/offline-parity-collection/native-retained/gradle-output/finite4-first/project-app/reports/tests/testDebugUnitTest/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 1m 35s
+59 actionable tasks: 59 executed

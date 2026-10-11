@@ -24,6 +24,55 @@ Assert(lanStart.Environment["T3_HOST"] == "0.0.0.0", "LAN mode must bind all int
 Assert(lanStart.Environment["T3_ENABLE_LAN"] == "true", "LAN mode must explicitly grant LAN permission");
 Assert(lanStart.Environment["T3_OPEN_BROWSER"] == "0", "server must not open a second browser");
 
+var pairedLocal = new ProcessStartInfo();
+LauncherPolicy.ApplyServerEnvironment(pairedLocal, lanEnabled: false);
+var privateAddresses = LauncherPolicy.FindPrivateIpv4Addresses();
+if (privateAddresses.Count > 0)
+{
+    Assert(
+        pairedLocal.Environment["T3_PAIRED_HOST"] == privateAddresses[0].ToString(),
+        "a plain launch must advertise a private address so encrypted pairing starts");
+}
+else
+{
+    Assert(
+        string.IsNullOrWhiteSpace(pairedLocal.Environment["T3_PAIRED_HOST"]),
+        "without a private address the launcher must not invent a pairing host");
+}
+
+var pinned = new ProcessStartInfo();
+pinned.Environment["T3_PAIRED_HOST"] = "10.9.9.9";
+LauncherPolicy.ApplyServerEnvironment(pinned, lanEnabled: true);
+Assert(
+    pinned.Environment["T3_PAIRED_HOST"] == "10.9.9.9",
+    "an explicitly configured pairing host must win over the detected address");
+
+// Phone access is a setting, and it defaults on: with the file absent the plain launch above
+// already proved the advertisement, and a stored "off" must stop it.
+string settingsDir = Path.Combine(Path.GetTempPath(), "t3-launcher-contracts-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(settingsDir);
+string settingsPath = LauncherPolicy.SystemSettingsPath(settingsDir, dataDir: null);
+Assert(Path.GetFileName(settingsPath) == "t3-settings.json", "settings file name changed");
+Assert(Path.GetFileName(Path.GetDirectoryName(settingsPath)!) == ".data", "settings must live in the server's data directory");
+Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+Assert(LauncherPolicy.AutoAllowMobileConnection(settingsPath), "a missing settings file must default to phone access on");
+
+File.WriteAllText(settingsPath, "{\"autoAllowMobileConnection\":false}");
+Assert(!LauncherPolicy.AutoAllowMobileConnection(settingsPath), "a stored off must disable phone access");
+var disabled = new ProcessStartInfo();
+LauncherPolicy.ApplyServerEnvironment(disabled, lanEnabled: false, autoAllowMobileConnection: false);
+// A missing key throws on the indexer, so the check has to be a lookup.
+Assert(
+    !disabled.Environment.TryGetValue("T3_PAIRED_HOST", out string? advertised) || string.IsNullOrWhiteSpace(advertised),
+    "phone access off must not advertise a pairing host");
+Assert(disabled.Environment["T3_HOST"] == "127.0.0.1", "phone access off must keep the desktop on loopback");
+
+File.WriteAllText(settingsPath, "{\"autoAllowMobileConnection\":true}");
+Assert(LauncherPolicy.AutoAllowMobileConnection(settingsPath), "a stored on must enable phone access");
+File.WriteAllText(settingsPath, "{ not json");
+Assert(LauncherPolicy.AutoAllowMobileConnection(settingsPath), "an unreadable settings file must fall back to phone access on");
+Directory.Delete(settingsDir, recursive: true);
+
 string fakeRoot = Path.Combine("C:\\", "repo");
 string fakeLocalAppData = Path.Combine("C:\\", "Users", "test", "AppData", "Local");
 var nodeCandidates = LauncherPolicy.NodeCandidates(

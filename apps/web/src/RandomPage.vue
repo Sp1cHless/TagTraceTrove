@@ -346,8 +346,8 @@ onMounted(async () => {
                 :alt="author.name"
                 :asset-url="api.assetUrl"
               />
-              <span v-else class="author-list-badge">{{ author.name.slice(0, 1).toUpperCase() }}</span>
-              <strong>{{ author.name }}</strong>
+              <span v-else class="author-list-badge t3-library-text">{{ author.name.slice(0, 1).toUpperCase() }}</span>
+              <strong class="t3-library-text">{{ author.name }}</strong>
             </button>
           </div>
         </template>
@@ -365,7 +365,7 @@ onMounted(async () => {
               @click="emit('open-tag', { id: tag.id, name: tag.name })"
             >
               <span class="random-tag-mark" aria-hidden="true">#</span>
-              <strong class="random-tag-name" data-testid="random-tag-name">{{ tag.name }}</strong>
+              <strong class="random-tag-name t3-library-text" data-testid="random-tag-name">{{ tag.name }}</strong>
               <small class="random-tag-count" data-testid="random-tag-count">{{ tag.entryCount }}</small>
             </button>
           </div>

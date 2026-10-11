@@ -1,0 +1,38 @@
+{
+  "argv": [
+    "cmd.exe",
+    "/c",
+    "gradlew.bat",
+    "--no-daemon",
+    "--console=plain",
+    "-I",
+    "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\isolated.gradle",
+    "testDebugUnitTest",
+    "--tests",
+    "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest.g2"
+  ],
+  "exit": 0,
+  "seconds": 140.96738076210022,
+  "xml": [
+    {
+      "path": ".hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\gradle-output\\stop-caps\\app\\test-results\\testDebugUnitTest\\TEST-com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest.xml",
+      "name": "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest",
+      "tests": "1",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-10T09:39:54.418Z",
+      "hostname": "LAPTOP-70QV4MNN",
+      "time": "116.074",
+      "cases": [
+        {
+          "name": "g2",
+          "classname": "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest",
+          "time": "116.074",
+          "failure": null
+        }
+      ],
+      "systemout": "CAP_CELLS 6 absent/false zeroPOST original retained recovery actualSQL; legacy optionalabsence NOT enriched and deletecap NOT universal\n"
+    }
+  ]
+}

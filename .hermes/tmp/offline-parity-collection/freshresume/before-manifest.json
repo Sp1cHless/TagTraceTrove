@@ -1,0 +1,10 @@
+{
+  "apps/server/src/repositories/collection-repository.ts": "9393571bf9078373269fdc01be907634534d8f2200240754c7bd350c80fee657",
+  "apps/web/tests/offline-collection-parity.integration.test.ts": "141535cdd034c9e84b070916480c530df7b327b12e9a8d75f110e74343040c66",
+  "apps/web/src/offline/offline-api.ts": "982b69cb25178c4dddf6331007664e277c97ffbcee9bb452b6496b57a9598805",
+  "apps/web/src/CollectionsPage.vue": "9ea36652efd65a8142ff59c697e4e8709fe34f6ee9f04e0bdaa59223155f15de",
+  "apps/web/src/api/gallery.ts": "1709c2c7bbfcbf26d33680ad612aaabadbf487d1a39988454c8505a76a56129a",
+  "apps/server/src/http/app.ts": "54fc2b1c7aa2af4bc79e211f7d6e4e580f0770a71399379a62c83e8f8cf40012",
+  "packages/shared/src/schemas/api.ts": "3e5402cd5f08f0b36ecf038e2c31cb662431ca96866e381c41a475b66156ef4e",
+  "packages/shared/src/schemas/sync.ts": "8de9a02acb4d6aa6e20db547d5489a35395ab282c43b3a940b4fe8e406a88c9e"
+}

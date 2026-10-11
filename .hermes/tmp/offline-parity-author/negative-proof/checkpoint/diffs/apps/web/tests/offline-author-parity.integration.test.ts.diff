@@ -1,0 +1,60 @@
+--- start/apps/web/tests/offline-author-parity.integration.test.ts
++++ final/apps/web/tests/offline-author-parity.integration.test.ts
+@@ -151,6 +151,57 @@
+   expect(new Set(f.bodies.filter(body=>JSON.parse(body).opId===original.opId)).size).toBe(1);
+  }finally{f.close();}
+ });
++for(const damage of ['fingerprint','foreign identity'] as const)it(`ordinary Author ACK-loss cold retry rejects ${damage} foreground delete proof without unauthorized cleanup`,async()=>{
++ const f=await fixture();try{
++  f.connect();const foreign=await f.online.createAuthor({name:'Foreign proof owner'});f.disconnect();
++  await f.current.deleteAuthor(f.author.id);const queued=(await f.store.list())[0]!;
++  const original=originalMutationEnvelope(queued);const {operationFingerprint}=await import('../src/offline/outbox-store.js');
++  const fingerprint=operationFingerprint(queued);
++  f.connect();f.loseReplay();await f.current.flushOfflineOutbox!();
++  expect(f.db.prepare('SELECT count(*) FROM producers WHERE id=?').pluck().get(f.author.id)).toBe(0);
++  expect((await f.store.list()).map(originalMutationEnvelope)).toEqual([original]);
++  f.loseAck();let cold=f.cold();await cold.flushOfflineOutbox!();
++  const installed=(await f.store.captureSnapshot!()).active!;expect(installed).not.toBeNull();
++  expect(installed.snapshot.payload.producers.some(row=>row.syncUid===original.entityUid || row.id===f.author.id)).toBe(false);
++  const key='producerDeleteProof.'+original.opId;const raw=await f.store.readMeta(key);expect(raw).not.toBeNull();
++  const proof=JSON.parse(String(raw));expect(proof).toMatchObject({fingerprint,receipt:{entityId:f.author.id,resourceVersion:original.baseVersion+1,serverSeq:expect.any(Number)}});
++  expect(installed.snapshot.header).toMatchObject({libraryId:original.libraryId,syncEpoch:original.syncEpoch});
++  expect(installed.snapshot.header.changeSeq).toBeGreaterThanOrEqual(proof.receipt.serverSeq);
++  // Persisted foreground receipts contain entityId, not library/epoch/UID. Change only
++  // an actual receipt owner field; do not invent mandatory identity metadata.
++  if(damage==='fingerprint')proof.fingerprint=fingerprint+'-corrupt';else proof.receipt.entityId=foreign.id;
++  const damaged=JSON.stringify(proof);expect(damaged).not.toBe(raw);await f.store.writeMeta(key,damaged);
++  cold=f.cold();expect(await f.store.readMeta(key)).toBe(damaged);
++  const before=(await f.store.list())[0]!;expect(operationFingerprint(before)).toBe(fingerprint);
++  const proofApi=f.online as typeof f.online & {fetchSyncChanges:NonNullable<typeof f.online.fetchSyncChanges>;ackSnapshotDelta:NonNullable<typeof f.online.ackSnapshotDelta>};
++  const remove=vi.spyOn(f.store,'removeMany');const ack=vi.spyOn(proofApi,'ackSnapshotDelta');
++  const fetchChanges=f.online.fetchSyncChanges!.bind(f.online);const rejected:{afterSeq:number;message:string}[]=[];
++  const journal=vi.spyOn(proofApi,'fetchSyncChanges').mockImplementation(async request=>{
++   try{return await fetchChanges(request);}catch(error){rejected.push({afterSeq:request.afterSeq,message:String(error)});throw error;}
++  });
++  try{
++   await cold.flushOfflineOutbox!();
++   const after=await f.store.list();expect(after).toHaveLength(1);expect(after.map(originalMutationEnvelope)).toEqual([original]);
++   expect(operationFingerprint(after[0]!)).toBe(fingerprint);expect(after[0]!.opId).toBe(queued.opId);
++   expect(remove).not.toHaveBeenCalled();
++   // Snapshot bootstrap can ACK its registered cursor, but never clear the
++   // original delete without matching foreground journal authority.
++   for(const [request] of ack.mock.calls)expect(request).toMatchObject({libraryId:original.libraryId,syncEpoch:original.syncEpoch,clientId:'delete-phone'});
++   expect(journal).toHaveBeenCalledWith(expect.objectContaining({libraryId:original.libraryId,syncEpoch:original.syncEpoch,afterSeq:proof.receipt.serverSeq-1,limit:1}));
++   // Real ACK already advanced this client's cursor. No fresh matching journal
++   // authority can replace the damaged cache in this retry; refusal is real HTTP.
++   expect(rejected).toContainEqual({afterSeq:proof.receipt.serverSeq-1,message:expect.stringMatching(/Cursor precedes acknowledged progress/i)});
++   // Attempt/status/error metadata may change independently of immutable bytes.
++   expect(await f.store.readMeta(key)).toBe(damaged);
++   const bodies=f.bodies.filter(body=>JSON.parse(body).opId===original.opId);expect(bodies).toHaveLength(3);
++   expect(new Set(bodies).size).toBe(1);expect(bodies.map(body=>JSON.parse(body))).toEqual([original,original,original]);
++   expect(f.business.some(path=>path===`/api/producers/${f.author.id}`)).toBe(false);
++   expect(f.db.prepare('SELECT count(*) FROM entries').pluck().get()).toBe(2);
++   expect(f.db.prepare('SELECT count(*) FROM producers WHERE id=?').pluck().get(foreign.id)).toBe(1);
++  }finally{remove.mockRestore();ack.mockRestore();journal.mockRestore();}
++ }finally{f.close();}
++});
++
+ it('atomic restore specifically rejects a structurally valid causal Producer update after Author delete without changing queue bytes',async()=>{
+  const f=await fixture();try{
+   await f.current.deleteAuthor(f.author.id);const before=JSON.stringify(await f.store.list());const backup=await buildPendingWorkExport(f.store);const deletion=backup.operations[0]!;

@@ -426,7 +426,7 @@ export function addCommonTagToCollection(
 
   return database.transaction(() => {
     const members = database.prepare(`
-      SELECT entry.id AS id, entry.type AS type
+      SELECT DISTINCT entry.id AS id, entry.type AS type
       FROM collection_entries AS link
       JOIN entries AS entry ON entry.id = link.entry_id
       WHERE link.collection_id IN (

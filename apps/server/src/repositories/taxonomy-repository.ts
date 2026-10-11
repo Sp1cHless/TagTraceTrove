@@ -1,5 +1,6 @@
 import { normalizeTag } from '@t3/shared';
 import type { T3Database } from '../database/connection.js';
+import { toSimplified } from '../taxonomy/simplify.js';
 
 export type TaxonomyVocabulary = 'entry' | 'producer';
 
@@ -41,6 +42,19 @@ function displayName(value: string): string {
   return value.normalize('NFKC').trim().replace(/\s+/gu, ' ');
 }
 
+/**
+ * The key a name is identified by: normalised, **and simplified**.
+ *
+ * Exported because everything that compares two names has to agree with what is stored, and a
+ * comparison written with `normalizeTag` alone reads a Traditional spelling as a different name here
+ * while the dictionary treats it as the same one there. Measured on the author-alias group writer,
+ * which skipped "the display name itself" by comparing un-simplified spellings: `海盜貓` looked like a
+ * spelling to record, and recording it then failed as a mapping onto itself.
+ */
+export function taxonomyNameKey(value: string): string {
+  return normalizeTag(toSimplified(displayName(value)));
+}
+
 function aliasFromRow(row: AliasRow): TaxonomyAlias {
   return {
     id: row.id,
@@ -53,12 +67,27 @@ function aliasFromRow(row: AliasRow): TaxonomyAlias {
   };
 }
 
+/**
+ * The name this spelling becomes: the alias's canonical, or the spelling itself, **simplified**.
+ *
+ * This is the one place that decides it, which is why the conversion lives here rather than at each
+ * caller. A tag or author name arrives in one of three scripts — English, Traditional Chinese,
+ * Simplified Chinese — and only Traditional → Simplified can be done without asking anybody: the same
+ * language written two ways. So every name that comes through is simplified first, and an English
+ * name is left exactly as it is for the dictionary to map. Without this, a site that spells its tags
+ * in Traditional (measured on jable.tv, 2026-10-05: 24 of its 45 pending tags) put Traditional tags
+ * straight into the library.
+ *
+ * The lookup is done on the simplified spelling too, so a dictionary row written in Traditional still
+ * matches: the row's own key is simplified when it is written (`writeTaxonomyAlias`), and Traditional
+ * and Simplified spellings of one name are therefore one row rather than two.
+ */
 export function resolveTaxonomyName(
   database: T3Database,
   vocabulary: TaxonomyVocabulary,
   value: string,
 ): string {
-  let name = displayName(value);
+  let name = toSimplified(displayName(value));
   let normalized = normalizeTag(name);
   const visited = new Set<string>();
   while (!visited.has(normalized)) {
@@ -76,7 +105,20 @@ export function resolveTaxonomyName(
     name = row.canonical_name;
     normalized = row.normalized_canonical;
   }
-  throw new Error('taxonomy alias cycle detected');
+  // A cycle stops the walk; it does not fail it.
+  //
+  // A row that points a name at itself — or two rows that point at each other — is a broken row, and
+  // this used to throw. That turned one bad row into a **500 on every import of that site**, because
+  // committing a work resolves every tag it carries: measured on a real library, a migration left 591
+  // such rows behind and every import of that site failed with "taxonomy alias cycle detected" until
+  // they were cleaned by hand. A dictionary must not be able to stop a work from being imported. The
+  // walk returns the name it had reached when the loop closed — which is what those rows say, and
+  // what a person reading the dictionary would expect to see.
+  //
+  // Refusing a *new* cycle is a different question, and that refusal is kept where it belongs: in
+  // `writeTaxonomyAlias`, which resolves the chain it is about to close and refuses when it comes back
+  // to the alias it is writing.
+  return name;
 }
 
 function mergeEntryTags(
@@ -157,16 +199,21 @@ function readAlias(
  * behavior). With an empty canonical name (`allowEmptyCanonical`) it records a
  * placeholder row only: never downgrades an already-completed mapping, and
  * placeholders are skipped by `resolveTaxonomyName` until they are filled.
+ *
+ * Both sides are stored **simplified**, which is what makes Traditional and Simplified spellings of
+ * one name the same row instead of two: a row written as `乳膠衣` and a row written as `乳胶衣` share
+ * one `normalized_alias`, so the second write updates the first. `resolveTaxonomyName` simplifies
+ * what it is asked about, so this is the other half of that one decision.
  */
 function writeTaxonomyAlias(
   database: T3Database,
   input: UpsertTaxonomyAliasInput,
   allowEmptyCanonical: boolean,
 ): TaxonomyAlias {
-  const alias = displayName(input.alias);
-  const normalizedAlias = normalizeTag(alias);
+  const alias = toSimplified(displayName(input.alias));
+  const normalizedAlias = taxonomyNameKey(input.alias);
   const partition = input.partition === undefined ? '' : displayName(input.partition);
-  const requestedCanonical = displayName(input.canonicalName);
+  const requestedCanonical = toSimplified(displayName(input.canonicalName));
   const requestedNormalizedCanonical = normalizeTag(requestedCanonical);
   if (!normalizedAlias) {
     throw new Error('taxonomy alias names cannot be empty');
@@ -247,6 +294,36 @@ export function upsertTaxonomyAlias(
   return writeTaxonomyAlias(database, input, false);
 }
 
+/** One name a bulk import passed over, and why. */
+export interface TaxonomyAliasImportSkip {
+  alias: string;
+  reason: string;
+}
+
+export interface TaxonomyAliasImportResult {
+  aliases: TaxonomyAlias[];
+  skipped: TaxonomyAliasImportSkip[];
+}
+
+/**
+ * Writes many alias rows, passing over the ones that cannot be written rather than failing on them.
+ *
+ * A bulk import is a *dictionary*, not a decision: it holds thousands of pairs from several sites, and
+ * one pair contradicting the library must not take the other two thousand with it. Measured on a real
+ * migration: a site's dictionary said `Bob → 鲍勃` while the library already said `鲍勃 → Bob`, the
+ * cycle check threw, and the whole move answered 500 — with nothing said about which name was the
+ * problem. The library keeps what it already has and the pair is reported.
+ *
+ * Two kinds are passed over:
+ *
+ * * a pair whose two sides are the same name — the built-in Traditional → Simplified conversion
+ *   already covers it (`乳膠衣 → 乳胶衣`), and a row for it could never do anything. A migrated
+ *   dictionary is full of them, because the tool filled them in itself;
+ * * a pair the library contradicts, which is the `Bob → 鲍勃` case above.
+ *
+ * The manual single-row path (`upsertTaxonomyAlias`) still throws: there a person typed one pair and
+ * should hear why it cannot be saved.
+ */
 export function importTaxonomyAliases(
   database: T3Database,
   inputs: Array<{
@@ -255,10 +332,28 @@ export function importTaxonomyAliases(
     alias: string;
     canonicalName: string;
   }>,
-): TaxonomyAlias[] {
-  return database.transaction(() => (
-    inputs.map((input) => writeTaxonomyAlias(database, input, true))
-  ))();
+): TaxonomyAliasImportResult {
+  return database.transaction(() => {
+    const aliases: TaxonomyAlias[] = [];
+    const skipped: TaxonomyAliasImportSkip[] = [];
+    for (const input of inputs) {
+      const alias = taxonomyNameKey(input.alias);
+      const canonical = taxonomyNameKey(input.canonicalName);
+      if (alias === '' || (canonical !== '' && alias === canonical)) {
+        skipped.push({ alias: input.alias, reason: 'says nothing' });
+        continue;
+      }
+      try {
+        aliases.push(writeTaxonomyAlias(database, input, true));
+      } catch (error) {
+        skipped.push({
+          alias: input.alias,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return { aliases, skipped };
+  })();
 }
 
 export function listTaxonomyAliases(

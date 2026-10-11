@@ -1,0 +1,159 @@
+--- apps/server/src/sync/replay-service.ts before
++++ apps/server/src/sync/replay-service.ts current
+@@ -339,9 +339,6 @@
+ }
+ 
+ function invalidCreateReason(database: T3Database, operation: EntryCreateOperation): string | null {
+-  if (!database.prepare('SELECT 1 FROM entries WHERE type = ? LIMIT 1').get(operation.payload.type)) {
+-    return 'Offline creation requires an existing Gallery';
+-  }
+   const seenSlots = new Set<number>();
+   for (const rating of operation.payload.ratings) {
+     const slot = rating.slotUid === undefined
+--- apps/server/src/sync/sync-service.ts before
++++ apps/server/src/sync/sync-service.ts current
+@@ -142,6 +142,7 @@
+       offlineEntryDelete: sqliteSchemaVersion >= 16,
+       offlinePendingEntryMetadata: sqliteSchemaVersion >= 23,
+       offlineEntryCreate: true,
++      offlineEntryNewType: true,
+       onlineEntryCreateClaim: sqliteSchemaVersion >= 32,
+       onlineEntryCreateCommand: sqliteSchemaVersion >= 32,
+       offlineEntryInitialContents: true,
+--- apps/server/tests/integration/sync.integration.test.ts before
++++ apps/server/tests/integration/sync.integration.test.ts current
+@@ -997,9 +997,10 @@
+       entityUid: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+       payload: { ...operation.payload, type: 'new-offline-gallery', ratings: [] },
+     });
+-    expect(invalid).toMatchObject({ status: 'failed', errorCode: 'invalid-create' });
++    // Gallery derives from type; a previously unused type is valid Entry intent.
++    expect(invalid).toMatchObject({ status: 'applied' });
+     expect(database.prepare('SELECT COUNT(*) FROM entries WHERE sync_uid = ?')
+-      .pluck().get('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee')).toBe(0);
++      .pluck().get('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee')).toBe(1);
+   });
+ 
+   it('uploads staged media idempotently and rejects hash, MIME, identity, collision, and replacement errors', async () => {
+--- apps/web/src/offline/offline-api.ts before
++++ apps/web/src/offline/offline-api.ts current
+@@ -2853,14 +2853,14 @@
+     if (transportError !== undefined && !isOfflineTransportError(transportError)) throw transportError;
+     if (!hasMediaOutbox(store)) throw new Error('Offline create storage is unavailable');
+     const active = await readActiveSnapshot(store);
+-    if (active === null) throw new Error('Download an offline copy before creating Entries offline');
++    if (active === null) throw new Error('Entry creation is not available under offline without a verified copy');
+     const preset = input.presetCreateOperation !== undefined && input.presetCreateOperation.operationKind === 'entry.create'
+       ? input.presetCreateOperation : undefined;
+     if (preset !== undefined && (preset.libraryId !== active.snapshot.header.libraryId || preset.syncEpoch !== active.snapshot.header.syncEpoch)) {
+       throw new Error('This offline copy belongs to a different library revision; refresh it while online');
+     }
+     if (await store.readMeta(ENTRY_CREATE_CAPABILITY_KEY) !== '1') {
+-      throw new Error('This offline copy has not enabled offline Entry creation; update it while online');
++      throw new Error('Entry creation is not available under offline; update this copy while online');
+     }
+     if (((input.contents?.length ?? 0) > 0 || (preset !== undefined && (preset.payload.contents?.length ?? 0) > 0))
+       && await store.readMeta(ENTRY_INITIAL_CONTENTS_CAPABILITY_KEY) !== '1') {
+@@ -2869,8 +2869,10 @@
+     const title = (preset === undefined ? input.title : preset.payload.title).trim();
+     const type = (preset === undefined ? input.type : preset.payload.type).trim();
+     if (title.length === 0 || type.length === 0) throw new Error('Title and Gallery are required');
+-    if (!active.snapshot.payload.entries.some((entry) => entry.type === type)) {
+-      throw new Error('Offline creation can only use an existing Gallery from this offline copy');
++    if (!active.snapshot.payload.entries.some((entry) => entry.type === type)
++      && (await store.readMeta('capability.offlineEntryNewType') !== '1'
++        || await store.readMeta('capability.offlineMutations') !== '1')) {
++      throw new Error('New Gallery creation is not available under offline; update this copy while online');
+     }
+     const previews = input.previewFiles ?? (input.previewFile === null ? [] : [input.previewFile]);
+     if (previews.length > 32) throw new Error('Offline Entries can stage at most 32 previews');
+@@ -2985,7 +2987,7 @@
+         lastError: null,
+       });
+     }
+-    if ((await missingForegroundMutationCapabilities(transportOperation(normalized), key => store.readMeta(key))).length) throw new Error('Current required capability unavailable for offline Entry creation');
++    if ((await missingForegroundMutationCapabilities(transportOperation(normalized), key => store.readMeta(key))).length) throw new Error('Entry creation is not available under offline: required capability unavailable');
+     await store.enqueueEntryCreate(normalized, media);
+     // Native is a retry mirror, never the commit authority. Failure cannot invite resubmission.
+     try { await options.nativeTransfers?.handoff(); } catch { /* foreground exact retry remains available */ }
+@@ -3762,6 +3764,14 @@
+             && (await store.readMeta(AUTHOR_CREATE_CAPABILITY_KEY) !== '1'
+               || (operation.payload.parentCreateOpId !== undefined && await store.readMeta('capability.offlinePendingEntryAuthorCreate') !== '1'))) {
+             replayError ??= 'The server does not currently support offline Author creation';
++            blockedEntities.add(entityKey);
++            continue;
++          }
++          const createdType = operation.operationKind === 'entry.create' ? operation.payload.type : undefined;
++          if (operation.operationKind === 'entry.create'
++            && !activeBeforeReplay?.snapshot.payload.entries.some(entry => entry.type === createdType)
++            && await store.readMeta('capability.offlineEntryNewType') !== '1') {
++            replayError ??= 'New Gallery creation is not available under offline; original remains queued';
+             blockedEntities.add(entityKey);
+             continue;
+           }
+@@ -4884,6 +4894,9 @@
+         const offlinePendingEntryAuthorCreate = ['offlineMutations', 'offlineAuthorCreate', 'offlineEntryAuthors', 'offlinePendingEntryAuthors', 'offlinePendingEntryAuthorCreate'].every(flag => result.featureFlags?.[flag] === true);
+         await store.writeMeta('capability.offlinePendingEntryAuthorCreate', offlinePendingEntryAuthorCreate ? '1' : '0');
+         await store.writeMeta('capability.offlineCrossEntryPendingAuthors', offlinePendingEntryAuthorCreate && result.featureFlags?.offlineCrossEntryPendingAuthors === true ? '1' : '0');
++        await store.writeMeta('capability.offlineEntryNewType',
++          result.featureFlags?.offlineMutations === true && result.featureFlags.offlineEntryCreate === true
++            && result.featureFlags.offlineEntryNewType === true ? '1' : '0');
+         await Promise.all([
+           store.writeMeta(
+             ENTRY_CREATE_CAPABILITY_KEY,
+@@ -6024,6 +6037,9 @@
+     listGalleries() {
+       return withFallback(() => online.listGalleries(), (library) => library.listGalleries());
+     },
++    listLayout(entryType) {
++      return withFallback(() => online.listLayout(entryType), library => library.listLayout(entryType));
++    },
+     queryEntryPage(input) {
+       return withFallback(() => online.queryEntryPage(input), (library) => library.queryEntryPage(input));
+     },
+--- apps/web/src/offline/offline-library.ts before
++++ apps/web/src/offline/offline-library.ts current
+@@ -37,6 +37,7 @@
+ 
+ export interface OfflineLibrary {
+   listGalleries(): GallerySummary[];
++  listLayout(entryType: string): Array<{ id: number; name: string; sortOrder: number; facets: Array<{ id: number; name: string; sortOrder: number }> }>;
+   listAuthors(): GalleryAuthorSummary[];
+   suggestProducers(input: ProducerSuggestionQuery): RelationSuggestionDto[];
+   suggestTags(input: TagSuggestionQuery): RelationSuggestionDto[];
+@@ -57,6 +58,15 @@
+ 
+ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
+   const { payload } = snapshot;
++  function listLayout(entryType: string) {
++    const rows = payload.tagGroups.filter(row => row.entryType === entryType.trim());
++    const ordered = (left: typeof rows[number], right: typeof rows[number]) => left.sortOrder - right.sortOrder || left.id - right.id;
++    return rows.filter(row => row.groupKind === 'section').sort(ordered).map(section => ({
++      id: section.id, name: section.name, sortOrder: section.sortOrder,
++      facets: rows.filter(row => row.groupKind === 'facet' && row.parentId === section.id).sort(ordered)
++        .map(facet => ({ id: facet.id, name: facet.name, sortOrder: facet.sortOrder })),
++    })).filter(section => section.facets.length > 0);
++  }
+   const entriesById = new Map(payload.entries.map((entry) => [entry.id, entry]));
+   const producersById = new Map(payload.producers.map((producer) => [producer.id, producer]));
+   const tagsById = new Map(payload.tags.map((tag) => [tag.id, tag]));
+@@ -734,6 +744,7 @@
+ 
+   return {
+     listGalleries,
++    listLayout,
+     listAuthors,
+     queryProducerPage,
+     getAuthor,
+--- apps/web/src/offline/pending-work-restore.ts before
++++ apps/web/src/offline/pending-work-restore.ts current
+@@ -148,7 +148,8 @@
+       && !union.some(parent=>parent.operationKind===`${row.entityKind}.create` && uid(parent.entityUid)===uid(row.entityUid))) {
+       throw new Error('Pending edit owner is not in this library or its pending creates');
+     }
+-    if (row.operationKind==='entry.create' && !payload.entries.some(entry=>entry.type===row.payload.type)) throw new Error('Pending Entry Gallery is not in this offline copy');
++    // Gallery is derived from Entry.type, not a referenced owner. New types
++    // restore as ordinary Entry intent; current capabilities gate replay.
+     if (row.operationKind==='entry.facet.create') {
+       const section = payload.tagGroups.find(group=>group.syncUid && uid(group.syncUid)===uid(String(row.payload.sectionUid)));
+       if (!section || section.groupKind!=='section' || section.entryType!==row.payload.entryType) throw new Error('Pending Facet Section is not in this Gallery');

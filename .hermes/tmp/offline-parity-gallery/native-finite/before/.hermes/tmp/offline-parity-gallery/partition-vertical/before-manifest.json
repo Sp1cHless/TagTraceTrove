@@ -1,0 +1,80 @@
+[
+  {
+    "path": "apps/web/src/offline/offline-api.ts",
+    "saved": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-gallery\\partition-vertical\\beforefullbytes\\apps\\web\\src\\offline\\offline-api.ts",
+    "size": 377265,
+    "sha256": "0f7b48bb9b3a8a994499be3fac63de72f24257cb9dca6d0d5fbba97e736f40d1"
+  },
+  {
+    "path": "apps/web/src/offline/pending-work-restore.ts",
+    "saved": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-gallery\\partition-vertical\\beforefullbytes\\apps\\web\\src\\offline\\pending-work-restore.ts",
+    "size": 30597,
+    "sha256": "8d8510c6c32a28198d8cda9dce0468a53f6b462b938a8a67d40322882f5b0bdf"
+  },
+  {
+    "path": "apps/web/src/offline/sync-mutation-plan.ts",
+    "saved": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-gallery\\partition-vertical\\beforefullbytes\\apps\\web\\src\\offline\\sync-mutation-plan.ts",
+    "size": 10090,
+    "sha256": "dae671b832f3756bc4ba4b213ed707c01a8e72f479dfce578dc6f2c32306285b"
+  },
+  {
+    "path": "packages/shared/src/schemas/sync.ts",
+    "saved": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-gallery\\partition-vertical\\beforefullbytes\\packages\\shared\\src\\schemas\\sync.ts",
+    "size": 62922,
+    "sha256": "a78e74ffcf2138c274e10bf2bc1b910c36e576dba36ec253895d434b79f38f83"
+  },
+  {
+    "path": "packages/shared/src/schemas/native-mutation-contract.ts",
+    "saved": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-gallery\\partition-vertical\\beforefullbytes\\packages\\shared\\src\\schemas\\native-mutation-contract.ts",
+    "size": 4147,
+    "sha256": "6e4eebe411131cedb9b7ffe5bce3fc5f72d1f1c120fa9eaabf70eac4141ac2cf"
+  },
+  {
+    "path": "apps/server/src/repositories/partition-repository.ts",
+    "saved": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-gallery\\partition-vertical\\beforefullbytes\\apps\\server\\src\\repositories\\partition-repository.ts",
+    "size": 4142,
+    "sha256": "173c5b392bae4adc3c4c292ccd6d18841167c4aff9b740c56a9653e7df6df571"
+  },
+  {
+    "path": "apps/server/src/sync/replay-service.ts",
+    "saved": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-gallery\\partition-vertical\\beforefullbytes\\apps\\server\\src\\sync\\replay-service.ts",
+    "size": 122058,
+    "sha256": "f6d5203e5fb5a0ad068a861c5996698c5edb0baf2aa8634404cacf6160371618"
+  },
+  {
+    "path": "apps/server/src/sync/sync-service.ts",
+    "saved": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-gallery\\partition-vertical\\beforefullbytes\\apps\\server\\src\\sync\\sync-service.ts",
+    "size": 19405,
+    "sha256": "de3306efe101e8fbeb6b05095a7168fba9ba1663bf09e7e17450cee7f7413286"
+  },
+  {
+    "path": "apps/web/tests/offline-api.test.ts",
+    "saved": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-gallery\\partition-vertical\\beforefullbytes\\apps\\web\\tests\\offline-api.test.ts",
+    "size": 184492,
+    "sha256": "aa88230fddd1a8ffd0e0df49c325c7c7f60b0f4e6ec85e843781be1131febf3e"
+  },
+  {
+    "path": "apps/server/src/database/doctor.ts",
+    "saved": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-gallery\\partition-vertical\\beforefullbytes\\apps\\server\\src\\database\\doctor.ts",
+    "size": 18441,
+    "sha256": "cc236c6f4def3b4693425f2d26bc951e693afe80716921a41458595867f0ff06"
+  },
+  {
+    "path": "apps/server/src/database/probe.ts",
+    "saved": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-gallery\\partition-vertical\\beforefullbytes\\apps\\server\\src\\database\\probe.ts",
+    "size": 55983,
+    "sha256": "81cb9bb495aaffafc7d0ca4d900131be4f521a2384859064f44cbf6ed541ea02"
+  },
+  {
+    "path": "apps/server/tests/integration/migration-runner.integration.test.ts",
+    "saved": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-gallery\\partition-vertical\\beforefullbytes\\apps\\server\\tests\\integration\\migration-runner.integration.test.ts",
+    "size": 15735,
+    "sha256": "b1f19c2f56b2f0f5a1c47b1f6d6e666015c4c22a54bd8bbd1d94cf806842223c"
+  },
+  {
+    "path": "apps/server/tests/integration/sync.integration.test.ts",
+    "saved": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-gallery\\partition-vertical\\beforefullbytes\\apps\\server\\tests\\integration\\sync.integration.test.ts",
+    "size": 93889,
+    "sha256": "156547555ad3aebde80c6da718024e369dddafc578b7a11c737a41df261ea2bd"
+  }
+]

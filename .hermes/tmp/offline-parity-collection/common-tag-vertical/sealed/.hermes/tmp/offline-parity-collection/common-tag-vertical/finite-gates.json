@@ -1,0 +1,33 @@
+[
+  {
+    "gate": "nearest-sql",
+    "exit": 0,
+    "passed": 74,
+    "failed": 0,
+    "pending": 0,
+    "failures": []
+  },
+  {
+    "gate": "nearest-default",
+    "exit": 0,
+    "passed": 170,
+    "failed": 0,
+    "pending": 0,
+    "failures": []
+  },
+  {
+    "gate": "web-types-final",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "gate": "shared-types-final",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "gate": "owned-lint-final",
+    "exit": 0,
+    "output": ""
+  }
+]

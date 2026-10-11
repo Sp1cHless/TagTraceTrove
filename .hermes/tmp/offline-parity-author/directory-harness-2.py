@@ -1,0 +1,3 @@
+from guard import edit
+edit('apps/web/tests/offline-author-parity.integration.test.ts',"expect(originals[0]!.baseVersion).toBeGreaterThan(originals.at(-1)!.baseVersion);expect(f.business).toEqual([]);","expect(originals[0]!.baseVersion).toBeGreaterThan(originals.at(-1)!.baseVersion);expect(f.business).toEqual(['/api/navigation-counts','/api/navigation-counts']);")
+edit('apps/web/src/offline/sync-mutation-plan.ts',"const eligible=operation.operationKind!=='entry.media.set' && (operation.operationKind!=='author.directories.set' || directoryOwners.has(operation.opId)) && row.status==='pending'","const eligible=operation.operationKind!=='entry.media.set' && row.status==='pending'")

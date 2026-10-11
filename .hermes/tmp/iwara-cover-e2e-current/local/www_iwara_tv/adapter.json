@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "domain": "www.iwara.tv",
+  "version": 1,
+  "capabilities": [
+    "author",
+    "cover_url",
+    "date_added",
+    "tags",
+    "title"
+  ],
+  "source": "local"
+}

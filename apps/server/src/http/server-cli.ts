@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveServerBinding } from './server-launch-config.js';
 import { startApiServer } from './server.js';
+import { applyStagedRestore, readSystemSettings } from './system-routes.js';
 
 function parsePort(value: string | undefined): number {
   const port = Number(value ?? '8765');
@@ -26,11 +27,24 @@ const defaultStaticRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../.
 const staticRoot = process.env.T3_STATIC_ROOT === undefined && existsSync(defaultStaticRoot)
   ? defaultStaticRoot
   : (process.env.T3_STATIC_ROOT || undefined);
+// A restore uploaded through the System page waits here: the live database is only replaced
+// while nothing has it open, which is exactly this moment.
+const restored = applyStagedRestore(dirname(databasePath), databasePath);
+if (restored) {
+  console.log(`Restored the library from a staged backup (${restored.entryCount ?? '?'} entries, `
+    + `${restored.producerCount ?? '?'} authors); the replaced library was copied to `
+    + `${restored.preRestoreBackup ?? 'nowhere (there was no database)'}.`);
+}
+const settings = readSystemSettings(dirname(databasePath)).settings;
+
 const runtime = await startApiServer({
   databasePath,
   hostname,
   port: parsePort(process.env.T3_PORT),
   ...(staticRoot ? { staticRoot } : {}),
+  ...(process.env.T3_PAIRED_HOST && settings.autoAllowMobileConnection ? { securePairing: { advertisedHost: process.env.T3_PAIRED_HOST,
+    configDirectory: resolve(process.env.T3_PAIRING_CONFIG_DIR ?? resolve(dirname(databasePath), 'private-authorization')),
+    port: parsePort(process.env.T3_TLS_PORT ?? '8766'), } } : {}),
 });
 
 console.log(`T3 API listening at ${runtime.origin}`);

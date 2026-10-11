@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import TagChip from './TagChip.vue';
+import { useI18n } from '../../i18n.js';
+
+const { t } = useI18n();
 
 export interface TagItem {
   id: string;
@@ -54,7 +57,7 @@ function removeTag(tagId: string): void {
 </script>
 
 <template>
-  <div class="tag-board" aria-label="Draggable tags">
+  <div class="tag-board" :aria-label="t('a11y.draggableTags')">
     <TagChip
       v-for="tag in modelValue"
       :key="tag.id"

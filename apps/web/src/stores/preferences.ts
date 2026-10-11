@@ -79,7 +79,9 @@ function enqueueViewLater(operation: () => Promise<void>): Promise<void> {
 
 function applyViewLaterState(state: ViewLaterState): void {
   viewLaterIds.value = normalizeViewLaterIds(state.entryIds);
-  viewLaterAuthorIds.value = normalizeViewLaterIds(state.producerIds);
+  // Facade state includes stable negative local Author IDs before replay.
+  // Legacy localStorage/HTTP numeric validation remains positive-only.
+  viewLaterAuthorIds.value = [...new Set(state.producerIds.filter(id => Number.isSafeInteger(id) && id !== 0))];
 }
 
 export function initializeViewLater(api: ViewLaterApi): Promise<void> {

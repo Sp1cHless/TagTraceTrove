@@ -1,0 +1,17 @@
+{
+  "name": "common",
+  "description": "The template every Gallery can start from, applied from the import review when a Gallery has none of its own.",
+  "note": "This file is repository content, not user data: it is committed, it ships with a build, and it is deliberately NOT under the git-ignored `.data/` directory. Applying it copies its Sections and Facets into a Gallery as that Gallery's own template, which the person can then rename, extend or replace in the entry editor like any template they built themselves.",
+  "generatedFrom": "the Gallery `template专用`, built by hand in T³ and extracted from its database on 2026-10-03; renamed to Chinese on 2026-10-10 so the template reads as one language in the review that offers it (no code matches these names — the one name-based lookup in the import is a facet literally called `series`)",
+  "sections": [
+    {
+      "name": "基本信息",
+      "facets": ["类型", "角色", "语言"]
+    },
+    {
+      "name": "标签",
+      "facets": ["所有标签"]
+    }
+  ],
+  "ratingSlots": ["综合评分"]
+}

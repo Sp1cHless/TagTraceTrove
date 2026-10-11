@@ -1,0 +1,37 @@
+{
+  "apps/web/src/offline/offline-api.ts": {
+    "sha256": "66d87078e721fe3299f3d479f24c2b7f8de1f80b4ea67ed1233c771180f7b95f",
+    "bytes": 314376,
+    "startSha256": "db32644ae53fa3b6210944dc81f7c4d5293e649e217926dcadb148c9cb25ea30"
+  },
+  "apps/web/src/offline/media-outbox-store.ts": {
+    "sha256": "9b4e79f05e05b2e377e38375cd0aa49c193ac23a3ee1007aa952f4e86e0c66e7",
+    "bytes": 4151,
+    "startSha256": "ad7aa087e08c12698a990e2efce80a3ac437aa32e4a5964b462efbb9f016112a"
+  },
+  "apps/web/src/offline/memory-offline-store.ts": {
+    "sha256": "5d667ae79e9d9360ceff337e9e591fc9b8d696cb8c6839d7cb619ae6784d1a5c",
+    "bytes": 7362,
+    "startSha256": "ae6cbc1a3fbf83ecb693420e1d258c0ec91c7a98254ef54f2b62dfbb9dd81075"
+  },
+  "apps/web/src/offline/indexeddb-snapshot-store.ts": {
+    "sha256": "eca2f11bd064efb4ca1250ac4be1f84c90496dedd7f95da922365c7a14425681",
+    "bytes": 31935,
+    "startSha256": "a7b08554ae5a09220e0c94505813a9ed5ffbf582188b69271768150f6b78f243"
+  },
+  "apps/web/tests/existing-entry-media-vertical.test.ts": {
+    "sha256": "ebbfbd1870a1ebc1766426d4eb02b58f74fa6d59deffa47fd1f54863f925669c",
+    "bytes": 35741,
+    "startSha256": "269f1cea6ce1196ba7367ec5e172ad7dce97a44a52743a4d8f867c8dd47c4d96"
+  },
+  "apps/web/tests/existing-entry-media.test.ts": {
+    "sha256": "f3b2263e52852d23c6f7c3679fa54cc13d1962d18b2ab909174bf116dc325271",
+    "bytes": 8925,
+    "startSha256": "4dce49d0448d60f33e0595d8226cbf86d88fb1ed19307a83557ede73ea8458f6"
+  },
+  "apps/web/tests/native-settings-facade.test.ts": {
+    "sha256": "0e2cfa1a7080b3f391a85e5d051736ee44f3ad67ce2133e420d9ff1444212934",
+    "bytes": 6438,
+    "startSha256": "4b8223d607e39c75151b25e61cbd70fc623e660612f2c0302b269966daa36f66"
+  }
+}

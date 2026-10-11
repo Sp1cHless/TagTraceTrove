@@ -49,6 +49,13 @@ export class ProviderRateLimitedError extends Error {
   }
 }
 
+/** Target adapters and catalog lookups share the same pause signal. */
+export function rateLimitFromResponse(response: Pick<Response, 'headers'>): ProviderRateLimitedError {
+  const raw = response.headers.get('retry-after');
+  const seconds = raw === null ? Number.NaN : Number(raw);
+  return new ProviderRateLimitedError(Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null);
+}
+
 export class ProviderParseError extends Error {
   constructor(message: string) {
     super(message);

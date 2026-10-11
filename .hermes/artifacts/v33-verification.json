@@ -1,0 +1,16 @@
+{
+  "candidate": "D:\\Project\\TagTraceTrove\\spikes\\001-android-webview-shell\\T3-C1-v33-create-status.apk",
+  "sha256": "2f7cc527d792e74d536c709f4eb0e70bd32e18bd647db9a5d2127ece77c4ec0f",
+  "versionCode": 33,
+  "versionName": "0.0.33-c1-create-status",
+  "standardTestsPassed": 680,
+  "isolatedSqlTestsPassed": 426,
+  "testWorkers": 2,
+  "sourceGates": "PASS",
+  "androidTasks": "PASS",
+  "identicalBundledResources": 7,
+  "signatureVerified": true,
+  "sameSignerAsV32": true,
+  "deviceAcceptance": "UNVERIFIED",
+  "formalLibraryDeployment": "NOT_PERFORMED"
+}

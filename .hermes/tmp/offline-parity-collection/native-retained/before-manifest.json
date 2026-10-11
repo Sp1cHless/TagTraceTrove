@@ -1,0 +1,154 @@
+{
+  "existing": [
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/AppliedReceipt.java",
+      "size": 1325,
+      "sha256": "3d4596f706cb1b9b678362884af1341f5f15c92e1715154e803eb49f577a18f6"
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferPlugin.java",
+      "size": 17567,
+      "sha256": "c14a201e9c1e3bcb0c410ea3253fdac29e5d29a58acc48ebd9592e8f04cee5e0"
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java",
+      "size": 17366,
+      "sha256": "ba469f3e29733740962324a9aa7a3c3bb26d98b5750d3ab0edc20e0c326813cb"
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/MainActivity.java",
+      "size": 9139,
+      "sha256": "72ceb47effc06edcbe0b3752f2a1d0065d6c2dc11d0bb9b8c428104335c0167f"
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/NativeMutationPlan.java",
+      "size": 3996,
+      "sha256": "5d4419066a78183b39c7e0e25afbddd9ee385d56f3865b8320c14b7e0dc3e92a"
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairedTransportPlugin.java",
+      "size": 4526,
+      "sha256": "2ae0fa9d87d1d002d53de039f329bd4d10bba3a2996def29cd1487139bcafc5a"
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingState.java",
+      "size": 5867,
+      "sha256": "1be655f3a005503b4b7ccbd76b6bc13c703c98f01f09cb0c4daaac426b697a33"
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingVault.java",
+      "size": 4237,
+      "sha256": "68cb1818a5c3f4fedea41d2e142cf6d9b005a5270301b4135e536150d221b5b8"
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PinnedLanTransport.java",
+      "size": 10772,
+      "sha256": "5bd3771a3efbcda3ddfdd31f839ec9dd34620655ffa31ebf905d57714e3c50da"
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java",
+      "size": 39518,
+      "sha256": "494f132632e59a782c6e4965a4e35ba088bbb947c8278d6d2cf6683075bb8579"
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TrustedLanPairing.java",
+      "size": 2164,
+      "sha256": "249fdd78891c0628b1220c52c375c319260feae37ca1f448d3b9c8d2f4291648"
+    },
+    {
+      "path": "packages/shared/src/schemas/api.ts",
+      "size": 55986,
+      "sha256": "3e5402cd5f08f0b36ecf038e2c31cb662431ca96866e381c41a475b66156ef4e"
+    },
+    {
+      "path": "packages/shared/src/schemas/import.ts",
+      "size": 9190,
+      "sha256": "4e1c718ce5f9941c93c7f1b604c3b5e5da8ab77800a0cc46a9168992e3ddd792"
+    },
+    {
+      "path": "packages/shared/src/schemas/native-mutation-contract.ts",
+      "size": 4147,
+      "sha256": "6e4eebe411131cedb9b7ffe5bce3fc5f72d1f1c120fa9eaabf70eac4141ac2cf"
+    },
+    {
+      "path": "packages/shared/src/schemas/pending-work.ts",
+      "size": 1531,
+      "sha256": "7ad377c617b69a5d6a894a4c77bbb4d19d1f2c6c5169721156218b46895ef87e"
+    },
+    {
+      "path": "packages/shared/src/schemas/siteprobe.ts",
+      "size": 16699,
+      "sha256": "0746189db49df4e3020d95e2bdba605cb9292ba29060cd61bd88f76e221977e7"
+    },
+    {
+      "path": "packages/shared/src/schemas/source-maintenance.ts",
+      "size": 6711,
+      "sha256": "058f96b6d9c60fcbe34a2fdf7a8c16c97010bd369db4f6992a6bcb45724506fa"
+    },
+    {
+      "path": "packages/shared/src/schemas/suggestions.ts",
+      "size": 2723,
+      "sha256": "050e23edb1af17f1747843add0c6ac363fc133d7ee15531f1cf8993025efb707"
+    },
+    {
+      "path": "packages/shared/src/schemas/sync-delta.ts",
+      "size": 1263,
+      "sha256": "3a508c21dec8990d675be33c8457ab85bdfc17d0378e67e07bc7c28aa527fe83"
+    },
+    {
+      "path": "packages/shared/src/schemas/sync.ts",
+      "size": 62922,
+      "sha256": "a78e74ffcf2138c274e10bf2bc1b910c36e576dba36ec253895d434b79f38f83"
+    },
+    {
+      "path": "apps/web/src/offline/outbox-store.ts",
+      "size": 9547,
+      "sha256": "ba11716ebf20040e182a2d3f8cedf06d851cc5d15c0840fa3198a6e1d7bf470b"
+    },
+    {
+      "path": "apps/web/src/offline/sync-mutation-plan.ts",
+      "size": 10090,
+      "sha256": "dae671b832f3756bc4ba4b213ed707c01a8e72f479dfce578dc6f2c32306285b"
+    },
+    {
+      "path": "apps/web/src/offline/offline-api.ts",
+      "size": 376145,
+      "sha256": "c50dd8d26aea2bee49a43d2a307686e2c6ef1580cab961a7c54c3333e34afa3a"
+    },
+    {
+      "path": "apps/server/tests/fixtures/native-worker-authority-acceptance.mts",
+      "size": 4067,
+      "sha256": "2f31bf5347cec1fae4deae3977a9d73bfae9cb6552a2e297517e0bb96da0a0dc"
+    },
+    {
+      "path": "apps/web/tests/fixtures/native-valid-kind-fixture.ts",
+      "size": 5055,
+      "sha256": "696b1933a481cf9bc8bc051a1df4b90f6a15905bc3de5443844528cbd1314104"
+    },
+    {
+      "path": "apps/server/src/sync/collection-common-tag.ts",
+      "size": 5734,
+      "sha256": "cba3f56da00795910947edbd638d132088f4fefd880a5dab634c0e47acdea2f4"
+    },
+    {
+      "path": "apps/server/src/sync/collection-delete.ts",
+      "size": 1177,
+      "sha256": "8f93f9a62f6e4aef557042060f00072a8e3918764cb159eec5e810619f274548"
+    },
+    {
+      "path": "apps/server/tests/fixtures/native-author-delete-timeline.mts",
+      "size": 6033,
+      "sha256": "54bd00fe20f77f0ff68c91a015c51931c8cd44733375642133f3603ddf600302"
+    },
+    {
+      "path": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeAuthorDeleteTimelineJvmTest.java",
+      "size": 9092,
+      "sha256": "136bf2614899015e833e26d80d01ccc27a7ae5e82e6a592face314e44d141f9c"
+    }
+  ],
+  "MARKNEW": [
+    "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeCollectionTimelineJvmTest.java",
+    "apps/server/tests/fixtures/native-collection-timeline.mts",
+    ".hermes/artifacts/offline-parity-collection-native-retained.md"
+  ]
+}

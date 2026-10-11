@@ -1,0 +1,200 @@
+[
+  {
+    "source": "apps/web/src/offline/offline-api.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\web\\src\\offline\\offline-api.ts",
+    "size": 369765,
+    "sha256": "369c503b143997384da8f774e4c0a1cb572e1c5c15a3c64dc933d28609c4401a",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "369c503b143997384da8f774e4c0a1cb572e1c5c15a3c64dc933d28609c4401a"
+  },
+  {
+    "source": "apps/web/src/offline/collection-delete.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\web\\src\\offline\\collection-delete.ts",
+    "size": 5038,
+    "sha256": "18a63ecf7335c5f2c337122ab118b0cafce597dc201d0a8014a354c39f37c2a7",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "18a63ecf7335c5f2c337122ab118b0cafce597dc201d0a8014a354c39f37c2a7"
+  },
+  {
+    "source": "apps/web/src/offline/pending-work-restore.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\web\\src\\offline\\pending-work-restore.ts",
+    "size": 27398,
+    "sha256": "0689cfd726b84371f87cf663bacfcdc6f673d1c4f00adac641bcc9e1e9373f09",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "0689cfd726b84371f87cf663bacfcdc6f673d1c4f00adac641bcc9e1e9373f09"
+  },
+  {
+    "source": "apps/web/src/offline/sync-mutation-plan.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\web\\src\\offline\\sync-mutation-plan.ts",
+    "size": 9290,
+    "sha256": "265c1ecac2a456c55e02028f8fb1fe121d8891c6306588fd1970ab96c0dcb745",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "265c1ecac2a456c55e02028f8fb1fe121d8891c6306588fd1970ab96c0dcb745"
+  },
+  {
+    "source": "apps/web/src/offline/outbox-store.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\web\\src\\offline\\outbox-store.ts",
+    "size": 9547,
+    "sha256": "ba11716ebf20040e182a2d3f8cedf06d851cc5d15c0840fa3198a6e1d7bf470b",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "ba11716ebf20040e182a2d3f8cedf06d851cc5d15c0840fa3198a6e1d7bf470b"
+  },
+  {
+    "source": "apps/web/src/offline/indexeddb-snapshot-store.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\web\\src\\offline\\indexeddb-snapshot-store.ts",
+    "size": 31935,
+    "sha256": "eca2f11bd064efb4ca1250ac4be1f84c90496dedd7f95da922365c7a14425681",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "eca2f11bd064efb4ca1250ac4be1f84c90496dedd7f95da922365c7a14425681"
+  },
+  {
+    "source": "apps/web/src/api/gallery.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\web\\src\\api\\gallery.ts",
+    "size": 66900,
+    "sha256": "6e5d9475a19ac1544cd89d0a3d0581326f3c97a9ab60546725bf9db1a12e3dac",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "6e5d9475a19ac1544cd89d0a3d0581326f3c97a9ab60546725bf9db1a12e3dac"
+  },
+  {
+    "source": "apps/web/src/CollectionsPage.vue",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\web\\src\\CollectionsPage.vue",
+    "size": 47963,
+    "sha256": "9ea36652efd65a8142ff59c697e4e8709fe34f6ee9f04e0bdaa59223155f15de",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": false,
+    "liveSha256": "77e0268966c77aab28ee6a38fdf6ea7d5f91174cc7d5a5b399abd1a6037c5945"
+  },
+  {
+    "source": "apps/server/src/http/app.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\server\\src\\http\\app.ts",
+    "size": 101101,
+    "sha256": "d4ae18b1fde4f3525f8ccebc6d0c3ed6f0222cca1e8aa607d17af3a773e89f63",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "d4ae18b1fde4f3525f8ccebc6d0c3ed6f0222cca1e8aa607d17af3a773e89f63"
+  },
+  {
+    "source": "apps/server/src/sync/collection-delete.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\server\\src\\sync\\collection-delete.ts",
+    "size": 1177,
+    "sha256": "8f93f9a62f6e4aef557042060f00072a8e3918764cb159eec5e810619f274548",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "8f93f9a62f6e4aef557042060f00072a8e3918764cb159eec5e810619f274548"
+  },
+  {
+    "source": "apps/server/src/sync/replay-service.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\server\\src\\sync\\replay-service.ts",
+    "size": 121063,
+    "sha256": "f0697ee412ef1e0a1bbac0ee74d43732718b36e684079518e10f6ffa97526c80",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "f0697ee412ef1e0a1bbac0ee74d43732718b36e684079518e10f6ffa97526c80"
+  },
+  {
+    "source": "apps/server/src/sync/sync-service.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\server\\src\\sync\\sync-service.ts",
+    "size": 19310,
+    "sha256": "b3d052259fe3c7034fca8c259ef0d626d0e49f8c88b29a15d2a4f0e05e2ab88b",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "b3d052259fe3c7034fca8c259ef0d626d0e49f8c88b29a15d2a4f0e05e2ab88b"
+  },
+  {
+    "source": "apps/server/src/repositories/collection-repository.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\server\\src\\repositories\\collection-repository.ts",
+    "size": 18537,
+    "sha256": "f7011273420eddb731d101f0a110513174c80b92c07992642c6acde1f7cdfb97",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "f7011273420eddb731d101f0a110513174c80b92c07992642c6acde1f7cdfb97"
+  },
+  {
+    "source": "apps/server/src/repositories/entry-tag-repository.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\server\\src\\repositories\\entry-tag-repository.ts",
+    "size": 44038,
+    "sha256": "26689fbe6619fe06e3e3fdacd9b6926a42d65fb9628b1366ef607e606ee8f200",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "26689fbe6619fe06e3e3fdacd9b6926a42d65fb9628b1366ef607e606ee8f200"
+  },
+  {
+    "source": "packages/shared/src/schemas/sync.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\packages\\shared\\src\\schemas\\sync.ts",
+    "size": 59998,
+    "sha256": "41a33d667586e825f0761593f93e1f9fd6bd8a12fc00a26dd928d0200726341d",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "41a33d667586e825f0761593f93e1f9fd6bd8a12fc00a26dd928d0200726341d"
+  },
+  {
+    "source": "packages/shared/src/schemas/api.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\packages\\shared\\src\\schemas\\api.ts",
+    "size": 55986,
+    "sha256": "3e5402cd5f08f0b36ecf038e2c31cb662431ca96866e381c41a475b66156ef4e",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "3e5402cd5f08f0b36ecf038e2c31cb662431ca96866e381c41a475b66156ef4e"
+  },
+  {
+    "source": "packages/shared/src/schemas/native-mutation-contract.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\packages\\shared\\src\\schemas\\native-mutation-contract.ts",
+    "size": 3999,
+    "sha256": "26b02be372725e75239f89972cfe722a7b3b5294a8108d4c9cb2470a1a2e5822",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "26b02be372725e75239f89972cfe722a7b3b5294a8108d4c9cb2470a1a2e5822"
+  },
+  {
+    "source": "apps/web/tests/offline-collection-parity.integration.test.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\web\\tests\\offline-collection-parity.integration.test.ts",
+    "size": 7950,
+    "sha256": "3beea510fc0528cafb29620866d370b69dacf8cfe29be16cac248fe4c5158345",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "3beea510fc0528cafb29620866d370b69dacf8cfe29be16cac248fe4c5158345"
+  },
+  {
+    "source": "apps/web/tests/offline-collection-delete.integration.test.ts",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\web\\tests\\offline-collection-delete.integration.test.ts",
+    "size": 29081,
+    "sha256": "05950c3faa1ae0ca51fa0b35dbb4066bc9b09600e6d03585bacc4006e9e5925a",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "05950c3faa1ae0ca51fa0b35dbb4066bc9b09600e6d03585bacc4006e9e5925a"
+  },
+  {
+    "source": "apps/server/src/database/migrations/028_author_resource_sync.sql",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\server\\src\\database\\migrations\\028_author_resource_sync.sql",
+    "size": 25354,
+    "sha256": "a9b86901b93087165ae9d1c4f574e15f3697266100d44091eee5f44a1a3f85fe",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "a9b86901b93087165ae9d1c4f574e15f3697266100d44091eee5f44a1a3f85fe"
+  },
+  {
+    "source": "apps/server/src/database/migrations/037_gallery_order_sync.sql",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\server\\src\\database\\migrations\\037_gallery_order_sync.sql",
+    "size": 38817,
+    "sha256": "39904508f711bf9c1ac7bcc8bcb6a6eb72b8c968a5065e275bc62c2368649c68",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "39904508f711bf9c1ac7bcc8bcb6a6eb72b8c968a5065e275bc62c2368649c68"
+  },
+  {
+    "source": "apps/server/src/database/migrations/042_standalone_author_directory_seed.sql",
+    "saved": ".hermes\\tmp\\offline-parity-collection\\common-tag\\before\\apps\\server\\src\\database\\migrations\\042_standalone_author_directory_seed.sql",
+    "size": 1249,
+    "sha256": "ee9dccd44efe6cf383633d7e44ebab39368a58a9e8c1da0f6d971c362cdbb008",
+    "savedMatchesSha": true,
+    "liveEqualsFreshBefore": true,
+    "liveSha256": "ee9dccd44efe6cf383633d7e44ebab39368a58a9e8c1da0f6d971c362cdbb008"
+  }
+]

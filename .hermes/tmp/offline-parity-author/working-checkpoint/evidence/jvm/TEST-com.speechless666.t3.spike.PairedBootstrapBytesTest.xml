@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.speechless666.t3.spike.PairedBootstrapBytesTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-09T08:57:38.994Z" hostname="LAPTOP-70QV4MNN" time="2.511">
+  <properties/>
+  <testcase name="productionBootstrapVerifierUsesAuthenticatedPinnedOriginalBytes" classname="com.speechless666.t3.spike.PairedBootstrapBytesTest" time="2.511"/>
+  <system-out><![CDATA[paired-bootstrap-byte-caller {"wrongMissingRetained":true,"pass":true,"canonicalQuery":true,"authenticatedRequests":42,"unapprovedNotPaired":3,"done":true,"bridgeCalls":20,"rawBytes":95}
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

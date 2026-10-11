@@ -1,0 +1,43 @@
+[
+  {
+    "path": "apps/server/src/http/app.ts",
+    "beforeSHA": "ebcf84cb016072cd116eff400f024b2b06ff01b6a2aca24f0c280e0765838a99",
+    "afterSHA": "2ba745ff16d838857f846b9a80380cce7c5a9cb44934778084ca2f4dbdee58ab",
+    "beforeSize": 106400,
+    "afterSize": 106447
+  },
+  {
+    "path": "apps/web/src/GalleryApp.vue",
+    "beforeSHA": "1b7d53cb4586e68b1c8491b5db99ccc15cc0eb5025bf95cac6d848c0d995c67c",
+    "afterSHA": "6dcdf0dc4d2000a44803051c2cdac3ee1fd190a92bfdb52d4166342507415da1",
+    "beforeSize": 257093,
+    "afterSize": 257780
+  },
+  {
+    "path": "apps/web/src/offline/offline-api.ts",
+    "beforeSHA": "d6f7446680ebefb1bde63cd4333399141851c7bf3583ca71ae5c35cede58df4a",
+    "afterSHA": "dff30848505a9bfd71dd7d3e3bf71e92dfeea49f53dd27452b05dc40585f2dfd",
+    "beforeSize": 395878,
+    "afterSize": 399517
+  },
+  {
+    "path": "apps/web/src/offline/offline-library.ts",
+    "beforeSHA": "edaa3182d30a23d8b59c645f885c6e84a2e855f00ea4f5efcb9c1cbf75501a83",
+    "afterSHA": "8a4f78512524d207c182694bfd92ff2830787de20d2c628ae33b206590a9708d",
+    "beforeSize": 40023,
+    "afterSize": 40111
+  },
+  {
+    "path": "packages/shared/src/schemas/sync.ts",
+    "beforeSHA": "f58a1deb95ca589aacf9470b532154386fd3e38e0a2e7e67832532d70804bc1b",
+    "afterSHA": "16d43806ee8f48291a50254c629bbec491d25784d7fd9fd365d4fb039c6b7d05",
+    "beforeSize": 65419,
+    "afterSize": 65478
+  },
+  {
+    "path": "apps/web/tests/offline-entry-rating-dimension-retained.integration.test.ts",
+    "afterSHA": "42b7032aef81dcf16d5e10d6dd4977ca28e2c8e15329d9ef20abb5853123e09e",
+    "afterSize": 15627,
+    "new": true
+  }
+]

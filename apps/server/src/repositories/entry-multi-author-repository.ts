@@ -63,6 +63,7 @@ function listLinkedAuthors(database: T3Database, entryId: number): LinkedAuthorR
 export function convertEntryAuthorsToMultiAuthor(
   database: T3Database,
   entryId: number,
+  replayTargetUid?: string,
 ): ConvertEntryAuthorsResult {
   return database.transaction(() => {
     const exists = database.prepare('SELECT 1 FROM entries WHERE id = ?').get(entryId);
@@ -87,7 +88,10 @@ export function convertEntryAuthorsToMultiAuthor(
       throw new Error('Multi Author conversion requires an Entry with several Authors');
     }
 
-    const targetId = multiAuthorId ?? createProducer(database, { name: MULTI_AUTHOR_PRODUCER_NAME }).id;
+    const targetId = multiAuthorId ?? (replayTargetUid === undefined
+      ? createProducer(database, { name: MULTI_AUTHOR_PRODUCER_NAME }).id
+      : Number(database.prepare('INSERT INTO producers (name, sync_uid) VALUES (?, ?)')
+        .run(MULTI_AUTHOR_PRODUCER_NAME, replayTargetUid).lastInsertRowid));
     linkEntryProducer(database, entryId, targetId);
     for (const author of convertible) {
       unlinkEntryProducer(database, entryId, author.id);

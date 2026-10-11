@@ -1,0 +1,20 @@
+{
+  "apk": "D:\\Project\\TagTraceTrove\\spikes\\001-android-webview-shell\\T3-v42-offline-duration-author.apk",
+  "sha256": "0c7638a39384577227d854f5165996f89b6abf475428012ce66083bfa089fc0b",
+  "size": 5829676,
+  "matchedWebFiles": [
+    "assets/index-BtGX_SHH.js",
+    "assets/index-r7U5d4bq.css",
+    "icons/icon-maskable.svg",
+    "icons/icon.svg",
+    "index.html",
+    "manifest.webmanifest",
+    "sw.js"
+  ],
+  "markers": [
+    "0.0.42-c3-duration-author-offline"
+  ],
+  "sameSignerAs": "D:\\Project\\TagTraceTrove\\spikes\\001-android-webview-shell\\T3-v41-offline-gallery-preview.apk",
+  "certificate": "Signer #1 certificate SHA-256 digest: 1035333c6fa6a18e40398739adda5a2640e6c9cf38e94bea1bf58118eb5fdf41",
+  "package": "package: name='com.speechless666.t3.spike' versionCode='42' versionName='0.0.42-c3-duration-author-offline' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'"
+}

@@ -4,6 +4,28 @@ import { runDatabaseProbe } from '../../src/database/probe.js';
 import { createMigratedMemoryDatabase } from '../../src/database/testing.js';
 
 describe('database verification', () => {
+  it('requires the Gallery order revision owner only once schema 37 is applied', () => {
+    const database = createMigratedMemoryDatabase();
+    try {
+      database.exec('DROP TABLE gallery_order_scope');
+      expect(inspectDatabase(database).issues).toContain('missing required table: gallery_order_scope');
+      // The requirement is gated on the introducing migration having been applied, so it takes
+      // removing 37 *and everything after it* to lift it — the latest version alone is never the
+      // one 37 introduced.
+      database.exec('DELETE FROM schema_migrations WHERE version >= 37');
+      expect(inspectDatabase(database).issues).not.toContain('missing required table: gallery_order_scope');
+    } finally { database.close(); }
+  });
+  it('detects a missing durable sync feed cursor table on an isolated database', () => {
+    const database = createMigratedMemoryDatabase();
+    try {
+      database.exec('DROP TABLE sync_feed_cursors');
+      expect(inspectDatabase(database).issues).toContain('missing required table: sync_feed_cursors');
+    } finally {
+      database.close();
+    }
+  });
+
   it('reports a clean migrated database', () => {
     const database = createMigratedMemoryDatabase();
 
@@ -109,5 +131,9 @@ describe('database verification', () => {
     expect(result.ok).toBe(true);
     expect(result.checks.every((check) => check.passed)).toBe(true);
     expect(result.checks.map((check) => check.name)).toContain('persist shared View later');
+    expect(result.checks.map((check) => check.name)).toContain('journal Producer View later membership');
+    expect(result.checks.map((check) => check.name)).toContain('journal Producer tag identity and membership');
+    expect(result.checks.map((check) => check.name)).toContain('durable bounded change feed acknowledgement');
+    expect(result.checks.map((check) => check.name)).toContain('idempotent online Entry claim');
   });
 });

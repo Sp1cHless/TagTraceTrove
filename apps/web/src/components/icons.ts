@@ -26,12 +26,18 @@ export type IconName =
   | 'folder'
   | 'folder-plus'
   | 'search'
+  | 'homepage'
+  | 'exchange'
   | 'menu'
   | 'close'
   | 'edit'
   | 'settings'
   | 'sun'
-  | 'moon';
+  | 'moon'
+  | 'expand'
+  | 'collapse'
+  | 'add'
+  | 'delete';
 
 export const iconMarkup: Record<IconName, string> = {
   'thumb-up':
@@ -58,6 +64,15 @@ export const iconMarkup: Record<IconName, string> = {
     '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2Z"/><path d="M12 10.5v6"/><path d="M9 13.5h6"/>',
   'search':
     '<circle cx="11" cy="11" r="7.5"/><path d="m20.5 20.5-4-4"/>',
+  // Traced from the approved master (apps/web/icon/homepage.png): a house outline whose eaves
+  // overhang the walls, with a rounded door standing on the same floor line.
+  'homepage':
+    '<path d="M3.6 11.4 12 3.5l8.4 7.9"/><path d="M6 10.3V18a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-7.7"/><path d="M10 20v-4.3a1.5 1.5 0 0 1 1.5-1.5h1a1.5 1.5 0 0 1 1.5 1.5V20"/>',
+  // Traced from the approved master (apps/web/icon/exchange.png): two shafts with opposite heads —
+  // up on the left, down on the right. The pair is what says "move these past each other", so the two
+  // halves are kept at the same length.
+  'exchange':
+    '<path d="M9 20V4"/><path d="m5.5 7.5 3.5-3.5 3.5 3.5"/><path d="M15 4v16"/><path d="m11.5 16.5 3.5 3.5 3.5-3.5"/>',
   'menu':
     '<path d="M4 7h16M4 12h16M4 17h16"/>',
   'close':
@@ -70,4 +85,17 @@ export const iconMarkup: Record<IconName, string> = {
     '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
   'moon':
     '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>',
+  // Traced from the approved masters (apps/web/icon/expand.png, collapse.png):
+  // two chevrons of the `back` icon's geometry, tip to tip, reading as "widen"
+  // and "narrow" the same strip.
+  'expand':
+    '<path d="M5.5 6l6 6-6 6"/><path d="M12 6l6 6-6 6"/>',
+  'collapse':
+    '<path d="M18.5 6l-6 6 6 6"/><path d="M12 6l-6 6 6 6"/>',
+  'add':
+    '<path d="M12 5.5v13"/><path d="M5.5 12h13"/>',
+  // Traced from apps/web/icon/delete.png; the master is the same X as `close`,
+  // kept under its own semantic name for the media editors that use it.
+  'delete':
+    '<path d="m6 6 12 12"/><path d="M18 6 6 18"/>',
 };

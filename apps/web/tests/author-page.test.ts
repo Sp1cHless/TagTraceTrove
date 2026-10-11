@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AuthorPage from '../src/AuthorPage.vue';
 import type { GalleryApi } from '../src/api/gallery.js';
 import { setLocale } from '../src/i18n.js';
+import { viewLaterAuthorIds } from '../src/stores/preferences.js';
 
 vi.stubGlobal('scrollTo', vi.fn());
 
@@ -47,9 +48,17 @@ function createAuthorApi() {
     return slot;
   });
   const setAuthorRating = vi.fn(async (_authorId: number, slotId: number, stars: number | null) => {
+    // The real route answers with the slot's own name; a hard-coded one would rename the row in the
+    // page and hide a mismatch between what was clicked and what is shown.
+    const name = authorRatings.find((row) => row.slotId === slotId)?.name ?? 'Overall';
     authorRatings = authorRatings.map((row) => (row.slotId === slotId ? { ...row, stars } : row));
-    return { slotId, name: 'Overall', stars };
+    return { slotId, name, stars };
   });
+  /** Deleting a dimension really drops the row, so the refresh that follows it is the real one. */
+  const deleteAuthorRatingSlot = vi.fn(async (_authorId: number, slotId: number) => {
+    authorRatings = authorRatings.filter((row) => row.slotId !== slotId);
+  });
+  const setAuthorGalleryAnchor = vi.fn(async () => undefined);
   const createAuthorDirectory = vi.fn(async (_authorId: number, input: {
     title: string;
     description?: string;
@@ -118,10 +127,13 @@ function createAuthorApi() {
     removeAuthorTag: vi.fn(async () => undefined),
     createAuthorRatingSlot,
     setAuthorRating,
+    setAuthorGalleryAnchor: vi.fn(async () => undefined),
+    deleteEntryRatingSlot: vi.fn(async () => undefined),
+    deleteAuthorRatingSlot,
     listCollections: vi.fn(async () => []),
     listCollectionsForProducer: vi.fn(async () => []),
     listTaxonomyAliases: vi.fn(async () => []),
-    listAuthorFilterOptions: vi.fn(async () => ({ authorTags: [], workTags: [] })),
+    listAuthorFilterOptions: vi.fn(async () => ({ authorTags: [], workTags: [], ratingSlots: [] })),
     queryProducerPage: vi.fn(async (input) => {
       const items = [{ id: 3, name: 'Example Author', covers: [], galleryType: 'game', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false }];
       return { items, total: items.length, page: input.page, pageSize: input.pageSize };
@@ -159,6 +171,9 @@ function createAuthorApi() {
     mergeAuthorEntries,
     createAuthorRatingSlot,
     setAuthorRating,
+    setAuthorGalleryAnchor,
+    deleteEntryRatingSlot: vi.fn(async () => undefined),
+    deleteAuthorRatingSlot,
   };
 }
 
@@ -173,7 +188,26 @@ async function openAuthor(api: GalleryApi) {
 }
 
 describe('AuthorPage', () => {
-  beforeEach(() => setLocale('en'));
+  beforeEach(() => {
+    setLocale('en');
+    viewLaterAuthorIds.value = [];
+  });
+
+  it('reports a failed work page request instead of leaving cards from the previous page', async () => {
+    const { api } = createAuthorApi();
+    const query = api.queryEntryPage.bind(api);
+    api.queryEntryPage = vi.fn(async (input) => {
+      if (input.page === 2) throw new Error('Works unavailable');
+      const result = await query(input);
+      return input.looseForProducerId === 3 ? { ...result, total: 40 } : result;
+    });
+    const wrapper = await openAuthor(api);
+    expect(wrapper.find('[data-testid="author-next-page"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="author-next-page"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Works unavailable');
+    expect(wrapper.findAll('[data-author-work-id]')).toHaveLength(0);
+  });
 
   it('lets a single work fill both Author list and detail cover mosaics', async () => {
     const { api } = createAuthorApi();
@@ -224,6 +258,33 @@ describe('AuthorPage', () => {
     expect(detailCover.attributes('data-cover-count')).toBe('1');
     expect((detailCover.element as HTMLElement).style.gridTemplateColumns)
       .toBe('repeat(1, minmax(0, 1fr))');
+  });
+
+  it('reflects Author View later add/remove through the existing detail control while offline', async () => {
+    const { api } = createAuthorApi();
+    let producerIds: number[] = [];
+    api.addViewLaterAuthor = vi.fn(async (authorId) => {
+      producerIds = [...producerIds, authorId];
+      return { entryIds: [], producerIds };
+    });
+    api.removeViewLaterAuthor = vi.fn(async (authorId) => {
+      producerIds = producerIds.filter((id) => id !== authorId);
+      return { entryIds: [], producerIds };
+    });
+    const wrapper = await openAuthor(api);
+    const button = wrapper.get('[data-testid="author-view-later-button"]');
+
+    await button.trigger('click');
+    await flushPromises();
+    expect(api.addViewLaterAuthor).toHaveBeenCalledWith(3);
+    expect(button.attributes('aria-pressed')).toBe('true');
+    expect(viewLaterAuthorIds.value).toEqual([3]);
+
+    await button.trigger('click');
+    await flushPromises();
+    expect(api.removeViewLaterAuthor).toHaveBeenCalledWith(3);
+    expect(button.attributes('aria-pressed')).toBe('false');
+    expect(viewLaterAuthorIds.value).toEqual([]);
   });
 
   it('shows uniform colored usage mode buttons with a clear pressed state', async () => {
@@ -303,11 +364,64 @@ describe('AuthorPage', () => {
     expect(option.text()).toBe('Random');
   });
 
+  it('filters and orders the Author list by the Author\u2019s own rating', async () => {
+    // The Author list's rating is the Author's own class. Adding a rating puts the highest first —
+    // the sort control above then decides the order within one rating — and the works summary is not
+    // offered here: what an Author's works inherit is a question about a work.
+    const { api } = createAuthorApi();
+    api.listAuthorFilterOptions = vi.fn(async () => ({
+      authorTags: [],
+      workTags: [],
+      // The same dimension name in two Galleries: the label has to say which one.
+      ratingSlots: [
+        { id: 70, name: 'Charisma', sortOrder: 0, entryType: 'game' },
+        { id: 71, name: 'Charisma', sortOrder: 0, entryType: 'av' },
+      ],
+    }));
+    api.queryProducerPage = vi.fn(async (input) => ({
+      items: [], total: 0, page: input.page, pageSize: input.pageSize,
+    }));
+    const wrapper = mount(AuthorPage, { props: { api, authors: [] } });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="add-author-rating-filter"]').trigger('click');
+    await flushPromises();
+    // An empty row asks nothing yet.
+    expect(api.queryProducerPage).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ ratingConditions: expect.anything() }),
+    );
+
+    const slotSelect = wrapper.get('[data-testid="author-rating-slot-select"]');
+    expect(slotSelect.findAll('option').map((option) => option.text()))
+      .toEqual(['Rating', 'Charisma · game', 'Charisma · av']);
+    await slotSelect.setValue(70);
+    await flushPromises();
+    // Default row: greater than 3 stars, and that dimension is what the list is ordered by.
+    expect(api.queryProducerPage).toHaveBeenLastCalledWith(expect.objectContaining({
+      ratingConditions: [{ slotId: 70, operator: 'gt', stars: 3 }],
+      ratingSort: { slotId: 70, direction: 'desc' },
+    }));
+
+    await wrapper.get('[data-testid="author-rating-operator-select"]').setValue('unrated');
+    await flushPromises();
+    expect(api.queryProducerPage).toHaveBeenLastCalledWith(expect.objectContaining({
+      ratingConditions: [{ slotId: 70, operator: 'unrated', stars: null }],
+    }));
+    expect(wrapper.find('[data-testid="author-rating-stars-select"]').exists()).toBe(false);
+
+    await wrapper.get('[data-testid="remove-author-rating-filter"]').trigger('click');
+    await flushPromises();
+    expect(api.queryProducerPage).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ ratingSort: expect.anything() }),
+    );
+  });
+
   it('filters the Author list with separate Author Tags and Works contain Tags controls', async () => {
     const { api } = createAuthorApi();
     api.listAuthorFilterOptions = vi.fn(async () => ({
       authorTags: [{ tagId: 2, name: 'Circle' }],
       workTags: [{ tagId: 5, name: 'Action' }],
+      ratingSlots: [{ id: 70, name: 'Charisma', sortOrder: 0, entryType: 'game' }],
     }));
     const matchingAuthor = {
       id: 4,
@@ -924,7 +1038,7 @@ describe('AuthorPage', () => {
     await wrapper.get('[data-testid="create-author-rating-form"]').trigger('submit');
     await flushPromises();
 
-    expect(createAuthorRatingSlot).toHaveBeenCalledWith(3, 'Overall');
+    expect(createAuthorRatingSlot).toHaveBeenCalledWith(3, 'Overall', 'producer');
     const row = wrapper.get('[data-testid="author-ratings"] [data-rating-slot-id="70"]');
     expect(row.text()).toContain('Overall');
     expect(row.get('.star-display-fill').attributes('style')).toContain('0%');
@@ -934,5 +1048,98 @@ describe('AuthorPage', () => {
     expect(setAuthorRating).toHaveBeenCalledWith(3, 70, 4.5);
     expect(wrapper.get('[data-testid="author-ratings"] [data-rating-slot-id="70"] .star-display-fill')
       .attributes('style')).toContain('90%');
+  });
+
+  it('keeps the author\u2019s own rating class apart from the works summary', async () => {
+    // Two classes of one author, one per half of the same board. The summary is what an unrated work
+    // of theirs inherits and it follows the Gallery's work dimensions by itself; the author's own
+    // describes the person and is never inherited. Separate partitions, so a row can never land in
+    // the wrong half.
+    const { api, createAuthorRatingSlot, setAuthorRating } = createAuthorApi();
+    const wrapper = await openAuthor(api);
+    await wrapper.get('[data-testid="start-author-editing"]').trigger('click');
+    await flushPromises();
+
+    // Editing reveals both halves even when neither has a dimension yet.
+    expect(wrapper.find('[data-testid="author-ratings"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="author-self-ratings"]').exists()).toBe(true);
+    // Each half is a grid cell of one board, which is what puts them side by side and stacks them
+    // when there is no room (the breakpoint is CSS, so the structure is what a test can hold on to).
+    const halves = wrapper.get('.author-ratings-board').findAll('.author-rating-row');
+    expect(halves).toHaveLength(2);
+    expect(halves[0]!.attributes('data-rating-class')).toBe('producer');
+    expect(halves[1]!.attributes('data-rating-class')).toBe('author_self');
+
+    await wrapper.get('[data-testid="add-author-self-rating-button"]').trigger('click');
+    await wrapper.get('[data-testid="create-author-self-rating-form"] input').setValue('Charisma');
+    await wrapper.get('[data-testid="create-author-self-rating-form"]').trigger('submit');
+    await flushPromises();
+
+    // The class travels with the call, so the server writes it into the right partition.
+    expect(createAuthorRatingSlot).toHaveBeenCalledWith(3, 'Charisma', 'author_self');
+    // Nothing presses "apply": the summary's dimensions come from the Gallery's template on their
+    // own, so there is no such control to find.
+    expect(wrapper.find('[data-testid="apply-work-dimensions"]').exists()).toBe(false);
+    expect(setAuthorRating).not.toHaveBeenCalled();
+  });
+
+  it('deletes a rating dimension only after the dialog is confirmed', async () => {
+    // The dimension belongs to the Gallery, not to this author: every author of it loses the row and
+    // its values go with it. So the × asks first — and backing out sends nothing.
+    const { api, createAuthorRatingSlot, deleteAuthorRatingSlot } = createAuthorApi();
+    const wrapper = await openAuthor(api);
+    await wrapper.get('[data-testid="start-author-editing"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="add-author-rating-button"]').trigger('click');
+    await wrapper.get('[data-testid="create-author-rating-form"] input').setValue('Taste');
+    await wrapper.get('[data-testid="create-author-rating-form"]').trigger('submit');
+    await flushPromises();
+    expect(createAuthorRatingSlot).toHaveBeenCalled();
+
+    const row = wrapper.get('[data-testid="author-ratings"] [data-rating-slot-id="70"]');
+    // Left of the arrows, and a different control from the × that clears one value: that one lives
+    // inside the star picker and only appears once the row actually has a value.
+    expect(row.get('[data-delete-rating-slot-id="70"]').text()).toBe('×');
+    expect(row.find('[data-clear-rating-slot-id]').exists()).toBe(false);
+    await row.get('[data-set-stars="4.5"]').trigger('click');
+    await flushPromises();
+    const rated = wrapper.get('[data-testid="author-ratings"] [data-rating-slot-id="70"]');
+    expect(rated.find('[data-clear-rating-slot-id]').exists()).toBe(true);
+
+    await row.get('[data-delete-rating-slot-id="70"]').trigger('click');
+    await flushPromises();
+    expect(deleteAuthorRatingSlot).not.toHaveBeenCalled();
+    const dialog = wrapper.get('[data-testid="rating-delete-confirmation"]');
+    expect(dialog.text()).toContain('Delete “Taste”?');
+    expect(dialog.text()).toContain('all authors under the same Gallery, together with every rating on it');
+
+    await wrapper.get('[data-testid="rating-delete-cancel"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="rating-delete-confirmation"]').exists()).toBe(false);
+    expect(deleteAuthorRatingSlot).not.toHaveBeenCalled();
+
+    await row.get('[data-delete-rating-slot-id="70"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="rating-delete-confirm"]').trigger('click');
+    await flushPromises();
+    expect(deleteAuthorRatingSlot).toHaveBeenCalledWith(3, 70);
+    expect(wrapper.find('[data-testid="author-ratings"] [data-rating-slot-id="70"]').exists()).toBe(false);
+  });
+
+  it('explains the two halves while editing and says nothing extra while reading', async () => {
+    const { api } = createAuthorApi();
+    const wrapper = await openAuthor(api);
+
+    // Reading: no hints, and nothing about a Gallery that is not there yet.
+    expect(wrapper.find('.rating-class-hint').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Inherited by unrated work');
+
+    await wrapper.get('[data-testid="start-author-editing"]').trigger('click');
+    await flushPromises();
+    const hints = wrapper.findAll('.rating-class-hint').map((hint) => hint.text());
+    expect(hints).toEqual([
+      'Inherited by unrated work.',
+      'Not inherited by work. Applied to all authors under the Gallery.',
+    ]);
   });
 });

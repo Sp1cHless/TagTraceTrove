@@ -1,0 +1,22 @@
+--- apps/server/src/http/app.ts fresh-before
++++ apps/server/src/http/app.ts latest
+@@ -1,3 +1,4 @@
++import { collectionCommonTagContext } from '../sync/collection-common-tag.js';
+ import { collectionDeleteIdentity } from '../sync/collection-delete.js';
+ import { createHash } from 'node:crypto';
+ import { readFile, stat } from 'node:fs/promises';
+@@ -1073,7 +1074,13 @@
+     return context.json(collectionRecordSchema.parse(updateCollection(database, collectionId, input)));
+   });
+ 
+-  app.get('/api/collections/:collectionId/sync-identity', (context) => {
++  app.get('/api/collections/:collectionId/common-tag-context', (context) => {
++    const {collectionId}=collectionIdParamsSchema.parse({collectionId:context.req.param('collectionId')});
++    const name=context.req.query('name');if(!name || name.length>500)return context.json(errorPayload('VALIDATION_ERROR','Missing Tag name'),400);
++    return context.json(collectionCommonTagContext(database,collectionId,name));
++  });
++
++  app.get('/api/collections/:collectionId/sync-identity' , (context) => {
+     const {collectionId}=collectionIdParamsSchema.parse({collectionId:context.req.param('collectionId')});
+     const identity=collectionDeleteIdentity(database,collectionId);
+     if (!identity) return context.json(errorPayload('NOT_FOUND','Collection not found'),404);

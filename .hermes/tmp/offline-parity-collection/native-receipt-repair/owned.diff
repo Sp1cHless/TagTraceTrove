@@ -1,0 +1,119 @@
+--- before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/AppliedReceipt.java
++++ after/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/AppliedReceipt.java
+@@ -9,6 +9,86 @@
+   if(!(id instanceof String) || !((String)id).matches("(?i)([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)") || !expected.equalsIgnoreCase((String)id) || !"applied".equals(receipt.opt("status")))return false;
+   return integer(receipt.opt("resourceVersion"),1) && integer(receipt.opt("serverSeq"),0) && (!receipt.has("entityId") || integer(receipt.opt("entityId"),1));
+  }
++ /** Actual-kind receipt proof, shared by settlement and retained dependency authority. */
++ static boolean valid(JSONObject receipt,JSONObject operation) {
++  try {
++   String kind=operation.getString("operationKind");
++   if(new JSONObject(NativeMutationContract.JSON).optJSONObject(kind)==null)return false;
++   String proofKey="collection.delete".equals(kind)?"collectionDeleteJournal":"collection.common-tag.add".equals(kind)?"collectionCommonTag":null;
++   if(proofKey==null)return valid(receipt,operation.getString("opId"));
++   if(!"collection".equals(operation.opt("entityKind")))return false;
++   java.util.Set<String> allowed=new java.util.HashSet<>(KEYS);allowed.add(proofKey);
++   if(!keys(receipt,allowed))return false;
++   JSONObject generic=new JSONObject(receipt.toString());generic.remove(proofKey);
++   if(!valid(generic,operation.getString("opId")) || !integer(receipt.opt("entityId"),1) || !integer(operation.opt("baseVersion"),1)
++     || receipt.getLong("resourceVersion")!=operation.getLong("baseVersion")+1)return false;
++   java.util.Map<String,Long> expected=new java.util.HashMap<>();
++   String root=operation.getString("entityUid").toLowerCase(java.util.Locale.ROOT);
++   if(!uuid(root))return false;
++   expected.put("collection:"+root,operation.getLong("baseVersion"));
++   org.json.JSONArray journal;
++   JSONObject base=operation.getJSONObject("baseValues");
++   if("collection.delete".equals(kind)) {
++    org.json.JSONArray children=base.getJSONArray("children");
++    if(children.length()>200)return false;
++    for(int i=0;i<children.length();i++)if(!owner(expected,"collection",children.getJSONObject(i)))return false;
++    journal=receipt.getJSONArray(proofKey);
++   }else {
++    JSONObject proof=receipt.getJSONObject(proofKey);
++    if(!exact(proof,"tagId","tagUid","entriesAffected","alreadyPresent","skipped","journal"))return false;
++    org.json.JSONArray members=base.getJSONArray("members"),types=base.getJSONArray("types");
++    if(members.length()>2000)return false;
++    int affected=0,present=0,skipped=0;
++    for(int i=0;i<members.length();i++) {
++     JSONObject member=members.getJSONObject(i);Object has=member.opt("present");if(!(has instanceof Boolean))return false;
++     boolean target=false;
++     for(int n=0;n<types.length();n++) {
++      JSONObject type=types.getJSONObject(n);
++      if(member.getString("entryType").equals(type.getString("entryType")) && type.has("facetUid") && !type.isNull("facetUid"))target=true;
++     }
++     if((Boolean)has)present++;
++     else if(target){affected++;if(!owner(expected,"entry",member))return false;}
++     else skipped++;
++    }
++    for(String count:new String[]{"entriesAffected","alreadyPresent","skipped"})if(!integer(proof.opt(count),0))return false;
++    if(proof.getLong("entriesAffected")!=affected || proof.getLong("alreadyPresent")!=present || proof.getLong("skipped")!=skipped)return false;
++    boolean noTag=proof.isNull("tagId");
++    if(noTag!=proof.isNull("tagUid") || affected>0 && noTag)return false;
++    if(!noTag && (!integer(proof.opt("tagId"),1) || !uuid(proof.opt("tagUid")) || !proof.getString("tagUid").equalsIgnoreCase(operation.getJSONObject("payload").getString("tagUid"))))return false;
++    journal=proof.getJSONArray("journal");
++   }
++   if(journal.length()!=expected.size() || journal.length()<1 || journal.length()>("collection.delete".equals(kind)?201:2001))return false;
++   long maximum=0;boolean rootFound=false;java.util.Set<String> seen=new java.util.HashSet<>();
++   for(int i=0;i<journal.length();i++) {
++    JSONObject row=journal.getJSONObject(i);boolean deletion="collection.delete".equals(kind);
++    if(!(deletion?exact(row,"id","syncUid","resourceVersion","serverSeq"):exact(row,"entityKind","id","syncUid","resourceVersion","serverSeq")))return false;
++    String entity=deletion?"collection":row.getString("entityKind");
++    if(!uuid(row.opt("syncUid")) || !integer(row.opt("id"),1) || !integer(row.opt("resourceVersion"),1) || !integer(row.opt("serverSeq"),1))return false;
++    String uid=row.getString("syncUid").toLowerCase(java.util.Locale.ROOT),key=entity+":"+uid;
++    Long version=expected.get(key);
++    if(version==null || !seen.add(key) || row.getLong("resourceVersion")!=version+1)return false;
++    if("collection".equals(entity) && root.equals(uid)) {
++     if(row.getLong("id")!=receipt.getLong("entityId") || deletion && i!=0)return false;
++     rootFound=true;
++    }
++    maximum=Math.max(maximum,row.getLong("serverSeq"));
++   }
++   return rootFound && maximum==receipt.getLong("serverSeq");
++  }catch(org.json.JSONException invalid){return false;}
++ }
++ private static boolean owner(java.util.Map<String,Long> expected,String kind,JSONObject row)throws org.json.JSONException {
++  if(!uuid(row.opt("syncUid")) || !integer(row.opt("syncVersion"),1))return false;
++  return expected.put(kind+":"+row.getString("syncUid").toLowerCase(java.util.Locale.ROOT),row.getLong("syncVersion"))==null;
++ }
++ private static boolean keys(JSONObject object,java.util.Set<String> allowed) {
++  java.util.Iterator<String> keys=object.keys();while(keys.hasNext())if(!allowed.contains(keys.next()))return false;return true;
++ }
++ private static boolean exact(JSONObject object,String... fields) {
++  return object.length()==fields.length && keys(object,new java.util.HashSet<>(java.util.Arrays.asList(fields)));
++ }
++ private static boolean uuid(Object value) {
++  return value instanceof String && ((String)value).matches("(?i)([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)");
++ }
+  private static boolean integer(Object value,long minimum) {
+   if(!(value instanceof Number))return false;
+   double number=((Number)value).doubleValue();
+--- before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java
++++ after/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java
+@@ -111,7 +111,7 @@
+        if(stop.stopped() || !ledger.renewJob(id,owner,System.currentTimeMillis()))throw new java.io.IOException("Stopped or lease lost before write");
+        PinnedLanTransport.Result response=state.transport.request("/api/sync/replay","POST","application/json",body,state.token);replay=response.bytes;
+        JSONObject receipt=json(response);
+-       if(!AppliedReceipt.valid(receipt,id))throw new SecurityException("Mutation failed/conflicted; successors held");
++       if(!AppliedReceipt.valid(receipt,op))throw new SecurityException("Mutation failed/conflicted; successors held");
+        if(job.isNull("uploadId")) {
+          if(stop.stopped() || !ledger.finishJob(id,owner,body,"completed",replay,null,null,System.currentTimeMillis()))throw new java.io.IOException("Lease lost; exact retry required");
+          continue;
+--- before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java
++++ after/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java
+@@ -127,7 +127,15 @@
+             if(!c.moveToFirst() || !"completed".equals(c.getString(0)) || c.isNull(1))return false;
+             try {
+                 org.json.JSONObject receipt=new org.json.JSONObject(new String(c.getBlob(1),java.nio.charset.StandardCharsets.UTF_8));
+-                if(!AppliedReceipt.valid(receipt,deps.getString(n)))return false;
++                String dependency=deps.getString(n);byte[] body=operationBody(dependency);
++                if(body==null)return false;
++                org.json.JSONObject original=new org.json.JSONObject(new String(body,java.nio.charset.StandardCharsets.UTF_8));
++                try(Cursor stored=getReadableDatabase().rawQuery("SELECT client_id,library_id,epoch,body_hash FROM operations WHERE op_id=?",new String[]{dependency})) {
++                    if(!stored.moveToFirst() || !dependency.equalsIgnoreCase(original.getString("opId"))
++                        || !stored.getString(0).equals(original.getString("clientId")) || !stored.getString(1).equals(original.getString("libraryId"))
++                        || !stored.getString(2).equals(original.getString("syncEpoch")) || !stored.getString(3).equals(sha256(body)))return false;
++                }
++                if(!AppliedReceipt.valid(receipt,original))return false;
+             } catch(org.json.JSONException invalid){return false;}
+         }return true;
+     }

@@ -1,0 +1,47 @@
+--- before/apps/web/src/offline/pending-work-restore.ts
++++ working/apps/web/src/offline/pending-work-restore.ts
+@@ -97,7 +97,7 @@
+     }
+   }
+   for (const [index,row] of union.entries()) {
+-    if (row.entityKind === 'entry' && union.slice(0,index).some(prior => prior.operationKind === 'entry.delete' && uid(prior.entityUid) === uid(row.entityUid))) {
++    if ((row.entityKind === 'entry' || row.entityKind === 'producer') && union.slice(0,index).some(prior => prior.operationKind === `${row.entityKind}.delete` && uid(prior.entityUid) === uid(row.entityUid))) {
+       throw new Error('A deleted Entry cannot accept later restored edits; nothing was restored');
+     }
+     if (union.slice(0,index).some(prior=>prior.entityKind===row.entityKind && uid(prior.entityUid)===uid(row.entityUid)
+@@ -118,7 +118,7 @@
+     const {status,lastAttemptAt,lastError,...envelope} = row;
+     void status; void lastAttemptAt; void lastError;
+     if (!syncReplayRequestSchema.safeParse(envelope).success) throw new Error('An existing pending edit has an unsupported envelope');
+-    if (!['entry.create','entry.tag.create','entry.facet.create','collection.create','collection.order.set'].includes(row.operationKind)
++    if (!['producer.create','entry.create','entry.tag.create','entry.facet.create','collection.create','collection.order.set'].includes(row.operationKind)
+       && !owners.get(row.entityKind)?.has(uid(row.entityUid))
+       && !union.some(parent=>parent.operationKind===`${row.entityKind}.create` && uid(parent.entityUid)===uid(row.entityUid))) {
+       throw new Error('Pending edit owner is not in this library or its pending creates');
+@@ -159,7 +159,7 @@
+   }
+   const creates = new Map<string,string>();
+   for (const row of union) {
+-    if (['entry.create','entry.tag.create','entry.facet.create','collection.create'].includes(row.operationKind)) {
++    if (['producer.create','entry.create','entry.tag.create','entry.facet.create','collection.create'].includes(row.operationKind)) {
+       const key = `${row.entityKind}:${uid(row.entityUid)}`;
+       if (creates.has(key) && creates.get(key)!==row.opId) throw new Error('Duplicate created item identity');
+       creates.set(key,row.opId);
+@@ -178,7 +178,7 @@
+     for (const dependency of dependencies) {
+       const parent = byId.get(uid(dependency.id));
+       const owner = parent?.row.operationKind==='entry.author.create-and-link' ? parent.row.payload.producerUid : parent?.row.entityUid;
+-      if (!parent || parent.index>=index || parent.row.operationKind!==dependency.kind || typeof owner!=='string' || uid(owner)!==uid(dependency.owner)) {
++      if (!parent || parent.index>=index || (parent.row.operationKind!==dependency.kind && !(dependency.kind==='entry.author.create-and-link' && parent.row.operationKind==='producer.create')) || typeof owner!=='string' || uid(owner)!==uid(dependency.owner)) {
+         throw new Error('A pending edit has a missing, foreign, or out-of-order parent. Restore a complete export containing the original parent edit before its children; cached item IDs cannot verify its server receipt. Nothing was restored');
+       }
+     }
+@@ -221,7 +221,7 @@
+   const prior = union.slice(0,index);
+   const same = (left:string|undefined,right:string) => left !== undefined && uid(left)===uid(right);
+   const entry = (value:string) => payload.entries.some(row=>same(row.syncUid,value)) || prior.some(row=>row.operationKind==='entry.create' && same(row.entityUid,value));
+-  const producer = (value:string) => payload.producers.some(row=>same(row.syncUid,value)) || prior.some(row=>row.operationKind==='entry.author.create-and-link' && typeof row.payload.producerUid==='string' && same(row.payload.producerUid,value));
++  const producer = (value:string) => payload.producers.some(row=>same(row.syncUid,value)) || prior.some(row=>row.operationKind==='producer.create' ? same(row.entityUid,value) : row.operationKind==='entry.author.create-and-link' && typeof row.payload.producerUid==='string' && same(row.payload.producerUid,value));
+   const collection = (value:string) => payload.collections.some(row=>same(row.syncUid,value)) || prior.some(row=>row.operationKind==='collection.create' && same(row.entityUid,value));
+   const requireRef = (valid:boolean) => { if (!valid) throw new Error('A related item identity is missing or belongs to another owner'); };
+   if (op.operationKind==='rating-layout.slots.set') {

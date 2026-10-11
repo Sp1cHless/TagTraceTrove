@@ -1,0 +1,7 @@
+{
+  "beforeSHA": "c00e80494759a153a356cb5812b4ff12d29fdb8d4c9b364075e5c36d9def34b6",
+  "afterSHA": "d453dd77a9f501ddc75442970b20a8a8161a679eb973bf5c735fb78a06c52e77",
+  "outsideDrift": false,
+  "old": "    async addCollectionTag(collectionId,name) {\n      const stage=async()=>{\n        if(!hasOutbox(store))throw new Error('Common-tag needs a durable local queue');",
+  "new": "    async addCollectionTag(collectionId,name) {\n      const stage=async()=>{\n        if(normalizeTag(name)==='')throw new Error('tag name cannot be empty');\n        if(!hasOutbox(store))throw new Error('Common-tag needs a durable local queue');"
+}

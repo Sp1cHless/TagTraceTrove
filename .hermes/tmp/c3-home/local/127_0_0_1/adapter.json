@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "domain": "127.0.0.1",
+  "version": 1,
+  "capabilities": [
+    "author",
+    "cover_url",
+    "tags",
+    "title"
+  ],
+  "source": "local"
+}

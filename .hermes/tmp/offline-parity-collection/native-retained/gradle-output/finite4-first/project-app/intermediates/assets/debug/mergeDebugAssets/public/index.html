@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="T³ personal collection index" />
+    <meta name="theme-color" content="#0f172a" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- Bump `?v=` when the artwork changes: a browser keeps favicons in a cache of its own
+         that a reload does not touch, so the URL has to change for a new one to appear. -->
+    <link rel="icon" href="/favicon.ico?v=2" sizes="any" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png?v=2" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=2" />
+    <title>T³</title>
+    <style>
+      /*
+        The first paint: T³'s own icon on white, from the very first frame. It is inline
+        and in the document rather than built by the bundle, so it is already there while
+        the app is still loading; `src/boot-overlay.ts` takes it away once the app has
+        settled. Effects beyond this can be added later.
+      */
+      #t3-boot { position: fixed; inset: 0; z-index: 2147483647; display: grid; place-items: center; background: #ffffff; }
+      /*
+        The same icon at the same size and on the same centre as the launch screen's, so the
+        hand-over between them has nothing to move. The system draws its icon scaled into a
+        288dp box and the icon generator scales the drawing to 0.62 of its own box, so that
+        product is the size the launch screen shows — and `viewport-fit=cover` above is what
+        puts this viewport on the screen's own centre, the way the launch screen is. Measured
+        on the phone: both frames draw the icon at 540 device px centred on y 1206.
+      */
+      #t3-boot img { width: calc(288px * 0.62); height: auto; }
+      #t3-boot.is-leaving { opacity: 0; transition: opacity 220ms ease; }
+      #t3-boot[hidden] { display: none; }
+      @media (prefers-reduced-motion: reduce) { #t3-boot.is-leaving { transition: none; } }
+    </style>
+    <script type="module" crossorigin src="/assets/index-CK_dct-U.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DKNELZNg.css">
+      <meta name="t3-native-shell" content="android">
+
+    <meta name="t3-api-base-url" content="https://localhost/api/">
+    <script>
+      (() => {
+        // The local virtual origin never exposes credentials to JS. Native resolves it via pinned TLS.
+        const originalFetch = window.fetch.bind(window);
+        const native = (method, args) => window.Capacitor.nativePromise('T3PairedTransport', method, args);
+        window.fetch = async (input, init) => {
+          const request = new Request(input, init);
+          const url = new URL(request.url, location.href);
+          if (url.origin !== 'https://localhost' || !url.pathname.startsWith('/api/')) return originalFetch(input, init);
+          if (request.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+          let body;
+          if (request.method !== 'GET' && request.method !== 'HEAD') {
+            const bytes = new Uint8Array(await request.arrayBuffer());
+            let binary = ''; for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+            body = btoa(binary);
+          }
+          let result;
+          try { result = await native('request', { path: url.pathname + url.search, method: request.method, contentType: request.headers.get('content-type'), body }); }
+          catch (error) {
+            if (error.code === 'NETWORK_UNAVAILABLE') throw new TypeError('Native network unavailable');
+            return new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Pairing rejected. Re-pair from Settings; offline work is preserved.' } }), { status: 401, headers: { 'content-type': 'application/json' } });
+          }
+          if (request.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+          const bytes = Uint8Array.from(atob(result.body), char => char.charCodeAt(0));
+          const response = new Response(result.status === 204 || request.method === 'HEAD' ? null : bytes, { status: result.status, headers: { 'content-type': result.contentType || 'application/octet-stream' } });
+          Object.defineProperty(response, 'url', { value: result.url || request.url });
+          return response;
+        };
+        window.addEventListener('DOMContentLoaded', () => {
+          native('status', {}).then(status => { if (!status.paired) return native('pair', {}); }).catch(() => native('pair', {}));
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="t3-boot" role="status" aria-live="polite">
+      <img src="/icons/boot.png" alt="" width="140" height="140" />
+    </div>
+  </body>
+</html>

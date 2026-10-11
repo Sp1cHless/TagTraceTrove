@@ -1,0 +1,11 @@
+{
+  "argv": [
+    "D:/install/Git/cmd/git.EXE",
+    "diff",
+    "--check",
+    "--",
+    "apps/web/src/offline/pending-work-restore.ts",
+    "apps/web/tests/offline-collection-common-tag.integration.test.ts"
+  ],
+  "exitCode": 0
+}

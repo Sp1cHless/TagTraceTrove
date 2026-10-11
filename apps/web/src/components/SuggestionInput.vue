@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useId, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 import { normalizeTag } from '@t3/shared';
 import type { RelationSuggestion } from '@t3/shared';
 import { useI18n } from '../i18n.js';
@@ -53,6 +53,38 @@ const rawQuery = ref('');
 const focused = ref(false);
 const composing = ref(false);
 const closed = ref(false);
+const inputElement = ref<HTMLInputElement | null>(null);
+/**
+ * A phone keyboard shrinks the visual viewport, so a list opening downward is
+ * painted under the keyboard (measured: 23px of room below the field, the list
+ * 87px tall). The list flips above the field and is bounded to the room on
+ * whichever side it lands.
+ */
+const dropUp = ref(false);
+const LIST_PREFERRED_HEIGHT = 224;
+const LIST_MIN_HEIGHT = 88;
+const listMaxHeight = ref(LIST_PREFERRED_HEIGHT);
+
+function measurePlacement(): void {
+  const input = inputElement.value;
+  if (input === null) return;
+  const rect = input.getBoundingClientRect();
+  const viewport = globalThis.visualViewport;
+  const viewportTop = viewport === undefined || viewport === null ? 0 : viewport.offsetTop;
+  const viewportBottom = viewport === undefined || viewport === null
+    ? globalThis.innerHeight
+    : Math.min(globalThis.innerHeight, viewport.height + viewport.offsetTop);
+  const spaceBelow = viewportBottom - rect.bottom - 8;
+  const spaceAbove = rect.top - viewportTop - 8;
+  // Flip only when the field cannot show a usable list below and the other side
+  // is roomier — a desktop field keeps opening downward.
+  const flip = spaceBelow < LIST_MIN_HEIGHT && spaceAbove > spaceBelow;
+  dropUp.value = flip;
+  listMaxHeight.value = Math.max(
+    LIST_MIN_HEIGHT,
+    Math.min(LIST_PREFERRED_HEIGHT, flip ? spaceAbove : spaceBelow),
+  );
+}
 const loading = ref(false);
 const suggestions = ref<RelationSuggestion[]>([]);
 const highlightIndex = ref(-1);
@@ -71,6 +103,7 @@ let requestGeneration = 0;
 let debounceHandle: ReturnType<typeof setTimeout> | null = null;
 let activeController: AbortController | null = null;
 let lastLoadedQuery: string | null = null;
+let lastScheduledQuery: string | null = null;
 
 function clearPendingDebounce(): void {
   if (debounceHandle === null) return;
@@ -89,11 +122,18 @@ function resetResults(): void {
 }
 
 function scheduleSearch(): void {
-  clearPendingDebounce();
   if (activeQuery.value === '') {
+    clearPendingDebounce();
     resetResults();
     return;
   }
+  // One queued search per query: a second caller for the same text (focus
+  // arriving right after typing did) must not cancel the pending one and
+  // schedule nothing in its place. A query whose search already ran is
+  // scheduled again on purpose — that is the retry path.
+  if (debounceHandle !== null && activeQuery.value === lastScheduledQuery) return;
+  clearPendingDebounce();
+  lastScheduledQuery = activeQuery.value;
   debounceHandle = setTimeout(() => {
     debounceHandle = null;
     void runSearch();
@@ -128,8 +168,30 @@ async function runSearch(): Promise<void> {
 
 watch(activeQuery, () => {
   closed.value = false;
-  if (composing.value) return;
+  measurePlacement();
+  // Searching during IME composition too: a phone's keyboard can hold a
+  // composition open for plain letters, and gating here meant the candidates
+  // only appeared after leaving and re-entering the field. Mid-composition
+  // queries are debounced like any other; they never submit on their own.
   scheduleSearch();
+});
+
+// The keyboard opens *after* focus and shrinks the viewport, so a placement
+// measured at focus time is stale by the time the list appears. Scrolling
+// moves the field inside that viewport without changing the viewport itself,
+// which is why the page's own scroll is watched too — the shell's scroll into
+// view is not a viewport resize (measured: the field moved from y377 to y30
+// with no resize event and the list stayed flipped).
+function onViewportChange(): void {
+  if (!dropdownOpen.value) return;
+  measurePlacement();
+}
+
+onMounted(() => {
+  globalThis.addEventListener('resize', onViewportChange);
+  globalThis.visualViewport?.addEventListener('resize', onViewportChange);
+  globalThis.visualViewport?.addEventListener('scroll', onViewportChange);
+  document.addEventListener('scroll', onViewportChange, { capture: true, passive: true });
 });
 
 watch(() => props.excludeIds, () => {
@@ -144,14 +206,31 @@ function onCompositionStart(): void {
   clearPendingDebounce();
 }
 
+/**
+ * The field's text is read from the element itself, not through `v-model`:
+ * Vue's own model listener drops `input` events while an IME composition is
+ * open, and a phone keyboard holds that composition open for as long as plain
+ * letters are being typed. The query then stayed at its previous value, no
+ * search was ever dispatched, and the candidates only appeared once the
+ * composition committed (the user's "nothing shows until I tap away").
+ * Measured on the device: the element carried `composing === true`, the query
+ * did not move, and clearing the flag let the very same event through.
+ */
+function onInputEvent(event: Event): void {
+  rawQuery.value = (event.target as HTMLInputElement).value;
+}
+
 function onCompositionEnd(): void {
   composing.value = false;
-  scheduleSearch();
+  // The composition watcher already dispatched a search for this text; a query
+  // that has not been dispatched yet gets one.
+  if (lastScheduledQuery !== activeQuery.value) scheduleSearch();
 }
 
 function onFocus(): void {
   focused.value = true;
   closed.value = false;
+  measurePlacement();
   if (activeQuery.value === '') return;
   if (lastLoadedQuery !== activeQuery.value && suggestions.value.length === 0) {
     scheduleSearch();
@@ -234,7 +313,14 @@ function exactMatch(): RelationSuggestion | null {
 
 function onEnter(event: KeyboardEvent): void {
   event.preventDefault();
-  if (composing.value) return;
+  // The event's own flag, not the component's: a phone keyboard can hold a
+  // composition open across a whole typing session without ever announcing its
+  // end, and the stale flag then swallowed every Enter — measured on the device
+  // in the offline tag editor, where a typed tag was created only when the
+  // field lost focus ("it shows up after I press Done"). While the composition
+  // really is in progress the key belongs to the IME.
+  if (event.isComposing) return;
+  composing.value = false;
   if (dropdownOpen.value) {
     const highlighted = suggestions.value[highlightIndex.value];
     if (highlighted) {
@@ -265,13 +351,18 @@ function onOptionClick(suggestion: RelationSuggestion): void {
 onBeforeUnmount(() => {
   clearPendingDebounce();
   activeController?.abort();
+  globalThis.removeEventListener('resize', onViewportChange);
+  globalThis.visualViewport?.removeEventListener('resize', onViewportChange);
+  globalThis.visualViewport?.removeEventListener('scroll', onViewportChange);
+  document.removeEventListener('scroll', onViewportChange, { capture: true });
 });
 </script>
 
 <template>
   <span class="suggestion-input">
     <input
-      v-model="rawQuery"
+      ref="inputElement"
+      :value="rawQuery"
       type="text"
       role="combobox"
       :aria-expanded="dropdownOpen"
@@ -283,6 +374,7 @@ onBeforeUnmount(() => {
       :size="inputSize"
       autocomplete="off"
       :placeholder="placeholder"
+      @input="onInputEvent"
       @focus="onFocus"
       @blur="onBlur"
       @compositionstart="onCompositionStart"
@@ -296,6 +388,8 @@ onBeforeUnmount(() => {
       v-if="dropdownOpen"
       :id="listId"
       class="suggestion-input__list"
+      :class="{ 'suggestion-input__list--up': dropUp }"
+      :style="{ maxHeight: `${listMaxHeight}px` }"
       role="listbox"
     >
       <li
@@ -313,10 +407,10 @@ onBeforeUnmount(() => {
           @mousedown.prevent
           @click="onOptionClick(suggestion)"
         >
-          <span>{{ suggestion.name }}</span>
+          <span class="t3-library-text">{{ suggestion.name }}</span>
           <span
             v-if="suggestion.matchedAlias"
-            class="suggestion-input__alias"
+            class="suggestion-input__alias t3-library-text"
           >{{ suggestion.matchedAlias }}</span>
         </button>
       </li>
@@ -340,8 +434,23 @@ onBeforeUnmount(() => {
   color: var(--text-primary);
   font: inherit;
   font-size: 0.85rem;
+  /* The `size` attribute above is counted in average — Latin — character widths, so it reserves
+     about half of what a Chinese placeholder or a Chinese tag needs: 搜索关系… was cut off at
+     47px of its 65px. Sizing to the content makes the box fit whatever it actually shows, in
+     either locale, and it keeps its own promise of growing with the typed text. `min-width`
+     holds the old floor so a field with no placeholder cannot collapse to its padding, and the
+     cap keeps a long name from widening past the panel. An engine without `field-sizing` keeps
+     exactly today's behaviour. */
+  field-sizing: content;
+  min-width: 5ch;
+  max-width: min(16rem, 100%);
 }
 .suggestion-input input:focus { outline: none; border-color: var(--accent); }
+/* Building the flipped rule on both class names, not just the state class: with
+   equal specificity the base rule's `top` won by source order and the flipped
+   list collapsed to its 12px padding (measured on the device under the
+   keyboard). */
+.suggestion-input .suggestion-input__list--up { top: auto; bottom: calc(100% + 0.25rem); }
 .suggestion-input__list {
   position: absolute;
   z-index: 50;
@@ -351,7 +460,6 @@ onBeforeUnmount(() => {
   gap: 0.1rem;
   min-width: 12rem;
   max-width: min(22rem, calc(100vw - 2.5rem));
-  max-height: 14rem;
   margin: 0;
   overflow-y: auto;
   padding: 0.3rem;

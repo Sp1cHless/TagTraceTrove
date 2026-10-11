@@ -8,6 +8,7 @@ import {
   createEntryRatingSlot,
   createProducerRatingSlot,
   createRatingSlot,
+  listAuthorSelfRatings,
   listEntryRatings,
   listProducerRatings,
   listRatingSlots,
@@ -116,13 +117,23 @@ describe('rating slots and values (real SQL)', () => {
     // ...and NOT to authors dominated by another Gallery.
     expect(listProducerRatings(database, mangaAuthor.id)).toEqual([]);
 
+    const versionBefore = database.prepare('SELECT sync_version FROM producers WHERE id = ?').pluck().get(comicAuthor.id) as number;
+    const syncUid = database.prepare('SELECT sync_uid FROM producers WHERE id = ?').pluck().get(comicAuthor.id) as string;
+    const journalBefore = database.prepare("SELECT COUNT(*) FROM sync_changes WHERE entity_kind = 'producer' AND entity_uid = ?").pluck().get(syncUid) as number;
     setProducerRating(database, { producerId: comicAuthor.id, slotId: slot.id, stars: 2.5 });
-    setProducerRating(database, { producerId: anotherComicAuthor.id, slotId: slot.id, stars: null });
-    expect(listProducerRatings(database, comicAuthor.id)[0]?.stars).toBe(2.5);
+    expect(database.prepare('SELECT sync_version FROM producers WHERE id = ?').pluck().get(comicAuthor.id)).toBe(versionBefore + 1);
+    expect(database.prepare("SELECT COUNT(*) FROM sync_changes WHERE entity_kind = 'producer' AND entity_uid = ?").pluck().get(syncUid)).toBe(journalBefore + 1);
+    setProducerRating(database, { producerId: comicAuthor.id, slotId: slot.id, stars: 2.5 });
+    expect(database.prepare('SELECT sync_version FROM producers WHERE id = ?').pluck().get(comicAuthor.id)).toBe(versionBefore + 1);
+    expect(database.prepare("SELECT COUNT(*) FROM sync_changes WHERE entity_kind = 'producer' AND entity_uid = ?").pluck().get(syncUid)).toBe(journalBefore + 1);
+    setProducerRating(database, { producerId: comicAuthor.id, slotId: slot.id, stars: null });
+    expect(database.prepare('SELECT sync_version FROM producers WHERE id = ?').pluck().get(comicAuthor.id)).toBe(versionBefore + 2);
+    expect(database.prepare("SELECT COUNT(*) FROM sync_changes WHERE entity_kind = 'producer' AND entity_uid = ?").pluck().get(syncUid)).toBe(journalBefore + 2);
+    expect(listProducerRatings(database, comicAuthor.id)[0]?.stars).toBeNull();
     expect(listProducerRatings(database, anotherComicAuthor.id)[0]?.stars).toBeNull();
 
     const detail = getAuthorDetail(database, comicAuthor.id);
-    expect(detail?.ratings).toEqual([{ slotId: slot.id, name: 'Taste', stars: 2.5 }]);
+    expect(detail?.ratings).toEqual([{ slotId: slot.id, name: 'Taste', stars: null }]);
   });
 
   it('refuses author slots without works and cross-Gallery author ratings', () => {
@@ -201,7 +212,10 @@ describe('rating slots and values (real SQL)', () => {
     expect(await slotResponse.json()).toEqual({
       id: authorSlot.id + 1,
       name: 'Second Taste',
-      sortOrder: 1,
+      // The summary's order counts the Gallery's work dimensions too: a work dimension brings the
+      // summary's dimension of the same name into being, so 'Art' (a work dimension above) already
+      // holds a place in this partition's order.
+      sortOrder: 2,
     });
 
     const authorSetResponse = await app.request(`/api/producers/${author.id}/ratings`, {
@@ -219,6 +233,69 @@ describe('rating slots and values (real SQL)', () => {
     database.prepare('DELETE FROM entries WHERE id = ?').run(entry.id);
     expect(database.prepare('SELECT COUNT(*) FROM entry_rating_values').pluck().get()).toBe(0);
     expect(listRatingSlots(database, 'entry', 'comic')).toHaveLength(1);
+  });
+
+  it('deletes one dimension for its whole Gallery and leaves the other classes alone', async () => {
+    const database = createDatabase();
+    const first = createEntry(database, { title: 'First', type: 'comic' });
+    const second = createEntry(database, { title: 'Second', type: 'comic' });
+    const author = createProducer(database, { name: 'Author' });
+    linkEntryProducer(database, first.id, author.id);
+    createRatingSlot(database, { kind: 'entry', entryType: 'comic', name: 'Quality' });
+    const doomed = createRatingSlot(database, { kind: 'entry', entryType: 'comic', name: 'Doomed' });
+    const other = createRatingSlot(database, { kind: 'entry', entryType: 'manga', name: 'Other Gallery' });
+    // The summary carries 'Doomed' too (a work dimension brings it into being), and both subjects
+    // are rated on it: deleting the work's dimension must not touch either of those.
+    const summaryDoomed = listProducerRatings(database, author.id).find((row) => row.name === 'Doomed');
+    setEntryRating(database, { entryId: first.id, slotId: doomed.id, stars: 3 });
+    setEntryRating(database, { entryId: second.id, slotId: doomed.id, stars: 4 });
+    setProducerRating(database, { producerId: author.id, slotId: summaryDoomed!.slotId, stars: 5 });
+
+    const authorSelf = createProducerRatingSlot(database, {
+      producerId: author.id, name: 'Charisma', kind: 'author_self',
+    });
+
+    const app = createApiApp(database);
+    const removed = await app.request(`/api/entries/${first.id}/rating-slots/${doomed.id}`, {
+      method: 'DELETE',
+    });
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ ok: true });
+
+    // Gone from every Entry of the Gallery, with its values — the values cascade with the slot.
+    expect(listEntryRatings(database, first.id).map((row) => row.name)).toEqual(['Quality']);
+    expect(listEntryRatings(database, second.id).map((row) => row.name)).toEqual(['Quality']);
+    expect(listEntryRatings(database, second.id).some((row) => row.slotId === doomed.id)).toBe(false);
+    expect(database.prepare('SELECT COUNT(*) FROM entry_rating_values WHERE slot_id = ?')
+      .pluck().get(doomed.id)).toBe(0);
+    // Another Gallery's dimension of the same kind is a different row and stays.
+    expect(listEntryRatings(database, createEntry(database, { title: 'M', type: 'manga' }).id)
+      .some((row) => row.slotId === other.id)).toBe(true);
+    // The author's own class is untouched, and so is the works summary's dimension of that name:
+    // different rows for a different subject.
+    expect(listAuthorSelfRatings(database, author.id).map((row) => row.name)).toEqual(['Charisma']);
+    expect(listProducerRatings(database, author.id).some((row) => row.slotId === summaryDoomed!.slotId))
+      .toBe(true);
+    expect(database.prepare('SELECT stars FROM producer_rating_values WHERE slot_id = ?')
+      .pluck().get(summaryDoomed!.slotId)).toBe(5);
+    expect(authorSelf.id).toBeGreaterThan(0);
+
+    // A slot that is not this Entry's Gallery, and one that is not an Entry's dimension at all, are
+    // both refused rather than deleted.
+    for (const slotId of [other.id, authorSelf.id]) {
+      const refused = await app.request(`/api/entries/${first.id}/rating-slots/${slotId}`, {
+        method: 'DELETE',
+      });
+      expect(refused.status).toBe(400);
+    }
+    // The author's side deletes the same way, from their own partition.
+    const removedSelf = await app.request(`/api/producers/${author.id}/rating-slots/${authorSelf.id}`, {
+      method: 'DELETE',
+    });
+    expect(removedSelf.status).toBe(200);
+    expect(listAuthorSelfRatings(database, author.id)).toEqual([]);
+    expect(database.pragma('integrity_check', { simple: true })).toBe('ok');
+    expect(database.pragma('foreign_key_check')).toEqual([]);
   });
 
   it('reorders rating slots through HTTP and syncs the template order across cards', async () => {

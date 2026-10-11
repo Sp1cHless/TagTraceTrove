@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.speechless666.t3.spike.BackgroundSchedulerJvmTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-06T06:25:48.778Z" hostname="LAPTOP-70QV4MNN" time="3.617">
+  <properties/>
+  <testcase name="productionEnqueueWhileRunningRetainsBoundedSuccessorAndNetworkGate" classname="com.speechless666.t3.spike.BackgroundSchedulerJvmTest" time="3.054"/>
+  <testcase name="explicitCancelThenRepeatedResumeHasOneUniqueUnfinishedJob" classname="com.speechless666.t3.spike.BackgroundSchedulerJvmTest" time="0.198"/>
+  <testcase name="transientRetryUsesSameBoundedJobAndIncrementsAttempt" classname="com.speechless666.t3.spike.BackgroundSchedulerJvmTest" time="0.173"/>
+  <testcase name="concurrentResumeWhileActuallyRunningCoalescesOneBlockedSuccessor" classname="com.speechless666.t3.spike.BackgroundSchedulerJvmTest" time="0.192"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

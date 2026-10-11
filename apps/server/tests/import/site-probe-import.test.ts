@@ -303,6 +303,53 @@ describe('loadSiteProbeExport', () => {
     }]);
   });
 
+  it('reads a video runtime in every spelling an export may write', async () => {
+    // Measured on 2026-10-08: hanime1 and missav declare it in an OpenGraph tag as a bare number of
+    // seconds (`og:video:duration` `805`), a card or a player's own label reads `13:25`, and a
+    // two-hour work reads `1:02:36`. One field, several spellings, and the Entry gets seconds.
+    const spellings: Array<[string | number | null, number | undefined]> = [
+      [805, 805],
+      ['805', 805],
+      ['13:25', 805],
+      ['1:02:36', 3756],
+      ['2:02', 122],
+      ['45', 45],
+      [null, undefined],
+    ];
+    for (const [written, expected] of spellings) {
+      const { metadataPath } = await writeMetadata({
+        source_site: 'hanime1.me',
+        source_id: '99737',
+        title: 'Example video',
+        video_url: 'https://hanime1.me/watch?v=99737',
+        author: 'Example Author',
+        duration: written,
+      });
+
+      const batch = await loadSiteProbeExport(metadataPath);
+
+      expect(batch.entries[0]?.durationSeconds).toBe(expected);
+    }
+  });
+
+  it('refuses a runtime it cannot read instead of importing it as no runtime', async () => {
+    // The field is written by an adapter, so an unreadable spelling is that adapter's defect. The
+    // failure a person cannot see is "the duration quietly vanished", so this one is loud.
+    const { metadataPath } = await writeMetadata({
+      source_site: 'hanime1.me',
+      source_id: '99737',
+      title: 'Example video',
+      video_url: 'https://hanime1.me/watch?v=99737',
+      author: 'Example Author',
+      duration: '1 hour 2 minutes',
+    });
+
+    // The report names the work, the value, and the shapes that are accepted — "Unsupported
+    // site_probe export format" would be true and useless.
+    await expect(loadSiteProbeExport(metadataPath))
+      .rejects.toThrow(/Work 99737 has a duration this importer cannot read: "1 hour 2 minutes"/u);
+  });
+
   it('imports Hitomi works whose language is unknown instead of rejecting the folder', async () => {
     const { metadataPath } = await writeHitomiAuthorExport([
       { source_id: '1668831', title: 'No language at all', language: { code: null, name: null } },
@@ -391,6 +438,29 @@ describe('loadSiteProbeExport', () => {
     // prefix `items/book_104722/` comes off and `cover/cover.jpg` resolves beside
     // it — the same place the Level 0 writer puts the file.
     expect(batch.entries[0]?.cover).toBe(join(directory, 'cover/cover.jpg'));
+  });
+
+  it('reads the author and the synopsis a learned adapter writes at the item’s top level', async () => {
+    // Measured on the first generated adapter (`www.bilinovel.com`, 2026-10-03): its record carries
+    // `author` and `description` beside an *empty* 分类信息, so a reader that only knew the category
+    // block lost the author the picker had just found and had no channel at all for the synopsis.
+    const { metadataPath } = await writeMetadata({
+      schema_version: 1,
+      source_site: 'www.bilinovel.com',
+      source_id: '4525.html',
+      title: '转生了的大圣女，拼死隐瞒自己身为圣女 ZERO',
+      detail_url: 'https://www.bilinovel.com/novel/4525.html',
+      author: '十夜',
+      description: '全篇全新创作！大人气系列的衍生前传，正式启航！！',
+      分类信息: { 作品: [], 登场人物: [], 分类标签: [], 作者: [], 作品类型: [] },
+    });
+
+    const batch = await loadSiteProbeExport(metadataPath);
+
+    expect(batch.entries[0]?.fields).toEqual({
+      authors: ['十夜'],
+      description: ['全篇全新创作！大人气系列的衍生前传，正式启航！！'],
+    });
   });
 
   it('still refuses a known site whose export stopped matching its own schema', async () => {

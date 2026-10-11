@@ -1,0 +1,13 @@
+--- original/apps/server/src/sync/sync-service.ts
++++ live/apps/server/src/sync/sync-service.ts
+@@ -171,7 +171,9 @@
+       offlinePendingEntryAuthors: sqliteSchemaVersion >= 29,
+       offlinePendingEntryAuthorCreate: sqliteSchemaVersion >= 29,
+       offlineCrossEntryPendingAuthors: sqliteSchemaVersion >= 33,
+-      offlineAuthorCreate: sqliteSchemaVersion >= 29,
++      offlineAuthorCreate: sqliteSchemaVersion >= 29,
++      offlineStandaloneAuthorCreate: sqliteSchemaVersion >= 33,
++      offlineAuthorDelete: sqliteSchemaVersion >= 33,
+       offlineEntryTags: sqliteSchemaVersion >= 30,
+       offlinePendingEntryTags: sqliteSchemaVersion >= 30,
+       offlineEntryTagVocabulary: sqliteSchemaVersion >= 34,

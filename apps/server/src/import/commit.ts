@@ -38,6 +38,17 @@ export interface ImportCommitResult {
   skippedExistingEntryCount: number;
   /** The works those skipped source URLs already belong to, in batch order. */
   existingEntryIds: number[];
+  /**
+   * The batch's works that were already in the library, each paired with the Entry it belongs to, in
+   * batch order.
+   *
+   * The media half of an import has to reach *every* work of the batch, and it used to reach only the
+   * created ones — so a commit cut between its transaction and its files left a work with no pictures
+   * that no later import would ever touch. This is the pairing that needs, and it comes from here
+   * rather than from the caller deciding again, because the decision reads two gates (the clean
+   * Source URL and the retained site work id) and only one place may own it.
+   */
+  skippedExisting: ImportCommitEntryResult[];
   createdProducerCount: number;
   producerLinkCount: number;
   tagAssignmentCount: number;
@@ -138,6 +149,8 @@ function partitionImportEntries(
   /** The work this source URL already belongs to, so the caller can still record
    *  that the run carried it — a name appearing in another folder is itself data. */
   existingEntryIds: number[];
+  /** Those same works paired with the batch entry each came from, in batch order. */
+  skipped: ImportCommitEntryResult[];
   /** Every batch work's site identity, in batch order; null when it has none. */
   siteWorkRefs: Array<{ sourceSite: string; sourceId: string } | null>;
   /** The Entry each already-known batch work resolved to. */
@@ -159,6 +172,7 @@ function partitionImportEntries(
 
   const entriesToImport: ImportEntry[] = [];
   const existingEntryIds: number[] = [];
+  const skipped: ImportCommitEntryResult[] = [];
   const siteWorkRefs: Array<{ sourceSite: string; sourceId: string } | null> = [];
   const knownEntryIdByEntry = new Map<ImportEntry, number>();
   const batchSiteWorkKeys = new Set<string>();
@@ -197,6 +211,11 @@ function partitionImportEntries(
       skippedExistingEntryCount += 1;
       existingEntryIds.push(knownEntryId);
       knownEntryIdByEntry.set(entry, knownEntryId);
+      skipped.push({
+        entryId: knownEntryId,
+        title: entry.title,
+        ...(entry.externalKey === undefined ? {} : { externalKey: entry.externalKey }),
+      });
       continue;
     }
     entriesToImport.push(entry);
@@ -206,6 +225,7 @@ function partitionImportEntries(
     entriesToImport,
     skippedExistingEntryCount,
     existingEntryIds,
+    skipped,
     siteWorkRefs,
     knownEntryIdByEntry,
   };
@@ -262,6 +282,7 @@ function createEntryRecord(
     type: entryType,
     uploadDate: entry.uploadDate,
     pageCount: entry.pageCount,
+    durationSeconds: entry.durationSeconds,
   });
 }
 
@@ -309,8 +330,10 @@ function collectTags(
     tags.set(key, { name: resolvedName, facetId });
   };
 
-  for (const tag of entry.tags ?? []) {
-    addTag(tag.name, mapping.canonicalTagFacetId);
+  if (mapping.canonicalTagFacetId !== null) {
+    for (const tag of entry.tags ?? []) {
+      addTag(tag.name, mapping.canonicalTagFacetId);
+    }
   }
   for (const [field, value] of Object.entries(entry.fields ?? {})) {
     const fieldMapping = mapping.fieldMappings[field];
@@ -448,10 +471,13 @@ export function commitImportBatch(
       entriesToImport,
       skippedExistingEntryCount,
       existingEntryIds,
+      skipped,
       siteWorkRefs,
       knownEntryIdByEntry,
     } = partitionImportEntries(database, batch, mapping);
-    assertFacet(database, mapping.canonicalTagFacetId, mapping.entryType);
+    if (mapping.canonicalTagFacetId !== null) {
+      assertFacet(database, mapping.canonicalTagFacetId, mapping.entryType);
+    }
     for (const fieldMapping of Object.values(mapping.fieldMappings)) {
       if (fieldMapping.kind === 'tag') {
         assertFacet(database, fieldMapping.facetId, mapping.entryType);
@@ -466,6 +492,28 @@ export function commitImportBatch(
     let tagAssignmentCount = 0;
     let contentCount = 0;
     const warnings: string[] = [];
+    // The review page's own Author: resolved once through the 'producer'
+    // vocabulary (so an alias spelling lands on the canonical Author), linked
+    // to every work this commit creates, and created only when nobody holds
+    // the name. Deferred until the first work needs it, so a batch that
+    // creates nothing adds no Author either.
+    let reviewedAuthorId: number | undefined;
+    const reviewedAuthor = (): number => {
+      if (reviewedAuthorId !== undefined) return reviewedAuthorId;
+      const typed = mapping.authorName;
+      if (typed === undefined) throw new Error('Import Author requested without a name');
+      const canonicalName = resolveTaxonomyName(database, 'producer', typed);
+      const key = normalizeName(canonicalName);
+      let producerId = knownProducers.get(key) ?? findProducerIdByName(database, canonicalName);
+      if (producerId === undefined) {
+        const producer: ProducerRecord = createProducer(database, { name: canonicalName });
+        producerId = producer.id;
+        createdProducerIds.add(producerId);
+      }
+      knownProducers.set(key, producerId);
+      reviewedAuthorId = producerId;
+      return producerId;
+    };
 
     for (const entry of entriesToImport) {
       const createdEntry = createEntryRecord(database, entry, mapping.entryType);
@@ -475,6 +523,10 @@ export function commitImportBatch(
         title: createdEntry.title,
         ...(entry.externalKey === undefined ? {} : { externalKey: entry.externalKey }),
       });
+      if (mapping.authorName !== undefined) {
+        linkEntryProducer(database, createdEntry.id, reviewedAuthor());
+        producerLinkCount += 1;
+      }
 
       const collectedTags = collectTags(database, entry, mapping, warnings);
       for (const tag of collectedTags) {
@@ -556,6 +608,22 @@ export function commitImportBatch(
       if (primarySource?.url) {
         addContent(mapping.sourceContentType, primarySource.url);
       }
+
+      // The two channels a work's own text arrives on. `body` is the contract's dedicated one, and
+      // the review's field destinations are the other: a field sent to Content becomes one row under
+      // the type the review named. Both were validated and neither was ever written, so a synopsis a
+      // learned adapter read was dropped at the last step — measured on the first generated adapter
+      // (`www.bilinovel.com`, 2026-10-03), whose `description` had no way into the Entry at all.
+      if (entry.body !== undefined && mapping.bodyContentType !== undefined) {
+        addContent(mapping.bodyContentType, entry.body);
+      }
+      for (const [field, value] of Object.entries(entry.fields ?? {})) {
+        const fieldMapping = mapping.fieldMappings[field];
+        if (fieldMapping?.kind !== 'content') continue;
+        for (const text of requireStringValues(field, value, 'Content')) {
+          addContent(fieldMapping.contentType, text);
+        }
+      }
     }
 
     const siteWorks = resolveBatchSiteWorks(
@@ -616,6 +684,7 @@ export function commitImportBatch(
       entryCount: results.length,
       skippedExistingEntryCount,
       existingEntryIds,
+      skippedExisting: skipped,
       createdProducerCount: createdProducerIds.size,
       producerLinkCount,
       tagAssignmentCount,

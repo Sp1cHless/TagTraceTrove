@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import Database from 'better-sqlite3';
@@ -46,6 +47,8 @@ export interface LibraryRestoreOptions {
   backupDir: string;
   databasePath: string;
   dataDir?: string;
+  /** Deterministic failure injection for isolated restore tests; never used by the CLI. */
+  testHooks?: { beforeStageValidation?: () => void; beforePromoteAssets?: () => void };
 }
 
 export interface LibraryRestoreResult {
@@ -157,23 +160,39 @@ export async function restoreLibraryBackup(options: LibraryRestoreOptions): Prom
   const dataDir = resolve(options.dataDir ?? dirname(databasePath));
   const assetRoot = join(dataDir, 'assets');
   const backupsRoot = join(dataDir, 'backups');
-  const preRestoreTag = `restore-prestore-${timestamp()}`;
+  const preRestoreTag = `restore-prestore-${timestamp()}-${randomUUID()}`;
+  const stagedDatabase = `${databasePath}.${preRestoreTag}.staged`;
+  const stagedAssets = `${assetRoot}.${preRestoreTag}.staged`;
+  const backupAssets = join(backupDir, 'assets');
+  let doctorOk = false;
+  let doctorIssues: string[] = [];
 
-  // Gate 2: the current library must not be locked by a running server.
-  // Renaming first makes a lock surface as an OS error instead of a silent
-  // partial overwrite.
-  const moveAside = (path: string, suffix: string): void => {
-    if (!existsSync(path)) {
-      return;
-    }
+  // Stage, migrate, rotate the epoch and validate *before* moving live files.
+  mkdirSync(dirname(databasePath), { recursive: true });
+  try {
+    cpSync(backupDatabase, stagedDatabase);
+    const staged = openDatabase(stagedDatabase);
     try {
-      renameSync(path, `${path}.${suffix}`);
-    } catch (error) {
-      throw new Error(
-        `Cannot replace ${path} (is the T3 server running? Exit the tray icon / close T3.bat first).\n${error instanceof Error ? error.message : String(error)}`,
-      );
+      applyAllMigrations(staged);
+      rotateSyncEpoch(staged);
+      options.testHooks?.beforeStageValidation?.();
+      const result = inspectDatabase(staged);
+      doctorOk = result.ok;
+      doctorIssues = result.issues;
+    } finally {
+      staged.close();
     }
-  };
+    if (!doctorOk) throw new Error(`Restore staging failed integrity checks:\n${doctorIssues.join('\n')}`);
+    if (existsSync(`${stagedDatabase}-wal`) || existsSync(`${stagedDatabase}-shm`)) {
+      throw new Error('Restore staging still has active SQLite WAL sidecars; refusing to promote');
+    }
+    if (existsSync(backupAssets)) cpSync(backupAssets, stagedAssets, { recursive: true });
+  } catch (error) {
+    for (const path of [stagedDatabase, `${stagedDatabase}-wal`, `${stagedDatabase}-shm`, stagedAssets]) {
+      rmSync(path, { recursive: true, force: true });
+    }
+    throw error;
+  }
 
   // Self-preservation: snapshot whatever is there now (best effort — a
   // corrupt current library may refuse, and restoring over it is the point).
@@ -191,39 +210,47 @@ export async function restoreLibraryBackup(options: LibraryRestoreOptions): Prom
     console.warn(`WARNING: could not snapshot the current library before restoring: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  for (const suffix of ['-wal', '-shm'] as const) {
-    moveAside(`${databasePath}${suffix}`, preRestoreTag);
-  }
-  moveAside(databasePath, preRestoreTag);
-  mkdirSync(dirname(databasePath), { recursive: true });
-  cpSync(backupDatabase, databasePath);
-
-  // Gate 3 runs before touching the live asset tree. Legacy backups are
-  // upgraded first so migration 015 can create sync_metadata; rotating the
-  // epoch here also ensures a later asset-copy failure cannot leave a
-  // runnable rewound database with its backed-up epoch.
-  const restored = openDatabase(databasePath);
-  let doctorOk = false;
-  let doctorIssues: string[] = [];
+  const movedAside: Array<{ live: string; saved: string }> = [];
+  const promoted: string[] = [];
+  const moveAside = (path: string): void => {
+    if (!existsSync(path)) return;
+    const saved = `${path}.${preRestoreTag}`;
+    try {
+      renameSync(path, saved);
+      movedAside.push({ live: path, saved });
+    } catch (error) {
+      throw new Error(`Cannot replace ${path} (is the T3 server running? Exit the tray icon / close T3.bat first).\n${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
   try {
-    applyAllMigrations(restored);
-    rotateSyncEpoch(restored);
-    const result = inspectDatabase(restored);
-    doctorOk = result.ok;
-    doctorIssues = result.issues;
+    // A promotion failure must restore the entire old database/WAL/media set.
+    moveAside(`${databasePath}-wal`);
+    moveAside(`${databasePath}-shm`);
+    moveAside(databasePath);
+    moveAside(assetRoot);
+    renameSync(stagedDatabase, databasePath);
+    promoted.push(databasePath);
+    options.testHooks?.beforePromoteAssets?.();
+    if (existsSync(stagedAssets)) {
+      renameSync(stagedAssets, assetRoot);
+      promoted.push(assetRoot);
+    }
+  } catch (error) {
+    const rollbackErrors: unknown[] = [];
+    for (const path of promoted.reverse()) {
+      try { rmSync(path, { recursive: true, force: true }); } catch (rollbackError) { rollbackErrors.push(rollbackError); }
+    }
+    for (const { live, saved } of movedAside.reverse()) {
+      try { renameSync(saved, live); } catch (rollbackError) { rollbackErrors.push(rollbackError); }
+    }
+    if (rollbackErrors.length > 0) {
+      throw new AggregateError([error, ...rollbackErrors], `Restore failed and could not fully roll back; original files remain under .${preRestoreTag}`);
+    }
+    throw error;
   } finally {
-    restored.close();
-  }
-  if (!doctorOk) {
-    throw new Error(`Restore completed but the restored database failed integrity checks:\n${doctorIssues.join('\n')}\nPre-restore snapshot: ${preRestoreSnapshot ?? '(none)'}`);
-  }
-
-  if (existsSync(assetRoot) || existsSync(join(backupDir, 'assets'))) {
-    moveAside(assetRoot, preRestoreTag);
-  }
-  const backupAssets = join(backupDir, 'assets');
-  if (existsSync(backupAssets)) {
-    cpSync(backupAssets, assetRoot, { recursive: true });
+    for (const path of [stagedDatabase, `${stagedDatabase}-wal`, `${stagedDatabase}-shm`, stagedAssets]) {
+      rmSync(path, { recursive: true, force: true });
+    }
   }
 
 

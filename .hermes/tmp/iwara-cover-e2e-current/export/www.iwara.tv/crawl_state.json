@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "listings": {
+    "work/bCiZIXUeR4tLq5": {
+      "source_kind": "work",
+      "source_ref": "bCiZIXUeR4tLq5",
+      "display_name": null,
+      "url": "https://www.iwara.tv/video/bCiZIXUeR4tLq5/mornye",
+      "source_ids": [
+        "bCiZIXUeR4tLq5"
+      ],
+      "last_seen_source_id": null,
+      "last_seen_work_date": null,
+      "last_seen_order_key": null,
+      "crawl_count": 1,
+      "first_crawled_at": "2026-10-11 02:54:39",
+      "last_crawled_at": "2026-10-11 02:54:39"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "inherited": 781,
+  "drift": [
+    "apps/server/src/http/app.ts",
+    "apps/web/src/api/gallery.ts",
+    "apps/web/src/offline/offline-api.ts",
+    "apps/web/src/offline/sync-mutation-plan.ts",
+    "apps/web/tests/offline-entry-multi-author.integration.test.ts",
+    "packages/shared/src/schemas/sync.ts"
+  ],
+  "onlyOwned": true,
+  "sourceTestsStopped": true
+}

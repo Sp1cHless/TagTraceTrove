@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -30,6 +30,7 @@ function makeFixture(): Fixture {
     assetRoot,
     cleanup: () => {
       temp.cleanup();
+      rmSync(dataDir, { recursive: true, force: true });
     },
   };
   fixtures.push(fixture);
@@ -80,6 +81,58 @@ describe('library backup', () => {
 });
 
 describe('library restore', () => {
+  it('does not move any live files if migration or staging validation fails', async () => {
+    const fixture = makeFixture();
+    insertEntry(fixture.temp, 'Live Entry');
+    const backup = await createLibraryBackup({ databasePath: fixture.temp.path, dataDir: fixture.dataDir });
+    const epoch = getSyncIdentity(fixture.temp.database).syncEpoch;
+    fixture.temp.database.close();
+
+    await expect(restoreLibraryBackup({
+      backupDir: backup.backupDir,
+      databasePath: fixture.temp.path,
+      dataDir: fixture.dataDir,
+      testHooks: { beforeStageValidation: () => { throw new Error('simulated migration failure'); } },
+    })).rejects.toThrow(/simulated migration failure/u);
+
+    const reopened = openDatabase(fixture.temp.path);
+    try {
+      expect((reopened.prepare('SELECT title FROM entries').get() as { title: string }).title).toBe('Live Entry');
+      expect(getSyncIdentity(reopened).syncEpoch).toBe(epoch);
+    } finally {
+      reopened.close();
+    }
+    expect(readFileSync(join(fixture.assetRoot, 'entries', '10', 'cover.webp'), 'utf8')).toBe('cover-bytes-A');
+  });
+
+  it('keeps the exact live database epoch and media when promotion fails after staging', async () => {
+    const fixture = makeFixture();
+    insertEntry(fixture.temp, 'Backup state');
+    const backup = await createLibraryBackup({ databasePath: fixture.temp.path, dataDir: fixture.dataDir });
+    insertEntry(fixture.temp, 'Live-only state');
+    const liveEpoch = getSyncIdentity(fixture.temp.database).syncEpoch;
+    const liveAsset = join(fixture.assetRoot, 'entries', '10', 'cover.webp');
+    writeFileSync(liveAsset, 'live-cover-bytes');
+    fixture.temp.database.close();
+
+    await expect(restoreLibraryBackup({
+      backupDir: backup.backupDir,
+      databasePath: fixture.temp.path,
+      dataDir: fixture.dataDir,
+      testHooks: { beforePromoteAssets: () => { throw new Error('simulated promotion failure'); } },
+    })).rejects.toThrow(/simulated promotion failure/u);
+
+    const live = openDatabase(fixture.temp.path);
+    try {
+      const titles = live.prepare('SELECT title FROM entries ORDER BY title').all() as Array<{ title: string }>;
+      expect(titles.map((row) => row.title)).toEqual(['Backup state', 'Live-only state']);
+      expect(getSyncIdentity(live).syncEpoch).toBe(liveEpoch);
+    } finally {
+      live.close();
+    }
+    expect(readFileSync(liveAsset, 'utf8')).toBe('live-cover-bytes');
+  });
+
   it('preserves the library identity but rotates the sync epoch after restore', async () => {
     const fixture = makeFixture();
     insertEntry(fixture.temp, 'Work A');
@@ -133,7 +186,7 @@ describe('library restore', () => {
     try {
       const version = restored.prepare('SELECT MAX(version) AS version FROM schema_migrations')
         .get() as { version: number };
-      expect(version.version).toBe(24);
+      expect(version.version).toBe(43);
       expect(getSyncIdentity(restored).syncEpoch).toMatch(/^[0-9a-f-]{36}$/u);
     } finally {
       restored.close();

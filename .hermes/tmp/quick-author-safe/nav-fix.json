@@ -1,0 +1,1 @@
+[{"path": "apps/web/src/AuthorPage.vue", "old": "onUnmounted(() => {\n  window.removeEventListener('resize', measureWorksGrid);\n});", "new": "onUnmounted(() => {\n  rememberAuthorNavigationState();\n  window.removeEventListener('resize', measureWorksGrid);\n});"}]

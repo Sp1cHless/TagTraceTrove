@@ -1,0 +1,89 @@
+--- apps/web/tests/offline-entry-delete.integration.test.ts.parent-start
++++ apps/web/tests/offline-entry-delete.integration.test.ts.current
+@@ -46,7 +46,7 @@
+  const api=(state?: import('../src/offline/offline-api.js').OfflineApiState)=>createOfflineAwareGalleryApi(online,store,{clientId:'delete-phone',randomUUID,...(state ? {state} : {})});const current=api();
+  await current.getSyncCapabilities({replay:false});if (install) await current.preferOfflineSnapshot!();business.length=0;disconnected=install;
+  return {db,root,entry,survivor,author,online,current,bodies,business,get store(){return store;},
+-  connect(){disconnected=false;},loseReplay(){loseReplay=true;},loseAck(){loseAck=true;},
++  connect(){disconnected=false;},disconnect(){disconnected=true;},loseReplay(){loseReplay=true;},loseAck(){loseAck=true;},
+   cold(state?: import('../src/offline/offline-api.js').OfflineApiState){store.close();store=createIndexedDbOfflineStore({indexedDB,databaseName:name});return api(state);},
+   close(){store.close();db.close();rmSync(root,{recursive:true,force:true});}};
+ }
+@@ -80,6 +80,77 @@
+   const cold=f.cold();await cold.flushOfflineOutbox!();expect(await f.store.list()).toEqual([]);
+   expect(f.bodies.map(body=>JSON.parse(body))).toEqual([original,original]);
+   expect(f.business.some(path=>path.includes('/sync-identity'))).toBe(true);
++ }finally{f.close();}
++});
++it('committed media reorder and removal then Entry deletion settle with exact original envelopes',async()=>{
++ const f=await fixture();try{
++  const {mkdirSync,writeFileSync}=await import('node:fs');const dir=join(f.root,'entries',String(f.entry.id));mkdirSync(dir,{recursive:true});
++  const refs=['cover','preview','preview-2'].map(name=>`/api/assets/entries/${f.entry.id}/${name}.${randomUUID()}.webp`);
++  for(const ref of refs)writeFileSync(join(dir,ref.split('/').at(-1)!),'committed bytes');
++  f.db.prepare('UPDATE entries SET cover_ref=?,preview_ref=?,preview_refs=? WHERE id=?').run(refs[0],refs[1],JSON.stringify(refs.slice(1)),f.entry.id);
++  f.connect();await f.store.writeGeneration(2,JSON.stringify(await f.online.fetchSyncSnapshot()));await f.store.writeMeta('activeGeneration','2');f.disconnect();
++  await f.current.setEntryMediaOrder!(f.entry.id,[refs[0]!,refs[2]!]);await f.current.deleteEntry(f.entry.id);
++  const originals=(await f.store.list()).map(originalMutationEnvelope);f.connect();
++  const state:import('../src/offline/offline-api.js').OfflineApiState={mode:'offline',lastFallbackAt:null};
++  await f.cold(state).flushOfflineOutbox!();expect(await f.store.list(),state.lastReplayError??undefined).toEqual([]);
++  expect(f.db.prepare('SELECT count(*) FROM entries WHERE id=?').pluck().get(f.entry.id)).toBe(0);
++  expect(f.bodies.map(body=>JSON.parse(body))).toEqual(originals);
++ }finally{f.close();}
++});
++it('uncertain pending create Content and metadata settle when a later authoritative existing Entry delete wins',async()=>{
++ const f=await fixture();try{
++  const {localKey}=await f.current.enqueueOfflineEntryCreate!({title:'Pending deleted',type:'comic',uploadDate:null,pageCount:null,ratings:[],viewLater:false,coverFile:null,previewFile:null});
++  await f.current.enqueueOfflinePendingEntryContent!(localKey,{contentType:'Note',content:'pending content'});
++  await f.current.enqueueOfflinePendingEntryMetadata!(localKey,{title:'Changed pending',uploadDate:null,pageCount:0});
++  const before=(await f.store.list()).map(originalMutationEnvelope);
++  await expect(f.current.deleteEntry(-1)).rejects.toThrow(/pending/i);expect((await f.store.list()).map(originalMutationEnvelope)).toEqual(before);expect(f.business).toEqual([]);
++  f.connect();f.loseReplay();await f.current.flushOfflineOutbox!();expect(await f.store.list()).toHaveLength(3);
++  const attempted=await f.store.list();await expect(f.current.deleteEntry(-1)).rejects.toThrow(/pending/i);expect(await f.store.list()).toEqual(attempted);
++  const id=Number(f.db.prepare("SELECT id FROM entries WHERE title='Pending deleted'").pluck().get());expect(id).toBeGreaterThan(0);
++  const state:import('../src/offline/offline-api.js').OfflineApiState={mode:'offline',lastFallbackAt:null};const cold=f.cold(state);
++  await cold.getSyncCapabilities({replay:false});await cold.deleteEntry(id);
++  expect(await f.store.list(),state.lastReplayError??undefined).toEqual([]);expect(f.db.prepare('SELECT count(*) FROM entries WHERE id=?').pluck().get(id)).toBe(0);
++  expect(f.bodies.slice(1,4).map(body=>JSON.parse(body))).toEqual(before);
++ }finally{f.close();}
++});
++it('ordinary online numeric deletion retains stored Authors like durable replay while workless eligibility disappears',async()=>{
++ const f=await fixture();try{
++  f.connect();await f.online.deleteEntry(f.entry.id);
++  expect(f.db.prepare('SELECT count(*) FROM producers WHERE id=?').pluck().get(f.author.id)).toBe(1);
++  expect(f.db.prepare('SELECT count(*) FROM entry_producers WHERE producer_id=?').pluck().get(f.author.id)).toBe(0);
++ }finally{f.close();}
++});
++it('rating layout values Collection and Directory predecessors retain independent members after Entry deletion',async()=>{
++ const f=await fixture();try{
++  const {linkEntryProducer}=await serverModule('repositories/producer-repository');linkEntryProducer(f.db,f.survivor.id,f.author.id);
++  f.connect();await f.store.writeGeneration(2,JSON.stringify(await f.online.fetchSyncSnapshot()));await f.store.writeMeta('activeGeneration','2');f.disconnect();
++  const slot=await f.current.createEntryRatingSlot(f.entry.id,'Quality');await f.current.setEntryRating(f.entry.id,slot.id,4);
++  const collection=await f.current.createCollection({kind:'entry',title:'Keep collection',galleryType:'comic'});
++  await f.current.addCollectionEntry(collection.id,f.entry.id);await f.current.addCollectionEntry(collection.id,f.survivor.id);
++  await f.current.createAuthorDirectory(f.author.id,{title:'Keep directory',entryIds:[f.entry.id,f.survivor.id]});
++  await f.current.deleteEntry(f.entry.id);const originals=(await f.store.list()).map(originalMutationEnvelope);f.connect();
++  const state:import('../src/offline/offline-api.js').OfflineApiState={mode:'offline',lastFallbackAt:null};await f.cold(state).flushOfflineOutbox!();
++  expect(await f.store.list(),state.lastReplayError??undefined).toEqual([]);
++  const collections=await f.online.listCollections('entry',true);expect(collections.find(row=>row.title==='Keep collection')?.entries.map(row=>row.id)).toEqual([f.survivor.id]);
++  const author=await f.online.getAuthor(f.author.id);expect(author.directories.find(row=>row.title==='Keep directory')?.entries.map(row=>row.id)).toEqual([f.survivor.id]);
++  expect((await f.online.listRatingSlots('comic')).some(row=>row.name==='Quality')).toBe(true);
++  expect(f.bodies.map(body=>JSON.parse(body))).toEqual(originals);
++ }finally{f.close();}
++});
++it.each(['collection','directory'] as const)('%s held membership blocks dependent deletion without blocking independent owners',async(kind)=>{
++ const f=await fixture();try{
++  const {linkEntryProducer}=await serverModule('repositories/producer-repository');linkEntryProducer(f.db,f.survivor.id,f.author.id);f.connect();
++  const container=kind==='collection'?await f.online.createCollection({kind:'entry',title:'Conflict container',galleryType:'comic'}):await f.online.createAuthorDirectory(f.author.id,{title:'Conflict container'});
++  await f.store.writeGeneration(2,JSON.stringify(await f.online.fetchSyncSnapshot()));await f.store.writeMeta('activeGeneration','2');f.disconnect();
++  const add=(api:import('../src/api/gallery.js').GalleryApi,id:number)=>kind==='collection'?api.addCollectionEntry(container.id,id):api.moveEntryToAuthorDirectory(f.author.id,container.id,id);
++  await add(f.current,f.entry.id);await f.current.deleteEntry(f.entry.id);await f.current.updateEntry(f.survivor.id,{title:'Independent changed'});
++  const deletion=(await f.store.list()).find(row=>row.operationKind==='entry.delete')!;
++  const held=(await f.store.list())[0]!;await f.store.update(held.opId,{status:'conflict',lastError:'Reviewed membership remains held'});
++  f.connect();await f.cold().flushOfflineOutbox!();
++  expect(f.db.prepare('SELECT count(*) FROM entries WHERE id=?').pluck().get(f.entry.id)).toBe(1);
++  expect(f.db.prepare('SELECT title FROM entries WHERE id=?').pluck().get(f.survivor.id)).toBe('Independent changed');
++  expect(f.bodies.some(body=>JSON.parse(body).opId===deletion.opId)).toBe(false);
++  const retained=(await f.store.list()).find(row=>row.opId===deletion.opId)!;expect(originalMutationEnvelope(retained)).toEqual(originalMutationEnvelope(deletion));expect(retained.lastAttemptAt).toBeNull();
+  }finally{f.close();}
+ });
+ it('duration edit then delete settles the final deleted owner timeline after cold exact retries',async()=>{

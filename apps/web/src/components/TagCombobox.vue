@@ -154,7 +154,7 @@ function onRootBlur(event: FocusEvent): void {
         v-for="option in filteredOptions"
         :key="option.id"
         type="button"
-        class="tag-combobox__option"
+        class="tag-combobox__option t3-library-text"
         :class="{ 'tag-combobox__option--chosen': option.id === modelValue }"
         :data-testid="`${testIdPrefix ?? 'tag'}-combobox-option`"
         @click="choose(option)"

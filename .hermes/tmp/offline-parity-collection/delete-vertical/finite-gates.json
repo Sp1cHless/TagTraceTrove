@@ -1,0 +1,61 @@
+[
+  {
+    "gate": "nearest-integration",
+    "exitCode": 0,
+    "output": "JSON report written to D:/Project/TagTraceTrove/.hermes/tmp/offline-parity-collection/delete-vertical/nearest-integration.json\n",
+    "success": true,
+    "numPassedTests": 56,
+    "numFailedTests": 0,
+    "numPendingTests": 0,
+    "failures": []
+  },
+  {
+    "gate": "nearest-default",
+    "exitCode": 0,
+    "output": "JSON report written to D:/Project/TagTraceTrove/.hermes/tmp/offline-parity-collection/delete-vertical/nearest-default.json\n",
+    "success": true,
+    "numPassedTests": 42,
+    "numFailedTests": 0,
+    "numPendingTests": 0,
+    "failures": []
+  },
+  {
+    "gate": "ordinary-parity",
+    "exitCode": 0,
+    "output": "JSON report written to D:/Project/TagTraceTrove/.hermes/tmp/offline-parity-collection/delete-vertical/ordinary-parity.json\n",
+    "success": true,
+    "numPassedTests": 2,
+    "numFailedTests": 0,
+    "numPendingTests": 1,
+    "failures": []
+  },
+  {
+    "gate": "common-tag-red",
+    "exitCode": 1,
+    "output": "JSON report written to D:/Project/TagTraceTrove/.hermes/tmp/offline-parity-collection/delete-vertical/common-tag-red.json\n",
+    "success": false,
+    "numPassedTests": 0,
+    "numFailedTests": 1,
+    "numPendingTests": 2,
+    "failures": [
+      [
+        "AssertionError: expected [ 'POST /api/collections/1/tags' ] to deeply equal []\n    at D:\\Project\\TagTraceTrove\\apps\\web\\tests\\offline-collection-parity.integration.test.ts:130:21\n    at file:///D:/Project/TagTraceTrove/node_modules/.pnpm/@vitest+runner@3.2.7/node_modules/@vitest/runner/dist/chunk-hooks.js:752:20"
+      ]
+    ]
+  },
+  {
+    "gate": "shared-types",
+    "exitCode": 0,
+    "output": ""
+  },
+  {
+    "gate": "owned-lint",
+    "exitCode": 0,
+    "output": ""
+  },
+  {
+    "gate": "diff-check",
+    "exitCode": 0,
+    "output": "warning: in the working copy of 'apps/server/src/http/app.ts', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'apps/server/src/sync/replay-service.ts', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'apps/server/src/sync/sync-service.ts', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'apps/web/src/api/gallery.ts', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'apps/web/src/offline/offline-api.ts', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'packages/shared/src/schemas/sync.ts', LF will be replaced by CRLF the next time Git touches it\n"
+  }
+]

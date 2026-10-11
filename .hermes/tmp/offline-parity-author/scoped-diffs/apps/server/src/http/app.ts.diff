@@ -1,0 +1,16 @@
+--- before/apps/server/src/http/app.ts
++++ working/apps/server/src/http/app.ts
+@@ -2011,6 +2011,13 @@
+     ));
+   });
+ 
++  app.get('/api/producers/:producerId/sync-identity', (context) => {
++    const { producerId } = producerIdParamsSchema.parse({ producerId: context.req.param('producerId') });
++    const row = database.prepare('SELECT id, sync_uid AS syncUid, sync_version AS syncVersion FROM producers WHERE id = ?').get(producerId);
++    if (!row) return context.json(errorPayload('NOT_FOUND', 'Author not found'), 404);
++    return context.json(syncEntryIdentitySchema.parse({ ...getSyncIdentity(database), ...row }));
++  });
++
+   app.get('/api/entries/:entryId/sync-identity', (context) => {
+     const { entryId } = entryIdParamsSchema.parse({ entryId: context.req.param('entryId') });
+     const row = database.prepare('SELECT id, sync_uid AS syncUid, sync_version AS syncVersion FROM entries WHERE id = ?')

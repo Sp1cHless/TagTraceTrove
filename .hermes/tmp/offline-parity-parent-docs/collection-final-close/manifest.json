@@ -1,0 +1,38 @@
+[
+  {
+    "live": "CURRENT.md",
+    "saved": ".hermes\\tmp\\offline-parity-parent-docs\\collection-final-close\\after\\CURRENT.md",
+    "size": 45411,
+    "sha256": "66a23f623e2524bc8da642feaee4db0865584ffefb46fa521ea37573a6c33744"
+  },
+  {
+    "live": ".hermes/artifacts/offline-parity-implementation-board.md",
+    "saved": ".hermes\\tmp\\offline-parity-parent-docs\\collection-final-close\\after\\.hermes\\artifacts\\offline-parity-implementation-board.md",
+    "size": 11098,
+    "sha256": "09b427a5fc88ffdff39e025541649ad8b51b00caa55a0143e50f2a741e2a6ded"
+  },
+  {
+    "live": ".hermes/artifacts/offline-parity-filtered-backlog.md",
+    "saved": ".hermes\\tmp\\offline-parity-parent-docs\\collection-final-close\\after\\.hermes\\artifacts\\offline-parity-filtered-backlog.md",
+    "size": 7069,
+    "sha256": "a18b8dacc7082a00f88bd585671f6e44c0cae8d71cfadfda65eef0fb8fb5416a"
+  },
+  {
+    "live": ".hermes/artifacts/offline-parity-collection-final-close.md",
+    "saved": ".hermes\\tmp\\offline-parity-parent-docs\\collection-final-close\\after\\.hermes\\artifacts\\offline-parity-collection-final-close.md",
+    "size": 3014,
+    "sha256": "40d3404246847b1ac78af67c54edf79e02abb226fe007ee882af5079c154cfc9"
+  },
+  {
+    "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/manifest.json",
+    "saved": ".hermes\\tmp\\offline-parity-parent-docs\\collection-final-close\\after\\.hermes\\tmp\\offline-parity-collection\\native-receipt-repair\\checkpoint\\manifest.json",
+    "size": 72652,
+    "sha256": "115e9020de19b8ac506217666095eea0dfe66b23d6ad3b688a29d992718ff537"
+  },
+  {
+    "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/parent-authorized/parent-fullbytes-manifest.json",
+    "saved": ".hermes\\tmp\\offline-parity-parent-docs\\collection-final-close\\after\\.hermes\\tmp\\offline-parity-collection\\common-tag-finite-close\\parent-authorized\\parent-fullbytes-manifest.json",
+    "size": 30812,
+    "sha256": "83753b8ae31254eda9c6dd0199cac0f85d7ed6e633da2a7b460faa7b03619c57"
+  }
+]

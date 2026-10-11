@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.speechless666.t3.spike.SecurePairingTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-09T04:33:50.525Z" hostname="LAPTOP-70QV4MNN" time="50.787">
+  <properties/>
+  <testcase name="replacementRequiresConfirmationAndNeverSwitchesQueuedWorkToForeignLibrary" classname="com.speechless666.t3.spike.SecurePairingTest" time="0.014"/>
+  <testcase name="nativePinnedClaimApiMediaColdRestartAndRevocation" classname="com.speechless666.t3.spike.SecurePairingTest" time="17.0"/>
+  <testcase name="strictPayloadAndPrivateOriginGate" classname="com.speechless666.t3.spike.SecurePairingTest" time="0.0"/>
+  <testcase name="actualHttpsOffOriginAndHttpDowngradeNeverForwardApiOrMediaAuthorization" classname="com.speechless666.t3.spike.SecurePairingTest" time="16.768"/>
+  <testcase name="actualCertificateReplacementRetainsOldCredentialUntilExplicitRepair" classname="com.speechless666.t3.spike.SecurePairingTest" time="17.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

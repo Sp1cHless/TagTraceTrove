@@ -1,0 +1,1265 @@
+[
+  {
+    "name": "uploadEntryMedia",
+    "line": 4003,
+    "offset": 676591,
+    "counts": [
+      {
+        "IfStatement": 11,
+        "ThrowStatement": 8,
+        "AwaitExpression": 14,
+        "TryStatement": 3,
+        "ReturnStatement": 6
+      },
+      {
+        "IfStatement": 10,
+        "ThrowStatement": 8,
+        "AwaitExpression": 22,
+        "TryStatement": 3,
+        "ReturnStatement": 5
+      }
+    ],
+    "callDiff": [
+      [
+        "#",
+        23,
+        28
+      ],
+      [
+        "getEntry",
+        1,
+        0
+      ]
+    ]
+  },
+  {
+    "name": "setEntryMediaOrder",
+    "line": 4057,
+    "offset": 678811,
+    "counts": [
+      {
+        "IfStatement": 8,
+        "ThrowStatement": 6,
+        "ReturnStatement": 6,
+        "AwaitExpression": 9,
+        "TryStatement": 3
+      },
+      {
+        "IfStatement": 8,
+        "ThrowStatement": 6,
+        "ReturnStatement": 6,
+        "AwaitExpression": 13,
+        "TryStatement": 3
+      }
+    ],
+    "callDiff": [
+      [
+        "236",
+        1,
+        0
+      ],
+      [
+        "#",
+        22,
+        24
+      ],
+      [
+        "setEntryMediaOrder",
+        0,
+        1
+      ]
+    ]
+  },
+  {
+    "name": "getClientId",
+    "line": 4130,
+    "offset": 680430,
+    "counts": [
+      {
+        "AwaitExpression": 1,
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1,
+        "AwaitExpression": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "getSyncCapabilities",
+    "line": 4134,
+    "offset": 680470,
+    "counts": [
+      {
+        "TryStatement": 1,
+        "AwaitExpression": 10,
+        "IfStatement": 5,
+        "ReturnStatement": 1,
+        "ThrowStatement": 1
+      },
+      {
+        "TryStatement": 1,
+        "AwaitExpression": 9,
+        "IfStatement": 1,
+        "ReturnStatement": 1,
+        "ThrowStatement": 1
+      }
+    ],
+    "callDiff": [
+      [
+        "writeMeta",
+        35,
+        34
+      ]
+    ]
+  },
+  {
+    "name": "fetchSyncSnapshot",
+    "line": 4360,
+    "offset": 687287,
+    "counts": [
+      {
+        "AwaitExpression": 1,
+        "ReturnStatement": 1
+      },
+      {
+        "AwaitExpression": 1,
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "enqueueOfflinePendingEntryFacetCreate",
+    "line": 4401,
+    "offset": 688387,
+    "counts": [
+      {
+        "AwaitExpression": 2,
+        "IfStatement": 1,
+        "ThrowStatement": 1
+      },
+      {
+        "AwaitExpression": 2,
+        "IfStatement": 1,
+        "ThrowStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "createFacet",
+    "line": 4407,
+    "offset": 688662,
+    "counts": [
+      {
+        "IfStatement": 2,
+        "ReturnStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 2,
+        "ThrowStatement": 1
+      },
+      {
+        "IfStatement": 2,
+        "ReturnStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 2,
+        "ThrowStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "updateEntry",
+    "line": 4414,
+    "offset": 688862,
+    "counts": [
+      {
+        "IfStatement": 2,
+        "ReturnStatement": 3,
+        "TryStatement": 1,
+        "AwaitExpression": 1,
+        "ThrowStatement": 1
+      },
+      {
+        "IfStatement": 2,
+        "ReturnStatement": 3,
+        "TryStatement": 1,
+        "AwaitExpression": 1,
+        "ThrowStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "recordEntryView",
+    "line": 4427,
+    "offset": 689054,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "likeEntry",
+    "line": 4439,
+    "offset": 689238,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "addViewLaterEntry",
+    "line": 4451,
+    "offset": 689410,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "removeViewLaterEntry",
+    "line": 4463,
+    "offset": 689598,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "addViewLaterAuthor",
+    "line": 4475,
+    "offset": 689795,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "removeViewLaterAuthor",
+    "line": 4487,
+    "offset": 689994,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "assignEntryTag",
+    "line": 4499,
+    "offset": 690202,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "AwaitExpression": 3,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 5,
+        "AwaitExpression": 5,
+        "IfStatement": 1,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": [
+      [
+        "#",
+        9,
+        10
+      ]
+    ]
+  },
+  {
+    "name": "moveEntryTag",
+    "line": 4521,
+    "offset": 690753,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 2,
+        "ThrowStatement": 1,
+        "AwaitExpression": 2,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 2,
+        "ThrowStatement": 1,
+        "AwaitExpression": 2,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "removeEntryTag",
+    "line": 4540,
+    "offset": 691201,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 2,
+        "ThrowStatement": 1,
+        "AwaitExpression": 2,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 2,
+        "ThrowStatement": 1,
+        "AwaitExpression": 2,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "linkEntryAuthorByName",
+    "line": 4558,
+    "offset": 691628,
+    "counts": [
+      {
+        "ReturnStatement": 6,
+        "IfStatement": 6,
+        "ThrowStatement": 4,
+        "AwaitExpression": 4,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 6,
+        "IfStatement": 6,
+        "ThrowStatement": 4,
+        "AwaitExpression": 4,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "linkEntryAuthor",
+    "line": 4586,
+    "offset": 692417,
+    "counts": [
+      {
+        "ReturnStatement": 3,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      },
+      {
+        "ReturnStatement": 3,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "unlinkEntryAuthor",
+    "line": 4597,
+    "offset": 692604,
+    "counts": [
+      {
+        "ReturnStatement": 3,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      },
+      {
+        "ReturnStatement": 3,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "setEntryRating",
+    "line": 4608,
+    "offset": 692795,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "updateAuthor",
+    "line": 4620,
+    "offset": 692985,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "assignAuthorTag",
+    "line": 4632,
+    "offset": 693176,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 3,
+        "ThrowStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 2
+      },
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 3,
+        "ThrowStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 2
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "renameAuthorTag",
+    "line": 4653,
+    "offset": 693727,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 5,
+        "ThrowStatement": 2,
+        "TryStatement": 1,
+        "AwaitExpression": 2
+      },
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 4,
+        "ThrowStatement": 2,
+        "TryStatement": 1,
+        "AwaitExpression": 2
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "removeAuthorTag",
+    "line": 4683,
+    "offset": 694543,
+    "counts": [
+      {
+        "ReturnStatement": 3,
+        "IfStatement": 2,
+        "ThrowStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 2
+      },
+      {
+        "ReturnStatement": 3,
+        "IfStatement": 2,
+        "ThrowStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 2
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "setAuthorRating",
+    "line": 4701,
+    "offset": 694967,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "AwaitExpression": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "createEntryRatingSlot",
+    "line": 4713,
+    "offset": 695166,
+    "counts": [
+      {
+        "ReturnStatement": 7,
+        "IfStatement": 4,
+        "ThrowStatement": 2,
+        "AwaitExpression": 2,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 7,
+        "IfStatement": 4,
+        "ThrowStatement": 2,
+        "AwaitExpression": 2,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "reorderEntryRatingSlots",
+    "line": 4741,
+    "offset": 695927,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "AwaitExpression": 3,
+        "IfStatement": 5,
+        "ThrowStatement": 4,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "AwaitExpression": 3,
+        "IfStatement": 5,
+        "ThrowStatement": 4,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "createAuthorRatingSlot",
+    "line": 4771,
+    "offset": 696786,
+    "counts": [
+      {
+        "ReturnStatement": 7,
+        "IfStatement": 4,
+        "ThrowStatement": 2,
+        "AwaitExpression": 2,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 7,
+        "IfStatement": 4,
+        "ThrowStatement": 2,
+        "AwaitExpression": 2,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "reorderAuthorRatingSlots",
+    "line": 4799,
+    "offset": 697544,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "AwaitExpression": 3,
+        "IfStatement": 5,
+        "ThrowStatement": 4,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "AwaitExpression": 3,
+        "IfStatement": 5,
+        "ThrowStatement": 4,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "createCollection",
+    "line": 4834,
+    "offset": 698412,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "AwaitExpression": 2,
+        "IfStatement": 1,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "AwaitExpression": 2,
+        "IfStatement": 1,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "updateCollection",
+    "line": 4848,
+    "offset": 698702,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "AwaitExpression": 2,
+        "IfStatement": 1,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "AwaitExpression": 2,
+        "IfStatement": 1,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "setCollectionNsfw",
+    "line": 4861,
+    "offset": 698947,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "AwaitExpression": 2,
+        "IfStatement": 1,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "AwaitExpression": 2,
+        "IfStatement": 1,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "reorderCollections",
+    "line": 4874,
+    "offset": 699193,
+    "counts": [
+      {
+        "ReturnStatement": 2,
+        "AwaitExpression": 3,
+        "IfStatement": 1,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 2,
+        "AwaitExpression": 3,
+        "IfStatement": 1,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "addCollectionEntry",
+    "line": 4887,
+    "offset": 699455,
+    "counts": [
+      {
+        "ReturnStatement": 2,
+        "AwaitExpression": 3,
+        "IfStatement": 1,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 2,
+        "AwaitExpression": 3,
+        "IfStatement": 1,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "removeCollectionEntry",
+    "line": 4899,
+    "offset": 699687,
+    "counts": [
+      {
+        "ReturnStatement": 2,
+        "AwaitExpression": 3,
+        "IfStatement": 1,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 2,
+        "AwaitExpression": 3,
+        "IfStatement": 1,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "addCollectionProducer",
+    "line": 4911,
+    "offset": 699925,
+    "counts": [
+      {
+        "ReturnStatement": 2,
+        "AwaitExpression": 3,
+        "IfStatement": 1,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 2,
+        "AwaitExpression": 3,
+        "IfStatement": 1,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "removeCollectionProducer",
+    "line": 4923,
+    "offset": 700161,
+    "counts": [
+      {
+        "ReturnStatement": 2,
+        "AwaitExpression": 3,
+        "IfStatement": 1,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 2,
+        "AwaitExpression": 3,
+        "IfStatement": 1,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "createAuthorDirectory",
+    "line": 4935,
+    "offset": 700403,
+    "counts": [
+      {
+        "ReturnStatement": 7,
+        "AwaitExpression": 2,
+        "IfStatement": 4,
+        "ThrowStatement": 3,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 7,
+        "AwaitExpression": 2,
+        "IfStatement": 4,
+        "ThrowStatement": 3,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "updateAuthorDirectory",
+    "line": 4986,
+    "offset": 701649,
+    "counts": [
+      {
+        "ReturnStatement": 5,
+        "IfStatement": 6,
+        "ThrowStatement": 5,
+        "AwaitExpression": 4,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 5,
+        "IfStatement": 6,
+        "ThrowStatement": 5,
+        "AwaitExpression": 4,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "moveEntryToAuthorDirectory",
+    "line": 5022,
+    "offset": 702729,
+    "counts": [
+      {
+        "ReturnStatement": 7,
+        "AwaitExpression": 2,
+        "IfStatement": 5,
+        "ThrowStatement": 3,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 7,
+        "AwaitExpression": 2,
+        "IfStatement": 5,
+        "ThrowStatement": 3,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "removeEntryFromAuthorDirectory",
+    "line": 5065,
+    "offset": 703905,
+    "counts": [
+      {
+        "ReturnStatement": 6,
+        "AwaitExpression": 2,
+        "IfStatement": 3,
+        "ThrowStatement": 2,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 6,
+        "AwaitExpression": 2,
+        "IfStatement": 3,
+        "ThrowStatement": 2,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "createEntryContent",
+    "line": 5096,
+    "offset": 704723,
+    "counts": [
+      {
+        "ReturnStatement": 6,
+        "AwaitExpression": 3,
+        "IfStatement": 2,
+        "ThrowStatement": 1,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 6,
+        "AwaitExpression": 3,
+        "IfStatement": 2,
+        "ThrowStatement": 1,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "updateEntryContent",
+    "line": 5126,
+    "offset": 705270,
+    "counts": [
+      {
+        "ReturnStatement": 5,
+        "AwaitExpression": 5,
+        "IfStatement": 3,
+        "ThrowStatement": 2,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 5,
+        "AwaitExpression": 5,
+        "IfStatement": 3,
+        "ThrowStatement": 2,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "deleteEntryContent",
+    "line": 5159,
+    "offset": 705897,
+    "counts": [
+      {
+        "ReturnStatement": 3,
+        "AwaitExpression": 5,
+        "IfStatement": 2,
+        "ThrowStatement": 1,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 3,
+        "AwaitExpression": 5,
+        "IfStatement": 2,
+        "ThrowStatement": 1,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "reorderEntryContents",
+    "line": 5180,
+    "offset": 706267,
+    "counts": [
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 3,
+        "ThrowStatement": 2,
+        "AwaitExpression": 4,
+        "TryStatement": 1
+      },
+      {
+        "ReturnStatement": 4,
+        "IfStatement": 3,
+        "ThrowStatement": 2,
+        "AwaitExpression": 4,
+        "TryStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "mergeViewLaterEntries",
+    "line": 5207,
+    "offset": 706796,
+    "counts": [
+      {
+        "IfStatement": 3,
+        "TryStatement": 1,
+        "AwaitExpression": 3,
+        "ReturnStatement": 2,
+        "ThrowStatement": 1
+      },
+      {
+        "IfStatement": 2,
+        "TryStatement": 1,
+        "AwaitExpression": 3,
+        "ReturnStatement": 2,
+        "ThrowStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "getViewLaterState",
+    "line": 5228,
+    "offset": 707137,
+    "counts": [
+      {
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "listGalleries",
+    "line": 5231,
+    "offset": 707220,
+    "counts": [
+      {
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "queryEntryPage",
+    "line": 5234,
+    "offset": 707291,
+    "counts": [
+      {
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "listFacetFilterOptions",
+    "line": 5237,
+    "offset": 707368,
+    "counts": [
+      {
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "getEntry",
+    "line": 5243,
+    "offset": 707475,
+    "counts": [
+      {
+        "ReturnStatement": 6,
+        "AwaitExpression": 4,
+        "IfStatement": 3
+      },
+      {
+        "ReturnStatement": 5,
+        "AwaitExpression": 4,
+        "IfStatement": 2
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "listCollections",
+    "line": 5263,
+    "offset": 707984,
+    "counts": [
+      {
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "listCollectionsForEntry",
+    "line": 5269,
+    "offset": 708070,
+    "counts": [
+      {
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "listAuthors",
+    "line": 5275,
+    "offset": 708174,
+    "counts": [
+      {
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "suggestProducers",
+    "line": 5278,
+    "offset": 708239,
+    "counts": [
+      {
+        "AwaitExpression": 3,
+        "IfStatement": 1,
+        "ReturnStatement": 2
+      },
+      {
+        "AwaitExpression": 3,
+        "IfStatement": 1,
+        "ReturnStatement": 2
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "suggestTags",
+    "line": 5289,
+    "offset": 708572,
+    "counts": [
+      {
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "queryProducerPage",
+    "line": 5294,
+    "offset": 708654,
+    "counts": [
+      {
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "getAuthor",
+    "line": 5297,
+    "offset": 708740,
+    "counts": [
+      {
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "listAuthorFilterOptions",
+    "line": 5300,
+    "offset": 708802,
+    "counts": [
+      {
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "searchTags",
+    "line": 5306,
+    "offset": 708912,
+    "counts": [
+      {
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "listGalleryTags",
+    "line": 5309,
+    "offset": 708983,
+    "counts": [
+      {
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "listCollectionsForProducer",
+    "line": 5312,
+    "offset": 709063,
+    "counts": [
+      {
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  },
+  {
+    "name": "listTaxonomyAliases",
+    "line": 5318,
+    "offset": 709176,
+    "counts": [
+      {
+        "ReturnStatement": 1
+      },
+      {
+        "ReturnStatement": 1
+      }
+    ],
+    "callDiff": []
+  }
+]

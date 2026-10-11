@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.speechless666.t3.spike.NativeEntryMultiAuthorConversionJvmTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-10T16:12:26.154Z" hostname="LAPTOP-70QV4MNN" time="115.237">
+  <properties/>
+  <testcase name="g1" classname="com.speechless666.t3.spike.NativeEntryMultiAuthorConversionJvmTest" time="19.394"/>
+  <testcase name="g2" classname="com.speechless666.t3.spike.NativeEntryMultiAuthorConversionJvmTest" time="79.889"/>
+  <testcase name="g3" classname="com.speechless666.t3.spike.NativeEntryMultiAuthorConversionJvmTest" time="15.954"/>
+  <system-out><![CDATA[REAL_SQL conversion creates registered target prunes singlework contributor cascadeOwner exactbody independentEntry advances
+CAP_CELLS 4 absent/false zeroPOST original retained recovery actualSQL; legacy owners-absence NOT enriched
+REAL_SQL commit then unusable-response MOCK loss; cold exact UUID/body/hash/client/libepoch/plan; receipt dedup1 NOT socket/OS termination
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

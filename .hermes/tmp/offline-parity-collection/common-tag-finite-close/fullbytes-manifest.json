@@ -1,0 +1,390 @@
+{
+  "status": "focused-green-final-gates-blocked-writer-stopped",
+  "entries": [
+    {
+      "live": "apps/web/tests/offline-collection-common-tag.integration.test.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/apps/web/tests/offline-collection-common-tag.integration.test.ts",
+      "size": 44874,
+      "sha256": "b0228bc00fc51b2590972629a3c2ae64455bf59182d0a0cf3538961b452e4f52",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": "apps/web/tests/offline-collection-delete.integration.test.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/apps/web/tests/offline-collection-delete.integration.test.ts",
+      "size": 29081,
+      "sha256": "05950c3faa1ae0ca51fa0b35dbb4066bc9b09600e6d03585bacc4006e9e5925a",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": "apps/web/src/offline/collection-common-tag.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/apps/web/src/offline/collection-common-tag.ts",
+      "size": 8572,
+      "sha256": "d0a0d681104c2191c89223aec26f87adfd3e642bb2baeb93ae8ef9405f89aaad",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": "apps/web/src/offline/offline-api.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/apps/web/src/offline/offline-api.ts",
+      "size": 376145,
+      "sha256": "c50dd8d26aea2bee49a43d2a307686e2c6ef1580cab961a7c54c3333e34afa3a",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": "apps/web/src/offline/pending-work-restore.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/apps/web/src/offline/pending-work-restore.ts",
+      "size": 30622,
+      "sha256": "110cb17e5215e1085aeeb440584d2754b6aea2485118c5732962845a0fef57dc",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": "apps/web/src/offline/indexeddb-snapshot-store.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/apps/web/src/offline/indexeddb-snapshot-store.ts",
+      "size": 32070,
+      "sha256": "da5194c02a5d3caea5e050f97ead73671ced08df1bc6ddedf774d2190df77d37",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": "apps/web/tests/offline-collection-parity.integration.test.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/apps/web/tests/offline-collection-parity.integration.test.ts",
+      "size": 8002,
+      "sha256": "4e6b8c6ad43f304742de06f9f5b5a055d5b502d9aa0bec83582707f36cd96d37",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": "vitest.config.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/vitest.config.ts",
+      "size": 335,
+      "sha256": "d9eb6889e66d356c90debd09bc8d5678dc4859daa3d9cab38f58c37c2ea675e9",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": "vitest.integration.config.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/vitest.integration.config.ts",
+      "size": 803,
+      "sha256": "62ae630d2f64ed3b560fc884f6c0f86d6ffb10e08470274adb420c2c4fc9b9b4",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": "package.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/package.json",
+      "size": 1363,
+      "sha256": "f3671e245e91b1df084996c26037a0499c3b977ba2fa5352b733745a399a0012",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": "pnpm-lock.yaml",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/pnpm-lock.yaml",
+      "size": 123880,
+      "sha256": "b2147c5ca5a38be454faad5554b94e88c1426acedd2f12032d6d967ba09343a5",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": "apps/web/tsconfig.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/apps/web/tsconfig.json",
+      "size": 240,
+      "sha256": "7ee80144808fdbb7a885917ff22a336f8f6254354675c1d39cbafdcad253f498",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": "apps/server/tsconfig.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/apps/server/tsconfig.json",
+      "size": 160,
+      "sha256": "613f85d231267858d093958f5b6448f14337c3b11c9235bc7a32b9a097e51a00",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": "packages/shared/tsconfig.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/packages/shared/tsconfig.json",
+      "size": 160,
+      "sha256": "613f85d231267858d093958f5b6448f14337c3b11c9235bc7a32b9a097e51a00",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/artifacts/offline-parity-collection-common-tag-finite-close.md",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/artifacts/offline-parity-collection-common-tag-finite-close.md",
+      "size": 8421,
+      "sha256": "25faab6b2c99c60c44aed90f85a666521345f5d54ffa1ab566484d71d4544a5f",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/before-cell3-bind.bin",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/before-cell3-bind.bin",
+      "size": 40488,
+      "sha256": "e73cdbcc97496d2dcc6df823ae950ef7230d05d0687d8d74afc3320cbd06b840",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/before-cell3.bin",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/before-cell3.bin",
+      "size": 37364,
+      "sha256": "e99882c3d4a0b1e3cd06fa14e9cdc27d4d7c2de4ad0e629c40075c9e0e542769",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/before-cell4-peer.bin",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/before-cell4-peer.bin",
+      "size": 44806,
+      "sha256": "8ec66e90221168887d7e7b26eb2e09f36f6c483890069020f7f494620015f924",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/before-cell4.bin",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/before-cell4.bin",
+      "size": 40551,
+      "sha256": "988613ecad086516a55234ad61f34552510b78bbe44ee2d81baa82bd5e9d1007",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/before-manifest.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/before-manifest.json",
+      "size": 1079,
+      "sha256": "04cbadf8b4863ad4a883df43155947f333d79c20690200e4d6cebebb4c3fec1b",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/before-seal-fix.bin",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/before-seal-fix.bin",
+      "size": 29708,
+      "sha256": "3be3a965fb4ec1b2ede862e8ae65d6801409461b0654416366716d510fe5546c",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell1-candidate.bin",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell1-candidate.bin",
+      "size": 34318,
+      "sha256": "7b7ec384fd8d43b75b2d40b3f54b268a47fffcbe8a128adff99f9b237212d16a",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell1-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell1-execution.json",
+      "size": 522,
+      "sha256": "b34ec72313aa07dfcd9f8e0872ea7dae336fda37a43a3fa02eb75d624e073add",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell1-first-valid-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell1-first-valid-execution.json",
+      "size": 454,
+      "sha256": "b71402f9bca335495fbee9961c4c1fe836fef03c1b6da2552c04874dd6a8a6e9",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell1-first-valid.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell1-first-valid.json",
+      "size": 5548,
+      "sha256": "f243037ed1b8db29c17e1a9a97c4ebdcd4858ac89bdbf6d28828a79e48e76b7b",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell1-first-valid.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell1-first-valid.log",
+      "size": 133,
+      "sha256": "42f6855c85a7770a16cef823ec2630750592cd368c197909a4749fcb0476de2a",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell1-first.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell1-first.json",
+      "size": 6255,
+      "sha256": "d1916e7018bafd72967d59dcf2d4c8f6e19700c1147ab0e92166ab1ca0ac19fb",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell1-first.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell1-first.log",
+      "size": 127,
+      "sha256": "1b90a7db9430b7b68834aee5e00d77dfdc3f157be923d5d60e199a5a8ac508c2",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell2-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell2-execution.json",
+      "size": 449,
+      "sha256": "ef235da3b3f16347acb6789442efbab831b38f44bb8bb070811690bc7d6fa277",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell2-first-valid-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell2-first-valid-execution.json",
+      "size": 455,
+      "sha256": "8f09aab5452cf6e1f481b0a47a48a0fe2adeacd56646207b0a1c2eab123e4b46",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell2-first-valid.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell2-first-valid.json",
+      "size": 5819,
+      "sha256": "d8c742e43e870ecef6538b18bcf3411917436c86625a9c9e0718d0d77328f50f",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell2-first-valid.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell2-first-valid.log",
+      "size": 133,
+      "sha256": "a1cb808c8bc22e12fc5a830afe556f232c135508996e181b0eb1b71a86fadcd1",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell2-first.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell2-first.json",
+      "size": 6126,
+      "sha256": "31305697b9aef44cc9132f86dd3579b88d39de9fca4e253d35f59c57c084e5e6",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell2-first.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell2-first.log",
+      "size": 127,
+      "sha256": "0d7883bd19cfaa1f54114fa04f2072cd6af872ae9ef27726c9208810566cac89",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell2-preflight.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell2-preflight.json",
+      "size": 22,
+      "sha256": "4e2e58e57bd0349a7c420726bb9925ff9b8e34309379adecd9af838678487461",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell3-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell3-execution.json",
+      "size": 450,
+      "sha256": "42b380165c1d3b34a028205800158b3e0ae8f9abe1f7c317498c84aa44be0956",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell3-first-valid-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell3-first-valid-execution.json",
+      "size": 456,
+      "sha256": "ff1bc2f8e7db58a8daa52cc2c9fd4e89302483f254e26b5768057ad23e7532d9",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell3-first-valid.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell3-first-valid.json",
+      "size": 6108,
+      "sha256": "8ac7ddf6d35e282bd431031766e47e45dee5c678c90ec0c4b91f64525aff3a8c",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell3-first-valid.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell3-first-valid.log",
+      "size": 133,
+      "sha256": "7bf0ef73e26cc325446f0dfdcce3f949b6599fdf60c894ec4a3e65c23e5d6a04",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell3-first.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell3-first.json",
+      "size": 6410,
+      "sha256": "c57e1f87e8ad3ee36cb3219a30fa090af8eea3b229aca4f21e3b44b109519a16",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell3-first.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell3-first.log",
+      "size": 127,
+      "sha256": "2baa9b20ba4b8304ce50265c081c07ef623ee9b3a0612deab8ad2b61e126af69",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell3-preflight.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell3-preflight.json",
+      "size": 103,
+      "sha256": "c29dc1d1b7fe40d70358c9ae0177d5b1f5fdf46be2df605776ed9b5a3c8eb072",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-execution.json",
+      "size": 448,
+      "sha256": "5d2f36e917e69fbf1944287f2c67e44757d2f8524d64790432f8c23aa6874702",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first-green-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first-green-execution.json",
+      "size": 451,
+      "sha256": "368dc93a9bbd283b9343c08dc1b9ab0072a79345ea5e2d93b34920ba7d17d657",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first-green.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first-green.json",
+      "size": 6388,
+      "sha256": "8e5f8304a0e3bd91da4259ebd38d667b6b4cebeb8c483f19aa961a19bbafa52a",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first-green.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first-green.log",
+      "size": 133,
+      "sha256": "c6b78293561a3b27f094bd6ba1272ee999f8657185f8837b53f808dc2c9e00c0",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first-valid-execution.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first-valid-execution.json",
+      "size": 454,
+      "sha256": "2e147d4f70c8723529a7d83e4ee5369ec0a92269b3548a454d2401f57057f892",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first-valid.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first-valid.json",
+      "size": 7183,
+      "sha256": "000b859aaf44ff4922702c930fc2d7ccb0d628e69e9ce68c86bec0defd81fbfb",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first-valid.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first-valid.log",
+      "size": 133,
+      "sha256": "abbe823889e9db1e08a799cbe633b4a6e2c2957b85d13e9182f392565e4c879f",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first.json",
+      "size": 6692,
+      "sha256": "d8232345e7772dc560519dbba9a80b976fd1b1b6d0f2858d3d2586a148942081",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first.log",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-first.log",
+      "size": 127,
+      "sha256": "ac71e8d7e773512da393ffa28bb7bb5c2887f4d34135d38e2b8b00964d1f3c49",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-preflight.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/cell4-preflight.json",
+      "size": 100,
+      "sha256": "d86199da86053c70a74ba535b4682dc23e0eb1efb28cfbc01a51cd7ff7a2fb5d",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/final-gates-blocked.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/final-gates-blocked.json",
+      "size": 479,
+      "sha256": "f2dceef6af02fa91c91b432988f94a50eb57625fc06d5e3137d253287bf14c8d",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/provenance.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/provenance.json",
+      "size": 1741,
+      "sha256": "cfeae5c9f7c5f8e7a67e2a0cf2253d0c8e5f7f8a7b13d275c6a6819da10ec96d",
+      "liveSavedSizeShaVerified": true
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/seal-fix-preflight.json",
+      "saved": ".hermes/tmp/offline-parity-collection/common-tag-finite-close/fullbytes/.hermes/tmp/offline-parity-collection/common-tag-finite-close/seal-fix-preflight.json",
+      "size": 241,
+      "sha256": "c27643b8f1ea67bf7a86122e6c5b327e97834cf6072820ca5a968c693dc517a5",
+      "liveSavedSizeShaVerified": true
+    }
+  ]
+}

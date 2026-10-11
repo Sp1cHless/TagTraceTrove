@@ -1,0 +1,9 @@
+[
+  {
+    "source": "apps\\web\\dist\\assets\\index-DubbDWVS.js",
+    "backup": ".hermes\\tmp\\release-preserved-v40\\assets\\index-DubbDWVS.js",
+    "sha256": "1e17019998a89368b70cbc7c2d543c3f82768c0fe3cbe753e021ebea2bcff223",
+    "bytes": 970134,
+    "marker": "0.0.40-c3-offline-read-latency"
+  }
+]

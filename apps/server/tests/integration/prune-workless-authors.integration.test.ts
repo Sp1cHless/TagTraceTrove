@@ -8,6 +8,8 @@ import { inspectDatabase } from '../../src/database/doctor.js';
 import {
   createMigratedMemoryDatabase,
   createTempFileDatabase,
+  insertLegacyEntry,
+  linkLegacyEntryProducer,
 } from '../../src/database/testing.js';
 import type { T3Database } from '../../src/database/connection.js';
 import { createEntry, deleteEntry } from '../../src/repositories/entry-repository.js';
@@ -48,8 +50,8 @@ describe('work-less Author pruning', () => {
       expect(applyAllMigrations(temp.database, migrationDirectory).currentVersion).toBe(17);
       const database = temp.database;
       const linked = createProducer(database, { name: 'Linked Author' });
-      const work = createEntry(database, { title: 'Work', type: 'comic' });
-      linkEntryProducer(database, work.id, linked.id);
+      const work = insertLegacyEntry(database, { title: 'Work', type: 'comic' });
+      linkLegacyEntryProducer(database, work.id, linked.id);
       // A merged-away spelling: the alias dictionary keeps the name, the row does not.
       const mergedSpelling = createProducer(database, { name: 'Old Spelling' });
       database.prepare(`

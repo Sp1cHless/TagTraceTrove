@@ -10,6 +10,25 @@ defineOptions({ inheritAttrs: false });
 const props = defineProps<{
   src: string;
   alt: string;
+  /**
+   * Bump to re-read the picture's bytes from the server.
+   *
+   * Media is addressed by position, so an edited list hands out the same URL
+   * for different bytes — and neither Vue's patch nor the browser re-reads an
+   * image whose URL did not change. This path fetches with `cache: 'no-cache'`
+   * and renders the result as an object URL, which is guaranteed to be the
+   * bytes the server holds now.
+   */
+  refreshToken?: number;
+  /**
+   * Keep the previously loaded picture visible while the next one loads.
+   *
+   * A paged viewer must not drop its picture between pages: clearing first
+   * collapses the whole media area (the pager and counter pile into the
+   * corner) and reads as the image disappearing. Cards keep the default,
+   * which clears before loading.
+   */
+  keepLastOnSrcChange?: boolean;
 }>();
 const attrs = useAttrs();
 
@@ -60,11 +79,46 @@ async function beginLoad(): Promise<void> {
 watch(() => props.src, () => {
   loadSequence += 1;
   releaseCachedHandle();
-  renderedSrc.value = undefined;
+  if (!props.keepLastOnSrcChange) renderedSrc.value = undefined;
   fallbackAttemptedFor = null;
   cacheMissFor = null;
-  hasLoaded.value = false;
+  hasLoaded.value = props.keepLastOnSrcChange && renderedSrc.value !== undefined;
   if (shouldLoad.value) void beginLoad();
+});
+
+let forcedUrl: string | null = null;
+function releaseForcedUrl(): void {
+  if (forcedUrl !== null) {
+    URL.revokeObjectURL(forcedUrl);
+    forcedUrl = null;
+  }
+}
+async function reloadForced(): Promise<void> {
+  const source = props.src;
+  const sequence = ++loadSequence;
+  releaseForcedUrl();
+  releaseCachedHandle();
+  hasLoaded.value = false;
+  try {
+    const response = await fetch(source, { cache: 'no-cache' });
+    if (!response.ok) throw new Error(`Media request returned ${response.status}`);
+    const objectUrl = URL.createObjectURL(await response.blob());
+    if (sequence !== loadSequence || props.src !== source) {
+      URL.revokeObjectURL(objectUrl);
+      return;
+    }
+    forcedUrl = objectUrl;
+    renderedSrc.value = objectUrl;
+  } catch {
+    // Fall back to whatever the address serves; a stale picture beats none.
+    if (sequence === loadSequence) renderedSrc.value = source;
+  }
+}
+let lastToken = props.refreshToken;
+watch(() => props.refreshToken, (token) => {
+  if (token === undefined || token === lastToken) return;
+  lastToken = token;
+  void reloadForced();
 });
 
 async function handleError(): Promise<void> {
@@ -117,6 +171,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   loadSequence += 1;
   observer?.disconnect();
+  releaseForcedUrl();
   releaseCachedHandle();
 });
 </script>

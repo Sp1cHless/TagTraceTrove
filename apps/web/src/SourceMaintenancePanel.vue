@@ -213,7 +213,7 @@ async function commit(): Promise<void> {
               :checked="selectedSourceKey === source.sourceKey"
               @change="selectedSourceKey = source.sourceKey"
             >
-            <strong>{{ source.sourceName }}</strong>
+            <strong class="t3-library-text">{{ source.sourceName }}</strong>
             <span class="muted">{{ source.hosts.join(', ') }}</span>
             <span class="muted">{{ t('sm.sourceCount', { entries: source.entryCount }) }}</span>
             <span
@@ -285,7 +285,7 @@ async function commit(): Promise<void> {
         :data-sm-entry-id="item.entryId"
       >
         <header>
-          <strong>{{ item.entryTitleSnapshot }}</strong>
+            <strong class="t3-library-text">{{ item.entryTitleSnapshot }}</strong>
           <span class="muted">{{ item.originUrls.join(', ') }}</span>
         </header>
         <p v-if="item.errorText" class="sm-probe-fail">{{ item.errorText }}</p>
@@ -300,7 +300,7 @@ async function commit(): Promise<void> {
                 @change="setDecision(item, 'accept', candidate.url)"
               >
               <span class="sm-band" :data-band="candidate.band">{{ bandLabel(candidate.band) }}</span>
-              <strong>{{ candidate.title }}</strong>
+              <strong class="t3-library-text">{{ candidate.title }}</strong>
               <span class="muted">{{ candidate.url }}</span>
             </label>
             <p class="sm-reasons">{{ candidate.reasons.join(' · ') }}</p>
@@ -340,12 +340,20 @@ async function commit(): Promise<void> {
 </template>
 
 <style scoped>
+/* Break URL/name min-content at the card, rather than clipping the shell. */
+.advanced-card { min-width: 0; overflow-wrap: anywhere; }
+.advanced-card > *, .sm-source-list label > *, .sm-inline > * { min-width: 0; max-width: 100%; }
+.advanced-card button, .advanced-card input { box-sizing: border-box; min-width: 0; max-width: 100%; }
+.sm-inline input[type='text'] { flex: 1 1 10rem; }
 .sm-origin, .sm-target, .sm-job, .sm-review, .sm-commit { margin-top: 0.8rem; }
 .sm-source-list { list-style: none; margin: 0.3rem 0; padding: 0; }
-.sm-source-list label { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.2rem 0; }
+/* Wraps, because the row is a name, its hosts, its count and a badge: measured at a 390px viewport
+   inside the Advanced page, it laid out 448px wide in a 326px card and the page clipped it — the
+   whole page was unusable from this tab, not just this row. (2026-10-05, mobile adaptation.) */
+.sm-source-list label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; padding: 0.2rem 0; }
 .sm-state-badge { padding: 0 0.4rem; border-radius: 0.4rem; background: var(--surface-muted); font-size: 0.75rem; }
 .sm-state-badge--invalid { color: #b91c1c; }
-.sm-inline { display: inline-flex; align-items: center; gap: 0.4rem; }
+.sm-inline { display: inline-flex; flex-wrap: wrap; max-width: 100%; align-items: center; gap: 0.4rem; }
 .sm-probe-ok { color: #15803d; }
 .sm-probe-fail { color: #b91c1c; }
 .sm-candidates { list-style: none; margin: 0.3rem 0; padding: 0; }
@@ -355,6 +363,6 @@ async function commit(): Promise<void> {
 .sm-band[data-band='conflict'] { color: #b91c1c; }
 .sm-reasons { margin: 0.1rem 0 0.3rem 1.5rem; color: var(--text-muted); font-size: 0.78rem; }
 .sm-item { border-top: 1px solid var(--border-subtle); padding: 0.5rem 0; }
-.sm-item-actions { display: flex; gap: 0.6rem; align-items: center; }
+.sm-item-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
 .sm-notice { color: #15803d; }
 </style>

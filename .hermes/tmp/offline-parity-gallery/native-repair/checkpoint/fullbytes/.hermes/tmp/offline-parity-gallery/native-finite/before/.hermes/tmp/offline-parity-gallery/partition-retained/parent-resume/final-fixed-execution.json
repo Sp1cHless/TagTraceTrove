@@ -1,0 +1,50 @@
+[
+  {
+    "name": "final-sql-fixed",
+    "exit": 0,
+    "argv": [
+      "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "--config",
+      "vitest.integration.config.ts",
+      "apps/web/tests/offline-collection-common-tag.integration.test.ts",
+      "apps/web/tests/offline-collection-delete.integration.test.ts",
+      "apps/web/tests/offline-collection-parity.integration.test.ts",
+      "apps/web/tests/offline-gallery-partition-retained.integration.test.ts",
+      "apps/web/tests/offline-gallery-partition.integration.test.ts",
+      "apps/web/tests/offline-gallery-type.integration.test.ts",
+      "apps/server/tests/integration/cross-path-entry-create.integration.test.ts",
+      "apps/server/tests/integration/gallery-order-sync.integration.test.ts",
+      "apps/server/tests/integration/gallery-partition-migration.integration.test.ts",
+      "apps/server/tests/integration/migration-runner.integration.test.ts",
+      "apps/server/tests/integration/partition-repository.integration.test.ts",
+      "apps/server/tests/integration/sync.integration.test.ts",
+      "--maxWorkers=2",
+      "--testTimeout=30000",
+      "--reporter=json",
+      "--outputFile=D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-gallery\\partition-retained\\parent-resume\\final-sql-fixed.json"
+    ],
+    "numPassedTests": 127,
+    "numFailedTests": 0,
+    "numPendingTests": 0
+  },
+  {
+    "name": "owned-lint-fixed",
+    "exit": 0,
+    "argv": [
+      "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+      "node_modules/eslint/bin/eslint.js",
+      "apps/web/src/offline/offline-api.ts",
+      "apps/web/src/api/gallery.ts",
+      "apps/server/src/http/app.ts",
+      "packages/shared/src/schemas/sync.ts",
+      "apps/server/src/sync/replay-service.ts",
+      "apps/web/src/offline/pending-work-restore.ts",
+      "apps/web/src/offline/sync-mutation-plan.ts",
+      "apps/web/src/offline/outbox-store.ts",
+      "apps/server/src/sync/sync-service.ts",
+      "apps/web/tests/offline-gallery-partition-retained.integration.test.ts"
+    ]
+  }
+]

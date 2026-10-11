@@ -1,0 +1,211 @@
+--- start/apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -28,7 +28,7 @@
+ import { ApiError } from '../api/client.js';
+ import { isOfflineTransportError } from '../api/transport-error.js';
+ import { createOfflineLibrary, type OfflineLibrary } from './offline-library.js';
+-import { mediaQueueIdentity, type MediaOutboxStore, type StagedMediaUpload } from './media-outbox-store.js';
++import { mediaQueueIdentity, operationQueueIdentity, type MediaOutboxStore, type StagedMediaUpload } from './media-outbox-store.js';
+ import {
+   createPendingSyncOperation,
+   operationFingerprint,
+@@ -4158,7 +4158,7 @@
+         let uploadId=randomUUID();
+         try { uploadId=await options.nativeTransfers?.allocateUploadId?.() ?? uploadId; }catch { /* old/uncertain native originals remain foreground replayable, not cancelable */ }
+         const upload: StagedMediaUpload = {uploadId,libraryId:active.snapshot.header.libraryId,syncEpoch:active.snapshot.header.syncEpoch,entryUid:entry.syncUid,kind,ordinal,mimeType:file.type as StagedMediaUpload['mimeType'],byteLength:file.size,sha256:await sha256Hex(file),blob:file,existingEntry:{expectedCoverRef:cover,expectedPreviewRefs:previews},status:'pending',lastAttemptAt:null,lastError:null};
+-        await store.enqueueExistingEntryMedia(upload,{snapshot:JSON.stringify(active.snapshot),revision:captured.revision,media:mediaQueueIdentity(rows)});
++        await store.enqueueExistingEntryMedia(upload,{snapshot:JSON.stringify(active.snapshot),revision:captured.revision,media:mediaQueueIdentity(rows),operations:operationQueueIdentity(operations)});
+         invalidateOfflineLibrary(); setMode('offline');
+         try { await setReplayStateFromStore(); } catch { /* durable commit already succeeded */ }
+         try { await options.nativeTransfers?.handoff(); } catch { /* original media remains available to foreground retry */ }
+@@ -4246,7 +4246,7 @@
+           if (JSON.stringify(refs.filter(ref => !ref.includes('#t3-upload='))) !== JSON.stringify(persisted)) throw new Error('Cancel staged previews separately before changing stored media');
+           const allMedia = await store.listMedia();
+           await store.cancelExistingEntryPreviews(entry.syncUid, staged.filter(row => !removedStaged.includes(row)).map(row=>row.uploadId),
+-            {snapshot:JSON.stringify(active.snapshot),revision:captured.revision,media:mediaQueueIdentity(allMedia)});
++            {snapshot:JSON.stringify(active.snapshot),revision:captured.revision,media:mediaQueueIdentity(allMedia),operations:operationQueueIdentity(operations)});
+           invalidateOfflineLibrary(); setMode('offline');
+           await setReplayStateFromStore();
+           return (await loadOfflineLibrary())!.getEntry(entryId);
+--- start/apps/web/src/offline/media-outbox-store.ts
++++ apps/web/src/offline/media-outbox-store.ts
+@@ -1,4 +1,4 @@
+-import type { PendingSyncOperation } from './outbox-store.js';
++import { operationFingerprint, type PendingSyncOperation } from './outbox-store.js';
+ 
+ export type StagedMediaStatus = 'pending' | 'failed';
+ 
+@@ -19,7 +19,7 @@
+   lastError: string | null;
+ }
+ 
+-export interface ExistingMediaGuard { snapshot: string; media: string; revision: string }
++export interface ExistingMediaGuard { snapshot: string; media: string; revision: string; operations: string }
+ export interface MediaOutboxStore {
+   cancelExistingEntryPreviews?(entryUid: string, retainedIds: string[], guard: ExistingMediaGuard): Promise<void>;
+   enqueueExistingEntryMedia?(upload: StagedMediaUpload, guard: ExistingMediaGuard): Promise<void>;
+@@ -43,7 +43,12 @@
+   ]));
+ }
+ 
+-export function validateExistingMediaStage(raw: unknown, revision: unknown, rows: StagedMediaUpload[], upload: StagedMediaUpload, guard: ExistingMediaGuard, capability: unknown): void {
++export function operationQueueIdentity(rows: PendingSyncOperation[]): string {
++  return JSON.stringify(rows.map(row => [operationFingerprint(row),row.status,row.lastAttemptAt,row.lastError]));
++}
++
++export function validateExistingMediaStage(raw: unknown, revision: unknown, rows: StagedMediaUpload[], upload: StagedMediaUpload, guard: ExistingMediaGuard, capability: unknown, operations: PendingSyncOperation[]): void {
++  if (operationQueueIdentity(operations) !== guard.operations) throw new Error('Pending operation queue changed; review the Entry and try again');
+   if (capability !== '1' || raw !== guard.snapshot || (revision ?? '0') !== guard.revision || mediaQueueIdentity(rows) !== guard.media) throw new Error('Offline copy or pending media changed; try again');
+   const snapshot = JSON.parse(String(raw)) as import('@t3/shared').SyncSnapshot;
+   const owner = snapshot.payload.entries.find(row => row.syncUid === upload.entryUid);
+--- start/apps/web/src/offline/memory-offline-store.ts
++++ apps/web/src/offline/memory-offline-store.ts
+@@ -76,7 +76,7 @@
+       operations.set(operation.opId,clone(operation)); return 'queued';
+     },
+     async enqueueExistingEntryMedia(upload, guard) {
+-      validateExistingMediaStage(generations.get(Number(meta.get('activeGeneration'))),meta.get(SNAPSHOT_REVISION_KEY),[...media.values()],upload,guard,meta.get('capability.existingEntryMedia'));
++      validateExistingMediaStage(generations.get(Number(meta.get('activeGeneration'))),meta.get(SNAPSHOT_REVISION_KEY),[...media.values()],upload,guard,meta.get('capability.existingEntryMedia'),[...operations.values()]);
+       media.set(upload.uploadId,clone(upload));
+     },
+     async enqueueEntryCreate(operation,uploads) {
+--- start/apps/web/src/offline/indexeddb-snapshot-store.ts
++++ apps/web/src/offline/indexeddb-snapshot-store.ts
+@@ -369,19 +369,20 @@
+     async enqueueExistingEntryMedia(upload, guard) {
+       const database = await open();
+       await new Promise<void>((resolve,reject) => {
+-        const tx = database.transaction([META_STORE,GENERATIONS_STORE,MEDIA_OUTBOX_STORE], 'readwrite');
++        const tx = database.transaction([META_STORE,GENERATIONS_STORE,MEDIA_OUTBOX_STORE,OUTBOX_STORE], 'readwrite');
+         const meta = tx.objectStore(META_STORE);
+         const media = tx.objectStore(MEDIA_OUTBOX_STORE);
+         const active = meta.get('activeGeneration');
+         const revision = meta.get(SNAPSHOT_REVISION_KEY);
+         const capability = meta.get('capability.existingEntryMedia');
+         const rows = media.getAll();
++        const operations = tx.objectStore(OUTBOX_STORE).getAll();
+         let explicitError: unknown;
+         active.onsuccess = () => {
+           const raw = tx.objectStore(GENERATIONS_STORE).get(Number(active.result));
+           raw.onsuccess = () => {
+             try {
+-              validateExistingMediaStage(raw.result,revision.result,rows.result,upload,guard,capability.result);
++              validateExistingMediaStage(raw.result,revision.result,rows.result,upload,guard,capability.result,(operations.result as {operation: PendingSyncOperation}[]).map(row=>row.operation));
+               media.add(upload);
+             } catch (cause) { explicitError = cause; tx.abort(); }
+           };
+--- start/apps/web/tests/existing-entry-media-vertical.test.ts
++++ apps/web/tests/existing-entry-media-vertical.test.ts
+@@ -10,6 +10,7 @@
+ // Cross-workspace runtime integration: deliberately not part of the web TS rootDir.
+ const serverModule = async (path: string) => { const target = `../../server/src/${path}.js`; return import(/* @vite-ignore */ target); };
+ import { createIndexedDbOfflineStore } from '../src/offline/indexeddb-snapshot-store.js';
++import { createMemoryOfflineStore } from '../src/offline/memory-offline-store.js';
+ import { createNativeTransfers } from '../src/offline/native-background-transfer.js';
+ import { createOfflineAwareGalleryApi } from '../src/offline/offline-api.js';
+ import { createGalleryApi } from '../src/api/gallery.js';
+@@ -19,7 +20,7 @@
+ import { preparePendingWork } from '../src/offline/pending-work-restore.js';
+ import { nativeMutationContract, type SyncSnapshot } from '@t3/shared';
+ 
+-async function harness(withNative = false, nativeNeverAttempted = false) {
++async function harness(withNative = false, nativeNeverAttempted = false, memory = false) {
+  const [{createTempFileDatabase},{applyAllMigrations},{createEntry},{createApiApp}]=await Promise.all(['database/testing','database/migrations','repositories/entry-repository','http/app'].map(serverModule));
+  const temp=createTempFileDatabase(); applyAllMigrations(temp.database);
+  const root=mkdtempSync(join(tmpdir(),'t3-existing-client-'));
+@@ -27,6 +28,7 @@
+  const app=createApiApp(temp.database,{assetRoot:root});
+  const trace:Array<{path:string;metadata?:unknown;hash?:string;result?:unknown;body?:unknown}>=[];
+  let loseUpload=false,loseReplay=false,loseAck=false,omitMedia=false,downgrade: 'absent' | 'false' | false=false,rejectCover=false;
++ let assetFault: 'wrong' | 'missing' | 'failed' | null=null;
+  const server=createServer(async(req,res)=>{
+   try {
+    const chunks:Buffer[]=[]; for await(const chunk of req) chunks.push(Buffer.from(chunk));
+@@ -49,6 +51,7 @@
+     value.target=snapshot.header;value.chunk=JSON.stringify(snapshot);value.insertLength=value.chunk.length;bytes=Buffer.from(JSON.stringify(value));
+    }
+    if(response.ok && ((loseUpload && req.url!.includes('/sync/media/')) || (loseAck && req.url!.includes('/sync/ack')) || (loseReplay && req.url!.includes('/sync/replay')))) {loseUpload=false;loseAck=false;loseReplay=false;res.destroy();return;}
++   if(assetFault && req.url!.startsWith('/api/assets/')){res.writeHead(assetFault==='missing'?404:assetFault==='failed'?503:200,{'content-type':'image/png'});res.end('not-the-original-image');return;}
+    res.writeHead(response.status,Object.fromEntries(response.headers));res.end(bytes);
+   }catch(error){res.writeHead(500);res.end(String(error));}
+  });
+@@ -56,9 +59,10 @@
+  const address=server.address() as {port:number};
+  const online=createGalleryApi(createApiClient({baseUrl:`http://127.0.0.1:${address.port}/api/`}),`http://127.0.0.1:${address.port}/`);
+  const databaseName=`existing-media-${crypto.randomUUID()}`;
+- let store=createIndexedDbOfflineStore({indexedDB,databaseName});
++ const openStore=()=>memory ? {...createMemoryOfflineStore(),close(){}} : createIndexedDbOfflineStore({indexedDB,databaseName});
++ let store=openStore();
+  const nativeTrace: Array<{method:string;args:Record<string,unknown>}> = [];
+- const native = () => withNative ? {nativeTransfers:createNativeTransfers(store,{call:async(method,args)=>{nativeTrace.push({method,args});return nativeNeverAttempted && method==='status'?{protocolVersion:1,planVersion:1,operationKinds:Object.keys(nativeMutationContract)}:method==='allocateUploadId'?{uploadId:crypto.randomUUID()}:method==='stageStandaloneMedia'?{stageId:crypto.randomUUID()}:method==='reconcile'?{active:0,completed:0,held:0}:method==='authorizePreviewCancel' || method==='inspectPreviewCancel' ? {neverAttempted:nativeNeverAttempted,uploadIds:(args.uploads as Array<{uploadId:string}>).map(row=>row.uploadId)}:{};}})} : {};
++ const native = () => withNative && 'captureNativeTransfers' in store ? {nativeTransfers:createNativeTransfers(store,{call:async(method,args)=>{nativeTrace.push({method,args});return nativeNeverAttempted && method==='status'?{protocolVersion:1,planVersion:1,operationKinds:Object.keys(nativeMutationContract)}:method==='allocateUploadId'?{uploadId:crypto.randomUUID()}:method==='stageStandaloneMedia'?{stageId:crypto.randomUUID()}:method==='reconcile'?{active:0,completed:0,held:0}:method==='authorizePreviewCancel' || method==='inspectPreviewCancel' ? {neverAttempted:nativeNeverAttempted,uploadIds:(args.uploads as Array<{uploadId:string}>).map(row=>row.uploadId)}:{};}})} : {};
+  let api=createOfflineAwareGalleryApi(online,store,native());
+  await api.getSyncCapabilities({replay:false});
+  await store.writeMeta('snapshotMediaMode','none');
+@@ -67,12 +71,39 @@
+  const bytes=await sharp({create:{width:2,height:2,channels:4,background:'#336699ff'}}).png().toBuffer();
+  const file=()=>new File([bytes],'original.png',{type:'image/png'}) as unknown as globalThis.File;
+  return {temp,root,entry,trace,nativeTrace,online,file,get store(){return store;},get api(){return api;},
+-  rejectCover(){rejectCover=true;},loseUpload(){loseUpload=true;},loseReplay(){loseReplay=true;},loseAck(){loseAck=true;},omitMedia(){omitMedia=true;},downgrade(value: 'absent' | 'false' = 'absent'){downgrade=value;},
+-  async cold(){store.close();store=createIndexedDbOfflineStore({indexedDB,databaseName});api=createOfflineAwareGalleryApi(online,store,native());await api.preferOfflineSnapshot!();},
++  assetFault(value: 'wrong' | 'missing' | 'failed'){assetFault=value;},rejectCover(){rejectCover=true;},loseUpload(){loseUpload=true;},loseReplay(){loseReplay=true;},loseAck(){loseAck=true;},omitMedia(){omitMedia=true;},downgrade(value: 'absent' | 'false' = 'absent'){downgrade=value;},
++  async cold(){store.close();store=openStore();api=createOfflineAwareGalleryApi(online,store,native());await api.preferOfflineSnapshot!();},
+   async cleanup(){store.close();await new Promise<void>(resolve=>server.close(()=>resolve()));temp.cleanup();rmSync(root,{recursive:true,force:true});}
+  };
+ }
+ describe('existing Entry real cold client/server media vertical',()=>{
++ it.each(['wrong','missing','failed'] as const)('retains exact staged bytes and does not validate or ACK a legal snapshot with %s asset bytes',async fault=>{
++  const h=await harness();try{
++   await h.api.uploadEntryMedia(h.entry.id,'preview',h.file());const original=(await h.store.listMedia())[0]!;
++   const base=await readActiveSnapshot(h.store);h.assetFault(fault);await h.api.replayOfflineOperations!();
++   const retained=(await h.store.listMedia())[0]!;expect(retained).toMatchObject({uploadId:original.uploadId,sha256:original.sha256,existingEntry:original.existingEntry});
++   expect(Buffer.from(await retained.blob.arrayBuffer())).toEqual(Buffer.from(await original.blob.arrayBuffer()));
++   expect(h.trace.some(row=>row.path.startsWith('/api/assets/'))).toBe(true);
++   expect(h.trace.filter(row=>row.path.includes('/sync/ack'))).toEqual([]);
++   expect(await h.store.readMeta('verifiedReplayProjection')).toBeNull();expect(await readActiveSnapshot(h.store)).toEqual(base);
++  }finally{await h.cleanup();}
++ },30000);
++ it.each([false,true])('atomically rejects an upload captured before a same-Entry deletion during hashing (memory=%s)',async memory=>{
++  const h=await harness(false,false,memory);let release!:()=>void;
++  try{
++   for(const color of ['#ef3030','#3030ef'])await h.online.uploadEntryMedia(h.entry.id,'preview',new File([await sharp({create:{width:3,height:3,channels:3,background:color}}).png().toBuffer()],'seed.png',{type:'image/png'}) as unknown as globalThis.File);
++   await applySnapshot(await h.online.fetchSyncSnapshot({media:'none'}),{store:h.store,expectedBase:await readActiveSnapshot(h.store)});
++   const before=await h.api.getEntry(h.entry.id);expect(before.previewRefs).toHaveLength(2);
++   const file=h.file(),original=file.arrayBuffer.bind(file);let entered!:()=>void;
++   const started=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);
++   Object.defineProperty(file,'arrayBuffer',{value:async()=>{entered();await gate;return original();}});
++   const staging=h.api.uploadEntryMedia(h.entry.id,'preview',file).then(()=>null,error=>error);
++   await started;await h.api.setEntryMediaOrder!(h.entry.id,[before.previewRefs[0]!]);
++   const queued=await h.store.list();expect(queued).toHaveLength(1);
++   release();expect(String(await staging)).toMatch(/changed|review|capture|queue|stale/iu);
++   expect(await h.store.listMedia()).toEqual([]);expect(await h.store.list()).toEqual(queued);
++  }finally{release?.();await h.cleanup();}
++ },30000);
+  it('pauses the actual native mirror and rejects staged cancellation without durable native never-attempted proof',async()=>{
+   const h=await harness(true);try{
+    await h.api.uploadEntryMedia(h.entry.id,'preview',h.file());const before=await h.store.listMedia();
+--- start/apps/web/tests/existing-entry-media.test.ts
++++ apps/web/tests/existing-entry-media.test.ts
+@@ -74,9 +74,9 @@
+    const api=createOfflineAwareGalleryApi({} as GalleryApi,store);await api.preferOfflineSnapshot!();
+    await api.uploadEntryMedia(1,'preview',new File(['first'],'image.png',{type:'image/png'}) as unknown as globalThis.File);
+    const rows=await store.listMedia();const state=await store.captureSnapshot!();const upload={...rows[0]!,uploadId:crypto.randomUUID()};
+-   await expect(store.enqueueExistingEntryMedia!(upload,{snapshot:JSON.stringify(state.active!.snapshot),revision:state.revision,media:mediaQueueIdentity([])})).rejects.toThrow(/changed/iu);
++   await expect(store.enqueueExistingEntryMedia!(upload,{snapshot:JSON.stringify(state.active!.snapshot),revision:state.revision,media:mediaQueueIdentity([]),operations:'[]'})).rejects.toThrow(/changed/iu);
+    await store.writeGeneration(1,JSON.stringify({...fixture(),header:{...fixture().header,syncEpoch:'rotated'}}));
+-   await expect(store.enqueueExistingEntryMedia!(upload,{snapshot:JSON.stringify(state.active!.snapshot),revision:state.revision,media:mediaQueueIdentity(rows)})).rejects.toThrow(/changed/iu);
++   await expect(store.enqueueExistingEntryMedia!(upload,{snapshot:JSON.stringify(state.active!.snapshot),revision:state.revision,media:mediaQueueIdentity(rows),operations:'[]'})).rejects.toThrow(/changed/iu);
+    expect(await store.listMedia()).toEqual(rows);
+    await store.removeMedia(rows[0]!.uploadId);const occupied=fixture();occupied.payload.entries[0]!.coverRef='/occupied';await store.writeGeneration(1,JSON.stringify(occupied));
+    await expect(api.uploadEntryMedia(1,'cover',new File(['cover'],'image.png',{type:'image/png'}) as unknown as globalThis.File)).rejects.toThrow(/occupied/iu);expect(await store.listMedia()).toEqual([]);
+--- start/apps/web/tests/native-settings-facade.test.ts
++++ apps/web/tests/native-settings-facade.test.ts
+@@ -14,7 +14,7 @@
+  const snapshot=fixture();await store.writeGeneration(1,JSON.stringify(snapshot));await store.writeMeta('activeGeneration','1');
+  const uploadId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  await store.writeMeta('capability.existingEntryMedia','1');
+- await store.enqueueExistingEntryMedia!({uploadId,libraryId:snapshot.header.libraryId,syncEpoch:'epoch',entryUid:snapshot.payload.entries[0]!.syncUid!,kind:'preview',ordinal:0,mimeType:'image/png',byteLength:1,sha256:'0'.repeat(64),blob:new Blob(['x']),existingEntry:{expectedCoverRef:null,expectedPreviewRefs:[]},status:'pending',lastAttemptAt:null,lastError:null},{snapshot:JSON.stringify(snapshot),revision:(await store.captureSnapshot!()).revision,media:'[]'});
++ await store.enqueueExistingEntryMedia!({uploadId,libraryId:snapshot.header.libraryId,syncEpoch:'epoch',entryUid:snapshot.payload.entries[0]!.syncUid!,kind:'preview',ordinal:0,mimeType:'image/png',byteLength:1,sha256:'0'.repeat(64),blob:new Blob(['x']),existingEntry:{expectedCoverRef:null,expectedPreviewRefs:[]},status:'pending',lastAttemptAt:null,lastError:null},{snapshot:JSON.stringify(snapshot),revision:(await store.captureSnapshot!()).revision,media:'[]',operations:'[]'});
+  const call=vi.fn(async(method:string)=>method==='status'?{protocolVersion:1,planVersion:1,operationKinds:Object.keys(nativeMutationContract)}:method==='preflight'?{libraryId:snapshot.header.libraryId,syncEpoch:'epoch',featureFlags:{offlineMediaUpload:true,existingEntryMedia:true}}:method==='foregroundOnlyUploads'?{uploadIds:[uploadId]}:method==='reconcile'?{active:0,completed:0,held:0,mirroredUploadIds:[],foregroundUploadIds:[uploadId]}:{});
+  const api=createOfflineAwareGalleryApi({assetUrl:(path:string)=>path} as GalleryApi,store,{nativeTransfers:createNativeTransfers(store,{call})});
+  const wrapper=mount(OfflineLibrarySettings,{props:{api,store}});await flushPromises();await vi.waitFor(()=>expect(wrapper.get('[data-testid="native-transfer-resume"]').attributes('disabled')).toBeUndefined());await wrapper.get('[data-testid="native-transfer-resume"]').trigger('click');await vi.waitFor(()=>expect(wrapper.text()).toContain('0 scheduled'));

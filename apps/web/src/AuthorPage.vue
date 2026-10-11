@@ -93,7 +93,14 @@ const initialListState = navigationMemory.states.get('author-list') as {
   usageMode?: 'lastViewed' | 'mostViewed' | 'mostLiked' | 'random' | null;
   authorTagFilters?: Array<number | null>;
   workTagFilters?: Array<number | null>;
+  ratingFilters?: AuthorRatingFilterRow[];
 } | undefined;
+
+interface AuthorRatingFilterRow {
+  slotId: number | null;
+  operator: 'eq' | 'gt' | 'lt' | 'unrated';
+  stars: number;
+}
 const activeAuthor = ref<AuthorDetailResponse | null>(null);
 const activeAuthorInViewLater = computed(() => (
   activeAuthor.value !== null && viewLaterAuthorIds.value.includes(activeAuthor.value.id)
@@ -233,8 +240,8 @@ function toggleAuthorCollection(collection: CollectionMenuOption): void {
   void addAuthorToCollection(collection.id);
 }
 
-const ratingEditorOpen = ref(false);
 const ratingName = ref('');
+const anchorInput = ref<HTMLInputElement | null>(null);
 const editingTagId = ref<number | null>(null);
 const editingTagName = ref('');
 const directoryTitle = ref('');
@@ -328,9 +335,16 @@ const authorFilters = ref<GalleryFacetFilters>(initialDetailState?.filters ?? {
 const authorTypeFilter = ref(initialListState?.typeFilter ?? '');
 const authorUsageMode = ref<'lastViewed' | 'mostViewed' | 'mostLiked' | 'random' | null>(initialListState?.usageMode ?? null);
 const authorRandomSeed = ref(Math.floor(Math.random() * 2_147_483_648));
-const authorListFilterOptions = ref<AuthorFilterOptions>({ authorTags: [], workTags: [] });
+const authorListFilterOptions = ref<AuthorFilterOptions>({ authorTags: [], workTags: [], ratingSlots: [] });
 const authorTagFilters = ref<Array<number | null>>(initialListState?.authorTagFilters ?? []);
 const workTagFilters = ref<Array<number | null>>(initialListState?.workTagFilters ?? []);
+/**
+ * The Author's OWN rating, as filter rows — the same shape the Gallery's filter bar uses, because it
+ * is the same question asked of a different subject. There is no works-summary row here: a summary is
+ * what an Author's works inherit, which is a question about a work, and the Author list is not one.
+ */
+const authorRatingFilters = ref<AuthorRatingFilterRow[]>(initialListState?.ratingFilters ?? []);
+const authorRatingStars: number[] = Array.from({ length: 10 }, (_, index) => (index + 1) / 2);
 const authorPageItems = ref<AuthorSummary[]>([]);
 const authorListTotal = ref(0);
 const authorListPage = ref(initialListState?.page ?? 1);
@@ -352,6 +366,7 @@ function rememberAuthorNavigationState(): void {
     usageMode: authorUsageMode.value,
     authorTagFilters: [...authorTagFilters.value],
     workTagFilters: [...workTagFilters.value],
+    ratingFilters: JSON.parse(JSON.stringify(authorRatingFilters.value)) as AuthorRatingFilterRow[],
   });
 }
 
@@ -369,13 +384,23 @@ async function loadAuthorListFilterOptions(): Promise<void> {
   try {
     authorListFilterOptions.value = await props.api.listAuthorFilterOptions(undefined, showNsfw.value);
   } catch {
-    authorListFilterOptions.value = { authorTags: [], workTags: [] };
+    authorListFilterOptions.value = { authorTags: [], workTags: [], ratingSlots: [] };
   }
 }
 
 async function applyAuthorListFilters(resetPage = true): Promise<void> {
   const ownTagIds = selectedTagIds(authorTagFilters.value);
   const relatedEntryTagIds = selectedTagIds(workTagFilters.value);
+  const ratingConditions = authorRatingFilters.value
+    .filter((row): row is AuthorRatingFilterRow & { slotId: number } => row.slotId !== null)
+    .map((row) => ({
+      slotId: row.slotId,
+      operator: row.operator,
+      stars: row.operator === 'unrated' ? null : row.stars,
+    }));
+  // The first rated dimension is what the list is ordered by, with the sort control above deciding
+  // the order inside one rating — that is what "adding a rating puts the highest first" means.
+  const ratingSortSlotId = ratingConditions[0]?.slotId ?? null;
   if (resetPage) authorListPage.value = 1;
   const request = ++authorListFilterRequest;
   error.value = null;
@@ -393,6 +418,8 @@ async function applyAuthorListFilters(resetPage = true): Promise<void> {
       ...(authorTypeFilter.value ? { entryType: authorTypeFilter.value } : {}),
       ownTagIds,
       relatedEntryTagIds,
+      ...(ratingConditions.length > 0 ? { ratingConditions } : {}),
+      ...(ratingSortSlotId === null ? {} : { ratingSort: { slotId: ratingSortSlotId, direction: 'desc' as const } }),
       includeNsfw: showNsfw.value,
       sort,
       ...(sort === 'random' ? { randomSeed: authorRandomSeed.value } : {}),
@@ -435,6 +462,43 @@ function addWorkTagFilter(): void {
 
 function tagSelectedInAnotherRow(rows: Array<number | null>, tagId: number, index: number): boolean {
   return rows.some((selected, selectedIndex) => selectedIndex !== index && selected === tagId);
+}
+
+/** "Greater than three stars" is what a rating filter is usually for, as on the Gallery's bar. */
+function addAuthorRatingFilter(): void {
+  authorRatingFilters.value.push({ slotId: null, operator: 'gt', stars: 3 });
+  void applyAuthorListFilters();
+}
+
+function removeAuthorRatingFilter(index: number): void {
+  authorRatingFilters.value.splice(index, 1);
+  void applyAuthorListFilters();
+}
+
+function chooseAuthorRatingSlot(row: AuthorRatingFilterRow, event: Event): void {
+  const value = (event.target as HTMLSelectElement).value;
+  row.slotId = value === '' ? null : Number(value);
+  void applyAuthorListFilters();
+}
+
+function chooseAuthorRatingOperator(row: AuthorRatingFilterRow, event: Event): void {
+  row.operator = (event.target as HTMLSelectElement).value as AuthorRatingFilterRow['operator'];
+  void applyAuthorListFilters();
+}
+
+function chooseAuthorRatingStars(row: AuthorRatingFilterRow, event: Event): void {
+  row.stars = Number((event.target as HTMLSelectElement).value);
+  void applyAuthorListFilters();
+}
+
+/**
+ * What one dimension is called in the dropdown. The Gallery is part of the answer when two Galleries
+ * use the same name: an Author's own dimensions belong to the Gallery they are anchored to, so the
+ * same word can mean two different rows.
+ */
+function authorRatingSlotLabel(slot: { name: string; entryType: string }): string {
+  const sameName = authorListFilterOptions.value.ratingSlots.filter((row) => row.name === slot.name);
+  return sameName.length > 1 ? `${slot.name} · ${slot.entryType}` : slot.name;
 }
 
 function removeAuthorTagFilter(index: number): void {
@@ -519,26 +583,35 @@ async function loadAuthorWorks(resetPage = false): Promise<void> {
     && filterActive.value
     && activeDirectoryId.value === null
     && authorFilterType.value !== null;
-  const result = await props.api.queryEntryPage({
-    ...(useFilters && authorFilterType.value ? { entryType: authorFilterType.value } : {}),
-    ...(activeDirectoryId.value !== null
-      ? { producerDirectoryId: activeDirectoryId.value }
-      : mergeAllWorks
-        ? {}
-      : useFilters
-        ? {}
-        : { looseForProducerId: author.id }),
-    authorIds: useFilters || mergeAllWorks ? [author.id] : [],
-    conditions: useFilters ? authorFilters.value.conditions.filter((condition) => condition.tagIds.length > 0) : [],
-    ratingConditions: useFilters ? authorFilters.value.ratingConditions : [],
-    ratingSort: useFilters ? authorFilters.value.ratingSort : null,
-    usageConditions: useFilters ? authorFilters.value.usageConditions : [],
-    usageSort: useFilters ? authorFilters.value.usageSort : null,
-    sort: authorSort.value,
-    ...(authorSort.value === 'random' ? { randomSeed: workRandomSeed.value } : {}),
-    page: page.value,
-    pageSize: pageSize.value,
-  });
+  let result: Awaited<ReturnType<GalleryApi['queryEntryPage']>>;
+  try {
+    result = await props.api.queryEntryPage({
+      ...(useFilters && authorFilterType.value ? { entryType: authorFilterType.value } : {}),
+      ...(activeDirectoryId.value !== null
+        ? { producerDirectoryId: activeDirectoryId.value }
+        : mergeAllWorks
+          ? {}
+        : useFilters
+          ? {}
+          : { looseForProducerId: author.id }),
+      authorIds: useFilters || mergeAllWorks ? [author.id] : [],
+      conditions: useFilters ? authorFilters.value.conditions.filter((condition) => condition.tagIds.length > 0) : [],
+      ratingConditions: useFilters ? authorFilters.value.ratingConditions : [],
+      ratingSort: useFilters ? authorFilters.value.ratingSort : null,
+      usageConditions: useFilters ? authorFilters.value.usageConditions : [],
+      usageSort: useFilters ? authorFilters.value.usageSort : null,
+      sort: authorSort.value,
+      ...(authorSort.value === 'random' ? { randomSeed: workRandomSeed.value } : {}),
+      page: page.value,
+      pageSize: pageSize.value,
+    });
+  } catch (cause) {
+    if (requestId === workRequestId.value) {
+      workPageItems.value = [];
+      error.value = cause instanceof Error ? cause.message : t('author.filterError');
+    }
+    return;
+  }
   if (requestId !== workRequestId.value) return;
   const maxPage = Math.max(1, Math.ceil(result.total / pageSize.value));
   if (page.value > maxPage) {
@@ -738,6 +811,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  rememberAuthorNavigationState();
   window.removeEventListener('resize', measureWorksGrid);
 });
 
@@ -766,7 +840,7 @@ function beginAuthorEdit(): void {
   authorOccupation.value = activeAuthor.value.occupation ?? '';
   authorArtwork.value = activeAuthor.value.artworkRef ?? '';
   authorContent.value = activeAuthor.value.content ?? '';
-  ratingEditorOpen.value = false;
+  ratingEditorKind.value = null;
   resetEntryMergeState();
   editingAuthor.value = true;
 }
@@ -828,60 +902,187 @@ async function addTag(name: string): Promise<void> {
   }
 }
 
-function applyAuthorRatingRow(row: RatingRow): void {
-  const author = activeAuthor.value;
-  if (!author) return;
-  author.ratings = author.ratings.map((item) => (item.slotId === row.slotId ? row : item));
+/**
+ * The Author's two rating classes, as the two halves of one board.
+ *
+ * They are separate partitions rather than one list with a flag: the works summary (`ratings`) is
+ * what an unrated work of theirs inherits, and its dimensions ARE the Gallery's work dimensions —
+ * a work dimension brings the summary's dimension of the same name into being by itself. The
+ * author's own (`authorSelfRatings`) describes the person or the studio and is never inherited. The
+ * Author's Gallery — the anchor both partitions hang off — is on the badge above.
+ */
+type AuthorRatingClass = 'producer' | 'author_self';
+
+interface AuthorRatingGroup {
+  kind: AuthorRatingClass;
+  rows: RatingRow[];
+  /** Already translated: the label and hint are built in the computed, not looked up per render. */
+  title: string;
+  hint: string;
+  testid: string;
+  addTestid: string;
+  formTestid: string;
 }
 
-async function createAuthorRatingSlot(): Promise<void> {
+const authorRatingGroups = computed<AuthorRatingGroup[]>(() => {
+  const author = activeAuthor.value;
+  if (!author) return [];
+  const groups: AuthorRatingGroup[] = [
+    {
+      kind: 'producer',
+      rows: author.ratings,
+      title: t('rating.worksSummary'),
+      hint: t('rating.worksSummaryHint'),
+      testid: 'author-ratings',
+      addTestid: 'add-author-rating-button',
+      formTestid: 'create-author-rating-form',
+    },
+    {
+      kind: 'author_self',
+      rows: author.authorSelfRatings ?? [],
+      title: t('rating.authorSelf'),
+      hint: t('rating.authorSelfHint'),
+      testid: 'author-self-ratings',
+      addTestid: 'add-author-self-rating-button',
+      formTestid: 'create-author-self-rating-form',
+    },
+  ];
+  return groups.filter((group) => group.rows.length > 0 || editingAuthor.value);
+});
+
+/** One editor at a time, so the second group cannot silently take the first group's name. */
+const ratingEditorKind = ref<AuthorRatingClass | null>(null);
+
+function authorRatingRows(kind: AuthorRatingClass): RatingRow[] {
+  const author = activeAuthor.value;
+  if (!author) return [];
+  return kind === 'producer' ? author.ratings : (author.authorSelfRatings ?? []);
+}
+
+function applyAuthorRatingRow(kind: AuthorRatingClass, row: RatingRow): void {
+  const author = activeAuthor.value;
+  if (!author) return;
+  if (kind === 'producer') {
+    author.ratings = author.ratings.map((item) => (item.slotId === row.slotId ? row : item));
+    return;
+  }
+  author.authorSelfRatings = (author.authorSelfRatings ?? [])
+    .map((item) => (item.slotId === row.slotId ? row : item));
+}
+
+async function createAuthorRatingSlot(kind: AuthorRatingClass): Promise<void> {
   if (!activeAuthor.value || !ratingName.value.trim()) return;
   error.value = null;
   try {
-    await props.api.createAuthorRatingSlot(activeAuthor.value.id, ratingName.value.trim());
+    await props.api.createAuthorRatingSlot(activeAuthor.value.id, ratingName.value.trim(), kind);
     ratingName.value = '';
-    ratingEditorOpen.value = false;
+    ratingEditorKind.value = null;
     await refreshAuthor();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.createRatingSlot');
   }
 }
 
-async function chooseAuthorStars(slotId: number, stars: number): Promise<void> {
+async function chooseAuthorStars(kind: AuthorRatingClass, slotId: number, stars: number): Promise<void> {
   if (!activeAuthor.value) return;
   error.value = null;
   try {
-    applyAuthorRatingRow(await props.api.setAuthorRating(activeAuthor.value.id, slotId, stars));
+    applyAuthorRatingRow(kind, await props.api.setAuthorRating(activeAuthor.value.id, slotId, stars));
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.setRating');
   }
 }
 
-async function clearAuthorStars(slotId: number): Promise<void> {
+async function clearAuthorStars(kind: AuthorRatingClass, slotId: number): Promise<void> {
   if (!activeAuthor.value) return;
   error.value = null;
   try {
-    applyAuthorRatingRow(await props.api.setAuthorRating(activeAuthor.value.id, slotId, null));
+    applyAuthorRatingRow(kind, await props.api.setAuthorRating(activeAuthor.value.id, slotId, null));
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.setRating');
   }
 }
 
-async function moveAuthorRatingSlot(slotId: number, direction: -1 | 1): Promise<void> {
+async function moveAuthorRatingSlot(
+  kind: AuthorRatingClass,
+  slotId: number,
+  direction: -1 | 1,
+): Promise<void> {
   const author = activeAuthor.value;
   if (!author) return;
-  const orderedIds = author.ratings.map((row) => row.slotId);
+  const rows = authorRatingRows(kind);
+  const orderedIds = rows.map((row) => row.slotId);
   const index = orderedIds.indexOf(slotId);
   const target = index + direction;
   if (index < 0 || target < 0 || target >= orderedIds.length) return;
   [orderedIds[index], orderedIds[target]] = [orderedIds[target]!, orderedIds[index]!];
   error.value = null;
   try {
-    // The order is shared per dominant-Gallery partition, like the slots.
+    // The order is shared per (class, Gallery) partition, like the slots themselves.
     await props.api.reorderAuthorRatingSlots(author.id, orderedIds);
     await refreshAuthor();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.reorderRating');
+  }
+}
+
+/**
+ * Deleting a dimension, in two steps.
+ *
+ * A dimension belongs to its Gallery's partition, not to the author whose card it was clicked on:
+ * every author of that Gallery loses it, and its values go with it. A dialog is the only honest
+ * shape for that — an inline "armed" button is what the app uses for a delete whose blast radius is
+ * the card you are looking at.
+ */
+const deleteRatingTarget = ref<{ slotId: number; name: string } | null>(null);
+
+function beginRatingDelete(slotId: number, name: string): void {
+  if (!editingAuthor.value) return;
+  error.value = null;
+  deleteRatingTarget.value = { slotId, name };
+}
+
+async function confirmRatingDelete(): Promise<void> {
+  const author = activeAuthor.value;
+  const target = deleteRatingTarget.value;
+  if (!author || target === null) return;
+  error.value = null;
+  try {
+    await props.api.deleteAuthorRatingSlot(author.id, target.slotId);
+    deleteRatingTarget.value = null;
+    await refreshAuthor();
+  } catch (cause) {
+    deleteRatingTarget.value = null;
+    error.value = cause instanceof Error ? cause.message : t('error.deleteEntry');
+  }
+}
+
+/** Anchoring: the Gallery both of this author's rating partitions live in. */
+const anchorEditorOpen = ref(false);
+const anchorDraft = ref('');
+
+function beginAnchorEdit(): void {
+  if (!editingAuthor.value || !activeAuthor.value) return;
+  anchorDraft.value = activeAuthor.value.galleryType ?? '';
+  anchorEditorOpen.value = true;
+  void nextTick(() => anchorInput.value?.focus());
+}
+
+async function saveAnchor(): Promise<void> {
+  const author = activeAuthor.value;
+  if (!anchorEditorOpen.value || !author) return;
+  const next = anchorDraft.value.trim();
+  if (next === '' || next === author.galleryType) {
+    anchorEditorOpen.value = false;
+    return;
+  }
+  error.value = null;
+  try {
+    await props.api.setAuthorGalleryAnchor(author.id, next);
+    anchorEditorOpen.value = false;
+    await refreshAuthor();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.setRating');
   }
 }
 
@@ -1267,8 +1468,8 @@ async function removeFromDirectory(): Promise<void> {
         <label>{{ t('directory.description') }}<textarea v-model="directoryDescription" name="directoryDescription" rows="4" /></label>
       </div>
       <header v-else class="directory-heading">
-        <h2>{{ activeDirectory.title }}</h2>
-        <p>{{ activeDirectory.description }}</p>
+          <h2 class="t3-library-text">{{ activeDirectory.title }}</h2>
+          <p class="t3-library-text">{{ activeDirectory.description }}</p>
       </header>
       <p
         v-if="editingDirectory"
@@ -1347,7 +1548,7 @@ async function removeFromDirectory(): Promise<void> {
                   :key="collection.id"
                   type="button"
                   role="menuitemcheckbox"
-                  class="add-to-collection-option"
+                  class="add-to-collection-option t3-library-text"
                   :class="{ 'is-member': authorCollectionIds.includes(collection.id) }"
                   :aria-checked="authorCollectionIds.includes(collection.id)"
                   :title="authorCollectionIds.includes(collection.id)
@@ -1398,21 +1599,41 @@ async function removeFromDirectory(): Promise<void> {
             :alt="activeAuthor.name"
             :asset-url="api.assetUrl"
           />
-          <div v-else class="author-artwork author-cover-placeholder">{{ activeAuthor.name.slice(0, 1).toUpperCase() }}</div>
+            <div v-else class="author-artwork author-cover-placeholder t3-library-text">{{ activeAuthor.name.slice(0, 1).toUpperCase() }}</div>
           <div>
             <p class="eyebrow">{{ t('author.occupation') }}</p>
-            <h2>
+            <h2 class="t3-library-text">
               {{ activeAuthor.name }}
-              <span v-if="activeAuthor.galleryType" class="author-gallery-badge" data-testid="author-gallery-badge">
-                {{ activeAuthor.galleryType }}
-              </span>
+              <!-- The Author's Gallery is a stored anchor, and this is where it is set: it is the
+                   partition both of their rating classes live in, so it belongs on the surface
+                   rather than being re-derived behind their back. -->
+              <input
+                v-if="editingAuthor && anchorEditorOpen"
+                ref="anchorInput"
+                v-model="anchorDraft"
+                class="author-gallery-anchor-input"
+                data-testid="author-gallery-anchor-input"
+                autocomplete="off"
+                :aria-label="t('author.galleryAnchor')"
+                @keydown.enter.prevent="saveAnchor"
+                @keydown.esc.prevent="anchorEditorOpen = false"
+                @blur="saveAnchor"
+              >
+              <span
+                v-else
+                class="author-gallery-badge"
+                :class="{ 'author-gallery-badge-editable': editingAuthor }"
+                data-testid="author-gallery-badge"
+                :title="editingAuthor ? t('author.galleryAnchorHint') : undefined"
+                @click="editingAuthor && beginAnchorEdit()"
+              >{{ activeAuthor.galleryType ?? t('author.galleryAnchorNone') }}</span>
             </h2>
             <small
               v-if="alternatesFor(activeAuthor.name)"
-              class="author-name-alternates"
+              class="author-name-alternates t3-library-text"
               data-testid="author-detail-alternates"
             >{{ alternatesFor(activeAuthor.name) }}</small>
-            <p>{{ activeAuthor.occupation }}</p>
+            <p class="t3-library-text">{{ activeAuthor.occupation }}</p>
             <p class="author-usage-summary" data-testid="author-usage-summary">
               <span class="detail-usage-count">{{ t('usage.viewCount', { count: activeAuthor.usage.viewCount }) }}</span>
               <span v-if="activeAuthor.usage.likeCount > 0" class="detail-usage-count">👍 {{ activeAuthor.usage.likeCount }}</span>
@@ -1430,7 +1651,7 @@ async function removeFromDirectory(): Promise<void> {
             <span
               v-for="tag in activeAuthor.tags"
               :key="tag.tagId"
-              class="author-tag"
+              class="author-tag t3-library-text"
               :data-author-tag-id="tag.tagId"
               @click="openAuthorTag(tag.tagId, tag.name)"
               @dblclick="beginTagRename(tag)"
@@ -1465,106 +1686,129 @@ async function removeFromDirectory(): Promise<void> {
              the single editor for this text. -->
         <div v-if="!editingAuthor" class="author-row author-content-row">
           <strong>{{ t('author.content') }}</strong>
-          <p>{{ activeAuthor.content }}</p>
+          <p class="t3-library-text">{{ activeAuthor.content }}</p>
         </div>
-        <div
-          v-if="activeAuthor.ratings.length > 0 || editingAuthor"
-          class="author-row author-rating-row"
-          data-testid="author-ratings"
-        >
-          <strong>{{ t('rating.title') }}</strong>
-          <div class="rating-rows">
-            <p v-if="activeAuthor.ratings.length === 0 && editingAuthor" class="muted">
-              {{ activeAuthor.galleryType === null ? t('rating.noWorks') : t('rating.empty') }}
-            </p>
-            <div
-              v-for="row in activeAuthor.ratings"
-              :key="row.slotId"
-              class="rating-row"
-              :data-rating-slot-id="row.slotId"
-            >
-              <span class="rating-name">{{ row.name }}</span>
-              <span
-                v-if="editingAuthor && activeAuthor.ratings.length > 1"
-                class="rating-sort-controls"
+        <!-- One board, two halves: the works summary is what an unrated work of theirs inherits, the
+             author's own dimensions describe the person. Each half is a class of its own, so they can
+             never mix; either half with nothing in it stays hidden. The halves sit side by side when
+             there is room and stack when there is not (phone width), which is why this is a grid with
+             a breakpoint rather than two fixed columns. -->
+        <div v-if="authorRatingGroups.length > 0" class="author-ratings-board">
+          <div
+            v-for="group in authorRatingGroups"
+            :key="group.kind"
+            class="author-row author-rating-row"
+            :data-testid="group.testid"
+            :data-rating-class="group.kind"
+          >
+            <strong class="t3-library-text">{{ group.title }}</strong>
+            <!-- The hint is the only thing telling the two halves apart, so it rides the edit mode:
+                 while reading, the values and the group names are enough. -->
+            <small v-if="editingAuthor" class="rating-class-hint">{{ group.hint }}</small>
+            <div class="rating-rows">
+              <p v-if="group.rows.length === 0 && editingAuthor && activeAuthor.galleryType === null" class="muted">
+                {{ t('rating.noWorks') }}
+              </p>
+              <div
+                v-for="row in group.rows"
+                :key="row.slotId"
+                class="rating-row"
+                :data-rating-slot-id="row.slotId"
               >
+                <span class="rating-name t3-library-text">{{ row.name }}</span>
+                <!-- Left of the arrows: this removes the DIMENSION, while the × inside the star
+                     picker clears this one value. Two different things, so they do not sit together. -->
                 <button
+                  v-if="editingAuthor"
                   type="button"
-                  :data-move-rating-up-id="row.slotId"
-                  :disabled="row.slotId === activeAuthor.ratings[0]?.slotId"
-                  :aria-label="t('rating.moveUp', { name: row.name })"
-                  @click="moveAuthorRatingSlot(row.slotId, -1)"
-                >↑</button>
-                <button
-                  type="button"
-                  :data-move-rating-down-id="row.slotId"
-                  :disabled="row.slotId === activeAuthor.ratings[activeAuthor.ratings.length - 1]?.slotId"
-                  :aria-label="t('rating.moveDown', { name: row.name })"
-                  @click="moveAuthorRatingSlot(row.slotId, 1)"
-                >↓</button>
-              </span>
-              <template v-if="editingAuthor">
-                <span class="star-picker">
-                  <span class="star-display">
-                    <span class="star-display-base">★★★★★</span>
-                    <span
-                      class="star-display-fill"
-                      :style="{ width: row.stars === null ? '0%' : `${(row.stars / 5) * 100}%` }"
-                    >★★★★★</span>
-                    <span class="star-picker-zones">
-                      <button
-                        v-for="half in 10"
-                        :key="half"
-                        type="button"
-                        :data-set-stars="half / 2"
-                        :aria-label="t('rating.set', { name: row.name, stars: half / 2 })"
-                        @click="chooseAuthorStars(row.slotId, half / 2)"
-                      />
-                    </span>
-                  </span>
-                  <button
-                    v-if="row.stars !== null"
-                    type="button"
-                    class="remove-tag-button"
-                    :data-clear-rating-slot-id="row.slotId"
-                    :aria-label="t('rating.clear', { name: row.name })"
-                    @click="clearAuthorStars(row.slotId)"
-                  >×</button>
-                </span>
-              </template>
-              <span v-else-if="row.stars !== null" class="star-display">
-                <span class="star-display-base">★★★★★</span>
+                  class="rating-delete-button"
+                  :data-delete-rating-slot-id="row.slotId"
+                  :title="t('rating.deleteDimension')"
+                  :aria-label="t('rating.deleteDimension')"
+                  @click="beginRatingDelete(row.slotId, row.name)"
+                >×</button>
                 <span
-                  class="star-display-fill"
-                  :style="{ width: `${(row.stars / 5) * 100}%` }"
-                >★★★★★</span>
-              </span>
-              <span v-else class="rating-unrated">{{ t('rating.unrated') }}</span>
-            </div>
-            <button
-              v-if="editingAuthor && !ratingEditorOpen"
-              data-testid="add-author-rating-button"
-              type="button"
-              class="add-button"
-              @click="ratingEditorOpen = true"
-            >
-              {{ t('rating.add') }}
-            </button>
-            <form
-              v-else-if="editingAuthor"
-              data-testid="create-author-rating-form"
-              class="compact-editor"
-              @submit.prevent="createAuthorRatingSlot"
-            >
-              <input
-                v-model="ratingName"
-                name="authorRatingName"
-                required
-                autocomplete="off"
-                :placeholder="t('rating.namePlaceholder')"
-                @blur="ratingName.trim() && createAuthorRatingSlot()"
+                  v-if="editingAuthor && group.rows.length > 1"
+                  class="rating-sort-controls"
+                >
+                  <button
+                    type="button"
+                    :data-move-rating-up-id="row.slotId"
+                    :disabled="row.slotId === group.rows[0]?.slotId"
+                    :aria-label="t('rating.moveUp', { name: row.name })"
+                    @click="moveAuthorRatingSlot(group.kind, row.slotId, -1)"
+                  >↑</button>
+                  <button
+                    type="button"
+                    :data-move-rating-down-id="row.slotId"
+                    :disabled="row.slotId === group.rows[group.rows.length - 1]?.slotId"
+                    :aria-label="t('rating.moveDown', { name: row.name })"
+                    @click="moveAuthorRatingSlot(group.kind, row.slotId, 1)"
+                  >↓</button>
+                </span>
+                <template v-if="editingAuthor">
+                  <span class="star-picker">
+                    <span class="star-display">
+                      <span class="star-display-base">★★★★★</span>
+                      <span
+                        class="star-display-fill"
+                        :style="{ width: row.stars === null ? '0%' : `${(row.stars / 5) * 100}%` }"
+                      >★★★★★</span>
+                      <span class="star-picker-zones">
+                        <button
+                          v-for="half in 10"
+                          :key="half"
+                          type="button"
+                          :data-set-stars="half / 2"
+                          :aria-label="t('rating.set', { name: row.name, stars: half / 2 })"
+                          @click="chooseAuthorStars(group.kind, row.slotId, half / 2)"
+                        />
+                      </span>
+                    </span>
+                    <button
+                      v-if="row.stars !== null"
+                      type="button"
+                      class="remove-tag-button"
+                      :data-clear-rating-slot-id="row.slotId"
+                      :aria-label="t('rating.clear', { name: row.name })"
+                      @click="clearAuthorStars(group.kind, row.slotId)"
+                    >×</button>
+                  </span>
+                </template>
+                <span v-else-if="row.stars !== null" class="star-display">
+                  <span class="star-display-base">★★★★★</span>
+                  <span
+                    class="star-display-fill"
+                    :style="{ width: `${(row.stars / 5) * 100}%` }"
+                  >★★★★★</span>
+                </span>
+                <span v-else class="rating-unrated">{{ t('rating.unrated') }}</span>
+              </div>
+              <button
+                v-if="editingAuthor && ratingEditorKind !== group.kind"
+                :data-testid="group.addTestid"
+                type="button"
+                class="add-button"
+                @click="ratingEditorKind = group.kind"
               >
-            </form>
+                {{ t('rating.add') }}
+              </button>
+              <form
+                v-else-if="editingAuthor"
+                :data-testid="group.formTestid"
+                class="compact-editor"
+                @submit.prevent="createAuthorRatingSlot(group.kind)"
+              >
+                <input
+                  v-model="ratingName"
+                  name="authorRatingName"
+                  required
+                  autocomplete="off"
+                  :placeholder="t('rating.namePlaceholder')"
+                  @blur="ratingName.trim() && createAuthorRatingSlot(group.kind)"
+                >
+              </form>
+            </div>
           </div>
         </div>
       </section>
@@ -1665,10 +1909,10 @@ async function removeFromDirectory(): Promise<void> {
                 <span class="directory-cover">
                   <template v-for="work in card.directory.entries.slice(0, 3)" :key="work.id">
                     <LazyCardImage v-if="work.coverRef" :src="api.assetUrl(entryCardMediaRef(work.coverRef))" :alt="work.title" loading="lazy" decoding="async" />
-                    <span v-else class="mini-placeholder">{{ work.title.slice(0, 1) }}</span>
+                    <span v-else class="mini-placeholder t3-library-text">{{ work.title.slice(0, 1) }}</span>
                   </template>
                 </span>
-                <span class="author-card-meta"><strong>{{ card.directory.title }}</strong><small>{{ card.directory.entryCount ?? card.directory.entries.length }} {{ t('author.works') }}</small></span>
+                <span class="author-card-meta"><strong class="t3-library-text">{{ card.directory.title }}</strong><small>{{ card.directory.entryCount ?? card.directory.entries.length }} {{ t('author.works') }}</small></span>
               </button>
               <button
                 v-if="editingAuthor && draggedWorkId !== null"
@@ -1730,6 +1974,37 @@ async function removeFromDirectory(): Promise<void> {
       </section>
 
       <div
+        v-if="deleteRatingTarget !== null"
+        class="entry-merge-overlay"
+        role="presentation"
+      >
+        <section
+          class="entry-merge-dialog"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="t('rating.deleteTitle', { name: deleteRatingTarget.name })"
+          data-testid="rating-delete-confirmation"
+        >
+          <h2>{{ t('rating.deleteTitle', { name: deleteRatingTarget.name }) }}</h2>
+          <p class="muted">{{ t('rating.deleteConfirmAuthor') }}</p>
+          <div class="entry-merge-actions">
+            <button
+              type="button"
+              class="secondary-button"
+              data-testid="rating-delete-cancel"
+              @click="deleteRatingTarget = null"
+            >{{ t('rating.deleteCancel') }}</button>
+            <button
+              type="button"
+              class="secondary-button danger-button"
+              data-testid="rating-delete-confirm"
+              @click="confirmRatingDelete"
+            >{{ t('rating.deleteAction') }}</button>
+          </div>
+        </section>
+      </div>
+
+      <div
         v-if="entryMergeConfirmationOpen && entryMergeSelection.length === 2"
         class="entry-merge-overlay"
         role="presentation"
@@ -1761,7 +2036,7 @@ async function removeFromDirectory(): Promise<void> {
                 @change="chooseEntryMergeKeeper(work.id)"
               >
               <span class="entry-merge-option-body">
-                <strong>{{ work.title }}</strong>
+                  <strong class="t3-library-text">{{ work.title }}</strong>
                 <small
                   v-for="source in entryMergeSourcesFor(work.id)"
                   :key="`${source.contentId}:${source.url}`"
@@ -1787,7 +2062,7 @@ async function removeFromDirectory(): Promise<void> {
                 :data-merge-title-source-id="work.id"
                 @change="chooseEntryMergeTitleSource(work.id)"
               >
-              <span>{{ work.title }}</span>
+                    <span class="t3-library-text">{{ work.title }}</span>
             </label>
             <label class="entry-merge-option entry-merge-title-field">
               <span class="muted">{{ t('entryMerge.titleOverride') }}</span>
@@ -1816,7 +2091,7 @@ async function removeFromDirectory(): Promise<void> {
               class="entry-merge-source-option"
             >
               <input v-model="entryMergeSelectedUrls" type="checkbox" :value="source.url">
-              <span><strong>{{ source.sourceName }}</strong><small>{{ source.url }}</small></span>
+                <span class="t3-library-text"><strong>{{ source.sourceName }}</strong><small>{{ source.url }}</small></span>
             </label>
           </fieldset>
 
@@ -1922,6 +2197,15 @@ async function removeFromDirectory(): Promise<void> {
             :disabled="workTagFilters.length >= authorListFilterOptions.workTags.length"
             @click="addWorkTagFilter"
           >{{ t('author.addWorkTagFilter') }}</button>
+          <!-- Only when there is something to filter by: the dimensions these Authors are actually
+               rated on in their own class. -->
+          <button
+            v-if="authorListFilterOptions.ratingSlots.length > 0"
+            type="button"
+            class="add-button"
+            data-testid="add-author-rating-filter"
+            @click="addAuthorRatingFilter"
+          >{{ t('filter.addRating') }}</button>
         </div>
         <div
           v-for="(_tagId, index) in authorTagFilters"
@@ -1943,6 +2227,58 @@ async function removeFromDirectory(): Promise<void> {
             class="remove-tag-filter"
             :aria-label="t('author.removeTagFilter')"
             @click="removeAuthorTagFilter(index)"
+          >×</button>
+        </div>
+        <div
+          v-for="(ratingRow, index) in authorRatingFilters"
+          :key="`author-rating-${index}`"
+          class="author-list-filter-row author-list-rating-filter-row"
+          data-testid="author-rating-filter-row"
+        >
+          <label>
+            <span>{{ t('rating.authorSelf') }}</span>
+            <select
+              class="filter-select"
+              data-testid="author-rating-slot-select"
+              :value="ratingRow.slotId ?? ''"
+              @change="chooseAuthorRatingSlot(ratingRow, $event)"
+            >
+              <option value="" disabled>{{ t('filter.ratingSlotPlaceholder') }}</option>
+              <option
+                v-for="slot in authorListFilterOptions.ratingSlots"
+                :key="slot.id"
+                :value="slot.id"
+              >{{ authorRatingSlotLabel(slot) }}</option>
+            </select>
+          </label>
+          <select
+            class="filter-select"
+            data-testid="author-rating-operator-select"
+            :value="ratingRow.operator"
+            @change="chooseAuthorRatingOperator(ratingRow, $event)"
+          >
+            <option value="eq">{{ t('filter.ratingEquals') }}</option>
+            <option value="gt">{{ t('filter.ratingGreaterThan') }}</option>
+            <option value="lt">{{ t('filter.ratingLessThan') }}</option>
+            <option value="unrated">{{ t('filter.ratingUnrated') }}</option>
+          </select>
+          <select
+            v-if="ratingRow.operator !== 'unrated'"
+            class="filter-select"
+            data-testid="author-rating-stars-select"
+            :value="ratingRow.stars"
+            @change="chooseAuthorRatingStars(ratingRow, $event)"
+          >
+            <option v-for="value in authorRatingStars" :key="value" :value="value">
+              {{ t('filter.ratingStars', { stars: value }) }}
+            </option>
+          </select>
+          <button
+            type="button"
+            class="remove-tag-filter"
+            :aria-label="t('filter.removeRow')"
+            data-testid="remove-author-rating-filter"
+            @click="removeAuthorRatingFilter(index)"
           >×</button>
         </div>
         <div
@@ -1988,8 +2324,8 @@ async function removeFromDirectory(): Promise<void> {
             :alt="author.name"
             :asset-url="api.assetUrl"
           />
-          <span v-else class="author-list-badge">{{ author.name.slice(0, 1).toUpperCase() }}</span>
-          <strong>{{ author.name }}</strong>
+              <span v-else class="author-list-badge t3-library-text">{{ author.name.slice(0, 1).toUpperCase() }}</span>
+              <strong class="t3-library-text">{{ author.name }}</strong>
           <small v-if="author.galleryType" class="author-gallery-badge" data-testid="author-list-gallery">
             {{ author.galleryType }}
           </small>
@@ -2224,6 +2560,54 @@ async function removeFromDirectory(): Promise<void> {
 }
 .author-basics h2 .author-gallery-badge { margin-left: 0.4rem; }
 .author-list-card > .author-gallery-badge { justify-self: start; }
+/* The anchor is editable in edit mode, so it has to look like something you can click — and the
+   "no Gallery yet" state has to be visible before an author has their first work. */
+.author-gallery-badge-editable { cursor: pointer; }
+.author-gallery-badge-editable:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.author-gallery-anchor-input {
+  width: 9rem;
+  margin-left: 0.4rem;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.45rem;
+  color: var(--text-primary);
+  background: var(--surface);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 400;
+  vertical-align: middle;
+}
+/* One line per half: what this class of rating means, shown while editing. It is the only thing
+   telling two same-shaped halves apart, so it sits in the flow rather than behind a tooltip. */
+.rating-class-hint { color: var(--text-muted); font-size: 0.72rem; line-height: 1.35; max-width: 46rem; }
+/* The dimension's own delete, left of the arrows. Muted until hovered: it sits in a row people come
+   to for the stars, and it is the one control here that reaches every author of the Gallery. */
+.rating-delete-button { padding: 0.05rem 0.3rem; border: none; border-radius: 0.35rem; color: var(--text-muted); background: none; font-size: 0.9rem; line-height: 1; cursor: pointer; }
+.rating-delete-button:hover { color: var(--danger, #b3261e); background: color-mix(in srgb, var(--danger, #b3261e) 12%, transparent); }
+/* The two halves of the rating block, side by side when there is room. `minmax(0, 1fr)` so a long
+   dimension name or a 10-zone star picker cannot push a half wider than its share — a grid item
+   defaults to `min-width: auto`, which is what would make the left half eat the right one. */
+.author-ratings-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  column-gap: 1.5rem;
+}
+/* A half drops the row's own separator (the board draws its own), and stacks: the label above its
+   hint and its rows rather than beside them. `.author-row`'s 7rem label column exists to line a row
+   up with the other rows of a full-width board, and inside a half it only shoved the ratings right —
+   the rows belong under the label, flush with the half's left edge. */
+.author-ratings-board > .author-rating-row {
+  border-top: none;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 0.4rem;
+}
+/* No room for two halves (a phone-width web page): the author's half moves under the summary,
+   which is what "dynamic" means here — not a fixed two-column table. */
+@media (max-width: 44rem) {
+  .author-ratings-board { grid-template-columns: minmax(0, 1fr); row-gap: 0.9rem; }
+  .author-ratings-board > .author-rating-row + .author-rating-row { border-top: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08)); }
+}
 .eyebrow { margin-bottom: 0.35rem; color: var(--accent); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
 @media (max-width: 44rem) {
   .author-toolbar,
@@ -2273,6 +2657,19 @@ async function removeFromDirectory(): Promise<void> {
   .sort-control { width: 100%; margin-left: 0; flex-wrap: wrap; }
   .sort-control select { min-width: 0; max-width: 100%; min-height: 44px; }
   .author-list-filter-row { max-width: 100%; }
+  /* The actual phone card is narrower than its viewport. Keep the dimension readable
+     above the operator/stars row instead of pushing delete outside the clipped card. */
+  .author-list-rating-filter-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 44px;
+    width: 100%;
+    min-width: 0;
+  }
+  .author-list-rating-filter-row > label { grid-column: 1 / -1; min-width: 0; }
+  .author-list-rating-filter-row select { width: 100%; box-sizing: border-box; }
+  .author-list-rating-filter-row > .remove-tag-filter { grid-column: 3; min-width: 44px; }
+  /* With Unrated, only the operator remains: let it use both select tracks. */
+  .author-list-rating-filter-row > select:nth-child(2):nth-last-child(2) { grid-column: 1 / span 2; }
   .author-list-filter-row select,
   .remove-tag-filter { min-height: 44px; }
 }

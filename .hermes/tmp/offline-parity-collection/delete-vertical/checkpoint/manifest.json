@@ -1,0 +1,1117 @@
+{
+  "status": "Collection delete finite foreground/SQL GREEN; Collection03 NOT DONE; writers stopped",
+  "entries": [
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\packages\\shared\\src\\schemas\\sync.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\working\\packages\\shared\\src\\schemas\\sync.ts",
+      "role": "owned",
+      "origin": null,
+      "bytes": 59998,
+      "sha256": "41a33d667586e825f0761593f93e1f9fd6bd8a12fc00a26dd928d0200726341d"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\packages\\shared\\src\\schemas\\native-mutation-contract.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\working\\packages\\shared\\src\\schemas\\native-mutation-contract.ts",
+      "role": "owned",
+      "origin": null,
+      "bytes": 3999,
+      "sha256": "26b02be372725e75239f89972cfe722a7b3b5294a8108d4c9cb2470a1a2e5822"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\server\\src\\sync\\sync-service.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\working\\apps\\server\\src\\sync\\sync-service.ts",
+      "role": "owned",
+      "origin": null,
+      "bytes": 19310,
+      "sha256": "b3d052259fe3c7034fca8c259ef0d626d0e49f8c88b29a15d2a4f0e05e2ab88b"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\server\\src\\sync\\replay-service.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\working\\apps\\server\\src\\sync\\replay-service.ts",
+      "role": "owned",
+      "origin": null,
+      "bytes": 121063,
+      "sha256": "f0697ee412ef1e0a1bbac0ee74d43732718b36e684079518e10f6ffa97526c80"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\server\\src\\http\\app.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\working\\apps\\server\\src\\http\\app.ts",
+      "role": "owned",
+      "origin": null,
+      "bytes": 101101,
+      "sha256": "d4ae18b1fde4f3525f8ccebc6d0c3ed6f0222cca1e8aa607d17af3a773e89f63"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\web\\src\\api\\gallery.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\working\\apps\\web\\src\\api\\gallery.ts",
+      "role": "owned",
+      "origin": null,
+      "bytes": 66900,
+      "sha256": "6e5d9475a19ac1544cd89d0a3d0581326f3c97a9ab60546725bf9db1a12e3dac"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\web\\src\\offline\\offline-api.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\working\\apps\\web\\src\\offline\\offline-api.ts",
+      "role": "owned",
+      "origin": null,
+      "bytes": 369188,
+      "sha256": "2fa64e27490aa128b617d12535417f0cbda22310a8f5a143667321d1533943d3"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\web\\src\\offline\\sync-mutation-plan.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\working\\apps\\web\\src\\offline\\sync-mutation-plan.ts",
+      "role": "owned",
+      "origin": null,
+      "bytes": 9290,
+      "sha256": "265c1ecac2a456c55e02028f8fb1fe121d8891c6306588fd1970ab96c0dcb745"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\web\\src\\offline\\pending-work-restore.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\working\\apps\\web\\src\\offline\\pending-work-restore.ts",
+      "role": "owned",
+      "origin": null,
+      "bytes": 26503,
+      "sha256": "e787ffdd1ccb5d8fc0bad076b719f1ae583bc95657bc0ddc6617455aaf5628a1"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\web\\tests\\offline-collection-parity.integration.test.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\working\\apps\\web\\tests\\offline-collection-parity.integration.test.ts",
+      "role": "owned",
+      "origin": null,
+      "bytes": 7950,
+      "sha256": "3beea510fc0528cafb29620866d370b69dacf8cfe29be16cac248fe4c5158345"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\server\\src\\sync\\collection-delete.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\working\\apps\\server\\src\\sync\\collection-delete.ts",
+      "role": "new-owned",
+      "origin": null,
+      "bytes": 1177,
+      "sha256": "8f93f9a62f6e4aef557042060f00072a8e3918764cb159eec5e810619f274548"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\web\\src\\offline\\collection-delete.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\working\\apps\\web\\src\\offline\\collection-delete.ts",
+      "role": "new-owned",
+      "origin": null,
+      "bytes": 3636,
+      "sha256": "fcf28dcd0bd91a66c6e6e4aa3433731b09fc17f4a5622b2a35b39e543c21637c"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\web\\tests\\offline-collection-delete.integration.test.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\working\\apps\\web\\tests\\offline-collection-delete.integration.test.ts",
+      "role": "new-owned",
+      "origin": null,
+      "bytes": 20597,
+      "sha256": "114727d845c12cfc9cfe10ae478c52b56157aa766c3c6c469c5613dcb73dc16d"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\artifacts\\offline-parity-collection-delete.md",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\working\\.hermes\\artifacts\\offline-parity-collection-delete.md",
+      "role": "report",
+      "origin": null,
+      "bytes": 9647,
+      "sha256": "9694672ec03b52dfd15a85ae579e6d424382abb57d2e80e4c012e2637e0b4d84"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\server\\src\\repositories\\collection-repository.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\observed\\apps\\server\\src\\repositories\\collection-repository.ts",
+      "role": "observed-dependency",
+      "origin": null,
+      "bytes": 18537,
+      "sha256": "f7011273420eddb731d101f0a110513174c80b92c07992642c6acde1f7cdfb97"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\web\\src\\CollectionsPage.vue",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\observed\\apps\\web\\src\\CollectionsPage.vue",
+      "role": "observed-dependency",
+      "origin": null,
+      "bytes": 47963,
+      "sha256": "9ea36652efd65a8142ff59c697e4e8709fe34f6ee9f04e0bdaa59223155f15de"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\packages\\shared\\src\\schemas\\api.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\observed\\packages\\shared\\src\\schemas\\api.ts",
+      "role": "observed-dependency",
+      "origin": null,
+      "bytes": 55986,
+      "sha256": "3e5402cd5f08f0b36ecf038e2c31cb662431ca96866e381c41a475b66156ef4e"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\web\\src\\offline\\outbox-store.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\observed\\apps\\web\\src\\offline\\outbox-store.ts",
+      "role": "observed-dependency",
+      "origin": null,
+      "bytes": 9547,
+      "sha256": "ba11716ebf20040e182a2d3f8cedf06d851cc5d15c0840fa3198a6e1d7bf470b"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\web\\src\\offline\\indexeddb-snapshot-store.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\observed\\apps\\web\\src\\offline\\indexeddb-snapshot-store.ts",
+      "role": "observed-dependency",
+      "origin": null,
+      "bytes": 31935,
+      "sha256": "eca2f11bd064efb4ca1250ac4be1f84c90496dedd7f95da922365c7a14425681"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\server\\src\\database\\testing.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\observed\\apps\\server\\src\\database\\testing.ts",
+      "role": "observed-dependency",
+      "origin": null,
+      "bytes": 2569,
+      "sha256": "d8a637f4d879f18bb1c51236760d7a3db381fb5cbe13753d70a0de7477945588"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\server\\src\\database\\migrations\\028_author_resource_sync.sql",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\observed\\apps\\server\\src\\database\\migrations\\028_author_resource_sync.sql",
+      "role": "observed-dependency",
+      "origin": null,
+      "bytes": 25354,
+      "sha256": "a9b86901b93087165ae9d1c4f574e15f3697266100d44091eee5f44a1a3f85fe"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\server\\src\\database\\migrations\\037_gallery_order_sync.sql",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\observed\\apps\\server\\src\\database\\migrations\\037_gallery_order_sync.sql",
+      "role": "observed-dependency",
+      "origin": null,
+      "bytes": 38817,
+      "sha256": "39904508f711bf9c1ac7bcc8bcb6a6eb72b8c968a5065e275bc62c2368649c68"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\apps\\server\\src\\database\\migrations\\042_standalone_author_directory_seed.sql",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\observed\\apps\\server\\src\\database\\migrations\\042_standalone_author_directory_seed.sql",
+      "role": "observed-dependency",
+      "origin": null,
+      "bytes": 1249,
+      "sha256": "ee9dccd44efe6cf383633d7e44ebab39368a58a9e8c1da0f6d971c362cdbb008"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\spikes\\001-android-webview-shell\\android\\app\\build.gradle",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\observed\\spikes\\001-android-webview-shell\\android\\app\\build.gradle",
+      "role": "observed-dependency",
+      "origin": null,
+      "bytes": 3683,
+      "sha256": "681bb588e6a59ca8b4515fd8823d9ea90bd9acb89509611bef40a4e66110d998"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\add-cells.py",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\add-cells.py",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 10479,
+      "sha256": "3642fbac801489f1677b31925b108975ffb77a8c83912042f273cb1ca2f8dc72"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\anchor-preflight.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\anchor-preflight.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 4144,
+      "sha256": "e1814746b27869ce229876ffed23f07c7d9f15e6411c97d81beaf335b4bdbc5b"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\apply.py",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\apply.py",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 22675,
+      "sha256": "2fcceb47cc57cf5dba1654b6fedab8519983f0eb18cd25b8d100bcaa40785654"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\archive.py",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\archive.py",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 6164,
+      "sha256": "6b05fd4bc3ae015bc9867d28825a10576312a3f84c8b1ce9a1db802434e72ca6"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\before\\apps\\server\\src\\http\\app.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\before\\apps\\server\\src\\http\\app.ts",
+      "role": "original-before",
+      "origin": null,
+      "bytes": 100576,
+      "sha256": "54fc2b1c7aa2af4bc79e211f7d6e4e580f0770a71399379a62c83e8f8cf40012"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\before\\apps\\server\\src\\sync\\replay-service.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\before\\apps\\server\\src\\sync\\replay-service.ts",
+      "role": "original-before",
+      "origin": null,
+      "bytes": 118812,
+      "sha256": "81aeedc7f31d27b2a418f50825ed320467a25523e41716f57d7d2c0dda4728fc"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\before\\apps\\server\\src\\sync\\sync-service.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\before\\apps\\server\\src\\sync\\sync-service.ts",
+      "role": "original-before",
+      "origin": null,
+      "bytes": 19252,
+      "sha256": "fe8409dfd0fb1126c63dc6aa89092f46851a51ec454ec7ac4a7a78e0f09678aa"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\before\\apps\\web\\src\\api\\gallery.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\before\\apps\\web\\src\\api\\gallery.ts",
+      "role": "original-before",
+      "origin": null,
+      "bytes": 66589,
+      "sha256": "1709c2c7bbfcbf26d33680ad612aaabadbf487d1a39988454c8505a76a56129a"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\before\\apps\\web\\src\\offline\\offline-api.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\before\\apps\\web\\src\\offline\\offline-api.ts",
+      "role": "original-before",
+      "origin": null,
+      "bytes": 363445,
+      "sha256": "982b69cb25178c4dddf6331007664e277c97ffbcee9bb452b6496b57a9598805"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\before\\apps\\web\\src\\offline\\pending-work-restore.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\before\\apps\\web\\src\\offline\\pending-work-restore.ts",
+      "role": "original-before",
+      "origin": null,
+      "bytes": 25558,
+      "sha256": "db9124b09d3e45730e1b4e6fab8e86f67a7ab25e694835b6fd471e79899298fd"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\before\\apps\\web\\src\\offline\\sync-mutation-plan.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\before\\apps\\web\\src\\offline\\sync-mutation-plan.ts",
+      "role": "original-before",
+      "origin": null,
+      "bytes": 8936,
+      "sha256": "0ee2f2e72a8f1ec698044fc1d07e11b37e4a4e151014aed702fdf137aac615d2"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\before\\apps\\web\\tests\\offline-collection-parity.integration.test.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\before\\apps\\web\\tests\\offline-collection-parity.integration.test.ts",
+      "role": "original-before",
+      "origin": null,
+      "bytes": 7905,
+      "sha256": "587f84b58932c14f0dabe141a32728cda99fbb74a50b555b868c93e6668aa44d"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\before\\packages\\shared\\src\\schemas\\native-mutation-contract.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\before\\packages\\shared\\src\\schemas\\native-mutation-contract.ts",
+      "role": "original-before",
+      "origin": null,
+      "bytes": 3862,
+      "sha256": "460aeaa49e3f22456409599b3879ca39c65b77fca022e73d1c36faf4fd505313"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\before\\packages\\shared\\src\\schemas\\sync.ts",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\before\\packages\\shared\\src\\schemas\\sync.ts",
+      "role": "original-before",
+      "origin": null,
+      "bytes": 58368,
+      "sha256": "8de9a02acb4d6aa6e20db547d5489a35395ab282c43b3a940b4fe8e406a88c9e"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\before-manifest.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\before-manifest.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 1712,
+      "sha256": "b723b09ce12b0a274c0497a58c7415ead13c1513f8d23f09a3e314579bee1a1a"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\cap-replay-fix.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\cap-replay-fix.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 523,
+      "sha256": "d3c67cbb9da6b8f16986ce98d1178cb0cf0a1d08188df8cbd3b92b17800ea3b3"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\cap-replay-fix.py",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\cap-replay-fix.py",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 962,
+      "sha256": "d52d0f734c5a11cdcb43a77ceb2253919b5f3e2f833dcf6b29d90461110ed8ab"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\cap-replay-test.py",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\cap-replay-test.py",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2306,
+      "sha256": "901cb1c2a109761fe55ba7b37dd2fa857596798fabcdf1ec111158ec106f8b65"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\common-tag-red-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\common-tag-red-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 4629,
+      "sha256": "a33b1ce5c8a37b78aa29cdc1bc962827fd1352b6a4b98b2c52538b34ed3ffe03"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\common-tag-red.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\common-tag-red.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 1978,
+      "sha256": "b42e51c62d150c7acb83ce8e80a04d1b415c0b4b360b69f58a4ac335ce10b609"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\common-tag-red.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\common-tag-red.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 123,
+      "sha256": "7e62ee56e7665f7cd69600fdba67254a5a2272d961073db324d6615a9667978b"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\correct-test.py",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\correct-test.py",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2004,
+      "sha256": "c08ead85be3441a0e658f1d295ec70014de4fd4e5dfe6086697e390acc8b8b07"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-applied1-applied1-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-applied1-applied1-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2922,
+      "sha256": "bc07bca6fc95168ed8574e48c2d6b509a4e24880793a8d1dfd65abb64420156e"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-applied1-applied1.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-applied1-applied1.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 124,
+      "sha256": "5c028b5c439955a387d33121e748faafbe66275a166aefd4344eec226a0e6156"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-applied1.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-applied1.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 1085,
+      "sha256": "1d820f21a79f576c167eef255fc0583843f502617ca794da467b6e9b5b57562d"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-cap-replay-red-cap-replay-red-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-cap-replay-red-cap-replay-red-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 3202,
+      "sha256": "37ad821799367207a9957c6c3620035b328806306f1b2b6ea80b7282faea0eb4"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-cap-replay-red-cap-replay-red.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-cap-replay-red-cap-replay-red.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 130,
+      "sha256": "052be3a4e2d8afa72dc8c798c0bf32d5f2f074bdfd0f44f0e4df7a9e86b888c3"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-cap-replay-red.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-cap-replay-red.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 7436,
+      "sha256": "e3b6dfd2fb5ef5dc820c567391d27777b98da7420fff04e9abb44994d9e2b647"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-closure-closure-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-closure-closure-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 3195,
+      "sha256": "13400e8285fc1e6893867f7145075420a755d3b38f0b181350ae36562a339ede"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-closure-closure.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-closure-closure.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 123,
+      "sha256": "745f5243cc3af76a99000683e678c9e3e1e1ea4919ea4c03d530c8602fc3dba7"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-closure.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-closure.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 5809,
+      "sha256": "735143f0c09bed959ad2c93014010cc89d3c40c69c1e6b9f0a419c454dcbb1c5"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-final-final-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-final-final-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 3193,
+      "sha256": "94447e2f1bffc178152590a629aeba3ebcd8a2a1426e8dc9f44485f05be6f930"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-final-final.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-final-final.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 121,
+      "sha256": "20bd3aff0c8f00b41cb9c1def5fc99589fa003df0adedcffa48866fe7937cdf4"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-final.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-final.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 5821,
+      "sha256": "90f30e37c694e34ef08619fcbc0fc5fb37cec6261028b054febd0a9eda5f1bc9"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-final21-final21-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-final21-final21-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 3195,
+      "sha256": "fc2d269eeeb84d6e4ed3cb94c1f369d47d41a91d8c2b040c1075d09c23c1b1fa"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-final21-final21.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-final21-final21.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 123,
+      "sha256": "8dd76a5666fa9ceb18dc435fcff9ad17ecf2e5fa15f1aa96613b3d64977c2dbe"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-final21.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-final21.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 7112,
+      "sha256": "f210cd6cba2b9f199641f887c8f0b9a1cdb74d80a45a494a7569b0e9325ed443"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-matrix-red-matrix-red-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-matrix-red-matrix-red-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2924,
+      "sha256": "6b3b1b1d96c20127f3ea712a28da5d883603f2732e3a760a77c287fc1db9422a"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-matrix-red-matrix-red.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-matrix-red-matrix-red.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 126,
+      "sha256": "8049f5f5efd345797f3a8d5f7fa5c24a1db0c40d663b697e23d454cc872a08e6"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-matrix-red.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-matrix-red.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 5830,
+      "sha256": "d6c2a6e2018f1f875e555fcff6b8d774b780f5e110656953d0a6ae313c5cfdb9"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-order-red-order-red-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-order-red-order-red-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2923,
+      "sha256": "55edde6c3d09bee3437b04b32f94cc321ac24bbf9a77e896204b0f2b5e9ca699"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-order-red-order-red.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-order-red-order-red.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 125,
+      "sha256": "df507fc330f3deffb65059fddcdecdadedc67ac690126e3918cf7dfe9d38e1c7"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-order-red.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-order-red.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 5830,
+      "sha256": "538f71e3fb5aae44dd5bb6c4ba33341689af4652a7d9f32be7891c7e2200c10a"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-planner-red-planner-red-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-planner-red-planner-red-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2925,
+      "sha256": "109ed8281e635a2a0550822b0f8d120bf4f7b1b14116f170e2fe569770b05bda"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-planner-red-planner-red.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-planner-red-planner-red.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 127,
+      "sha256": "b2f68ed286a900a3a48ec96616e44e66f0932de9379fa1d7f5f0a3db5e413712"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\delete-planner-red.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\delete-planner-red.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 6577,
+      "sha256": "399b8c93f503ade54319f4f4e6b7101c38e48b06ccffbb4780ef6097672142d7"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\diff-check-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\diff-check-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 4629,
+      "sha256": "3c32df868e10c265f61598519f00e7c90c105a6b895eee4e88f1cdea8ff61fca"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\diff-check.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\diff-check.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 762,
+      "sha256": "07e55415ca3cea3fff5d42276de7c29256de07b65d0ad8017f2f9954b7e6b6df"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\final-anchor-edits.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\final-anchor-edits.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2424,
+      "sha256": "78c0845879f690a1579837d4c77338e22d01be8f3f27b34dc00c43ba45b1da03"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\final-edits.py",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\final-edits.py",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2590,
+      "sha256": "aeebd50f3301f90f7963523d6759729baaccc91143557b6430b9f3c4ff3891b9"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\finite-cells.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\finite-cells.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 339,
+      "sha256": "8355eefad86b93043fe7e136c024fd97a29a8ba4ae482e12476d74ef952731e1"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\finite-gates.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\finite-gates.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2669,
+      "sha256": "978b981ee35532384a852b6bd31eff98dd77f0912aa4ae4efbe8a87c8b538633"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\first-green.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\first-green.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 1395,
+      "sha256": "e6caba8ac6c30f80840ecdc684505f2a0301e81b81e5c8df86ed91b4f038f86a"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\first-green.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\first-green.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 120,
+      "sha256": "0980e2fcebb6420a819e481f42e81dd004afd43231cf508796de837689e766a4"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\gates.py",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\gates.py",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 3705,
+      "sha256": "5abbd06d0bc8a7bd5976bbc455125d02cad3e99e5d75c07940ac38fd5aaa56b1"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\mixed-newline-repair.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\mixed-newline-repair.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 447,
+      "sha256": "edd473bb639b1a9169071be81a23d37d35271d44e3734c57809083f280ea6443"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\native-contract-prepared.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\native-contract-prepared.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 5030,
+      "sha256": "4a1da369e1ed14b00c84a1a0e917f84371d4bd0a85e953ef188c98f6539aa379"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\nearest-default-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\nearest-default-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 4629,
+      "sha256": "3c32df868e10c265f61598519f00e7c90c105a6b895eee4e88f1cdea8ff61fca"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\nearest-default.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\nearest-default.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 15620,
+      "sha256": "cc4611f5a1c54f42c046462e1b93cdbe34c0904e2fcfb14aa221e4ee58543217"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\nearest-default.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\nearest-default.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 124,
+      "sha256": "8644156e1d710c1c1de9435b399195685b6c907b0521d9e8cb89a18745826cce"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\nearest-integration-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\nearest-integration-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 4629,
+      "sha256": "3c32df868e10c265f61598519f00e7c90c105a6b895eee4e88f1cdea8ff61fca"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\nearest-integration.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\nearest-integration.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 19043,
+      "sha256": "2613f5a2b9f5d68129f7e53799841b845dba3cecc1ef1df2c45ec0d10d93f7a8"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\nearest-integration.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\nearest-integration.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 128,
+      "sha256": "d88ab16aa3487394f0838a2ac38be0622760c3db15e453feafb5bf91bfe83a6b"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\ordinary-parity-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\ordinary-parity-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 4629,
+      "sha256": "3c32df868e10c265f61598519f00e7c90c105a6b895eee4e88f1cdea8ff61fca"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\ordinary-parity.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\ordinary-parity.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 1682,
+      "sha256": "ffc424af99b87468705fc31c1d68f8d5621d4cb940e5c028995a5584f4806407"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\ordinary-parity.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\ordinary-parity.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 124,
+      "sha256": "79d3e0a6cce72395908930515513fd9dc6ceca1169ad29e3abfdaec46814cf6e"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\owned-lint-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\owned-lint-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 4629,
+      "sha256": "3c32df868e10c265f61598519f00e7c90c105a6b895eee4e88f1cdea8ff61fca"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\owned-lint.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\owned-lint.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\owner-region-provenance.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\owner-region-provenance.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 737,
+      "sha256": "817aac2b82b10f49a74b2b1cdcc501f1d3b53118aa9ce25831d6d0476f9ff49a"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\preserve-newlines.py",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\preserve-newlines.py",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2553,
+      "sha256": "7b6b653da62052c1b42c22d83734c11ea9f63f31a487f71d36d8031d2241a810"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\red-corrected.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\red-corrected.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 1395,
+      "sha256": "1f1010ec6ef4930da1a375cf60c398542134dc45da5e078449c0bef908cd2545"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\red-corrected.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\red-corrected.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 122,
+      "sha256": "6cf1dce6db8408a2d9e7ce5b8700a89ea41bb2a3706cac8eb72fd0c830c6b4f2"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\red.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\red.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2517,
+      "sha256": "d44f3b5d92b55986ff71ae5e644d52d0cab8d26a5fc2af6d732e5db1191a843f"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\red.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\red.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 112,
+      "sha256": "8e636d5688a651e3c5844c01856c6a38f1bfeda33cc6af8135b6be1c0084b497"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\run.py",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\run.py",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 1843,
+      "sha256": "5d31daa6d96460fece58cf330df9ab612d417b2919224a6120cca532ac8dea50"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-applied1-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-applied1-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2919,
+      "sha256": "2c8224c7137f2d8919e556b577f3b252712227d62ebff6889aad9d1301d9fe53"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-applied1.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-applied1.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-cap-replay-red-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-cap-replay-red-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 3193,
+      "sha256": "d728099df11dfe5988c249ffd380e6b1ab37fc56048e62d896fbf17bd17d1653"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-cap-replay-red.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-cap-replay-red.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-closure-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-closure-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 3193,
+      "sha256": "013e71eb21e5b6d1b3e5c2416de5b82d813687c39eb5ce614341ea36ee61bf28"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-closure.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-closure.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-final-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-final-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 3193,
+      "sha256": "f2992e3cdea83058a590a10e64856772e06a023dd87f533bb71b1eb9b152174f"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-final.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-final.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-final21-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-final21-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 3193,
+      "sha256": "4ec968095370164ee0391df1c0df0f561f2bdfb208756b5bb731302488cfc465"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-final21.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-final21.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-matrix-red-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-matrix-red-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2919,
+      "sha256": "d3d7967a9a739e6609e38b8c0ecca09e6270eab7d4c12b4635b2f98aa8f31421"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-matrix-red.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-matrix-red.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-order-red-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-order-red-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2919,
+      "sha256": "488227b9136b9decd02bf721f78cf380c6a5e098f2a5d61de957c7705f00dfc1"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-order-red.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-order-red.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-planner-red-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-planner-red-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2919,
+      "sha256": "81cb639c1baa682ec777a0c4d0e1473a0c50bd6b46e665aa032fa538d2359343"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types-planner-red.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types-planner-red.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\server-types.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\server-types.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\setup.py",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\setup.py",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 5274,
+      "sha256": "963d8f015da906ed5267bd694eceae3aab7f69317daf64ec576ca39f3f4cdaa6"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\shared-types-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\shared-types-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 4629,
+      "sha256": "3c32df868e10c265f61598519f00e7c90c105a6b895eee4e88f1cdea8ff61fca"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\shared-types.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\shared-types.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-applied1-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-applied1-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2916,
+      "sha256": "35d25ad28ad7115d689a1b60c031b09b0059cf475923c84a405e5fa9e1f4823d"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-applied1.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-applied1.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 341,
+      "sha256": "21fab6139c80864b763b0ef1302a11ee85878987b08c84bc074cba21df5844b2"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-cap-replay-red-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-cap-replay-red-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 3190,
+      "sha256": "b40a8edae0de8439d1c4bd8cf35867411bab3b664106ac8a44fa61ca01320d51"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-cap-replay-red.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-cap-replay-red.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 705,
+      "sha256": "69e7f19156e1f512a9bfad107e46985fd99b6737025f279b0ba26bbf4fe583da"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-closure-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-closure-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 3190,
+      "sha256": "93e8d73d4991d4b99f65a1acf8673ba82baa7d6996fd62b48da12ed010d582cc"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-closure.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-closure.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-final-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-final-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 3190,
+      "sha256": "91639acf32437dc957211617cc43529b17078b856f9c3805ca1b965da68236a3"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-final.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-final.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-final21-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-final21-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 3190,
+      "sha256": "3ae819855279a5f90cbf504d3dcc60c8502780125ccb816b13fca490c50ced50"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-final21.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-final21.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-matrix-red-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-matrix-red-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2916,
+      "sha256": "5000c045fd16980bef8324d9eb22e14e3ccb67b9cfec20c35449b0579333b8f2"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-matrix-red.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-matrix-red.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 266,
+      "sha256": "54023fa4fdb82519dab2923c9b1549822c2d9ba0014701f1fbf1aa0a0946e967"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-order-red-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-order-red-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2916,
+      "sha256": "b75faa0eae3cbe94fa0a7c27a9f88c15d7947c6bc031c28b3c70127225802f8d"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-order-red.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-order-red.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-planner-red-guard.json",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-planner-red-guard.json",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 2916,
+      "sha256": "0c07c6573ed249a1c20dda97e22b8eb68873eec269b376934ac7d73e7d03c134"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types-planner-red.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types-planner-red.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\web-types.log",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\web-types.log",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "livePath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\owned-continuation.diff",
+      "savedPath": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\delete-vertical\\checkpoint\\evidence\\owned-continuation.diff",
+      "role": "actual-evidence",
+      "origin": null,
+      "bytes": 30572,
+      "sha256": "f55d1e299118bf53003c34870dee84d8294330f82c8a3698766e4dff8ef10ef9"
+    }
+  ],
+  "ownerRegionGuards": {
+    "apps/server/src/http/app.ts": {
+      "beforeFullSHA": "54fc2b1c7aa2af4bc79e211f7d6e4e580f0770a71399379a62c83e8f8cf40012",
+      "currentFullSHA": "d4ae18b1fde4f3525f8ccebc6d0c3ed6f0222cca1e8aa607d17af3a773e89f63",
+      "ownedInsertedRegionSHA": "330771439a468803eae53b88762243de7aa5232b3855369e309bb5018ff4153a",
+      "outsideCollectionBytesIdentical": true
+    },
+    "apps/web/src/api/gallery.ts": {
+      "beforeFullSHA": "1709c2c7bbfcbf26d33680ad612aaabadbf487d1a39988454c8505a76a56129a",
+      "currentFullSHA": "6e5d9475a19ac1544cd89d0a3d0581326f3c97a9ab60546725bf9db1a12e3dac",
+      "ownedInsertedRegionSHA": "9ebe17d50bc6ce756b289bde7dce57cab935689931deae717edf7b096d63509e",
+      "outsideCollectionBytesIdentical": true
+    }
+  },
+  "nativeWorker": "UNVERIFIED",
+  "bulkTag": "actual RED"
+}

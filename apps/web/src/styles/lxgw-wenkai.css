@@ -1,0 +1,67 @@
+/*
+  LXGW WenKai / 霞鹜文楷 (lightweight build) — LXGW, SIL OFL 1.1. The licence travels with the
+  file as `assets/fonts/lxgw-wenkai-OFL.txt`, and its ADDITIONAL PERMISSION is what lets this
+  subset keep the reserved name: it forbids shipping such a file as an installable desktop
+  font, not delivering it as a web font.
+
+  This is T³'s own voice — the app's labels, buttons, headings and hints. It is NOT a content
+  font: see `.t3-library-text` below, which every work title, tag, author name and description
+  wears instead. The library is scraped from many sites, so it carries whatever those sites
+  wrote: rare kanji, traditional forms, Korean, emoji. A bundled subset cannot cover that by
+  construction, and a fallback glyph in the middle of a title is exactly the seam this split
+  removes — the platform font already has every glyph the platform can draw.
+
+  `unicode-range` keeps the face to Han, so the app's Latin and its Arabic numerals stay in
+  Inter. Those digits sit in dense rows (counts, dates, byte sizes) where Inter's are the ones
+  T³'s screens were laid out for; they also mean "Source 维护" reads as an English term beside
+  Han rather than as a second voice.
+
+  The shipped woff2 is not the release file. `tools/fonts/subset-wenkai.py` cuts the 13.2 MB
+  `LXGWWenKaiLite-Regular.ttf` down to the common CJK sets — simplified, traditional and
+  Japanese, plus kana, punctuation and symbols — for 18109 glyphs and 3,890 KB. Re-run the
+  script rather than re-downloading; the character set is fixed, the data is not.
+*/
+@font-face {
+  font-family: 'LXGW WenKai Lite';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/lxgw-wenkai-lite.woff2') format('woff2');
+  unicode-range:
+    U+2E80-2EFF, U+3000-303F, U+31C0-31EF, U+3400-4DBF, U+4E00-9FFF,
+    U+F900-FAFF, U+FE10-FE1F, U+FE30-FE4F, U+FF00-FFEF,
+    U+20000-2A6DF, U+2A700-2EBEF, U+2F800-2FA1F;
+}
+
+/* theme.css gives `:root` the platform stack; this re-voices the app that inherits from it.
+   `font-synthesis` has to come back on with it — the face ships one weight and the app turns
+   synthesis off globally, so without this every Chinese heading would come back lighter than
+   the Latin beside it. */
+body {
+  font-family:
+    'LXGW WenKai Lite', Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', sans-serif;
+  font-synthesis: weight;
+}
+
+/* Library text: a value that came out of the database rather than out of `t()`. It goes back to
+   the platform stack — the most universal face the device has, which is the one that can render
+   a Japanese title, a traditional character and a Korean tag without changing voice mid-word.
+
+   `!important` is deliberate. The app's buttons, selects and chips state `font: inherit` so a
+   control takes the face of what surrounds it, and every SFC's style is scoped, so those rules
+   are really `.detail-chip-link[data-v-…]` — two selector components against this one class, and
+   they win whatever the file order. A node that is itself library text has to out-rank them; the
+   alternative was editing a dozen component stylesheets to add exceptions. The cost is that a
+   deliberate inner face (a monospace path inside a tagged block) would also need `!important`;
+   nothing inside a tagged node relies on that today. */
+.t3-library-text {
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+}
+
+/* Synthesis is the other half of the same choice — a Chinese heading in the platform face should
+   not come back bolder than it is, exactly as it behaves outside this feature. */
+.t3-library-text {
+  font-synthesis: none;
+}

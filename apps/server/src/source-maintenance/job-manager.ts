@@ -74,8 +74,9 @@ async function collectCatalogWorks(
             works.push(work);
           }
         }
-      } catch {
-        // Provider failure only lowers evidence quality; it never fails the run.
+      } catch (cause) {
+        if (cause instanceof ProviderRateLimitedError) throw cause;
+        // Other provider failures only lower evidence quality.
       }
     }
   }
@@ -176,6 +177,7 @@ export async function executeSearchRun(
             ...(candidate.creators === undefined ? {} : { creators: candidate.creators }),
             ...(candidate.workKind === undefined ? {} : { workKind: candidate.workKind }),
             ...(candidate.thumbnailUrl === undefined ? {} : { thumbnailUrl: candidate.thumbnailUrl }),
+            ...(candidate.catalogIds === undefined ? {} : { catalogIds: candidate.catalogIds }),
             band: 'ambiguous',
             reasons: [],
             adapterEvidence: { ...candidate.adapterEvidence, queries: [variant] },
@@ -190,17 +192,21 @@ export async function executeSearchRun(
         ...(candidate.creators === undefined ? {} : { creators: candidate.creators }),
         ...(candidate.workKind === undefined ? {} : { workKind: candidate.workKind }),
         ...(candidate.thumbnailUrl === undefined ? {} : { thumbnailUrl: candidate.thumbnailUrl }),
-        catalogIds,
+        ...(candidate.catalogIds === undefined ? {} : { catalogIds: candidate.catalogIds }),
       }));
       const banded: BandedCandidate[] = bandCandidates(
         rawCandidates,
         {
           trustedTitles: trusted,
           entryCatalogIds: catalogIds,
+          originExternalIds: run.originSourceKey === 'known:hitomi'
+            ? facts.originUrls.flatMap((url) => [...url.matchAll(/-(\d+)\.html(?:$|[?#])/giu)]
+              .map((match) => `ehentai:${match[1]}`))
+            : [],
           entryCreators: creators,
           isUrlOwnedByOtherEntry: (url) => {
             const owners = ownership.get(url);
-            return owners !== undefined && owners.has(entryId) === false && owners.size > 0;
+            return owners !== undefined && (owners.size !== 1 || !owners.has(entryId));
           },
         },
       );

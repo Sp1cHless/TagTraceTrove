@@ -1,0 +1,22 @@
+--- before/apps/web/src/offline/collection-delete.ts
++++ apps/web/src/offline/collection-delete.ts
+@@ -1,11 +1,18 @@
+ import { syncCollectionIdentitySchema, type SyncSnapshot, type SyncCollectionIdentity, type SyncReplayRequest, type SyncReplayResult } from '@t3/shared';
+ import type { GalleryApi } from '../api/gallery.js';
+-export function snapshotCollectionIdentity(snapshot:SyncSnapshot,id:number):SyncCollectionIdentity {
++export function snapshotCollectionIdentity(snapshot:SyncSnapshot,id:number,origins:readonly SyncReplayRequest[]=[],clientId?:string):SyncCollectionIdentity {
+   const owner=snapshot.payload.collections.find(row=>row.id===id);
+   if (!owner) throw new Error('Collection deletion is not available under offline: missing saved owner');
+   const parent=owner.parentId===null?null:snapshot.payload.collections.find(row=>row.id===owner.parentId)?.syncUid;
+   // Old missing stable child identity remains unknown, never an empty cascade.
+   const result=syncCollectionIdentitySchema.safeParse({libraryId:snapshot.header.libraryId,syncEpoch:snapshot.header.syncEpoch,id:owner.id,syncUid:owner.syncUid,syncVersion:owner.syncVersion,scope:{kind:owner.kind,parentUid:parent,children:snapshot.payload.collections.filter(row=>row.parentId===id).map(row=>({syncUid:row.syncUid,syncVersion:row.syncVersion})).sort((a,b)=>(a.syncUid??'').localeCompare(b.syncUid??''))}});
++  const localRows=[owner,...snapshot.payload.collections.filter(row=>row.parentId===id)].filter(row=>row.id<0);
++  if (localRows.length && clientId && [owner,...snapshot.payload.collections.filter(row=>row.parentId===id)].every(row=>row.id>0 || origins.some(origin=>origin.operationKind==='collection.create' && origin.clientId===clientId && origin.libraryId===snapshot.header.libraryId && origin.syncEpoch===snapshot.header.syncEpoch && origin.entityUid===row.syncUid && origin.baseVersion===0 && origin.payload.kind===row.kind && origin.payload.parentUid===(row.parentId===null?null:snapshot.payload.collections.find(parent=>parent.id===row.parentId)?.syncUid)))) {
++    // The negative number is a local projection key, never a server identity.
++    const local=syncCollectionIdentitySchema.omit({id:true}).safeParse({libraryId:snapshot.header.libraryId,syncEpoch:snapshot.header.syncEpoch,syncUid:owner.syncUid,syncVersion:owner.syncVersion,scope:{kind:owner.kind,parentUid:parent,children:snapshot.payload.collections.filter(row=>row.parentId===id).map(row=>({syncUid:row.syncUid,syncVersion:row.syncVersion})).sort((a,b)=>(a.syncUid??'').localeCompare(b.syncUid??''))}});
++    if (local.success) return {...local.data,id:owner.id};
++  }
++  if (localRows.length) throw new Error('Collection deletion needs validated same-device create origins');
+   if (!result.success) throw new Error('Collection deletion is not available under offline: unknown child identity/scope');
+   return result.data;
+ }

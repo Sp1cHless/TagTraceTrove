@@ -1,0 +1,15 @@
+{
+  "apk": "D:\\Project\\TagTraceTrove\\spikes\\001-android-webview-shell\\T3-C1-v35-pending-tags.apk",
+  "sha256": "ea1dc92b9972307051281b9c64dc7b11506a0ad20098dedd5f1f34ba1a9d4500",
+  "size": 4399638,
+  "matchedWebFiles": [
+    "assets/index-BKFg6EOF.css",
+    "assets/index-DIqUQ1RR.js",
+    "icons/icon-maskable.svg",
+    "icons/icon.svg",
+    "index.html",
+    "manifest.webmanifest",
+    "sw.js"
+  ],
+  "markersVerified": true
+}

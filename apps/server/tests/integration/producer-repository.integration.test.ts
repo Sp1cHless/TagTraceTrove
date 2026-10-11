@@ -120,6 +120,8 @@ describe('producer repository', () => {
           entries: [expect.objectContaining({ id: grouped.id })],
         })],
         ratings: [],
+        // The two author classes are separate lists, and the author's own starts empty.
+        authorSelfRatings: [],
         usage: { viewCount: 0, likeCount: 0, lastViewedAt: null },
       });
       expect(getAuthorDetail(database, 999)).toBeNull();

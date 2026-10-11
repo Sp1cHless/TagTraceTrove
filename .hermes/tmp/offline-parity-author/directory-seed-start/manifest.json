@@ -1,0 +1,17 @@
+{
+  "apps/web/tests/offline-author-parity.integration.test.ts": "613d72d142bf526652f71c465ed39e8d654e8147591730c08b8382ae8cfef2f3",
+  "packages/shared/src/schemas/sync.ts": "a6ce69afb082926188e191da2dba2e995a225ef77a38abba51f13cbbf799de03",
+  "packages/shared/src/schemas/native-mutation-contract.ts": "7d7ac661718a0656b653f7390d2eb53a7ee781951f58195212e5859670a3895e",
+  "apps/server/src/sync/sync-service.ts": "b8ea0c4b76f75399aebc625b0adeabc335adab50c88d8d0b34f97bcbfe7dd1f3",
+  "apps/server/src/sync/replay-service.ts": "23872b62d8bd00e9a71d24fbcb13207d2312952cd1c10ecc94f3f85f689bde7d",
+  "apps/web/src/offline/offline-api.ts": "afe921a3c57b5ecf9548e93d6b07ae408f42c54fc231807ffb0373eaccddf010",
+  "apps/web/src/offline/pending-work-restore.ts": "ec70e60effafdd3f562f11eeab2f650ac76c3bd25f4c3eecf2e79f0576be1d66",
+  "apps/web/src/offline/outbox-store.ts": "ba11716ebf20040e182a2d3f8cedf06d851cc5d15c0840fa3198a6e1d7bf470b",
+  "apps/web/src/api/gallery.ts": "1709c2c7bbfcbf26d33680ad612aaabadbf487d1a39988454c8505a76a56129a",
+  "apps/server/src/http/app.ts": "db20df0bab45324962737e7c42324dab056e4ccb1613f568c45dfd561b167fb8",
+  "apps/web/tests/fixtures/native-valid-kind-fixture.ts": "20f620d5dae5af2214a38445830020ac773b521e409f5ce0977548687863b875",
+  "apps/web/src/offline/sync-mutation-plan.ts": "884a57dc0e22755d8e85d186866cd6d9797b9d70abbaaeddaac321b1a09d6057",
+  ".hermes/artifacts/offline-parity-author-implementation.md": "ddbee8bb85149d5b55f52fc447bc82d5948a2b4f7f12bba257e559ee1fa12b56",
+  "apps/web/src/GalleryApp.vue": "8e9103c58f49800c745a6068655d5cf5f1c2da04a10ae1c6fec0d0ac6f873fb4",
+  "apps/web/src/stores/preferences.ts": "b162c7b8ef9d8fed9677f57eda9d095c2a891b1d58a5446a563e72eaac112b42"
+}

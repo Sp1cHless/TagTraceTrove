@@ -1,0 +1,86 @@
+{
+  "apps/server/tests/fixtures/native-background-vertical.mts": {
+    "sha256": "e6a53bd6bc2920f7ebe7ea236bc783b2ec8356ea6210ae6807f956a63d8c66a3",
+    "bytes": 7239,
+    "lines": 80,
+    "modified": true
+  },
+  "apps/web/src/GalleryApp.vue": {
+    "sha256": "eb8c4d8e4f68b1b06259a7322f1e44c2f25ad1f65a24e6bea852bc3f49e42e88",
+    "bytes": 258432,
+    "lines": 5908,
+    "modified": true
+  },
+  "apps/web/src/api/gallery.ts": {
+    "sha256": "4d2d59c5fa7aa848513d72ffdae8f949ec2907237b93318a6fbeded540d28d28",
+    "bytes": 63759,
+    "lines": 1481,
+    "modified": true
+  },
+  "apps/web/src/components/OfflineLibrarySettings.vue": {
+    "sha256": "31ff6a454a8a425baeef4d7885f87475f6cf42ce77b04091a09e7f8d1d07d855",
+    "bytes": 18684,
+    "lines": 412,
+    "modified": false
+  },
+  "apps/web/src/offline/native-background-transfer.ts": {
+    "sha256": "8ca0dd5d49b08d027ffdf425ca2795b15e011a326b521dc7170ca15ca8707e73",
+    "bytes": 16704,
+    "lines": 175,
+    "modified": true
+  },
+  "apps/web/src/offline/offline-api.ts": {
+    "sha256": "db32644ae53fa3b6210944dc81f7c4d5293e649e217926dcadb148c9cb25ea30",
+    "bytes": 314260,
+    "lines": 5521,
+    "modified": true
+  },
+  "apps/web/tests/existing-entry-media-vertical.test.ts": {
+    "sha256": "269f1cea6ce1196ba7367ec5e172ad7dce97a44a52743a4d8f867c8dd47c4d96",
+    "bytes": 32744,
+    "lines": 370,
+    "modified": true
+  },
+  "apps/web/tests/gallery-app.test.ts": {
+    "sha256": "bbae804615ce179891a22e42fa2d233ca3f4921618166becdf00b6e2f5223291",
+    "bytes": 391852,
+    "lines": 8239,
+    "modified": true
+  },
+  "apps/web/tests/native-background-handoff.test.ts": {
+    "sha256": "602ae1fd8927e6d290b443ef195636f59a62407aea0292f0a148d1262a0c05cf",
+    "bytes": 6004,
+    "lines": 62,
+    "modified": true
+  },
+  "apps/web/tests/native-background-settings.test.ts": {
+    "sha256": "fc146974d367a5894c4f4ae1e09d4694f62831bdab2d042dfb52e6987dc428a4",
+    "bytes": 3146,
+    "lines": 31,
+    "modified": false
+  },
+  "apps/web/tests/native-settings-facade.test.ts": {
+    "sha256": "4b8223d607e39c75151b25e61cbd70fc623e660612f2c0302b269966daa36f66",
+    "bytes": 6422,
+    "lines": 43,
+    "modified": true
+  },
+  "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferPlugin.java": {
+    "sha256": "c14a201e9c1e3bcb0c410ea3253fdac29e5d29a58acc48ebd9592e8f04cee5e0",
+    "bytes": 17567,
+    "lines": 187,
+    "modified": true
+  },
+  "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java": {
+    "sha256": "494f132632e59a782c6e4965a4e35ba088bbb947c8278d6d2cf6683075bb8579",
+    "bytes": 39518,
+    "lines": 467,
+    "modified": true
+  },
+  "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/TransferLedgerJvmTest.java": {
+    "bytes": 18016,
+    "lines": 178,
+    "sha256": "60236a2d38268f60c8c3b71384529d941b27db6d7dd4aa2daaf233431ba7ad0b",
+    "modified": true
+  }
+}

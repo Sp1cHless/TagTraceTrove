@@ -200,27 +200,27 @@ describe('entry tag repository', () => {
       expect(findEntriesByTags(database, {
         entryType: 'game',
         includeTagIds: [action.tagId, favorite.tagId],
-      })).toEqual([{ id: 1, title: 'One', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null }]);
+      })).toEqual([{ id: 1, title: 'One', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, durationSeconds: null, viewCount: 0, likeCount: 0, lastViewedAt: null }]);
       expect(findEntriesByTags(database, {
         entryType: 'game',
         includeTagIds: [action.tagId],
         excludeTagIds: [favorite.tagId],
-      })).toEqual([{ id: 2, title: 'Two', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null }]);
+      })).toEqual([{ id: 2, title: 'Two', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, durationSeconds: null, viewCount: 0, likeCount: 0, lastViewedAt: null }]);
       expect(findEntriesByTags(database, {
         entryType: 'game',
         includeTagIds: [action.tagId, action.tagId],
       })).toEqual([
-        { id: 1, title: 'One', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
-        { id: 2, title: 'Two', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
+        { id: 1, title: 'One', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, durationSeconds: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
+        { id: 2, title: 'Two', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, durationSeconds: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
       ]);
       expect(findEntriesByTags(database, { entryType: 'game' })).toEqual([
-        { id: 1, title: 'One', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
-        { id: 2, title: 'Two', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
+        { id: 1, title: 'One', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, durationSeconds: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
+        { id: 2, title: 'Two', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, durationSeconds: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
       ]);
       expect(findEntriesByTags(database, { includeTagIds: [action.tagId] })).toEqual([
-        { id: 1, title: 'One', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
-        { id: 3, title: 'Other Type', type: 'manga', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
-        { id: 2, title: 'Two', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
+        { id: 1, title: 'One', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, durationSeconds: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
+        { id: 3, title: 'Other Type', type: 'manga', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, durationSeconds: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
+        { id: 2, title: 'Two', type: 'game', coverRef: null, previewRef: null, previewRefs: [], uploadDate: null, pageCount: null, durationSeconds: null, viewCount: 0, likeCount: 0, lastViewedAt: null },
       ]);
     } finally {
       database.close();

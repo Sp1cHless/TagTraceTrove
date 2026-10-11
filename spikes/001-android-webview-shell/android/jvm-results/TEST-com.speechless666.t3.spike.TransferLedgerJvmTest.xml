@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.speechless666.t3.spike.TransferLedgerJvmTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-06T06:34:57.925Z" hostname="LAPTOP-70QV4MNN" time="4.82">
+  <properties/>
+  <testcase name="independentHandlesClaimOnceAndColdResultsRemainUntilReconciled" classname="com.speechless666.t3.spike.TransferLedgerJvmTest" time="4.442"/>
+  <testcase name="standaloneFiniteLeaseCancelTombstoneAndExplicitResumeKeepExactOriginal" classname="com.speechless666.t3.spike.TransferLedgerJvmTest" time="0.086"/>
+  <testcase name="populatedLegacyVersionsUpgradeWithoutChangingBodiesBlobsLeasesOrResults" classname="com.speechless666.t3.spike.TransferLedgerJvmTest" time="0.19"/>
+  <testcase name="expiredOriginalOperationLeaseCannotRecordRawResult" classname="com.speechless666.t3.spike.TransferLedgerJvmTest" time="0.05"/>
+  <testcase name="coldOpenPreservesExactBodyAndBinaryAndRejectsCollision" classname="com.speechless666.t3.spike.TransferLedgerJvmTest" time="0.052"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

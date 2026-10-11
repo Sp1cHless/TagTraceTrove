@@ -1,0 +1,51 @@
+{
+  "apkSha256": "9bb20c3dba94862db47837886597c9ff24d48a2d720b21b14f409c398649c7c7",
+  "entries": [
+    {
+      "apkEntry": "assets/public/assets/index-0GrHYOUR.js",
+      "sha256": "fc4fb55a273fd934098c32784653f0c20182fbf9eaed718db9b230a4394876fe",
+      "bytes": 985523
+    },
+    {
+      "apkEntry": "assets/public/assets/index-C0otm6y8.css",
+      "sha256": "5a57e247d50a9a9b5d15537fc297f2694019f51c4efae1d633394357103724a3",
+      "bytes": 141998
+    },
+    {
+      "apkEntry": "assets/public/cordova.js",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "apkEntry": "assets/public/cordova_plugins.js",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "apkEntry": "assets/public/icons/icon-maskable.svg",
+      "sha256": "fa501d4d85841e4d66e0ae8540be4dabfd076ccdb8088df51f27ad9fa1e3f875",
+      "bytes": 290
+    },
+    {
+      "apkEntry": "assets/public/icons/icon.svg",
+      "sha256": "f36cf6bb3367b74cb9883526b4e9c4bae47961925f18d577eb0ee7a35507cff8",
+      "bytes": 298
+    },
+    {
+      "apkEntry": "assets/public/index.html",
+      "sha256": "d27f29de311366e3bf9089bb9671c3cd2aca8060d72c2b831b979aac899abd34",
+      "bytes": 3089
+    },
+    {
+      "apkEntry": "assets/public/manifest.webmanifest",
+      "sha256": "dc57617567f3995981e16fa5a4da6361f8d82d999a4cf53cd3f2ffcacb1287b5",
+      "bytes": 540
+    },
+    {
+      "apkEntry": "assets/public/sw.js",
+      "sha256": "5a1e9f86901f3e0ababd5a0664f970b4a9e06dfd2c1151e298da77a743935186",
+      "bytes": 3842
+    }
+  ],
+  "boundary": "Verified frozen v41 artifact; later concurrent Author rating source edits are NOT covered by its build-time gates."
+}

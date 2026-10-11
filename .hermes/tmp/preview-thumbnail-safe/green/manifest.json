@@ -1,0 +1,77 @@
+{
+  "status": "PASS",
+  "start": {
+    "path": ".hermes/tmp/preview-thumbnail-safe/start/media.ts",
+    "bytes": 12845,
+    "sha256": "40986bc12b86b75a8505a6ce8985a114cfef3018dd116a1de9da1598cbb9b0a8"
+  },
+  "green": [
+    {
+      "path": "apps/server/src/import/media.ts",
+      "bytes": 13131,
+      "sha256": "c21ba0f95ad299038513d40474bda9eee3a120b219bb502a37a2b5ec56e79267",
+      "backup": ".hermes/tmp/preview-thumbnail-safe/green/apps/server/src/import/media.ts"
+    },
+    {
+      "path": "apps/server/tests/integration/entry-upload-thumbnail.integration.test.ts",
+      "bytes": 6973,
+      "sha256": "07274fe6443e59c5176f45ae11fa297fa15a38b92c3f35f373d96308af36782a",
+      "backup": ".hermes/tmp/preview-thumbnail-safe/green/apps/server/tests/integration/entry-upload-thumbnail.integration.test.ts"
+    }
+  ],
+  "evidence": [
+    {
+      "path": ".hermes/tmp/preview-thumbnail-safe/red.log",
+      "bytes": 3096,
+      "sha256": "7f83c67bfb5893d3f67245c4ccc9571f10d580585b0ccd9e878b48e1a1ed7985"
+    },
+    {
+      "path": ".hermes/tmp/preview-thumbnail-safe/green.log",
+      "bytes": 1080,
+      "sha256": "97947f42b411f74325dd4f1f2553c3aabfb446f21182efb75e3b0ff700f6718d"
+    },
+    {
+      "path": ".hermes/tmp/preview-thumbnail-safe/affected-integration.log",
+      "bytes": 1027,
+      "sha256": "f0a44f19b3ba9e1b30818044b1fa16911797e768c18534163046635b58431eb7"
+    },
+    {
+      "path": ".hermes/tmp/preview-thumbnail-safe/typecheck.log",
+      "bytes": 100,
+      "sha256": "9ac1a5c12c0c22b9012367f490419072cb9baf9b53ae57e54eecbd616e1ea2bc"
+    },
+    {
+      "path": ".hermes/tmp/preview-thumbnail-safe/eslint.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": ".hermes/tmp/preview-thumbnail-safe/parent-probe-green.log",
+      "bytes": 216,
+      "sha256": "0fc0b259d02a73adf775b777668d9e0fc8a848672a5ef0f92366d179a5e8a670"
+    },
+    {
+      "path": ".hermes/tmp/preview-thumbnail-safe/parent-probe-green.json",
+      "bytes": 231,
+      "sha256": "46a8eb8247ac3c25e65800d0f566bcc93d9ce07b2649f4132d9ece00fff29c95"
+    },
+    {
+      "path": ".hermes/tmp/preview-thumbnail-safe/parent-red-original.json",
+      "bytes": 232,
+      "sha256": "f570f65e17da0b828cecc4ad9c513b14f8992a03ab9ab97a6bbb21bfda31c5ad"
+    },
+    {
+      "path": ".hermes/tmp/preview-thumbnail-safe/implementation.diff",
+      "bytes": 1034,
+      "sha256": "f53295a44371138e524cc71e5a4c7c6d54730132503e12d9e188d6eb053f91b9"
+    }
+  ],
+  "exitCodes": {
+    "regressionRed": 1,
+    "regressionGreen": 0,
+    "affectedIntegration": 0,
+    "serverTypecheck": 0,
+    "affectedESLint": 0,
+    "parentProbe": 0
+  }
+}

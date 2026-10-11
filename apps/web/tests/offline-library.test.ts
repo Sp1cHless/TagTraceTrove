@@ -41,6 +41,50 @@ function makeSnapshot(): SyncSnapshot {
 }
 
 describe('offline library read model', () => {
+  it('does not leak NSFW-only Entry Tag suggestions into SFW Relation search', () => {
+    const snapshot = makeSnapshot();
+    snapshot.payload.gallerySettings = [{ entryType: 'game', nsfw: true }];
+    const library = createOfflineLibrary(snapshot);
+    expect(library.suggestTags({ q: 'rpg', vocabulary: 'entry', excludeIds: [], includeNsfw: 'false', limit: 20 })).toEqual([]);
+  });
+
+  it('suggests existing Authors by canonical name and identity alias without crossing Tag aliases', () => {
+    const snapshot = makeSnapshot();
+    snapshot.payload.producers.push({ id: 10, name: 'Workless', occupation: '', artworkRef: null, content: null });
+    snapshot.payload.taxonomyAliases = [
+      { id: 1, vocabulary: 'producer', partition: 'authors', aliasName: '鹰角', normalizedAlias: '鹰角', canonicalName: 'Hypergryph', normalizedCanonical: 'hypergryph' },
+      { id: 2, vocabulary: 'producer', partition: 'tags', aliasName: 'Wrong', normalizedAlias: 'wrong', canonicalName: 'Hypergryph', normalizedCanonical: 'hypergryph' },
+    ];
+    const library = createOfflineLibrary(snapshot);
+    expect(library.suggestProducers({ q: '鹰角', excludeIds: [], limit: 20 })).toMatchObject([
+      { id: 9, name: 'Hypergryph', matchedAlias: '鹰角', totalUsageCount: 1 },
+    ]);
+    expect(library.suggestProducers({ q: 'work', excludeIds: [], limit: 20 })).toMatchObject([
+      { id: 10, name: 'Workless', totalUsageCount: 0 },
+    ]);
+    expect(library.suggestProducers({ q: 'wrong', excludeIds: [], limit: 20 })).toEqual([]);
+    expect(library.suggestProducers({ q: '鹰角', excludeIds: [9], limit: 20 })).toEqual([]);
+  });
+
+  it('suggests used Entry and Author Tags from their own vocabularies with alias and SFW boundaries', () => {
+    const snapshot = makeSnapshot();
+    snapshot.payload.producerTags.push({ id: 50, name: 'Painter', normalizedName: 'painter' });
+    snapshot.payload.producerTagAssignments.push({ producerId: 9, tagId: 50 });
+    snapshot.payload.taxonomyAliases = [
+      { id: 1, vocabulary: 'entry', partition: 'tags', aliasName: 'Role playing', normalizedAlias: 'role playing', canonicalName: 'RPG', normalizedCanonical: 'rpg' },
+      { id: 2, vocabulary: 'producer', partition: 'tags', aliasName: '绘师', normalizedAlias: '绘师', canonicalName: 'Painter', normalizedCanonical: 'painter' },
+      { id: 3, vocabulary: 'producer', partition: 'authors', aliasName: 'Incorrect', normalizedAlias: 'incorrect', canonicalName: 'Painter', normalizedCanonical: 'painter' },
+    ];
+    const library = createOfflineLibrary(snapshot);
+    expect(library.suggestTags({ vocabulary: 'entry', q: 'role', excludeIds: [], limit: 20, includeNsfw: 'true' }))
+      .toMatchObject([{ id: 30, name: 'RPG', matchedAlias: 'Role playing', totalUsageCount: 1 }]);
+    expect(library.suggestTags({ vocabulary: 'entry', q: 'role', excludeIds: [], limit: 20, includeNsfw: 'false' })).toEqual([]);
+    expect(library.suggestTags({ vocabulary: 'producer', q: '绘', excludeIds: [], limit: 20, includeNsfw: 'true' }))
+      .toMatchObject([{ id: 50, name: 'Painter', matchedAlias: '绘师' }]);
+    expect(library.suggestTags({ vocabulary: 'producer', q: 'incorrect', excludeIds: [], limit: 20 })).toEqual([]);
+    expect(library.suggestTags({ vocabulary: 'producer', q: '绘', excludeIds: [50], limit: 20 })).toEqual([]);
+  });
+
   it('derives galleries and author cards from snapshot rows', () => {
     const library = createOfflineLibrary(makeSnapshot());
     expect(library.listGalleries()).toEqual([
@@ -79,6 +123,36 @@ describe('offline library read model', () => {
     });
 
     expect(result.items.map((entry) => entry.title)).toEqual(['Hades II', 'Endfield']);
+  });
+
+  it('keeps nested offline Collection folder previews and counts aligned with opening the folder', () => {
+    const snapshot = makeSnapshot();
+    snapshot.payload.collections.push({
+      id: 61, kind: 'entry', title: 'Favorites — second folder', description: '',
+      nsfw: false, parentId: 60, sortOrder: 0,
+    });
+    snapshot.payload.collectionMembers.push({ collectionId: 61, entryId: 2, position: 0 });
+    snapshot.payload.entries[1] = {
+      ...snapshot.payload.entries[1]!,
+      previewRefs: ['entries/2/page-1.webp'],
+    };
+    snapshot.header.counts.collections = 2;
+
+    const library = createOfflineLibrary(snapshot);
+    const child = library.listCollections('entry', true)[0]!.children[0]!;
+    expect(child).toMatchObject({
+      entryCount: 1,
+      entries: [{
+        id: 2,
+        coverRef: null,
+        previewRefs: ['entries/2/page-1.webp'],
+      }],
+    });
+    expect(library.queryEntryPage({
+      collectionId: 61,
+      entryType: 'game', conditions: [], authorIds: [], ratingConditions: [], ratingSort: null,
+      usageConditions: [], usageSort: null, sort: 'title-asc', page: 1, pageSize: 30,
+    })).toMatchObject({ total: 1, items: [{ id: 2, title: 'Hades II' }] });
   });
 
   it('reconstructs an Entry detail and read-only collection context', () => {

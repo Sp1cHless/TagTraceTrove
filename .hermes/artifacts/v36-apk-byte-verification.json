@@ -1,0 +1,17 @@
+{
+  "apk": "D:\\Project\\TagTraceTrove\\spikes\\001-android-webview-shell\\T3-C1-v36-pending-authors.apk",
+  "sha256": "0f516f9984c15be991e44d737e1d70de5eb4a61a336af0ddec4ebfb5cd03ecf6",
+  "size": 4401738,
+  "matchedWebFiles": [
+    "assets/index-BCejduXI.css",
+    "assets/index-CZImvOuz.js",
+    "icons/icon-maskable.svg",
+    "icons/icon.svg",
+    "index.html",
+    "manifest.webmanifest",
+    "sw.js"
+  ],
+  "markersVerified": true,
+  "sameSignerAsV35": true,
+  "package": "package: name='com.speechless666.t3.spike' versionCode='36' versionName='0.0.36-c1-pending-authors' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'"
+}

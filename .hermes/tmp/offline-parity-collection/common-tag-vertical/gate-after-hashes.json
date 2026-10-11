@@ -1,0 +1,22 @@
+{
+  "packages/shared/src/schemas/sync.ts": "a78e74ffcf2138c274e10bf2bc1b910c36e576dba36ec253895d434b79f38f83",
+  "packages/shared/src/schemas/native-mutation-contract.ts": "6e4eebe411131cedb9b7ffe5bce3fc5f72d1f1c120fa9eaabf70eac4141ac2cf",
+  "packages/shared/src/collection-common-tag.ts": "45b0cc262de2e640d613eed6599e6676b6c6342e84c2a9fc6242517a21c7b9ea",
+  "packages/shared/src/index.ts": "ee34edcf6a33edb575c935e130e1231d93f572108b2f149ab2945f08d7859c08",
+  "apps/server/src/sync/collection-common-tag.ts": "cba3f56da00795910947edbd638d132088f4fefd880a5dab634c0e47acdea2f4",
+  "apps/server/src/sync/replay-service.ts": "de1ef6f918f3b2ba3b2f6db517d67d70ab8a9dfac2fbdd06a5d54b17e947d743",
+  "apps/server/src/sync/sync-service.ts": "473811bb87418eed87331a78a01aaef6844163a76e7bedd2e8f21799dc160e3f",
+  "apps/server/src/http/app.ts": "02c185cce8543d13cf151860eebad73aabdebc666c0b3f58bec1335adeb8f9c2",
+  "apps/web/src/api/gallery.ts": "7712a66050a41df2a41a3540e90ba772700dcba1d30a70424d3c1740fc82e4ff",
+  "apps/web/src/offline/collection-common-tag.ts": "8bcf1d3cd181ed6546675ad5b5b54190b940d77b429b655d27d2a4723496a36b",
+  "apps/web/src/offline/offline-api.ts": "c00e80494759a153a356cb5812b4ff12d29fdb8d4c9b364075e5c36d9def34b6",
+  "apps/web/src/offline/sync-mutation-plan.ts": "dae671b832f3756bc4ba4b213ed707c01a8e72f479dfce578dc6f2c32306285b",
+  "apps/web/src/offline/pending-work-restore.ts": "f6614dad18f8f042b0d969e4b10b242b6d9bcfabf2e11466b70f6b522bdd79d2",
+  "apps/web/tests/offline-collection-common-tag.integration.test.ts": "f7526afc5e84f5a504829d2cf5bc60ee1ac05c06a662866df8147b2b637ac704",
+  "apps/web/tests/offline-collection-parity.integration.test.ts": "4e6b8c6ad43f304742de06f9f5b5a055d5b502d9aa0bec83582707f36cd96d37",
+  "packages/shared/package.json": "2ef541414369ef148e414681953c6ea59b7162c00b35d974bd7fa6f36f24dfe3",
+  "pnpm-lock.yaml": "b2147c5ca5a38be454faad5554b94e88c1426acedd2f12032d6d967ba09343a5",
+  "apps/web/src/CollectionsPage.vue": "77e0268966c77aab28ee6a38fdf6ea7d5f91174cc7d5a5b399abd1a6037c5945",
+  "apps/web/tests/offline-collection-delete.integration.test.ts": "05950c3faa1ae0ca51fa0b35dbb4066bc9b09600e6d03585bacc4006e9e5925a",
+  "apps/server/src/database/migrations/028_author_resource_sync.sql": "a9b86901b93087165ae9d1c4f574e15f3697266100d44091eee5f44a1a3f85fe"
+}

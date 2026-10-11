@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+    "D:\\Project\\TagTraceTrove\\apps\\web\\node_modules\\vue-tsc\\bin\\vue-tsc.js",
+    "-p",
+    "D:\\Project\\TagTraceTrove\\apps\\web\\tsconfig.json",
+    "--noEmit"
+  ],
+  "exitCode": 2,
+  "timeoutSeconds": 180,
+  "testBefore": "edf4f8d3c435973d5bc7cdc13bc705b3c62e56fa59f91b87cbb8735b7bc2e0f8",
+  "testAfter": "edf4f8d3c435973d5bc7cdc13bc705b3c62e56fa59f91b87cbb8735b7bc2e0f8",
+  "testStable": true
+}

@@ -1,0 +1,13 @@
+{
+  "command": [
+    "git",
+    "diff",
+    "--check",
+    "--",
+    "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeAuthorDeleteTimelineJvmTest.java",
+    "apps/server/tests/fixtures/native-author-delete-timeline.mts"
+  ],
+  "exit": 0,
+  "stdout": "",
+  "stderr": ""
+}

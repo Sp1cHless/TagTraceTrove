@@ -1,3 +1,4 @@
+import { rateLimitFromResponse } from '../catalog-provider.js';
 import type { AdapterCandidate, AdapterSearchInput, SourceSearchAdapter } from '../source-search-adapter.js';
 
 /**
@@ -130,10 +131,10 @@ async function fetchSearchHtml(
   if (signal.aborted) throw signal.reason ?? new Error('ehentai: aborted');
   // e-hentai answers quota abuse with 509 and soft bans with 403.
   if (response.status === 429 || response.status === 503 || response.status === 509) {
-    throw new EhentaiStructureError(`ehentai: rate limited (HTTP ${response.status})`);
+    throw rateLimitFromResponse(response);
   }
   if (response.status === 403) {
-    throw new EhentaiStructureError('ehentai: access denied (HTTP 403; IP may be temporarily banned)');
+    throw rateLimitFromResponse(response);
   }
   if (!response.ok) {
     throw new EhentaiStructureError(`ehentai: HTTP ${response.status}`);

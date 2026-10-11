@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.speechless666.t3.spike.NativeEntryMultiAuthorConversionJvmTest" tests="1" skipped="0" failures="1" errors="0" timestamp="2026-10-10T16:02:19.668Z" hostname="LAPTOP-70QV4MNN" time="19.013">
+  <properties/>
+  <testcase name="g1" classname="com.speechless666.t3.spike.NativeEntryMultiAuthorConversionJvmTest" time="19.013">
+    <failure message="org.junit.ComparisonFailure: {&quot;opId&quot;:&quot;b1361c55-c6be-4b85-b2a4-e777c1284fd4&quot;,&quot;clientId&quot;:&quot;ccc5e2c6-31b0-45d0-bf01-234b40cf2bd7&quot;,&quot;libraryId&quot;:&quot;2f14f56c-90cc-4836-b569-8e7ab821382b&quot;,&quot;syncEpoch&quot;:&quot;f5180955-b01c-4b17-95f5-0fe4e0e1310c&quot;,&quot;entityUid&quot;:&quot;28cf7b3c-63d5-41b9-a644-f0d6b91a05af&quot;,&quot;clientCreatedAt&quot;:&quot;2026-10-10T16:02:21.980Z&quot;,&quot;entityKind&quot;:&quot;entry&quot;,&quot;operationKind&quot;:&quot;entry.authors.convert-to-multi&quot;,&quot;baseVersion&quot;:3,&quot;baseValues&quot;:{&quot;authors&quot;:[{&quot;producerUid&quot;:&quot;d05f94c4-8a57-4385-84f0-6ac4ea20bd6e&quot;,&quot;name&quot;:&quot;Preserved Author&quot;,&quot;version&quot;:1,&quot;workUids&quot;:[&quot;28cf7b3c-63d5-41b9-a644-f0d6b91a05af&quot;,&quot;eb52f6e7-5f8f-445e-bd6c-5fd990cd7432&quot;]},{&quot;producerUid&quot;:&quot;9f3fa326-b862-472a-94ad-076193e5722f&quot;,&quot;name&quot;:&quot;Solo Contributor&quot;,&quot;version&quot;:1,&quot;workUids&quot;:[&quot;28cf7b3c-63d5-41b9-a644-f0d6b91a05af&quot;]}],&quot;target&quot;:null,&quot;cascadeOwners&quot;:[{&quot;entityKind&quot;:&quot;author_directory_set&quot;,&quot;entityUid&quot;:&quot;a051f896-3d74-4969-b30c-0f3c06f10620&quot;,&quot;version&quot;:1},{&quot;entityKind&quot;:&quot;author_directory_set&quot;,&quot;entityUid&quot;:&quot;1bf630be-e4c1-4303-a76d-f9bd1fa45803&quot;,&quot;version&quot;:3},{&quot;entityKind&quot;:&quot;collection&quot;,&quot;entityUid&quot;:&quot;a046cfdc-6772-403e-af62-94685fb5db7f&quot;,&quot;version&quot;:2}]},&quot;payload&quot;:{&quot;targetUid&quot;:&quot;880d3bc4-3b55-4ef3-931b-249d95140b54&quot;}} expected:&lt;[completed]&gt; but was:&lt;[active]&gt;" type="org.junit.ComparisonFailure">org.junit.ComparisonFailure: {&quot;opId&quot;:&quot;b1361c55-c6be-4b85-b2a4-e777c1284fd4&quot;,&quot;clientId&quot;:&quot;ccc5e2c6-31b0-45d0-bf01-234b40cf2bd7&quot;,&quot;libraryId&quot;:&quot;2f14f56c-90cc-4836-b569-8e7ab821382b&quot;,&quot;syncEpoch&quot;:&quot;f5180955-b01c-4b17-95f5-0fe4e0e1310c&quot;,&quot;entityUid&quot;:&quot;28cf7b3c-63d5-41b9-a644-f0d6b91a05af&quot;,&quot;clientCreatedAt&quot;:&quot;2026-10-10T16:02:21.980Z&quot;,&quot;entityKind&quot;:&quot;entry&quot;,&quot;operationKind&quot;:&quot;entry.authors.convert-to-multi&quot;,&quot;baseVersion&quot;:3,&quot;baseValues&quot;:{&quot;authors&quot;:[{&quot;producerUid&quot;:&quot;d05f94c4-8a57-4385-84f0-6ac4ea20bd6e&quot;,&quot;name&quot;:&quot;Preserved Author&quot;,&quot;version&quot;:1,&quot;workUids&quot;:[&quot;28cf7b3c-63d5-41b9-a644-f0d6b91a05af&quot;,&quot;eb52f6e7-5f8f-445e-bd6c-5fd990cd7432&quot;]},{&quot;producerUid&quot;:&quot;9f3fa326-b862-472a-94ad-076193e5722f&quot;,&quot;name&quot;:&quot;Solo Contributor&quot;,&quot;version&quot;:1,&quot;workUids&quot;:[&quot;28cf7b3c-63d5-41b9-a644-f0d6b91a05af&quot;]}],&quot;target&quot;:null,&quot;cascadeOwners&quot;:[{&quot;entityKind&quot;:&quot;author_directory_set&quot;,&quot;entityUid&quot;:&quot;a051f896-3d74-4969-b30c-0f3c06f10620&quot;,&quot;version&quot;:1},{&quot;entityKind&quot;:&quot;author_directory_set&quot;,&quot;entityUid&quot;:&quot;1bf630be-e4c1-4303-a76d-f9bd1fa45803&quot;,&quot;version&quot;:3},{&quot;entityKind&quot;:&quot;collection&quot;,&quot;entityUid&quot;:&quot;a046cfdc-6772-403e-af62-94685fb5db7f&quot;,&quot;version&quot;:2}]},&quot;payload&quot;:{&quot;targetUid&quot;:&quot;880d3bc4-3b55-4ef3-931b-249d95140b54&quot;}} expected:&lt;[completed]&gt; but was:&lt;[active]&gt;
+	at org.junit.Assert.assertEquals(Assert.java:117)
+	at com.speechless666.t3.spike.NativeEntryMultiAuthorConversionJvmTest.phase(NativeEntryMultiAuthorConversionJvmTest.java:47)
+	at com.speechless666.t3.spike.NativeEntryMultiAuthorConversionJvmTest.g1(NativeEntryMultiAuthorConversionJvmTest.java:60)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.robolectric.RobolectricTestRunner$HelperTestRunner$1.evaluate(RobolectricTestRunner.java:502)
+	at org.robolectric.internal.SandboxTestRunner$2.lambda$evaluate$2(SandboxTestRunner.java:285)
+	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:104)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+	Suppressed: java.lang.IllegalArgumentException: Unsupported class file major version 69
+		at org.objectweb.asm.ClassReader.&lt;init&gt;(ClassReader.java:200)
+		at org.objectweb.asm.ClassReader.&lt;init&gt;(ClassReader.java:180)
+		at org.objectweb.asm.ClassReader.&lt;init&gt;(ClassReader.java:166)
+		at org.robolectric.internal.bytecode.ClassNodeProvider.createClassNode(ClassNodeProvider.java:24)
+		at org.robolectric.internal.bytecode.ClassNodeProvider.getClassNode(ClassNodeProvider.java:16)
+		at org.robolectric.internal.bytecode.InstrumentingClassWriter.typeInfo(InstrumentingClassWriter.java:114)
+		at org.robolectric.internal.bytecode.InstrumentingClassWriter.getCommonSuperClass(InstrumentingClassWriter.java:36)
+		at org.objectweb.asm.SymbolTable.addMergedType(SymbolTable.java:1286)
+		at org.objectweb.asm.Frame.merge(Frame.java:1311)
+		at org.objectweb.asm.Frame.merge(Frame.java:1218)
+		at org.objectweb.asm.MethodWriter.computeAllFrames(MethodWriter.java:1612)
+		at org.objectweb.asm.MethodWriter.visitMaxs(MethodWriter.java:1548)
+		at org.objectweb.asm.MethodVisitor.visitMaxs(MethodVisitor.java:787)
+		at org.objectweb.asm.tree.MethodNode.accept(MethodNode.java:767)
+		at org.objectweb.asm.tree.MethodNode.accept(MethodNode.java:647)
+		at org.objectweb.asm.tree.ClassNode.accept(ClassNode.java:468)
+		at org.robolectric.internal.bytecode.ClassInstrumentor.instrumentToBytes(ClassInstrumentor.java:132)
+		at org.robolectric.internal.bytecode.ClassInstrumentor.lambda$instrument$1(ClassInstrumentor.java:147)
+		at org.robolectric.util.PerfStatsCollector.measure(PerfStatsCollector.java:51)
+		at org.robolectric.internal.bytecode.ClassInstrumentor.instrument(ClassInstrumentor.java:147)
+		at org.robolectric.internal.bytecode.SandboxClassLoader.maybeInstrumentClass(SandboxClassLoader.java:153)
+		at org.robolectric.internal.bytecode.SandboxClassLoader.lambda$loadClass$0(SandboxClassLoader.java:136)
+		at org.robolectric.util.PerfStatsCollector.measure(PerfStatsCollector.java:51)
+		at org.robolectric.internal.bytecode.SandboxClassLoader.loadClass(SandboxClassLoader.java:136)
+		at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:490)
+		at org.robolectric.Shadows.reset(Shadows.java:2764)
+		at org.robolectric.android.internal.AndroidTestEnvironment.resetState(AndroidTestEnvironment.java:579)
+		at org.robolectric.RobolectricTestRunner.lambda$finallyAfterTest$0(RobolectricTestRunner.java:326)
+		at org.robolectric.util.PerfStatsCollector.measure(PerfStatsCollector.java:82)
+		at org.robolectric.RobolectricTestRunner.finallyAfterTest(RobolectricTestRunner.java:324)
+		at org.robolectric.internal.SandboxTestRunner$2.lambda$evaluate$2(SandboxTestRunner.java:298)
+		... 5 more
+</failure>
+  </testcase>
+  <system-out><![CDATA[DEBUG_JOBS [{"opId":"b1361c55-c6be-4b85-b2a4-e777c1284fd4","uploadId":null,"metadata":null,"flags":["offlineMutations","offlineEntryMultiAuthorConversion"],"phase":"active","replay":"{\"opId\":\"b1361c55-c6be-4b85-b2a4-e777c1284fd4\",\"status\":\"applied\",\"resourceVersion\":6,\"serverSeq\":22,\"entityId\":1,\"conversion\":{\"entryId\":1,\"multiAuthorId\":3,\"multiAuthorName\":\"multiple author\",\"convertedAuthors\":[{\"id\":1,\"name\":\"Preserved Author\"},{\"id\":2,\"name\":\"Solo Contributor\"}]},\"conversionAuthorIdentities\":[{\"producerUid\":\"d05f94c4-8a57-4385-84f0-6ac4ea20bd6e\",\"id\":1},{\"producerUid\":\"9f3fa326-b862-472a-94ad-076193e5722f\",\"id\":2}],\"conversionTargetVersion\":1,\"conversionJournal\":[{\"seq\":14,\"entityKind\":\"author_directory_set\",\"entityUid\":\"464877d4-e221-4eb7-80c1-9147c10b74bd\",\"changeKind\":\"create\",\"resourceVersion\":1,\"record\":{\"id\":3,\"producerId\":3,\"syncUid\":\"464877d4-e221-4eb7-80c1-9147c10b74bd\",\"syncVersion\":1}},{\"seq\":15,\"entityKind\":\"producer\",\"entityUid\":\"880d3bc4-3b55-4ef3-931b-249d95140b54\",\"changeKind\":\"create\",\"resourceVersion\":1,\"record\":{\"id\":3,\"syncUid\":\"880d3bc4-3b55-4ef3-931b-249d95140b54\",\"syncVersion\":1,\"name\":\"multiple author\",\"occupation\":null,\"artworkRef\":null,\"content\":null}},{\"seq\":16,\"entityKind\":\"entry\",\"entityUid\":\"28cf7b3c-63d5-41b9-a644-f0d6b91a05af\",\"changeKind\":\"update\",\"resourceVersion\":4,\"record\":{\"id\":1,\"syncUid\":\"28cf7b3c-63d5-41b9-a644-f0d6b91a05af\",\"syncVersion\":4,\"title\":\"Converted work\",\"type\":\"Comic\",\"coverRef\":null,\"previewRef\":null,\"previewRefsJson\":\"[]\",\"pageCount\":null,\"uploadDate\":null,\"createdAt\":\"2026-10-10 16:02:21\",\"updatedAt\":\"2026-10-10 16:02:21\"}},{\"seq\":17,\"entityKind\":\"entry\",\"entityUid\":\"28cf7b3c-63d5-41b9-a644-f0d6b91a05af\",\"changeKind\":\"update\",\"resourceVersion\":5,\"record\":{\"id\":1,\"syncUid\":\"28cf7b3c-63d5-41b9-a644-f0d6b91a05af\",\"syncVersion\":5,\"title\":\"Converted work\",\"type\":\"Comic\",\"coverRef\":null,\"previewRef\":null,\"previewRefsJson\":\"[]\",\"pageCount\":null,\"uploadDate\":null,\"createdAt\":\"2026-10-10 16:02:21\",\"updatedAt\":\"2026-10-10 16:02:21\"}},{\"seq\":18,\"entityKind\":\"author_directory_set\",\"entityUid\":\"1bf630be-e4c1-4303-a76d-f9bd1fa45803\",\"changeKind\":\"update\",\"resourceVersion\":4,\"record\":{\"id\":2,\"producerId\":2,\"syncUid\":\"1bf630be-e4c1-4303-a76d-f9bd1fa45803\",\"syncVersion\":4}},{\"seq\":19,\"entityKind\":\"entry\",\"entityUid\":\"28cf7b3c-63d5-41b9-a644-f0d6b91a05af\",\"changeKind\":\"update\",\"resourceVersion\":6,\"record\":{\"id\":1,\"syncUid\":\"28cf7b3c-63d5-41b9-a644-f0d6b91a05af\",\"syncVersion\":6,\"title\":\"Converted work\",\"type\":\"Comic\",\"coverRef\":null,\"previewRef\":null,\"previewRefsJson\":\"[]\",\"pageCount\":null,\"uploadDate\":null,\"createdAt\":\"2026-10-10 16:02:21\",\"updatedAt\":\"2026-10-10 16:02:21\"}},{\"seq\":20,\"entityKind\":\"author_directory_set\",\"entityUid\":\"1bf630be-e4c1-4303-a76d-f9bd1fa45803\",\"changeKind\":\"delete\",\"resourceVersion\":5,\"record\":null},{\"seq\":21,\"entityKind\":\"collection\",\"entityUid\":\"a046cfdc-6772-403e-af62-94685fb5db7f\",\"changeKind\":\"update\",\"resourceVersion\":3,\"record\":{\"id\":1,\"syncUid\":\"a046cfdc-6772-403e-af62-94685fb5db7f\",\"syncVersion\":3,\"kind\":\"producer\",\"title\":\"Contributor shelf\",\"description\":\"\",\"sortOrder\":0}},{\"seq\":22,\"entityKind\":\"producer\",\"entityUid\":\"9f3fa326-b862-472a-94ad-076193e5722f\",\"changeKind\":\"delete\",\"resourceVersion\":2,\"record\":null}]}","mediaResult":null,"error":"Interrupted; exact original retry required"},{"opId":"09089596-1479-4761-bdeb-5e4e391f6743","uploadId":null,"metadata":null,"flags":["offlineMutations","offlineEntryUpdate"],"phase":"completed","replay":"{\"opId\":\"09089596-1479-4761-bdeb-5e4e391f6743\",\"status\":\"applied\",\"resourceVersion\":3,\"serverSeq\":23}","mediaResult":null,"error":null}]
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

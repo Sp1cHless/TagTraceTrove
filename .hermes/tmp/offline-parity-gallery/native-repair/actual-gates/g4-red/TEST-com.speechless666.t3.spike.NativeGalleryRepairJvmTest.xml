@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.speechless666.t3.spike.NativeGalleryRepairJvmTest" tests="1" skipped="0" failures="1" errors="0" timestamp="2026-10-10T08:25:23.574Z" hostname="LAPTOP-70QV4MNN" time="19.325">
+  <properties/>
+  <testcase name="g4" classname="com.speechless666.t3.spike.NativeGalleryRepairJvmTest" time="19.325">
+    <failure message="org.junit.ComparisonFailure: {&quot;opId&quot;:&quot;da499c1d-e4fc-4375-8132-20a7f175f2f1&quot;,&quot;clientId&quot;:&quot;5e1d401e-6b78-44fb-8d64-1437ca18576b&quot;,&quot;libraryId&quot;:&quot;0e687fbe-1bb7-4621-b1d0-647f1efb2dd6&quot;,&quot;syncEpoch&quot;:&quot;2ad369a3-3fee-4340-ba3a-8e6a9d8b8b1b&quot;,&quot;entityUid&quot;:&quot;79d6701f-0933-4020-8a8e-2216da3273de&quot;,&quot;clientCreatedAt&quot;:&quot;2026-10-10T08:25:26.029Z&quot;,&quot;entityKind&quot;:&quot;entry&quot;,&quot;operationKind&quot;:&quot;entry.create&quot;,&quot;baseVersion&quot;:0,&quot;baseValues&quot;:{},&quot;payload&quot;:{&quot;title&quot;:&quot;Origin&quot;,&quot;type&quot;:&quot;Native-70fc2762-c4e2-457c-9f6b-1a9d6681bef8&quot;,&quot;uploadDate&quot;:null,&quot;pageCount&quot;:null,&quot;ratings&quot;:[],&quot;viewLater&quot;:false,&quot;partitionScopeUid&quot;:&quot;ee92588c-74be-48a2-9c47-8839072f0c22&quot;}} expected:&lt;[hel]d&gt; but was:&lt;[complete]d&gt;" type="org.junit.ComparisonFailure">org.junit.ComparisonFailure: {&quot;opId&quot;:&quot;da499c1d-e4fc-4375-8132-20a7f175f2f1&quot;,&quot;clientId&quot;:&quot;5e1d401e-6b78-44fb-8d64-1437ca18576b&quot;,&quot;libraryId&quot;:&quot;0e687fbe-1bb7-4621-b1d0-647f1efb2dd6&quot;,&quot;syncEpoch&quot;:&quot;2ad369a3-3fee-4340-ba3a-8e6a9d8b8b1b&quot;,&quot;entityUid&quot;:&quot;79d6701f-0933-4020-8a8e-2216da3273de&quot;,&quot;clientCreatedAt&quot;:&quot;2026-10-10T08:25:26.029Z&quot;,&quot;entityKind&quot;:&quot;entry&quot;,&quot;operationKind&quot;:&quot;entry.create&quot;,&quot;baseVersion&quot;:0,&quot;baseValues&quot;:{},&quot;payload&quot;:{&quot;title&quot;:&quot;Origin&quot;,&quot;type&quot;:&quot;Native-70fc2762-c4e2-457c-9f6b-1a9d6681bef8&quot;,&quot;uploadDate&quot;:null,&quot;pageCount&quot;:null,&quot;ratings&quot;:[],&quot;viewLater&quot;:false,&quot;partitionScopeUid&quot;:&quot;ee92588c-74be-48a2-9c47-8839072f0c22&quot;}} expected:&lt;[hel]d&gt; but was:&lt;[complete]d&gt;
+	at org.junit.Assert.assertEquals(Assert.java:117)
+	at com.speechless666.t3.spike.NativeGalleryRepairJvmTest.phase(NativeGalleryRepairJvmTest.java:46)
+	at com.speechless666.t3.spike.NativeGalleryRepairJvmTest.g4(NativeGalleryRepairJvmTest.java:66)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.robolectric.RobolectricTestRunner$HelperTestRunner$1.evaluate(RobolectricTestRunner.java:502)
+	at org.robolectric.internal.SandboxTestRunner$2.lambda$evaluate$2(SandboxTestRunner.java:285)
+	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:104)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+</failure>
+  </testcase>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,10 @@
+{
+  "apps/web/src/AddEntryPage.vue": "2f5b8d7ec58e8d36212b22aa680eca78aa3c5eaa274f846cfeeefe03097e7e6b",
+  "apps/web/src/GalleryApp.vue": "aa41be4b82467f2141f4ddac852a784995069913a5968f75e39ecf5ae7428cc3",
+  "apps/web/src/AuthorPage.vue": "cac1cee8f63ba3d88b33295a5c300bc03fe529a8ee472e672d23889ec7a058f8",
+  "apps/web/src/offline/offline-api.ts": "9d373ae1a9a88772ad59e3881cbb534187b1feba8479bed228f6048d765c6b81",
+  "apps/web/src/navigation-memory.ts": "4f16f6b95e4f4dfd66c96e63c46760e0f9380043ebf08f7ecb560913f88891c2",
+  "apps/web/src/api/gallery.ts": "7994c4b4485d48e29d2bcea2bbfebb9774798660d85e20bab63ccd34fbe9dc84",
+  "apps/web/tests/gallery-app.test.ts": "4638fa6e4f529989bb0de0f33a8ffc61b5b8d6cfa9917a5b8e6869f2d9c68fee",
+  "packages/shared/src/schemas/api.ts": "3e5402cd5f08f0b36ecf038e2c31cb662431ca96866e381c41a475b66156ef4e"
+}

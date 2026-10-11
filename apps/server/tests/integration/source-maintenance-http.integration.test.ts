@@ -1,7 +1,7 @@
 import { rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMigratedMemoryDatabase, createTempFileDatabase } from '../../src/database/testing.js';
 import { applyAllMigrations } from '../../src/database/migrations.js';
 import type { T3Database } from '../../src/database/connection.js';
@@ -37,6 +37,38 @@ function seedApp(database: T3Database) {
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 describe('source maintenance HTTP routes', () => {
+  it('pauses and reports an escaped background search failure without an unhandled rejection', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const app = seedApp(database);
+    const created = await app.request('/api/source-maintenance/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ originSourceKey: 'known:hitomi', adapterKey: 'fake', markOriginInvalid: false }),
+    });
+    const { id } = await created.json() as { id: number };
+    const originalPrepare = database.prepare.bind(database);
+    const prepare = vi.spyOn(database, 'prepare').mockImplementation(((sql: string) => {
+      if (sql.includes('SELECT entry_id, id AS content_id, content')) {
+        prepare.mockRestore();
+        throw new Error('injected search failure');
+      }
+      return originalPrepare(sql);
+    }) as typeof database.prepare);
+    const reported = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const started = await app.request(`/api/source-maintenance/runs/${id}/start`, { method: 'POST' });
+      expect(started.status).toBe(200);
+      await vi.waitFor(() => expect(reported).toHaveBeenCalledWith(
+        expect.stringContaining(String(id)), expect.any(Error),
+      ));
+      const current = await app.request(`/api/source-maintenance/runs/${id}`);
+      expect(await current.json()).toMatchObject({ status: 'paused' });
+    } finally {
+      prepare.mockRestore();
+      reported.mockRestore();
+    }
+  });
   it('exposes the Source library with the status overlay', async () => {
     const database = createMigratedMemoryDatabase();
     databases.push(database);

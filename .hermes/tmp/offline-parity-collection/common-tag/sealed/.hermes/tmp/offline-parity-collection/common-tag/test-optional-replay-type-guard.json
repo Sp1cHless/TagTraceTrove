@@ -1,0 +1,7 @@
+{
+  "before": "edf4f8d3c435973d5bc7cdc13bc705b3c62e56fa59f91b87cbb8735b7bc2e0f8",
+  "after": "cae3dc4914d7220b0b35868ed5a3418e8eeb5fb3d68281605173e41822d91d3b",
+  "count": 3,
+  "reason": "factory supplies optional GalleryApi replay method; assert presence at test call sites only",
+  "lineEndingsPreserved": true
+}

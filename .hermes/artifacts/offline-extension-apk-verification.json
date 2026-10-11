@@ -1,0 +1,20 @@
+{
+  "apk": "D:\\Project\\TagTraceTrove\\spikes\\001-android-webview-shell\\T3-v41-offline-gallery-preview.apk",
+  "sha256": "9bb20c3dba94862db47837886597c9ff24d48a2d720b21b14f409c398649c7c7",
+  "size": 5824720,
+  "matchedWebFiles": [
+    "assets/index-0GrHYOUR.js",
+    "assets/index-C0otm6y8.css",
+    "icons/icon-maskable.svg",
+    "icons/icon.svg",
+    "index.html",
+    "manifest.webmanifest",
+    "sw.js"
+  ],
+  "markers": [
+    "0.0.41-c3-gallery-preview-offline"
+  ],
+  "sameSignerAs": "D:\\Project\\TagTraceTrove\\spikes\\001-android-webview-shell\\T3-v40-offline-read-latency.apk",
+  "certificate": "Signer #1 certificate SHA-256 digest: 1035333c6fa6a18e40398739adda5a2640e6c9cf38e94bea1bf58118eb5fdf41",
+  "package": "package: name='com.speechless666.t3.spike' versionCode='41' versionName='0.0.41-c3-gallery-preview-offline' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'"
+}

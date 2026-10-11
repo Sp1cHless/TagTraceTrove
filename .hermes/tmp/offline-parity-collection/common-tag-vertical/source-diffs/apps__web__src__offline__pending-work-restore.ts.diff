@@ -1,0 +1,20 @@
+--- apps/web/src/offline/pending-work-restore.ts fresh-before
++++ apps/web/src/offline/pending-work-restore.ts latest
+@@ -265,6 +265,17 @@
+     op.baseValues.producerUids.forEach(value=>requireRef(producer(value)));
+ 
+   }
++  if(op.operationKind==='collection.common-tag.add') {
++    const owner=payload.collections.find(row=>same(row.syncUid,op.entityUid));const origin=prior.find(row=>row.operationKind==='collection.create' && same(row.entityUid,op.entityUid));
++    requireRef((owner?.kind??origin?.payload.kind)==='entry');
++    for(const child of op.baseValues.scope.children)requireRef(collection(child.syncUid));
++    for(const member of op.baseValues.members)requireRef(entry(member.syncUid));
++    for(const type of op.baseValues.types){
++      if(type.layoutUid)requireRef(payload.entryTagLayouts?.some(row=>same(row.syncUid,type.layoutUid!) && row.entryType===type.entryType)===true);
++      if(type.facetUid)requireRef(payload.tagGroups.some(row=>same(row.syncUid,type.facetUid!) && row.entryType===type.entryType && row.groupKind==='facet' && payload.tagGroups.some(section=>section.id===row.parentId && same(section.syncUid,type.sectionUid!) && section.entryType===type.entryType)) || prior.some(row=>row.operationKind==='entry.facet.create' && same(row.entityUid,type.facetUid!)));
++    }
++    if(op.baseValues.tag)requireRef(payload.tags.some(row=>same(row.syncUid,op.baseValues.tag!.syncUid)) || prior.some(row=>row.operationKind==='entry.tag.create' && same(row.entityUid,op.baseValues.tag!.syncUid)) || prior.some(row=>row.operationKind==='collection.common-tag.add' && typeof row.payload.tagUid==='string' && same(row.payload.tagUid,op.baseValues.tag!.syncUid)));
++  }
+   if (op.operationKind==='collection.delete') {
+     const owner=payload.collections.find(row=>same(row.syncUid,op.entityUid));
+     const origin=prior.find(row=>row.operationKind==='collection.create' && same(row.entityUid,op.entityUid));

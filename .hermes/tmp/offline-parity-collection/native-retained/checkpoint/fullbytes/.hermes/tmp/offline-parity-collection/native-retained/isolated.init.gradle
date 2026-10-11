@@ -1,0 +1,27 @@
+def outputToken = System.getenv('T3_NATIVE_OUTPUT_TOKEN') ?: 'collection03-final'
+if (!(outputToken ==~ /[a-zA-Z0-9_-]+/)) throw new GradleException('Invalid owned output token')
+def isolatedRoot = new File('D:/Project/TagTraceTrove/.hermes/tmp/offline-parity-collection/native-retained/gradle-output/' + outputToken)
+gradle.beforeProject { p ->
+    def key = p.path == ':' ? 'root' : 'project-' + p.path.substring(1).replace(':', '__')
+    p.layout.buildDirectory.set(new File(isolatedRoot, key))
+    p.tasks.withType(Test).configureEach {
+        maxParallelForks = 1
+        forkEvery = 1
+    }
+}
+gradle.projectsEvaluated {
+    gradle.rootProject.allprojects.each { p ->
+        def dir = p.layout.buildDirectory.get().asFile
+        if (!dir.toPath().startsWith(isolatedRoot.toPath())) throw new GradleException('Non-isolated project: ' + p.path)
+        println('COLLECTION03_ISOLATED ' + p.path + ' -> ' + dir)
+    }
+}
+gradle.taskGraph.whenReady { graph ->
+    graph.allTasks.each { t ->
+        if (t.name.toLowerCase().contains('copyweb') || t.name.toLowerCase().contains('assemble') || t.name.toLowerCase().contains('syncassets')) throw new GradleException('Forbidden task ' + t.path)
+        t.outputs.files.files.each { f ->
+            if (f.toPath().startsWith(new File('D:/Project/TagTraceTrove/apps/web/dist').toPath()) || f.toPath().startsWith(new File('D:/Project/TagTraceTrove/spikes/001-android-webview-shell/android/app/src/main/assets').toPath())) throw new GradleException('Protected output: ' + f)
+        }
+    }
+    println('COLLECTION03_TASK_GRAPH ' + graph.allTasks.collect { it.path }.join(','))
+}

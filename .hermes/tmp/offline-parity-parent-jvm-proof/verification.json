@@ -1,0 +1,125 @@
+{
+  "totals": {
+    "tests": 61,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "xml": [
+    {
+      "file": "TEST-com.getcapacitor.myapp.ExampleUnitTest.xml",
+      "sha256": "f9f4e37459cda8caf1ceb139b9c5ea9cb35d86711c7a4ef49ff6be110d67fc3d",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "TEST-com.speechless666.t3.spike.AppliedReceiptJvmTest.xml",
+      "sha256": "c139f13865394e99b59aabe8a564c1434082c8cdc64bcb46c771da16d3ce8868",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "TEST-com.speechless666.t3.spike.BackgroundSchedulerJvmTest.xml",
+      "sha256": "c9a7c4df8bf55aee314dbc3c78facf31344b17085ee7ec84bf6c3ab32764f003",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "TEST-com.speechless666.t3.spike.BackgroundTransferJvmTest.xml",
+      "sha256": "8b28753af19772b024b03bb876a76116c9d59f0803118eaec69df268ba458835",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "TEST-com.speechless666.t3.spike.DurationAuthorPlanJvmTest.xml",
+      "sha256": "96d036f1c314ae46244cb8e13af88096e1026063324a933c9383c06192a8566d",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "TEST-com.speechless666.t3.spike.FiniteBudgetJvmTest.xml",
+      "sha256": "c1381411cd46f5b949f1b90e406513b4dc092cdcad9eff18b76c2821a5f5a4ec",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "TEST-com.speechless666.t3.spike.NativeMutationSafetyJvmTest.xml",
+      "sha256": "8f84f5cf57f378b924c792ecaa90ffe8551c0a54e6ee445fe888db431845340e",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "TEST-com.speechless666.t3.spike.NativeStagingInterleavingsJvmTest.xml",
+      "sha256": "49fb2b29b4f15fa7d3606c5131a63a838582a24bf422ef0af5fa6f62bc9fd6a7",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "TEST-com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest.xml",
+      "sha256": "68ee19202a3ff3b7cec1277a668f11cb61b0f411e0b8296dc48c32bddc7826fd",
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "TEST-com.speechless666.t3.spike.PairedBootstrapBytesTest.xml",
+      "sha256": "0e8f5ee390a520e977f3f4becf7add10c2c535d8767128f9b08f8a65d2aeeeba",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "TEST-com.speechless666.t3.spike.SecurePairingTest.xml",
+      "sha256": "0e1a66024dfbed1bb2ef77f7b832cd6392ecbc8c1126be44c90f232eca24d47d",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "TEST-com.speechless666.t3.spike.TransferLedgerJvmTest.xml",
+      "sha256": "3236b05ba682e94abb61f00a176e8ec79e7448bf5707bd14f061cf2f632260dc",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "file": "TEST-com.speechless666.t3.spike.TrustedLanPairingTest.xml",
+      "sha256": "93e4b0f50a3e2cf5d23353b47b9f3671d48ddd10e16bcac77f08d4ec9a60ceb1",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "deleteNamedTests": [
+    {
+      "suite": "com.speechless666.t3.spike.NativeMutationSafetyJvmTest",
+      "name": "productionCancellationDeletesUnsealedFilesAndPersistsBothIdentities"
+    },
+    {
+      "suite": "com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest",
+      "name": "deletionDefersAcrossStandaloneMediaQueueAndRetainsUncertainOriginals"
+    }
+  ],
+  "boundary": "JVM report/archive evidence only. Successor production/test writer remains active; no current whole-tree/release/device completion claimed. Parent online-no-copy probe rerun still RED: missing-snapshot local rejection after successful isolated API reads."
+}

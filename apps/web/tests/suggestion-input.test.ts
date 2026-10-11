@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { defineComponent } from 'vue';
 import type { RelationSuggestion } from '@t3/shared';
 import SuggestionInput from '../src/components/SuggestionInput.vue';
@@ -52,6 +52,24 @@ type HarnessProps = {
   commitOnBlur?: boolean;
   selectFillsInput?: boolean;
 };
+
+/** The device measurement the phone layout is built on: the soft keyboard
+ * shrinks window.innerHeight to 430 while the author field's bottom sits at
+ * 407, so a downward list lands under the keyboard. */
+function stubPlacement(
+  element: Element,
+  rect: { top: number; bottom: number },
+  viewportHeight: number,
+): void {
+  (element as HTMLElement).getBoundingClientRect = () => ({
+    top: rect.top, bottom: rect.bottom, left: 0, right: 0,
+    width: 200, height: rect.bottom - rect.top, x: 0, y: rect.top,
+    toJSON: () => ({}),
+  }) as DOMRect;
+  Object.defineProperty(window, 'innerHeight', {
+    value: viewportHeight, configurable: true, writable: true,
+  });
+}
 
 async function mountHarness(props: HarnessProps = {}) {
   const calls: Array<{ query: string; excludeIds: number[] }> = [];
@@ -115,12 +133,26 @@ describe('SuggestionInput', () => {
     expect(wrapper.find('[role="listbox"]').exists()).toBe(false);
   });
 
-  it('requests debounced suggestions for a single character and renders them', async () => {
+  // The debounce contract is a timing *upper* bound, and a real-timer sleep is
+  // only a lower bound (a loaded machine overshoots it), so this one assertion
+  // drives the clock instead of racing it.
+  it('waits out the debounce before searching for a single character', async () => {
+    vi.useFakeTimers();
+    try {
+      const { input, calls } = await mountHarness();
+      await input.setValue('校');
+      await vi.advanceTimersByTimeAsync(TEST_DEBOUNCE_MS - 1);
+      expect(calls).toEqual([]);
+      await vi.advanceTimersByTimeAsync(2);
+      expect(calls).toEqual([{ query: '校', excludeIds: [] }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('renders the returned candidates for a single character', async () => {
     const { wrapper, input, calls, pending } = await mountHarness();
-    await input.setValue('校');
-    await sleep(TEST_DEBOUNCE_MS / 2);
-    expect(calls).toEqual([]);
-    await sleep(SEARCH_SETTLE_MS);
+    await typeAndSettle(input, '校');
     expect(calls).toEqual([{ query: '校', excludeIds: [] }]);
     pending[0]!.resolve([
       makeSuggestion(1, '校园'),
@@ -370,17 +402,74 @@ describe('SuggestionInput', () => {
     expect(input.attributes('size')).toBe('7');
   });
 
-  it('does not request or submit while the IME composition is active', async () => {
+  it('requests candidates during IME composition but never submits its text', async () => {
     const { wrapper, input, calls } = await mountHarness();
     await input.trigger('compositionstart');
     await input.setValue('青');
     await sleep(SEARCH_SETTLE_MS);
-    expect(calls).toEqual([]);
-    await input.trigger('keydown.enter');
+    // A phone's keyboard can hold plain letters inside a composition span:
+    // the candidates must still follow the text, or nothing shows until the
+    // field loses focus.
+    expect(calls).toEqual([{ query: '青', excludeIds: [] }]);
+    // A key the IME itself is part of carries `isComposing`; that is what the
+    // component must honour, not a flag that may never be cleared.
+    const duringComposition = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    Object.defineProperty(duringComposition, 'isComposing', { value: true });
+    input.element.dispatchEvent(duringComposition);
     expect(wrapper.emitted('submit-text')).toBeUndefined();
     await input.trigger('compositionend');
     await sleep(SEARCH_SETTLE_MS);
     expect(calls).toEqual([{ query: '青', excludeIds: [] }]);
+  });
+
+  // Vue's own v-model listener drops `input` events while an IME composition is
+  // open (`e.target.composing`) — measured on the device: the component's query
+  // stayed at the previous value through a whole composition, so no search ever
+  // ran and the candidates only surfaced once the composition committed, which
+  // the user reads as "nothing happens until I tap away".
+  it('follows the text the field shows while an IME composition is still open', async () => {
+    const { input, calls } = await mountHarness();
+    await input.trigger('compositionstart');
+    const element = input.element as HTMLInputElement;
+    element.value = 'abcdefgh';
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(SEARCH_SETTLE_MS);
+    expect(element.getAttribute('size')).toBe('8');
+    expect(calls).toEqual([{ query: 'abcdefgh', excludeIds: [] }]);
+  });
+
+  // Measured on the phone: the tag editor committed nothing on Enter and the
+  // tag only appeared once the field lost focus (the user's "it shows up after
+  // I press Done"). The component's own composition flag was left set because a
+  // phone keyboard can hold a composition open for a whole typing session, and
+  // onEnter trusted that flag instead of the event's own `isComposing`.
+  it('commits on Enter once the composition has ended, even if the flag was left set', async () => {
+    const { input, wrapper } = await mountHarness();
+    await input.trigger('compositionstart');
+    const element = input.element as HTMLInputElement;
+    element.value = 'zztmp';
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(SEARCH_SETTLE_MS);
+    // A real Enter that the IME is not part of: the composition has ended by
+    // the time this key event is dispatched.
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    element.dispatchEvent(event);
+    await sleep(APPLY_MS);
+    expect(wrapper.emitted('submit-text')).toEqual([['zztmp']]);
+  });
+
+  it('leaves Enter to the IME while a composition is really in progress', async () => {
+    const { input, wrapper } = await mountHarness();
+    await input.trigger('compositionstart');
+    const element = input.element as HTMLInputElement;
+    element.value = 'zhongwen';
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(SEARCH_SETTLE_MS);
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'isComposing', { value: true });
+    element.dispatchEvent(event);
+    await sleep(APPLY_MS);
+    expect(wrapper.emitted('submit-text')).toBeUndefined();
   });
 
   it('shows the empty state once a live query returns no candidates', async () => {
@@ -390,6 +479,43 @@ describe('SuggestionInput', () => {
     await sleep(APPLY_MS);
     expect(wrapper.find('[role="listbox"]').exists()).toBe(true);
     expect(wrapper.find('.suggestion-input__empty').exists()).toBe(true);
+  });
+
+  it('flips the candidate list above the field when the keyboard leaves no room below', async () => {
+    const { wrapper, input, pending } = await mountHarness();
+    stubPlacement(input.element, { top: 377, bottom: 407 }, 430);
+    await typeAndSettle(input, 'a');
+    pending[0]!.resolve([makeSuggestion(1, 'A1'), makeSuggestion(2, 'A2')]);
+    await sleep(APPLY_MS);
+    const list = wrapper.find('[role="listbox"]');
+    expect(list.exists()).toBe(true);
+    expect(list.classes()).toContain('suggestion-input__list--up');
+    // 377px of room above minus the 8px gap, so the full 224px list fits.
+    expect(list.attributes('style')).toContain('max-height: 224px');
+  });
+
+  it('keeps opening downward on a viewport with room below the field', async () => {
+    const { wrapper, input, pending } = await mountHarness();
+    stubPlacement(input.element, { top: 280, bottom: 310 }, 800);
+    await typeAndSettle(input, 'a');
+    pending[0]!.resolve([makeSuggestion(1, 'A1')]);
+    await sleep(APPLY_MS);
+    const list = wrapper.find('[role="listbox"]');
+    expect(list.classes()).not.toContain('suggestion-input__list--up');
+    expect(list.attributes('style')).toContain('max-height: 224px');
+  });
+
+  it('shrinks the list to the room left below a field in the middle of a keyboard-shrunk viewport', async () => {
+    const { wrapper, input, pending } = await mountHarness();
+    // 120px below (roomier than the 40px above, so it still opens downward)
+    // would clip a 224px list: the list is bounded to what fits.
+    stubPlacement(input.element, { top: 240, bottom: 270 }, 430);
+    await typeAndSettle(input, 'a');
+    pending[0]!.resolve([makeSuggestion(1, 'A1')]);
+    await sleep(APPLY_MS);
+    const list = wrapper.find('[role="listbox"]');
+    expect(list.classes()).not.toContain('suggestion-input__list--up');
+    expect(list.attributes('style')).toContain('max-height: 152px');
   });
 
   it('survives a rejected provider call without throwing', async () => {

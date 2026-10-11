@@ -1,10 +1,27 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createGalleryApi,
+  createDefaultGalleryApi,
   resolveAssetUrl,
   resolveDefaultApiBaseUrl,
 } from '../src/api/gallery.js';
 import type { ApiClient } from '../src/api/client.js';
+
+describe('change feed transport', () => {
+  it('validates a bounded page and sends its exact identity and cursor', async () => {
+    const page = { changes: [], nextSeq: 0, highWaterSeq: 4, ackSeq: 0 };
+    const request = vi.fn(async () => page);
+    const api = createGalleryApi({ request } as unknown as ApiClient);
+    const query = { libraryId: 'library-1', syncEpoch: 'epoch-1', protocolVersion: 1, clientId: 'client-1', afterSeq: 0, limit: 100 };
+    await expect(api.fetchSyncChanges!(query)).resolves.toEqual(page);
+    expect(request).toHaveBeenCalledWith('sync/changes', { query });
+  });
+
+  it('rejects malformed feed pages before a consumer can advance', async () => {
+    const api = createGalleryApi({ request: async () => ({ changes: [], nextSeq: -1, highWaterSeq: 0, ackSeq: 0 }) } as unknown as ApiClient);
+    await expect(api.fetchSyncChanges!({ libraryId: 'l', syncEpoch: 'e', protocolVersion: 1, clientId: 'c', afterSeq: 0, limit: 100 })).rejects.toThrow();
+  });
+});
 
 describe('default GalleryApi origin', () => {
   it('uses the serving origin in production while retaining the 8765 development default', () => {
@@ -17,22 +34,71 @@ describe('default GalleryApi origin', () => {
     expect(resolveDefaultApiBaseUrl(undefined, true, 'https://localhost', '   '))
       .toBe('https://localhost/api/');
   });
+  it('fails closed for a native shell without a valid paired private HTTP API base', () => {
+    expect(() => resolveDefaultApiBaseUrl(undefined, true, 'https://localhost', '', true)).toThrow(/pair/i);
+    expect(() => resolveDefaultApiBaseUrl(undefined, true, 'https://localhost', 'http://public.test/api/', true)).toThrow(/pair/i);
+    expect(() => resolveDefaultApiBaseUrl(undefined, true, 'https://localhost', 'http://192.168.1.8:8765/api/more', true)).toThrow(/pair/i);
+    expect(resolveDefaultApiBaseUrl(undefined, true, 'https://localhost', 'http://192.168.1.8:8765/api/', true))
+      .toBe('http://192.168.1.8:8765/api/');
+  });
+  it('keeps the shell virtual origin as the standing base with or without pairing', () => {
+    // prepare-web embeds exactly this meta; the injected fetch routes it through
+    // the native transport, and an unpaired shell answers 401 for the pairing
+    // screen instead of a module-scope throw that blanks the whole app.
+    expect(resolveDefaultApiBaseUrl(undefined, true, 'https://localhost', 'https://localhost/api/', true))
+      .toBe('https://localhost/api/');
+    expect(resolveDefaultApiBaseUrl(undefined, true, 'https://localhost', 'https://localhost/api', true))
+      .toBe('https://localhost/api/');
+  });
+  it('does not throw at module scope for the shipped shell meta before pairing', () => {
+    vi.stubGlobal('window', { location: { origin: 'https://localhost' } });
+    vi.stubGlobal('document', { querySelector: (selector: string) => {
+      if (selector === 'meta[name="t3-native-shell"]') return {};
+      if (selector === 'meta[name="t3-api-base-url"]') return { content: 'https://localhost/api/' };
+      return null;
+    } });
+    try {
+      expect(() => createDefaultGalleryApi()).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it('routes a paired native shell to the injected LAN origin', () => {
+    vi.stubGlobal('window', { location: { origin: 'https://localhost' } });
+    vi.stubGlobal('document', { querySelector: (selector: string) => {
+      if (selector === 'meta[name="t3-native-shell"]') return {};
+      if (selector === 'meta[name="t3-api-base-url"]') return { content: 'http://192.168.1.8:8765/api/' };
+      return null;
+    } });
+    try {
+      const api = createDefaultGalleryApi();
+      expect(api.assetUrl('/api/thumbnails/entries/17/cover')).toBe('http://192.168.1.8:8765/api/thumbnails/entries/17/cover');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe('GalleryApi asset origin', () => {
   it('routes remote media through the Capacitor same-origin interceptor only inside the native shell', () => {
-    const path = '/api/thumbnails/entries/17/cover';
-    const remote = 'http://192.168.50.155:8765/api/thumbnails/entries/17/cover';
+    const path = '/api/thumbnails/entries/17/cover.webp';
+    const remote = 'http://192.168.50.155:8765/api/thumbnails/entries/17/cover.webp';
 
     expect(resolveAssetUrl(path, 'http://192.168.50.155:8765/')).toBe(remote);
     expect(resolveAssetUrl(path, 'http://192.168.50.155:8765/', 'https://localhost')).toBe(
-      'https://localhost/_capacitor_http_interceptor_?u=http%3A%2F%2F192.168.50.155%3A8765%2Fapi%2Fthumbnails%2Fentries%2F17%2Fcover',
+      'https://localhost/_capacitor_http_interceptor_?u=http%3A%2F%2F192.168.50.155%3A8765%2Fapi%2Fthumbnails%2Fentries%2F17%2Fcover.webp',
     );
     expect(resolveAssetUrl(
       'https://localhost/_capacitor_http_interceptor_?u=http%3A%2F%2F192.168.50.155%3A8765%2Fcover.webp',
       'http://192.168.50.155:8765/',
       'https://localhost',
     )).toBe('https://localhost/_capacitor_http_interceptor_?u=http%3A%2F%2F192.168.50.155%3A8765%2Fcover.webp');
+    // The shell's own virtual origin rides the WebView's pinned-transport
+    // interception; wrapping it would send the request to Capacitor's local
+    // asset server, which has no /api route.
+    expect(resolveAssetUrl(path, 'https://localhost/', 'https://localhost')).toBe(
+      'https://localhost/api/thumbnails/entries/17/cover.webp',
+    );
   });
 });
 
@@ -435,6 +501,9 @@ describe('GalleryApi Authors', () => {
     await expect(api.listAuthorFilterOptions('Comic', false)).resolves.toEqual({
       authorTags: [{ tagId: 2, name: 'Circle' }],
       workTags: [{ tagId: 5, name: 'Action' }],
+      // The response carries the Authors' own rating dimensions; the schema fills an empty list for a
+      // server that does not answer with one yet.
+      ratingSlots: [],
     });
     const input = {
       ownTagIds: [2, 3], relatedEntryTagIds: [5, 8], includeNsfw: true,
@@ -548,5 +617,46 @@ describe('GalleryApi Authors', () => {
     });
     expect(request).toHaveBeenCalledWith('producers/3/directories/5/entries/7', { method: 'PUT' });
     expect(request).toHaveBeenCalledWith('producers/3/directories/5/entries/7', { method: 'DELETE' });
+  });
+});
+
+describe('GalleryApi SiteProbe readme and review page', () => {
+  /** A client that answers with what the route would, and remembers where it was asked. */
+  function recordingClient(): { client: ApiClient; calls: string[] } {
+    const calls: string[] = [];
+    return {
+      calls,
+      client: {
+        async request<T>(path: string): Promise<T> {
+          calls.push(path);
+          return { site: 'demo.test', source: 'installed', text: '# Demo' } as T;
+        },
+      },
+    };
+  }
+
+  it('reads a site readme through its own route', async () => {
+    const { client, calls } = recordingClient();
+    const api = createGalleryApi(client);
+
+    const readme = await api.siteprobeReadme('demo.test');
+
+    expect(calls).toEqual(['siteprobe/readme']);
+    expect(readme.text).toBe('# Demo');
+  });
+
+  it('builds the review page URL through the same resolver every asset URL uses', () => {
+    const { client } = recordingClient();
+    const api = createGalleryApi(client, 'http://192.168.50.155:8765/');
+
+    const path = 'D:/export/demo & co/listing/review.html';
+    const runId = '6f9d29c1-37f7-420b-870e-4b4f45dd7d19';
+    const url = api.siteprobeExportFileUrl(path, runId);
+
+    const parsed = new URL(url);
+    expect(parsed.pathname).toBe('/api/siteprobe/export-file');
+    expect(parsed.searchParams.get('path')).toBe(path);
+    expect(parsed.searchParams.get('selectionRunId')).toBe(runId);
+    expect(url.startsWith('http://192.168.50.155:8765/')).toBe(true);
   });
 });

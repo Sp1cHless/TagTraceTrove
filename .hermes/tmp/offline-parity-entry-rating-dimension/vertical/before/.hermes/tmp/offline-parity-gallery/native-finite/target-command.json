@@ -1,0 +1,17 @@
+{
+  "task": ":app:testDebugUnitTest",
+  "tests": [
+    "com.speechless666.t3.spike.NativeGalleryFiniteJvmTest"
+  ],
+  "output": "gradle-output/target",
+  "node": "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+  "businessReceipts": "REAL canonical temporary SQLite",
+  "plannedGroups": [
+    "g1 existing/new origin flags and old absence",
+    "saved partition individual false/absent gates",
+    "origin creator -> true -> false ordering + independent progress/global hold",
+    "response loss cold original body/hash/metadata retry",
+    "invalid receipt dependency refusal/cap downgrade"
+  ],
+  "stopRule": "Genuine Native production RED: do not edit Native production; remaining groups and nearest not claimed"
+}

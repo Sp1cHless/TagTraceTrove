@@ -15,6 +15,7 @@ import {
 import {
   createProducerRatingSlot,
   createRatingSlot,
+  listRatingSlots,
   setEntryRating,
   setProducerRating,
 } from '../../src/repositories/rating-repository.js';
@@ -438,9 +439,12 @@ describe('Facet filter HTTP routes', () => {
     expect(filter([], { slotId: slot.id, direction: 'desc' }))
       .toEqual([rated5, rated3, unrated]);
 
-    // Options surface the shared slots for the filter UI.
-    expect(listFacetFilterOptions(database, 'comic').ratingSlots)
-      .toEqual([{ id: slot.id, name: 'Quality', sortOrder: 0 }]);
+    // Options surface the dimensions a person picks: the work's own, and the author's own. The works
+    // summary is deliberately absent — the work dimension already falls back to it, so an option for
+    // it would be the same number twice under two names.
+    expect(listFacetFilterOptions(database, 'comic').ratingSlots).toEqual([
+      { id: slot.id, name: 'Quality', sortOrder: 0, subjectKind: 'entry' },
+    ]);
   });
 
   it('falls back to the Author rating only when the work has fewer than four Authors', () => {
@@ -488,29 +492,91 @@ describe('Facet filter HTTP routes', () => {
       ratingSort: { slotId: entrySlot.id, direction: 'desc', applyAuthorRating },
     }).map((entry) => entry.title);
 
-    // Without the fallback only own ratings count.
-    expect(sorted(false)).toEqual(['Own Five', 'Own Three', 'Author Four', 'Big Anthology', 'Nothing Rated']);
-    // With it: own ratings win, missing ones use the Author, four-Author works stay unrated.
-    expect(sorted(true)).toEqual([
-      'Own Five',
-      'Author Four',
-      'Own Three',
-      'Nothing Rated',
-      'Big Anthology',
-    ]);
+    // Own ratings win, missing ones use the Author's summary, four-Author works inherit nothing —
+    // and there is only one reading: the older flag asks for the same thing.
+    const expected = ['Own Five', 'Author Four', 'Own Three', 'Nothing Rated', 'Big Anthology'];
+    expect(sorted(false)).toEqual(expected);
+    expect(sorted(true)).toEqual(expected);
 
-    // The filter stays entry-only: an Author-rated work is still "unrated".
+    // Filtering reads the same value, so an Author-rated work is not "unrated": only the work that
+    // can inherit nothing is.
     expect(findEntriesByFacetFilters(database, {
       entryType: 'comic',
       conditions: [],
       authorIds: [],
       ratingConditions: [{ slotId: entrySlot.id, operator: 'unrated', stars: null }],
       ratingSort: null,
-    }).map((entry) => entry.title)).toEqual([
-      'Author Four',
-      'Big Anthology',
-      'Nothing Rated',
-    ]);
+    }).map((entry) => entry.title)).toEqual(['Big Anthology']);
+  });
+
+  it('filters and sorts by the author’s own class, and by the works summary', () => {
+    // The point of the classes: a work's value on the author's OWN dimension is the author's, so every
+    // work of that author answers the same way; the works summary is the work's own value first and
+    // the author's summary only where the work has none.
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const entrySlot = createRatingSlot(database, { kind: 'entry', entryType: 'comic', name: 'Quality' });
+    const rated = createEntry(database, { title: 'Rated', type: 'comic' });
+    const unrated = createEntry(database, { title: 'Unrated', type: 'comic' });
+    const anthology = createEntry(database, { title: 'Anthology', type: 'comic' });
+    const actor = createProducer(database, { name: 'Actor' });
+    const other = createProducer(database, { name: 'Other' });
+    linkEntryProducer(database, rated.id, actor.id);
+    linkEntryProducer(database, unrated.id, actor.id);
+    for (const producer of [actor, other, createProducer(database, { name: 'Third' }),
+      createProducer(database, { name: 'Fourth' })]) {
+      linkEntryProducer(database, anthology.id, producer.id);
+    }
+    setEntryRating(database, { entryId: rated.id, slotId: entrySlot.id, stars: 4 });
+    const charisma = createProducerRatingSlot(database, {
+      producerId: actor.id, name: 'Charisma', kind: 'author_self',
+    });
+    setProducerRating(database, { producerId: actor.id, slotId: charisma.id, stars: 5 });
+    // The works summary carries the same name as the work dimension, and the actor's summary value is
+    // lower than the rated work's own — so the two classes cannot be confused in the numbers.
+    const summary = listRatingSlots(database, 'producer', 'comic')
+      .find((slot) => slot.name === 'Quality')!;
+    setProducerRating(database, { producerId: actor.id, slotId: summary.id, stars: 3 });
+
+    const filter = (slotId: number, operator: 'gt' | 'unrated', stars = 4) => findEntriesByFacetFilters(
+      database,
+      {
+        entryType: 'comic',
+        conditions: [],
+        authorIds: [],
+        ratingConditions: [{ slotId, operator, stars: operator === 'gt' ? stars : null }],
+        ratingSort: null,
+      },
+    ).map((entry) => entry.title);
+    const sorted = (slotId: number) => findEntriesByFacetFilters(database, {
+      entryType: 'comic',
+      conditions: [],
+      authorIds: [],
+      ratingConditions: [],
+      ratingSort: { slotId, direction: 'desc', applyAuthorRating: false },
+    }).map((entry) => entry.title);
+
+    // The author's own dimension: the author is worth 5, so BOTH of their works pass `> 4` even
+    // though only one of them carries anything itself — and the anthology, with four authors,
+    // answers nothing.
+    expect(filter(charisma.id, 'gt')).toEqual(['Rated', 'Unrated']);
+    expect(filter(charisma.id, 'unrated')).toEqual(['Anthology']);
+
+    // The works summary is not a dimension of its own: a work dimension already reads as its own
+    // value and, where it has none, its Authors' summary — the same numbers, one option.
+    expect(sorted(entrySlot.id)).toEqual(['Rated', 'Unrated', 'Anthology']);
+    // `> 3` separates them: the rated work's own 4 answers, the unrated work's inherited 3 does not.
+    expect(filter(entrySlot.id, 'gt', 3)).toEqual(['Rated']);
+    expect(filter(entrySlot.id, 'gt', 2)).toEqual(['Rated', 'Unrated']);
+    // And it is not the same question as the author's own class: 3 is not > 4.
+    expect(filter(entrySlot.id, 'unrated')).toEqual(['Anthology']);
+    // The summary slot still answers if a remembered filter names it (it is the same question),
+    // which is why the API keeps accepting it even though the bar no longer offers it.
+    expect(sorted(summary.id)).toEqual(['Rated', 'Unrated', 'Anthology']);
+
+    // A slot of another Gallery is still refused, whichever class it is.
+    const foreign = createRatingSlot(database, { kind: 'author_self', entryType: 'manga', name: 'Charisma' });
+    expect(() => filter(foreign.id, 'gt')).toThrow(/does not belong to the Gallery/u);
   });
 
   it('rejects rating conditions pointing at a foreign Gallery', async () => {

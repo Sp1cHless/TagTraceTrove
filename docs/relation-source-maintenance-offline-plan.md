@@ -1242,6 +1242,8 @@ freshness gate；不增加 Android 专用业务模型。
 
 ## 27. Phase C3 — 离线创建 Entry
 
+Implementation status (v26 automated candidate, device unverified): existing-Gallery Entry creation supports initial Content in the immutable create op, plus a separate `entry.content.append` for later rows while the Entry remains pending. The append references the original create op ID and stable Entry UUID; the server requires its successful receipt and appends one UUID-addressed row transactionally. The client persists/projects the append across restarts, checks `offlineEntryContentAppend` on enqueue and replay, and retains applied work until a verified snapshot includes the row. Search's pending card offers append-only editing when its persisted capability/parent state permit. Pending Tag/Author edits, replacement/deletion, full local→numeric route mapping and physical-device acceptance remain outside this v26 slice. The v35 follow-up implements pending Tag add/move/remove as immutable `entry.tags.set` children of the original create, limited to existing cached vocabulary and same-Gallery Facets, with the separate `offlinePendingEntryTags` gate. Its automated release verification passed; pending Authors, new vocabulary/Facet creation, and Content replacement/deletion remain excluded. The subsections below describe the broader C3 design, not a claim that every planned item is shipped.
+
 ### 27.1 Entry identity
 
 - Client 生成 UUID。
@@ -1265,6 +1267,9 @@ freshness gate；不增加 Android 专用业务模型。
 - 可选 cover/preview blobs。
 
 不允许离线创建新 Gallery、复杂 layout、Author/Tag relations 或 Import batch。
+
+后续扩展不是改写首版 create envelope：v35 通过独立 causal `entry.tags.set` 支持 pending Entry 已有缓存 Tag 添加／移动／移除；v36 通过独立 `entry.authors.set` 支持已有缓存 Author 关联／移除，`baseVersion: 0` iff `parentCreateOpId`。v36 要求 global mutation + Entry Author + `offlinePendingEntryAuthors`；搜索缓存 canonical name、选择 stable Producer UID，完整 captured base／desired set，失败／冲突阻断同父 Tag/Author/Content 编辑，按最后 applied desired set 与真实 receipt cursor／newer checksum snapshot 收敛。已执行 756 standard／450 isolated SQL tests、完整构建与 APK 核对；独立只读窄审 PASS，真机／真实多标签页仍 UNVERIFIED。离线新 Author、其他 local-only Producer 关联、新 Tag/Facet、pending Content 替换／删除不属于这两个板块。
+
 
 在开放 C3 前，应先把当前在线多请求 create chain收敛成一个可重试的 server command（metadata/ratings/view-later 原子；media 独立）。
 

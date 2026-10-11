@@ -1,0 +1,16 @@
+{
+  "url": "http://127.0.0.1:8811/work/3.html",
+  "final_url": "http://127.0.0.1:8811/work/3.html",
+  "status": 200,
+  "content_type": "text/html",
+  "documents": [
+    {
+      "name": "page",
+      "format": "markup",
+      "text": "<!DOCTYPE html><html lang=\"zh\"><head>\n<meta charset=\"utf-8\">\n<title>作品三 - MockSite</title>\n<meta property=\"og:title\" content=\"作品三\">\n<meta property=\"og:image\" content=\"http://127.0.0.1:8811/img/cover3.png\">\n<link rel=\"stylesheet\" href=\"/style.css\">\n</head>\n<body>\n<header><a href=\"/\">MockSite 首页</a></header>\n<main>\n  <div class=\"breadcrumb\"><a href=\"/list\">作品列表</a></div>\n  <h1 class=\"work-title\">作品三</h1>\n  <div class=\"work-meta\">作者：<a class=\"author\" href=\"/author/作者丙\">作者丙</a></div>\n  <div class=\"work-tags\">标签：<a class=\"tag\" href=\"/tag/标签A\">标签A</a>\n    <a class=\"tag\" href=\"/tag/标签E\">标签E</a></div>\n  <div class=\"cover-box\"><img class=\"cover\" src=\"/img/cover3.png\" alt=\"作品三封面\"></div>\n  <p class=\"summary\">作品三的简介段落。这一段是较长的自由文本，用来让标题字段不至于只能从 h1 读出。</p>\n  <div class=\"ads\">\n    <img src=\"/img/ad1.png\" alt=\"广告位\">\n    <img src=\"/img/ad2.png\" alt=\"广告位\">\n  </div>\n</main>\n\n\n</body></html>"
+    }
+  ],
+  "notes": [
+    "the network log held no usable JSON response"
+  ]
+}

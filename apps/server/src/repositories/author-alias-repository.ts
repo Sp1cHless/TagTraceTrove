@@ -1,6 +1,6 @@
 import { normalizeTag } from '@t3/shared';
 import type { T3Database } from '../database/connection.js';
-import { upsertTaxonomyAlias } from './taxonomy-repository.js';
+import { taxonomyNameKey, upsertTaxonomyAlias } from './taxonomy-repository.js';
 
 /**
  * Author alias groups: one display name (显示名) plus every tag-name spelling
@@ -95,9 +95,9 @@ export function writeAuthorAliasGroup(
   if (!displayName) throw new Error('author alias display name cannot be empty');
 
   const seen = new Set<string>();
-  const displayNormalized = normalizeTag(displayName);
+  const displayNormalized = taxonomyNameKey(displayName);
   for (const tagName of input.tagNames) {
-    const normalized = normalizeTag(displayForm(tagName));
+    const normalized = taxonomyNameKey(tagName);
     if (!normalized) continue;
     if (normalized === displayNormalized) continue; // display name itself, no mapping needed
     if (seen.has(normalized)) {
@@ -111,7 +111,7 @@ export function writeAuthorAliasGroup(
 
   database.transaction(() => {
     for (const tagName of input.tagNames) {
-      const normalized = normalizeTag(displayForm(tagName));
+      const normalized = taxonomyNameKey(tagName);
       if (!normalized || normalized === displayNormalized || !seen.has(normalized)) continue;
       upsertTaxonomyAlias(database, {
         vocabulary: 'producer',

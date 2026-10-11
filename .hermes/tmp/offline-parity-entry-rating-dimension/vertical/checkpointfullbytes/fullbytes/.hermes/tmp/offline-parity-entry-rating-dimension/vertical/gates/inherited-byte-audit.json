@@ -1,0 +1,10 @@
+{
+  "baselineCount": 1224,
+  "changes": [
+    "apps/server/src/http/app.ts",
+    "apps/web/src/api/gallery.ts",
+    "apps/web/src/offline/offline-api.ts",
+    "packages/shared/src/schemas/sync.ts"
+  ],
+  "outsideOwned": []
+}

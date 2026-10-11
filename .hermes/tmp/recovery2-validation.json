@@ -1,0 +1,11 @@
+{
+  "candidate": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\recovery2-snapshot-candidate.ts",
+  "syntax": [],
+  "diagnostics": [
+    {
+      "line": 4499,
+      "code": 2322,
+      "message": "Type '(entryId: number, input: { facetId: number; name: string; }) => Promise<void>' is not assignable to type '(entryId: number, input: { facetId: number; name: string; }) => Promise<{ tagId: number; name: string; normalizedName: string; facetId: number; } | null>'.   Type 'Promise<void>' is not assignable to type 'Promise<{ tagId: number; name: string; normalizedName: string; facetId: number; } | null>'.     Type 'void' is not assignable to type '{ tagId: number; name: string; normalizedName: string; facetId: number; } | null'."
+    }
+  ]
+}

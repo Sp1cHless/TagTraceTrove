@@ -266,11 +266,11 @@ export function executeProducerMerges(
         // Works the keeper already curates stay in the keeper's own directory;
         // remaining memberships (under moved directories) transfer.
         const dropDuplicateMemberships = database.prepare(`
-          DELETE FROM author_directory_entries
-          WHERE producer_id = ?
+          DELETE FROM author_directory_entries AS absorbed
+          WHERE absorbed.producer_id = ?
             AND EXISTS (
-              SELECT 1 FROM author_directory_entries
-              WHERE producer_id = ? AND entry_id = author_directory_entries.entry_id
+              SELECT 1 FROM author_directory_entries AS keeper
+              WHERE keeper.producer_id = ? AND keeper.entry_id = absorbed.entry_id
             )
         `);
         dropDuplicateMemberships.run(other.id, keeper.id);
@@ -348,6 +348,9 @@ export function executeProducerMerges(
         execution.ratingsRelinked += ratingsRelinked.changes;
         database.prepare('DELETE FROM producer_rating_values WHERE producer_id = ?').run(other.id);
 
+        // The Directory set is its own sync owner. Transfer its data above, then
+        // tombstone the absorbed set before deleting the Producer.
+        database.prepare('DELETE FROM author_directory_sets WHERE producer_id = ?').run(other.id);
         database.prepare('DELETE FROM producers WHERE id = ?').run(other.id);
         execution.deletedProducers += 1;
       }

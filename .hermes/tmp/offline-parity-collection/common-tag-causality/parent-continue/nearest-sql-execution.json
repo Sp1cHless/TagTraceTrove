@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "--config",
+    "vitest.integration.config.ts",
+    "apps/web/tests/offline-author-parity.integration.test.ts",
+    "apps/web/tests/offline-entry-delete.integration.test.ts",
+    "apps/server/tests/integration/author-resource-migration.integration.test.ts",
+    "apps/server/tests/integration/collection-repository.integration.test.ts",
+    "apps/server/tests/integration/entry-tags-sync.integration.test.ts",
+    "apps/server/tests/integration/pending-entry-tags.integration.test.ts",
+    "--maxWorkers=2",
+    "--testTimeout=30000",
+    "--reporter=json",
+    "--outputFile=D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\common-tag-causality\\parent-continue\\nearest-sql.json"
+  ],
+  "exitCode": 0
+}

@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.speechless666.t3.spike.NativeCollectionTimelineJvmTest" tests="4" skipped="0" failures="4" errors="0" timestamp="2026-10-10T02:38:52.672Z" hostname="LAPTOP-70QV4MNN" time="68.43">
+  <properties/>
+  <testcase name="c1" classname="com.speechless666.t3.spike.NativeCollectionTimelineJvmTest" time="19.922">
+    <failure message="org.junit.ComparisonFailure: {&quot;opId&quot;:&quot;10bdc214-4628-471d-96c4-09888af86666&quot;,&quot;clientId&quot;:&quot;5db7c374-44ef-4d03-a9ee-b91b6a14a1c1&quot;,&quot;libraryId&quot;:&quot;b8ece44b-f9bf-46d6-a675-a71783cadc34&quot;,&quot;syncEpoch&quot;:&quot;6d693299-2aaa-45f4-88e9-31886ef4986c&quot;,&quot;entityUid&quot;:&quot;6088b9c1-d6e1-479b-9454-8682f2c18cd5&quot;,&quot;clientCreatedAt&quot;:&quot;2026-10-10T02:38:55.299Z&quot;,&quot;entityKind&quot;:&quot;collection&quot;,&quot;operationKind&quot;:&quot;collection.delete&quot;,&quot;baseVersion&quot;:2,&quot;baseValues&quot;:{&quot;kind&quot;:&quot;entry&quot;,&quot;parentUid&quot;:null,&quot;children&quot;:[]},&quot;payload&quot;:{}} expected:&lt;[complete]d&gt; but was:&lt;[hel]d&gt;" type="org.junit.ComparisonFailure">org.junit.ComparisonFailure: {&quot;opId&quot;:&quot;10bdc214-4628-471d-96c4-09888af86666&quot;,&quot;clientId&quot;:&quot;5db7c374-44ef-4d03-a9ee-b91b6a14a1c1&quot;,&quot;libraryId&quot;:&quot;b8ece44b-f9bf-46d6-a675-a71783cadc34&quot;,&quot;syncEpoch&quot;:&quot;6d693299-2aaa-45f4-88e9-31886ef4986c&quot;,&quot;entityUid&quot;:&quot;6088b9c1-d6e1-479b-9454-8682f2c18cd5&quot;,&quot;clientCreatedAt&quot;:&quot;2026-10-10T02:38:55.299Z&quot;,&quot;entityKind&quot;:&quot;collection&quot;,&quot;operationKind&quot;:&quot;collection.delete&quot;,&quot;baseVersion&quot;:2,&quot;baseValues&quot;:{&quot;kind&quot;:&quot;entry&quot;,&quot;parentUid&quot;:null,&quot;children&quot;:[]},&quot;payload&quot;:{}} expected:&lt;[complete]d&gt; but was:&lt;[hel]d&gt;
+	at org.junit.Assert.assertEquals(Assert.java:117)
+	at com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.phase(NativeCollectionTimelineJvmTest.java:46)
+	at com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.capCell(NativeCollectionTimelineJvmTest.java:68)
+	at com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.c1(NativeCollectionTimelineJvmTest.java:73)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.robolectric.RobolectricTestRunner$HelperTestRunner$1.evaluate(RobolectricTestRunner.java:502)
+	at org.robolectric.internal.SandboxTestRunner$2.lambda$evaluate$2(SandboxTestRunner.java:285)
+	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:104)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+</failure>
+  </testcase>
+  <testcase name="c2" classname="com.speechless666.t3.spike.NativeCollectionTimelineJvmTest" time="16.303">
+    <failure message="org.junit.ComparisonFailure: {&quot;opId&quot;:&quot;f3d97f77-2577-456c-8f04-42b2470875b4&quot;,&quot;clientId&quot;:&quot;7160572e-23d0-42e7-88eb-f61c1d36d930&quot;,&quot;libraryId&quot;:&quot;d99ebf54-000e-40e6-8769-f77ab5fcd245&quot;,&quot;syncEpoch&quot;:&quot;288c7cfa-f875-47e8-8cad-3cc5ee53b060&quot;,&quot;entityUid&quot;:&quot;4c0bc330-d158-491e-832d-979ae2f7b8d1&quot;,&quot;clientCreatedAt&quot;:&quot;2026-10-10T02:39:13.615Z&quot;,&quot;entityKind&quot;:&quot;collection&quot;,&quot;operationKind&quot;:&quot;collection.common-tag.add&quot;,&quot;baseVersion&quot;:2,&quot;baseValues&quot;:{&quot;scope&quot;:{&quot;kind&quot;:&quot;entry&quot;,&quot;parentUid&quot;:null,&quot;children&quot;:[]},&quot;members&quot;:[{&quot;syncUid&quot;:&quot;90b4875d-c26f-4481-b98b-bd651ef266a4&quot;,&quot;syncVersion&quot;:1,&quot;entryType&quot;:&quot;Comic&quot;,&quot;present&quot;:false}],&quot;types&quot;:[{&quot;entryType&quot;:&quot;Comic&quot;,&quot;layoutUid&quot;:&quot;87669286-9a07-41bb-a370-ce06ad3a9f04&quot;,&quot;layoutVersion&quot;:3,&quot;facetId&quot;:2,&quot;facetUid&quot;:&quot;4dd2bf39-adeb-4a27-a78b-45b5e7d04808&quot;,&quot;sectionUid&quot;:&quot;3ae09c13-b80b-4d87-a8dc-72fc18cbf80d&quot;,&quot;placements&quot;:[]}],&quot;tag&quot;:null},&quot;payload&quot;:{&quot;name&quot;:&quot;Native tag&quot;,&quot;tagUid&quot;:&quot;cba100ef-e8c1-447a-993d-872f59d7a009&quot;}} expected:&lt;[complete]d&gt; but was:&lt;[hel]d&gt;" type="org.junit.ComparisonFailure">org.junit.ComparisonFailure: {&quot;opId&quot;:&quot;f3d97f77-2577-456c-8f04-42b2470875b4&quot;,&quot;clientId&quot;:&quot;7160572e-23d0-42e7-88eb-f61c1d36d930&quot;,&quot;libraryId&quot;:&quot;d99ebf54-000e-40e6-8769-f77ab5fcd245&quot;,&quot;syncEpoch&quot;:&quot;288c7cfa-f875-47e8-8cad-3cc5ee53b060&quot;,&quot;entityUid&quot;:&quot;4c0bc330-d158-491e-832d-979ae2f7b8d1&quot;,&quot;clientCreatedAt&quot;:&quot;2026-10-10T02:39:13.615Z&quot;,&quot;entityKind&quot;:&quot;collection&quot;,&quot;operationKind&quot;:&quot;collection.common-tag.add&quot;,&quot;baseVersion&quot;:2,&quot;baseValues&quot;:{&quot;scope&quot;:{&quot;kind&quot;:&quot;entry&quot;,&quot;parentUid&quot;:null,&quot;children&quot;:[]},&quot;members&quot;:[{&quot;syncUid&quot;:&quot;90b4875d-c26f-4481-b98b-bd651ef266a4&quot;,&quot;syncVersion&quot;:1,&quot;entryType&quot;:&quot;Comic&quot;,&quot;present&quot;:false}],&quot;types&quot;:[{&quot;entryType&quot;:&quot;Comic&quot;,&quot;layoutUid&quot;:&quot;87669286-9a07-41bb-a370-ce06ad3a9f04&quot;,&quot;layoutVersion&quot;:3,&quot;facetId&quot;:2,&quot;facetUid&quot;:&quot;4dd2bf39-adeb-4a27-a78b-45b5e7d04808&quot;,&quot;sectionUid&quot;:&quot;3ae09c13-b80b-4d87-a8dc-72fc18cbf80d&quot;,&quot;placements&quot;:[]}],&quot;tag&quot;:null},&quot;payload&quot;:{&quot;name&quot;:&quot;Native tag&quot;,&quot;tagUid&quot;:&quot;cba100ef-e8c1-447a-993d-872f59d7a009&quot;}} expected:&lt;[complete]d&gt; but was:&lt;[hel]d&gt;
+	at org.junit.Assert.assertEquals(Assert.java:117)
+	at com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.phase(NativeCollectionTimelineJvmTest.java:46)
+	at com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.capCell(NativeCollectionTimelineJvmTest.java:68)
+	at com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.c2(NativeCollectionTimelineJvmTest.java:74)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.robolectric.RobolectricTestRunner$HelperTestRunner$1.evaluate(RobolectricTestRunner.java:502)
+	at org.robolectric.internal.SandboxTestRunner$2.lambda$evaluate$2(SandboxTestRunner.java:285)
+	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:104)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+</failure>
+  </testcase>
+  <testcase name="c3" classname="com.speechless666.t3.spike.NativeCollectionTimelineJvmTest" time="16.175">
+    <failure message="org.junit.ComparisonFailure: {&quot;opId&quot;:&quot;0282401c-846d-4cd6-998c-c25418bf9341&quot;,&quot;clientId&quot;:&quot;2c4ed524-c7ec-4443-8d33-7966617020f8&quot;,&quot;libraryId&quot;:&quot;035292ca-2d18-4620-9818-01da6a95bc53&quot;,&quot;syncEpoch&quot;:&quot;49709ed9-afe0-4a6d-8261-c2ce5d7e65ac&quot;,&quot;entityUid&quot;:&quot;4a50d0d7-e627-4294-9a54-8730385141d0&quot;,&quot;clientCreatedAt&quot;:&quot;2026-10-10T02:39:29.907Z&quot;,&quot;entityKind&quot;:&quot;collection&quot;,&quot;operationKind&quot;:&quot;collection.common-tag.add&quot;,&quot;baseVersion&quot;:2,&quot;baseValues&quot;:{&quot;scope&quot;:{&quot;kind&quot;:&quot;entry&quot;,&quot;parentUid&quot;:null,&quot;children&quot;:[]},&quot;members&quot;:[{&quot;syncUid&quot;:&quot;20dad762-96fd-4160-b1d0-d3610b981555&quot;,&quot;syncVersion&quot;:1,&quot;entryType&quot;:&quot;Comic&quot;,&quot;present&quot;:false}],&quot;types&quot;:[{&quot;entryType&quot;:&quot;Comic&quot;,&quot;layoutUid&quot;:&quot;63af4d1e-a1f8-4d8d-8181-0b98ed37bea8&quot;,&quot;layoutVersion&quot;:3,&quot;facetId&quot;:2,&quot;facetUid&quot;:&quot;c1a09921-9189-4dc3-b19a-771faecb16d2&quot;,&quot;sectionUid&quot;:&quot;bc596360-f811-4c97-876c-560ae4fb63a9&quot;,&quot;placements&quot;:[]}],&quot;tag&quot;:null},&quot;payload&quot;:{&quot;name&quot;:&quot;Native tag&quot;,&quot;tagUid&quot;:&quot;9a42ed87-315c-4568-b841-752985600a0b&quot;}} expected:&lt;[complete]d&gt; but was:&lt;[hel]d&gt;" type="org.junit.ComparisonFailure">org.junit.ComparisonFailure: {&quot;opId&quot;:&quot;0282401c-846d-4cd6-998c-c25418bf9341&quot;,&quot;clientId&quot;:&quot;2c4ed524-c7ec-4443-8d33-7966617020f8&quot;,&quot;libraryId&quot;:&quot;035292ca-2d18-4620-9818-01da6a95bc53&quot;,&quot;syncEpoch&quot;:&quot;49709ed9-afe0-4a6d-8261-c2ce5d7e65ac&quot;,&quot;entityUid&quot;:&quot;4a50d0d7-e627-4294-9a54-8730385141d0&quot;,&quot;clientCreatedAt&quot;:&quot;2026-10-10T02:39:29.907Z&quot;,&quot;entityKind&quot;:&quot;collection&quot;,&quot;operationKind&quot;:&quot;collection.common-tag.add&quot;,&quot;baseVersion&quot;:2,&quot;baseValues&quot;:{&quot;scope&quot;:{&quot;kind&quot;:&quot;entry&quot;,&quot;parentUid&quot;:null,&quot;children&quot;:[]},&quot;members&quot;:[{&quot;syncUid&quot;:&quot;20dad762-96fd-4160-b1d0-d3610b981555&quot;,&quot;syncVersion&quot;:1,&quot;entryType&quot;:&quot;Comic&quot;,&quot;present&quot;:false}],&quot;types&quot;:[{&quot;entryType&quot;:&quot;Comic&quot;,&quot;layoutUid&quot;:&quot;63af4d1e-a1f8-4d8d-8181-0b98ed37bea8&quot;,&quot;layoutVersion&quot;:3,&quot;facetId&quot;:2,&quot;facetUid&quot;:&quot;c1a09921-9189-4dc3-b19a-771faecb16d2&quot;,&quot;sectionUid&quot;:&quot;bc596360-f811-4c97-876c-560ae4fb63a9&quot;,&quot;placements&quot;:[]}],&quot;tag&quot;:null},&quot;payload&quot;:{&quot;name&quot;:&quot;Native tag&quot;,&quot;tagUid&quot;:&quot;9a42ed87-315c-4568-b841-752985600a0b&quot;}} expected:&lt;[complete]d&gt; but was:&lt;[hel]d&gt;
+	at org.junit.Assert.assertEquals(Assert.java:117)
+	at com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.phase(NativeCollectionTimelineJvmTest.java:46)
+	at com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.c3(NativeCollectionTimelineJvmTest.java:85)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.robolectric.RobolectricTestRunner$HelperTestRunner$1.evaluate(RobolectricTestRunner.java:502)
+	at org.robolectric.internal.SandboxTestRunner$2.lambda$evaluate$2(SandboxTestRunner.java:285)
+	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:104)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+</failure>
+  </testcase>
+  <testcase name="c4" classname="com.speechless666.t3.spike.NativeCollectionTimelineJvmTest" time="16.03">
+    <failure message="org.junit.ComparisonFailure: {&quot;opId&quot;:&quot;c2496d35-e280-4adb-ab82-25ee3a33f4e6&quot;,&quot;clientId&quot;:&quot;d7852b3d-5025-4ecc-9ed7-68cf66eff160&quot;,&quot;libraryId&quot;:&quot;dc904163-92e2-4d74-95b2-9fb20922a5d6&quot;,&quot;syncEpoch&quot;:&quot;74963886-f201-4129-89d3-e60bb8f48366&quot;,&quot;entityUid&quot;:&quot;ad251537-f790-4c74-9734-6adcef4436f1&quot;,&quot;clientCreatedAt&quot;:&quot;2026-10-10T02:39:45.974Z&quot;,&quot;entityKind&quot;:&quot;collection&quot;,&quot;operationKind&quot;:&quot;collection.common-tag.add&quot;,&quot;baseVersion&quot;:2,&quot;baseValues&quot;:{&quot;scope&quot;:{&quot;kind&quot;:&quot;entry&quot;,&quot;parentUid&quot;:null,&quot;children&quot;:[]},&quot;members&quot;:[{&quot;syncUid&quot;:&quot;2e7c9ef1-02a6-4ad5-94fe-6e9c4ab1e37b&quot;,&quot;syncVersion&quot;:1,&quot;entryType&quot;:&quot;Comic&quot;,&quot;present&quot;:false}],&quot;types&quot;:[{&quot;entryType&quot;:&quot;Comic&quot;,&quot;layoutUid&quot;:&quot;a59fc17e-a54b-4dfe-8895-7c0be939bf58&quot;,&quot;layoutVersion&quot;:3,&quot;facetId&quot;:2,&quot;facetUid&quot;:&quot;3cef00e2-f9c4-4988-a416-a429c56336d6&quot;,&quot;sectionUid&quot;:&quot;ef0cfdc8-a72c-462d-8ea8-2a79b718ec14&quot;,&quot;placements&quot;:[]}],&quot;tag&quot;:null},&quot;payload&quot;:{&quot;name&quot;:&quot;Native tag&quot;,&quot;tagUid&quot;:&quot;150b2d1f-afb3-48c3-b9ba-76a62ab8b1b1&quot;}} expected:&lt;[hel]d&gt; but was:&lt;[complete]d&gt;" type="org.junit.ComparisonFailure">org.junit.ComparisonFailure: {&quot;opId&quot;:&quot;c2496d35-e280-4adb-ab82-25ee3a33f4e6&quot;,&quot;clientId&quot;:&quot;d7852b3d-5025-4ecc-9ed7-68cf66eff160&quot;,&quot;libraryId&quot;:&quot;dc904163-92e2-4d74-95b2-9fb20922a5d6&quot;,&quot;syncEpoch&quot;:&quot;74963886-f201-4129-89d3-e60bb8f48366&quot;,&quot;entityUid&quot;:&quot;ad251537-f790-4c74-9734-6adcef4436f1&quot;,&quot;clientCreatedAt&quot;:&quot;2026-10-10T02:39:45.974Z&quot;,&quot;entityKind&quot;:&quot;collection&quot;,&quot;operationKind&quot;:&quot;collection.common-tag.add&quot;,&quot;baseVersion&quot;:2,&quot;baseValues&quot;:{&quot;scope&quot;:{&quot;kind&quot;:&quot;entry&quot;,&quot;parentUid&quot;:null,&quot;children&quot;:[]},&quot;members&quot;:[{&quot;syncUid&quot;:&quot;2e7c9ef1-02a6-4ad5-94fe-6e9c4ab1e37b&quot;,&quot;syncVersion&quot;:1,&quot;entryType&quot;:&quot;Comic&quot;,&quot;present&quot;:false}],&quot;types&quot;:[{&quot;entryType&quot;:&quot;Comic&quot;,&quot;layoutUid&quot;:&quot;a59fc17e-a54b-4dfe-8895-7c0be939bf58&quot;,&quot;layoutVersion&quot;:3,&quot;facetId&quot;:2,&quot;facetUid&quot;:&quot;3cef00e2-f9c4-4988-a416-a429c56336d6&quot;,&quot;sectionUid&quot;:&quot;ef0cfdc8-a72c-462d-8ea8-2a79b718ec14&quot;,&quot;placements&quot;:[]}],&quot;tag&quot;:null},&quot;payload&quot;:{&quot;name&quot;:&quot;Native tag&quot;,&quot;tagUid&quot;:&quot;150b2d1f-afb3-48c3-b9ba-76a62ab8b1b1&quot;}} expected:&lt;[hel]d&gt; but was:&lt;[complete]d&gt;
+	at org.junit.Assert.assertEquals(Assert.java:117)
+	at com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.phase(NativeCollectionTimelineJvmTest.java:46)
+	at com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.c4(NativeCollectionTimelineJvmTest.java:97)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.robolectric.RobolectricTestRunner$HelperTestRunner$1.evaluate(RobolectricTestRunner.java:502)
+	at org.robolectric.internal.SandboxTestRunner$2.lambda$evaluate$2(SandboxTestRunner.java:285)
+	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:104)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+</failure>
+  </testcase>
+  <system-out><![CDATA[CAP_HOLD delete offlineMutations absent=true
+CAP_HOLD delete offlineMutations absent=false
+CAP_HOLD delete offlineCollectionManagement absent=true
+CAP_HOLD delete offlineCollectionManagement absent=false
+CAP_HOLD delete offlineCollectionDelete absent=true
+CAP_HOLD delete offlineCollectionDelete absent=false
+VALID_RETRY delete {"opId":"10bdc214-4628-471d-96c4-09888af86666","uploadId":null,"metadata":null,"flags":["offlineMutations","offlineCollectionManagement","offlineCollectionDelete"],"phase":"held","replay":"{\"opId\":\"10bdc214-4628-471d-96c4-09888af86666\",\"status\":\"applied\",\"resourceVersion\":3,\"serverSeq\":1,\"entityId\":1,\"collectionDeleteJournal\":[{\"id\":1,\"syncUid\":\"6088b9c1-d6e1-479b-9454-8682f2c18cd5\",\"resourceVersion\":3,\"serverSeq\":1}]}","mediaResult":null,"error":"Mutation failed\/conflicted; successors held"}
+CAP_HOLD bulk offlineMutations absent=true
+CAP_HOLD bulk offlineMutations absent=false
+CAP_HOLD bulk offlineCollectionManagement absent=true
+CAP_HOLD bulk offlineCollectionManagement absent=false
+CAP_HOLD bulk offlineCollectionCommonTag absent=true
+CAP_HOLD bulk offlineCollectionCommonTag absent=false
+VALID_RETRY bulk {"opId":"f3d97f77-2577-456c-8f04-42b2470875b4","uploadId":null,"metadata":null,"flags":["offlineMutations","offlineCollectionManagement","offlineCollectionCommonTag"],"phase":"held","replay":"{\"opId\":\"f3d97f77-2577-456c-8f04-42b2470875b4\",\"status\":\"applied\",\"resourceVersion\":3,\"serverSeq\":3,\"entityId\":1,\"collectionCommonTag\":{\"tagId\":1,\"tagUid\":\"cba100ef-e8c1-447a-993d-872f59d7a009\",\"entriesAffected\":1,\"alreadyPresent\":0,\"skipped\":0,\"journal\":[{\"entityKind\":\"entry\",\"id\":1,\"syncUid\":\"90b4875d-c26f-4481-b98b-bd651ef266a4\",\"resourceVersion\":2,\"serverSeq\":2},{\"entityKind\":\"collection\",\"id\":1,\"syncUid\":\"4c0bc330-d158-491e-832d-979ae2f7b8d1\",\"resourceVersion\":3,\"serverSeq\":3}]}}","mediaResult":null,"error":"Mutation failed\/conflicted; successors held"}
+CHAIN_BULK {"opId":"0282401c-846d-4cd6-998c-c25418bf9341","uploadId":null,"metadata":null,"flags":["offlineMutations","offlineCollectionManagement","offlineCollectionCommonTag"],"phase":"held","replay":"{\"opId\":\"0282401c-846d-4cd6-998c-c25418bf9341\",\"status\":\"applied\",\"resourceVersion\":3,\"serverSeq\":6,\"entityId\":1,\"collectionCommonTag\":{\"tagId\":1,\"tagUid\":\"9a42ed87-315c-4568-b841-752985600a0b\",\"entriesAffected\":1,\"alreadyPresent\":0,\"skipped\":0,\"journal\":[{\"entityKind\":\"entry\",\"id\":1,\"syncUid\":\"20dad762-96fd-4160-b1d0-d3610b981555\",\"resourceVersion\":2,\"serverSeq\":5},{\"entityKind\":\"collection\",\"id\":1,\"syncUid\":\"4a50d0d7-e627-4294-9a54-8730385141d0\",\"resourceVersion\":3,\"serverSeq\":6}]}}","mediaResult":null,"error":"Mutation failed\/conflicted; successors held"}
+FAULT foreign {"opId":"c2496d35-e280-4adb-ab82-25ee3a33f4e6","uploadId":null,"metadata":null,"flags":["offlineMutations","offlineCollectionManagement","offlineCollectionCommonTag"],"phase":"held","replay":"{\"opId\":\"12043326-4cf3-4e45-88fc-290ad23b548f\",\"status\":\"applied\",\"resourceVersion\":3,\"serverSeq\":3,\"entityId\":1,\"collectionCommonTag\":{\"tagId\":1,\"tagUid\":\"150b2d1f-afb3-48c3-b9ba-76a62ab8b1b1\",\"entriesAffected\":1,\"alreadyPresent\":0,\"skipped\":0,\"journal\":[{\"entityKind\":\"entry\",\"id\":1,\"syncUid\":\"2e7c9ef1-02a6-4ad5-94fe-6e9c4ab1e37b\",\"resourceVersion\":2,\"serverSeq\":2},{\"entityKind\":\"collection\",\"id\":1,\"syncUid\":\"ad251537-f790-4c74-9734-6adcef4436f1\",\"resourceVersion\":3,\"serverSeq\":3}]}}","mediaResult":null,"error":"Mutation failed\/conflicted; successors held"}
+FAULT shape {"opId":"c2496d35-e280-4adb-ab82-25ee3a33f4e6","uploadId":null,"metadata":null,"flags":["offlineMutations","offlineCollectionManagement","offlineCollectionCommonTag"],"phase":"completed","replay":"{\"opId\":\"c2496d35-e280-4adb-ab82-25ee3a33f4e6\",\"status\":\"applied\",\"resourceVersion\":3,\"serverSeq\":3,\"entityId\":1}","mediaResult":null,"error":null}
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

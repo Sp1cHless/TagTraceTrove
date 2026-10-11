@@ -1,0 +1,121 @@
+# Current project boundary
+
+## Active ordinary-page offline extension — supersedes old phase exclusions
+
+User authorized continuous sequential implementation of the filtered ordinary-page backlog; no per-feature phone acceptance pauses. Advanced functions/siteprobe Import excluded; ordinary Quick included. Board: `.hermes/artifacts/offline-parity-implementation-board.md`. Entry-delete known matrix is AUTOMATED GREEN: 22 focused, 1237 default, 694 integration, typecheck/affected lint/diff and unchanged online-no-copy production probe passed. Fullbytes checkpoint `.hermes/tmp/offline-parity-first-tranche/parent-stage/checkpoint/manifest.json` (18 files). Parent completed repairs after deleg_34cb640c stopped on provider HTTP429. Current sole production/test writer is deleg_d34b6a30. User confirmed the app-performance writer completed and released ownership; parent rechecked all27 STOP checkpoint files against live bytes, with no further drift. Adopt released GalleryApp/gallery-app tests and preserve v46 transport plus v45 media/cache optimizations; never restore their old hashes. Resume at probe serverBuild argument and three rollback beforeJournal/beforeSequence declarations, then current complete source gates and a fresh fullbytes checkpoint. Author02 remains WORKING; remaining negative/restore/connected/native cells open, no03 and no APK/deployment. Parent owns operational docs and reads production/tests only; unexpected renewed source/output overlap stops work. Native seed log is historical successful execution without archived suite/count; limited fresh seed JVM proof, if executed under exclusive outputs, must be archived immediately and does not close gap7 Worker timelines.
+
+Formal DB/assets/default services remain protected, no deployment/git side effects, one writer and full-byte/SHA-guarded targeted patches. Physical-device items grouped and UNVERIFIED; Delivered artifact sections below are release evidence, not proof of evolving feature source. Old C0–C3 exclusions below are historical and do not override this new explicit authorization.
+
+
+## v46 Transport latency — authoritative current status
+
+研究全文见 `docs/app-online-ui-latency-study.md`。在线模式的卡顿与「先显示 Home 再跳进 entry / 字段一个个出现」不在网络或服务端：桌面实测配对监听器**全新连接 + TLS 握手 + 取响应 7–11 ms、复用连接 0.24 ms**，而同一读在手机上实测 143–413 ms。四个成本压在**每一个**请求上：`PairingState.verify()` 自己就是一次 `GET /api/sync/capabilities`（每个请求前都调，WebView 子资源拦截器里每张图再调一次）、`PairingVault.load()` 每次都走 Android Keystore 解密、`PinnedLanTransport` 每个请求都新建 OkHttpClient + SSLContext（无连接复用）、所有请求共用一条单线程而媒体预载（v45 后快 90 倍）一直占着它。`openEntry` 先 await 三个请求才设置 Entry，而 `isHomeView` 的定义就是「没有 Entry」，所以延迟表现为「先 Home」。
+
+仅原生改动，无服务端/schema/web 改动：①已解密配对状态按存储密文缓存（重配对/清除即失效，跨进程成立）；②读请求不再自付一次身份往返（请求本身带 token，服务端才是权威，被撤销的设备在该请求上直接 401），写请求仍先严格确认，且 `verify()` 改为**独占新连接**（换证书会在握手时被拒）；③读客户端池化连接并对「服务端已关闭的空闲连接」重试一次，写客户端保持不池化、不重试（每次写重新校验证书）；④读走 4 线程池，写保持原串行通道不变。预期：单次读 250–700ms → 10–30ms。
+
+门槛：typecheck（server 包当前带另一路在改的错误，web 干净）、lint、web build、1239/1239 web 单测，以及原生 13 个 JVM 测试类逐类 fork 全过（含新增的 `repeatedReadsShareOnePinnedConnectionPerPool`）。症状 2（切出再回来像重载）**尚未证实**：原生与 web 都没有「恢复时重载已渲染页面」的路径（web 只在退役旧 PWA worker 时重载一次且带 session 守卫；原生 `onResume` 的 8 秒看门狗只在 URL 为空白时补载），剩下最可能的解释是 Android 在后台回收 WebView 渲染进程 —— 待设备用 `performance.timeOrigin` 记号 + `dumpsys meminfo` 复测。
+
+**真机实测（v46 装机后，正式库）**：打开 entry 由 **581ms 降到 129/213/132ms**（后台有媒体抓取时 574ms → 100/140ms），`openEntry` 的三个请求由「第 3 个 301.9ms 才发出」变成 **6.7ms 内并发发出**，单次请求稳态 11–16ms（首个新建连接付一次 ~100ms 握手）。主因是每次读都重做整份 8.85MB 快照的 zod 投影（约 200–300ms、被 65 处调用，且 `getEntry` 先投影再发请求）；按 revision + activeGeneration 指针缓存投影后消失。**症状 2（切出再回来像重载）在三种场景下都没有复现**（HOME 后台 25s、真切浏览器 45s、240 张图压力下后台 30s：进程/`timeOrigin`/视图全部保持），故未加「恢复上次视图」；探针固化在 `spikes/001-android-webview-shell/device-probes/`。
+
+APK `spikes/001-android-webview-shell/T3-v46-transport-latency.apk`，versionCode46，`0.0.46-c3-transport-latency`，SHA256 `1e3360cc60d9979f1296909dfe520da0ae1097f67b95718f3e34eff8266a7c7c`（同 versionCode 就地重建：`edf04bfc3e98a87fffca1cf0f894cd1561cc7e11f1d1f0d78754e79d8d9ad347` → `8cbacd1046f7744f873c2759ca26a90d039336c11330fe28e40561ae3b4bf7b9` → 本次）。包内 Web 字节／marker 一致，签名者与 v43–v45 相同；装机后 `adb pull` 的 base.apk 与本地文件 SHA256 一致。
+
+## v45 Media cache sharding — historical frozen artifact
+
+Root cause measured in the installed app's own WebView through adb/CDP: a CacheStorage *write* is charged for what the bucket already holds. A `put` cost 4–15 ms in a bucket of up to 4,000 entries (105 MB) but 10.2–12.7 s in the one holding 11,007 entries (195 MB) — per-entry `delete` was just as slow (12.0–12.3 s) — while a keyed `match` stayed at 1 ms at every size. The media preload wrote every address into that one bucket, so a library download crawled: measured 4.9 cache entries/min ≈ 1.6 images/min on the phone.
+
+Three client-side changes; no server, schema or native change.
+1. `offline/cache-names.ts`: media addresses spread over 256 buckets by FNV-1a hash (`t3-offline-media-v1-s<n>`); the pre-shard bucket stays readable.
+2. `offline/offline-media.ts`: one-time `reshardLegacyMediaCache` copies the pre-shard bucket's entries into their address buckets (bytes copied, never re-downloaded) and then drops it whole; readers keep falling back to it until then. It runs at every start inside `startMediaPreload`, so an installed copy upgrades itself on the next launch.
+3. `offline/offline-media-task.ts`: the walk's `isCurrent` guard compares the tiny `activeGeneration` meta pointer instead of rebuilding the snapshot — `readActiveSnapshot` → `captureSnapshot` re-parsed the whole (9.9 MB) library on every media reference, which left the first minutes of every run idle.
+
+Device (WGM77LVKD6RW9XZX, formal library `0f4ab6e4`, schema 41): the migration carried 11,056 entries in ~2.5 min with no re-download, then the shards held exactly 11,056 and the pre-shard bucket was gone. Download rate 1.6 → 35 images/min with 1+2, → 147 images/min with 3 (2,160 cache entries in 293 s ≈ 0.4 s per image, equal to the measured fetch floor of ~0.4 s). Read/write cost, the migration and the pre-shard fallback are pinned by 15 tests in `apps/web/tests/offline-media-cache-shards.test.ts`. Gates: 1237/1237 default, 686/686 isolated integration, typecheck/lint/build PASS.
+
+APK `spikes/001-android-webview-shell/T3-v45-media-cache-shards.apk`, versionCode45, `0.0.45-c3-media-cache-shards`, SHA256 `57de1984884dc82d53dc58487a70cfa812c4d728c717ac457f5ce5b6acb4b45b` (the first build, `98e74e4d94b74680577d414a73af2e1d979efc800c33658a1e6f70a837d7ef60`, carried changes 1+2 only and was installed and measured; change 3 was rebuilt in place at the same versionCode). Packaged Web bytes/marker match, signer equals v43/v44, installed over the app with data preserved (IndexedDB, Outbox and the 195 MB media cache), and the pulled `base.apk` SHA-256 equals the local file. Phone touch/IME behavior beyond those CDP numbers remains UNVERIFIED. No formal DB/assets/migration/server restart/git side effects.
+
+## v44 Advanced functions layout — historical frozen artifact
+
+Tags, Source maintenance, Offline library right overflow repaired in three scoped CSS sections only. No script/template/function/data/native change. Nested min-content and intrinsic file/input widths fixed, long tokens wrap; container-relative breakpoints preserve wide desktop forms. Actual GalleryApp Settings/Advanced functions, populated/expanded/editing states: parent independently repeated30/30 en/zh360/390/430/768/1440 cases, measured visible text Range and controls against card inner bounds, card against viewport. Parent visually inspected all three360 screenshots. Native/restore/API fixture data are simulation, not sync/plugin proof.
+
+497 source/test/config bytes verified; only deliberate release identity changed afterward. Final1219/1219 default,672/672 integration,60/60 native JVM, all typechecks/full lint/diff/Web build/prepare/copy/assemble/identity tests PASS. First integration671/672 snapshot delta-payload test failure retained; unchanged focused/full retry PASS, no unrelated source repair or guessed cause.
+
+APK `spikes/001-android-webview-shell/T3-v44-advanced-layout.apk`, versionCode44, `0.0.44-c3-advanced-layout`, SHA256 `aaafd34f2b31d922852b1a0143bc2c80719555b7fb3ef5a548c631d8a7468bcc`. Exact packaged Web bytes/marker/version and same signer asv43 verified. Freeze `.hermes/tmp/advanced-layout/release-final/manifest.json`; report `.hermes/artifacts/advanced-layout-implementation.md` and `advanced-layout-release.md`.
+
+Phone/WebView/touch/IME UNVERIFIED. Cover-install, not uninstall/Clear/re-download. No formal DB/assets/default services/migrations/git side effects. CSS-only change requires no backend restart. Previous v43 functionality retained.
+
+## Earlier releases — historical below
+
+## v43 delivery — historical frozen artifact
+
+Latest two requested callers completed: Quick import manual duration actual form/facade/cold IDB/application HTTP/isolated SQL, invalid refusal,805/0/blank/presets, uncertain original-body retry, snapshot/ACK response-loss cold settlement. Author LIST self-rating options include unscored dimensions; filter/query matches current anchor partitions/visibility/class refusal/AND/sort/total/pages; own/work tag combinations, navigation leave/remount and first-row primary order are tested. Author navigation memory unmount save fixed. Actual GalleryApp360 rating row overflow found and repaired with rating-only responsive grid; actual-shell360/430/768 rated+unrated/two-row browser bounds passed. Bare AuthorPage evidence was not substituted for shell proof.
+
+Parent independently checked11-entry implementation checkpoint, scoped deltas and own targeted layout patch. Final gates:1219/1219 default,672/672 isolated integration,60/60 native JVM; shared/server/web typecheck,full ESLint,diff,production build,prepare/copy/assemble all PASS. Identity-dependent254 tests/typecheck/lint rerun after bump. Initial parent standard-test command omitted project integration exclusion and build command used unsupported --root: both harness errors corrected, not application defects.
+
+APK `spikes/001-android-webview-shell/T3-v43-offline-quick-duration-author-filter.apk`, versionCode43, `0.0.43-c3-quick-duration-author-filter`, SHA256 `4faf8f23383b43ca65c3b45008e75159658192653c8fe3fc8f1407c999c4f2f1`. Packaged Web bytes/marker exact, same signer as v42. Evidence `.hermes/artifacts/quick-author-entrypoints-implementation.md`, `quick-author-bounded-review.md`, `quick-author-apk-verification.json`, frozen `.hermes/tmp/quick-author-release-final/manifest.json`. Source/test writers stopped.
+
+Phone hardware/touch/IME/WebView/Keystore/PluginCall/force-stop still UNVERIFIED. Finite new checks `quick-author-device-check.md` deferred; no old register reopened and no required re-download/testing now. Upgrade over the installed app, not uninstall/Clear. Update old snapshot metadata against the new backend before new-field writes; existing media cache reuse retains prior automation proof, not phone quota proof. User-controlled backend reload remains tray Exit/relaunch when convenient. No official DB/assets read/touch/migration/service restart/deployment/device install/commit/reset/stash or signing-key change in this workstream.
+
+## Earlier v42 and follow-up evidence — historical below
+
+## Historical follow-up investigation — Quick import duration / Author-list rating filter
+
+User requested follow-up of these two new callers, latest source/domain semantics confirmed. Sole production/test writer `deleg_1a921ba7` active; parent read-only/docs and final review/build/package. Bounded scope `.hermes/artifacts/quick-author-entrypoints-acceptance.md`. Quick-import duration UI already exists; test actual shell/facade cold create/replay and mobile layout rather than claim the previous stub proves it. Author-list options must include unscored self dimensions; filter/sort/options must match current SQL anchor partitions and class validation. Previous v42 remains the frozen delivered artifact, not proof of these new caller tests/current evolving source. No new gates/APK/phone PASS yet. Existing device register stays deferred; protected official DB/assets/default service/migrations remain untouched.
+
+## v42 delivery — historical frozen artifact
+
+Entry duration and the current Author rating system are implemented for offline/mobile callers, including duration add/edit/clear/0, optional legacy-field compatibility, create/preset/pending propagation, both Author rating classes, shared dimension create/reorder/delete, per-author half-star/clear, stored Gallery anchor, and latest rating filter/sort inheritance semantics. Field-aware foreground/native capabilities fail closed; original uncertain operations remain immutable; snapshot final field/class/value checks and durable ACK precede cleanup. Export/atomic restore and existing cache reuse have automatic proof.
+
+Parent independently verified the full-byte implementation checkpoint and completed bounded review. Final default tests 1212/1212, integration 655/655, native JVM 60/60 across 13 isolated suites PASS. Shared/server/web typechecks, full ESLint, diff check, Web build, prepare/copy and debug APK build PASS. Identity-dependent default tests and web typecheck/lint were rerun after version updates.
+
+APK: `spikes/001-android-webview-shell/T3-v42-offline-duration-author.apk`, versionCode 42, `0.0.42-c3-duration-author-offline`. SHA-256 `0c7638a39384577227d854f5165996f89b6abf475428012ce66083bfa089fc0b`. Actual packaged Web bytes and marker match; signer matches v41/v40. Evidence: `.hermes/artifacts/duration-author-offline-implementation.md`, `duration-author-bounded-review.md`, `duration-author-apk-verification.json`; frozen final source/Web hashes `.hermes/tmp/duration-author-release-final/manifest.json`. No feature writer remains.
+
+DEVICE UNVERIFIED: physical touch, actual wide/narrow rendering, WebView/Keystore/PluginCall and OS behavior. New grouped checks: `.hermes/artifacts/duration-author-device-check.md`; user cannot test now and is not asked to re-download or reopen the historical register. Existing v41 Gallery/Preview device checks remain distinct and deferred.
+
+Upgrade by installing over the existing app, not uninstalling or clearing its data. Old copies without the new trustworthy fields/capabilities remain readable but refuse new writes until metadata is refreshed against the updated backend. Automated production snapshot/cache selectors retained user metadata/capabilities and reused unchanged Entry bytes without media fetches/puts; this is not a guarantee that phone-specific cache/quota behavior has been tested. Restart the backend only through the user-controlled T3 tray Exit/relaunch workflow when ready; this session did not restart/deploy/install or touch formal DB/assets, edit migrations, commit/reset/stash or change the signing key.
+
+## Historical v41 evidence below (superseded current-status wording)
+
+## Frozen artifact / concurrent-source boundary
+
+The v41 APK and its build-time tests/review remain the delivered Gallery/Preview artifact, not a claim that the currently changing repository is globally GREEN. After the APK was built, another workstream changed Author rating code in offline-api.ts, api/gallery.ts and GalleryApp.vue. Those later edits were not rolled back, silently repackaged or covered by this APK's gates. In particular the later author_self slot-layout change is absent from this delivery. Raw live-source SHA must not be substituted for the build-time checkpoint. Verified APK/public Web bytes are frozen under `.hermes/tmp/release-v41-final/packaged-web-manifest.json`; observed later API drift is recorded alongside it. No additional feature review or production edits were opened to absorb that separate workstream. “No writer remains” in earlier completion wording means this Gallery/Preview workstream only.
+
+
+
+## Active instruction / stop point
+
+## v41 delivery — historical build evidence
+
+Gallery order and Entry preview add/delete implementation, the two final byte/snapshot defenses and bounded review are closed. No feature writer remains. Latest implementation: `.hermes/artifacts/preview-last-implementation.md`; bounded parent review: `.hermes/artifacts/offline-extension-bounded-review.md`.
+
+Fresh default tests 1204/1204 and isolated integration 635/635 PASS; shared/server/web typechecks, root lint, diff-check and production build PASS. Full native JVM 57/57 across 12 per-class isolated forks PASS (initial shared-process Robolectric SQLite crash retained in logs). APK `spikes/001-android-webview-shell/T3-v41-offline-gallery-preview.apk`, versionCode 41 / `0.0.41-c3-gallery-preview-offline`, SHA-256 `9bb20c3dba94862db47837886597c9ff24d48a2d720b21b14f409c398649c7c7`; packaged Web bytes/marker match and signer equals v40. Machine-readable proof: `.hermes/artifacts/offline-extension-apk-verification.json`.
+
+Only this extension's device checks remain: `.hermes/artifacts/offline-extension-device-check.md`. Script/JVM pairing bytes do not establish actual WebView/PluginCall/Keystore or force-stop behavior. Deletion survivor byte identity is checked when trustworthy original cache bytes exist; null provenance never claims byte proof. Unknown/attempted native cancellation stays refused; released survivors are foreground-only. Occupied-cover replacement and excluded Import/Source/PWA/conflict work stay out of scope.
+
+No formal DB/assets/default service restart, deployment, device install, commit or release-key change. Current backend code must be reloaded by the user through the normal T3 tray Exit/relaunch workflow; packaging alone does not reload the existing server. Old C0–C3/v38–v40 device register is not reopened.
+
+Historical source recovery is CLOSED. Preserve `.hermes/tmp/offline-api-restored-validated.ts` and `.hermes/artifacts/source-recovery-status.json`; never restore HEAD or old 5,384-line recovery baseline over later Preview work. Recovery-only 1,793-test PASS is historical, not the latest feature release gate. Detailed incident/review evidence is archived; current work and checkpoints are described above. All production edits remain targeted patches after complete-byte backups. Formal DB/assets/default services remain protected.
+
+2026-10-08 用户确认：此前遗留 App 测试已完成，对应问题已修复；旧清单的 UNVERIFIED 不再作为重复验收待办（未补造逐项设备证据）。本轮授权按顺序实现：① Gallery 排序的完整离线适配；② Entry 内 preview 添加／删除的离线适配。①②均已实现并集中验证、完成 v41 APK 包装；仅本轮新功能实机验收未验证。详细证据见 `docs/offline-gallery-preview-progress.md`。工作区保持不 merge/commit/reset/stash；不触碰正式 `apps/server/.data/library.db` 或 assets；不启动或重启默认 server。
+
+## Canonical status documents
+
+- `docs/offline-validation-checklist.md`：历史集中验收清单；用户已确认完成，旧 UNVERIFIED 仅保留未回填的逐项证据边界，不作为重跑要求。v40 为上一已交付版本。
+- `docs/offline-gallery-preview-progress.md`：本轮新功能的有限验收板与源码／自动化／包装证据。
+- `docs/offline-completion-status.md`：源码／自动化／review／包装／真机分层状态，以及与原计划的实际差距（已补 v41 自动化／包装状态；历史设备证据保留）。
+- `docs/relation-source-maintenance-offline-plan.md` §§23–31：原设计与 C0–C3 allowlist；§27.2 已于 v38 落地。
+- `spikes/001-android-webview-shell/README.md` v41 节：当前 APK 自动化／包装证据；v40 及更旧节保留历史真机实测，不冒充 v41 真机验证。
+
+## Current implementation boundary
+
+离线只读、现有对象编辑、create/media、pending Entry metadata/Content/Tag/Author、新 Author 与跨 Entry 复用、新 Tag/Facet、atomic pending-work restore、完整 snapshot delta/durable ACK、QR/auth/TLS pinning、native ledger v7/有限 WorkManager（durable fresh UUID、永久 attempt seal 与取消 tombstone），以及 **§27.2 在线可重试原子 create command**（metadata/ratings/View later/初始 Content 一条 command；media 独立；uncertain 失败以完全相同的操作落离线 Outbox，由 receipt 解决歧义）均已有实际源码与自动化证明。
+
+v40 候选（`0.0.40-c3-offline-read-latency`，SHA-256 `ceda01d1e2d98b3104b61d92c807b16424b0ba1ffbebb331c93cee4ac341aeb0`）在 v39 之上再做两处修复：离线读不再排在卡住的能力探针之后（`PairedTransportPlugin.status` 改用独立单线程执行器；真机 A/B 由 7674ms 降至 253ms，探针自身请求实测 8069ms 才失败，读与请求同时结束），以及离线 tag 编辑器按 Enter 不再被残留的组字标记吞掉（改以事件自身的 `isComposing` 为准；真机输入 `zztmp2` 后回车 2129ms 内出现 chip，无需失焦）；tag 写入不再等整条条目重读（写入返回 tag 身份、界面立即落上，真机由 1169ms 降到 799ms，三个重读请求转到后台）；创建后重载当前 Gallery 卡片列表、Settings 的 Update/Clear/Restore 触发可见数据重读（两条都是你记录的“派生界面在返回路径上变旧”）；服务端新增 `/api/pairing/forget` 清理已撤销设备记录（活设备拒绝，桌面设置页有 Remove record）；**发布级**：托盘启动器（T3.exe/T3.bat）自己广告私有地址，使加密配对在打包后的普通启动中即可用；属主锁改为“持有 loopback 端口”作为存活凭证（PID 会被复用），主人已死则下次启动静默接管、主人仍在则拒绝；锁出现任何问题都不再打断桌面服务（恢复表单始终可达）；合集下拉在手机端改为按触发按钮实测定位（真机实测 x93–285 完全在屏幕内，原来右边缘被切）；离线创建那条**提前 return** 的分支也补上了刷新（真机：离线创建的作品立刻出现在网格并带 staged 封面）；探针（`/api/sync/capabilities`）连接超时 8s→2s；离线读不再每次向原生取 libraryId（新增 `createShellLibraryIdSource` 缓存，focus/online/回到可见时失效）；服务端把“缩略图渲染失败”归为 400；客户端也不再因为一条被服务端拒绝的媒体上传而中断整次重放（真机实测：pending 8、failed 0、好的封面连尝试都没有——媒体按 entryUid 排序，被拒的那条挡在前面），改为把该行标成 failed 并继续排空，只有传输类错误才留待重试；手机端设置面板改为**实测**背后 `.content-panel` 的框并对齐它（左/宽/顶一致，底边自由），不再重复内边距表达式（那正是它偏窄偏左、右边漏出背景框的原因）；因面板是 header 子元素而 header 的 `backdrop-filter` 会使其成为 fixed 的包含块，测量再按实际渲染校正一次（真机实测两框均为 left 12 / right 348 / top 72 / width 336）。v39 在 v38 之上只改 web 层三处：composer 作者框复用字段样式；候选列表在键盘下方无空间时上翻并按可用空间限高、随视口与滚动重算；输入框文本改由普通 `@input` 读取（Vue 的 `v-model` 在 IME 组字期间丢弃 input 事件，组字未结束前查询不前进、搜索从不派发——这正是用户手机上“输入后不弹候选、点开别处才出现”的成因）。整树门槛：1158 standard / 621 isolated SQL / typecheck / lint / build 全通过；APK versionCode 40 + marker 一致，九个 Web 资源与 APK 逐字节一致。真机（WGM77LVKD6RW9XZX）实测：作者框 44px 与其他字段一致；键盘开启时字段 y363–407／视口 430，真 IME 输入 `a` 后候选 A1/A2 上翻至 y273–359 完整可见；同一 Entry 打开在“探针在飞”下由 7674ms 降到 253ms；tag 写入到 chip 由 1169ms 降到 799ms（写入 713ms，三个重读转后台）。
+
+## Remaining implementation / release work
+
+- 本轮 Gallery／preview 自动化及 v41 APK 核验已完成；仅新功能实机验收未验证，旧 App 整套测试用户已完成，不重复派发。OS kill/force-stop/plugin/scanner/WebView/Keystore 和真实多 tab 的新覆盖仍须与 JVM/IDB 自动化分开记录。
+- 稳定 release 签名决策：v41 保持与 v40 相同的 debug keystore；正式发布前需确定 release key 与换签/升级路径。
+- 正式部署需单独授权与安全备份／迁移／assets整合；不默认操作正式库。
+
+## Not a core-plan gap
+
+原计划 §25.5 排除已有媒体 replacement，包括占用 cover 的离线替换；它仍 online-only，不算 C0–C3缺失。新 Gallery/type、破坏性主体删除／merge、taxonomy/templates、Import/Source batch同样不因“全部离线”自动纳入。细粒度保留本地冲突编辑器、可选纯浏览器 PWA、常驻／开机自启／force-stop 后继续任务不是本轮已交付或必需的默认承诺。

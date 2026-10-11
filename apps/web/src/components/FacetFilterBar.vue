@@ -89,9 +89,6 @@ const rows = ref<FilterRow[]>([]);
 const ratingRows = ref<RatingRow[]>([]);
 const usageSortField = ref<string>('');
 const sortSlotId = ref<number | undefined>(undefined);
-// Second mode of the same sort control: works without their own value for the
-// selected dimension fall back to their Authors' rating for that dimension.
-const sortApplyAuthorRating = ref(false);
 const starValues: number[] = Array.from({ length: 10 }, (_, index) => (index + 1) / 2);
 const itemInputs = ref<Array<HTMLInputElement | null>>([]);
 const filterError = ref<string | null>(null);
@@ -121,7 +118,6 @@ function hydrateFromModel(filters: GalleryFacetFilters): void {
     stars: condition.stars ?? 3,
   }));
   sortSlotId.value = filters.ratingSort?.slotId;
-  sortApplyAuthorRating.value = filters.ratingSort?.applyAuthorRating ?? false;
   usageSortField.value = filters.usageSort?.field ?? '';
 }
 
@@ -252,6 +248,20 @@ function emitFilters(): void {
   emit('update:modelValue', { conditions, authorIds, ...ratingFilters(), ...usageFilters() });
 }
 
+/**
+ * What one rating dimension is called in a list.
+ *
+ * A name alone is not enough any more: the works summary carries the work dimensions' names, so the
+ * same name appears once per class and means a different number each time. The class is named after
+ * the dimension it describes, and a work's own dimension needs no label — inside a Gallery's filter
+ * bar that is the unmarked case.
+ */
+function slotLabel(slot: { name: string; subjectKind?: 'entry' | 'producer' | 'author_self' | undefined }): string {
+  if (slot.subjectKind === 'producer') return `${slot.name} · ${t('rating.worksSummary')}`;
+  if (slot.subjectKind === 'author_self') return `${slot.name} · ${t('rating.authorSelf')}`;
+  return slot.name;
+}
+
 function ratingFilters(): Pick<GalleryFacetFilters, 'ratingConditions' | 'ratingSort'> {
   const ratingConditions: RatingFilterCondition[] = ratingRows.value
     .filter((row): row is RatingRow & { slotId: number } => row.slotId !== undefined)
@@ -265,7 +275,10 @@ function ratingFilters(): Pick<GalleryFacetFilters, 'ratingConditions' | 'rating
     : {
       slotId: sortSlotId.value,
       direction: 'desc',
-      applyAuthorRating: sortApplyAuthorRating.value,
+      // A work dimension always reads as "its own value, else its Authors' summary of the same
+      // name". The flag is what the offline copy reads to sort the same way, so it is sent even
+      // though the server applies the fallback regardless.
+      applyAuthorRating: true,
     };
   return { ratingConditions, ratingSort };
 }
@@ -277,7 +290,9 @@ function emitRatingFilters(): void {
 }
 
 function addRatingRow(): void {
-  ratingRows.value.push({ slotId: undefined, operator: 'eq', stars: 3 });
+  // "Greater than three stars" is what a rating filter is usually for — "show me the ones I liked";
+  // equality is the narrower question and is one step away.
+  ratingRows.value.push({ slotId: undefined, operator: 'gt', stars: 3 });
   emitRatingFilters();
 }
 
@@ -303,21 +318,10 @@ function chooseRatingStars(row: RatingRow, event: Event): void {
 }
 
 function onRatingSortChange(event: Event): void {
-  // Each dimension has two options: the work's own rating, and the same sort
-  // with the Author rating filling in works that carry none. Encoding the
-  // fallback as an option keeps it inside the sort control instead of adding
-  // another row to a filter bar that is already tight on phones.
+  // One option per dimension, and no second mode to choose: the Author's summary is what a work
+  // without its own value reads as, so "sort by this dimension" is the whole question.
   const value = (event.target as HTMLSelectElement).value;
-  if (value === '') {
-    sortSlotId.value = undefined;
-    sortApplyAuthorRating.value = false;
-  } else if (value.endsWith(':author')) {
-    sortSlotId.value = Number(value.slice(0, -':author'.length));
-    sortApplyAuthorRating.value = true;
-  } else {
-    sortSlotId.value = Number(value);
-    sortApplyAuthorRating.value = false;
-  }
+  sortSlotId.value = value === '' ? undefined : Number(value);
   emitRatingFilters();
 }
 
@@ -525,7 +529,7 @@ function onBarPointerDown(event: PointerEvent): void {
         </button>
         <button
           v-else
-          class="facet-select-button facet-select-button--chosen"
+          class="facet-select-button facet-select-button--chosen t3-library-text"
           type="button"
           data-testid="facet-picker-chosen"
           :title="rowHint(row)"
@@ -552,7 +556,7 @@ function onBarPointerDown(event: PointerEvent): void {
             :disabled="choice.disabled"
             @click="chooseFacet(row, choice)"
           >
-            <span class="filter-option__label">{{ choice.label }}</span>
+            <span class="filter-option__label t3-library-text">{{ choice.label }}</span>
             <span v-if="choice.disabled" class="filter-option__hint">{{ t('filter.alreadyUsed') }}</span>
           </button>
           <p v-if="filteredFacetChoices(row.facetQuery).length === 0" class="filter-dropdown__empty">
@@ -568,7 +572,7 @@ function onBarPointerDown(event: PointerEvent): void {
         class="filter-tag-chip"
         data-testid="filter-tag-chip"
       >
-        <span>{{ chipName(row, id) }}</span>
+        <span class="t3-library-text">{{ chipName(row, id) }}</span>
         <button
           class="filter-tag-chip__remove"
           type="button"
@@ -602,7 +606,7 @@ function onBarPointerDown(event: PointerEvent): void {
           <button
             v-for="option in filteredItemOptions(row)"
             :key="option.id"
-            class="filter-option"
+            class="filter-option t3-library-text"
             type="button"
             @click="addItem(row, option)"
           >
@@ -627,14 +631,14 @@ function onBarPointerDown(event: PointerEvent): void {
 
     <div v-for="(ratingRow, ratingIndex) in ratingRows" :key="`rating-${ratingIndex}`" class="filter-row">
       <select
-        class="filter-select"
+        class="filter-select t3-library-text"
         data-testid="rating-slot-select"
         :value="ratingRow.slotId ?? ''"
         @change="chooseRatingSlot(ratingRow, $event)"
       >
         <option value="" disabled>{{ t('filter.ratingSlotPlaceholder') }}</option>
         <option v-for="slot in props.options.ratingSlots" :key="slot.id" :value="slot.id">
-          {{ slot.name }}
+          {{ slotLabel(slot) }}
         </option>
       </select>
       <select
@@ -719,21 +723,15 @@ function onBarPointerDown(event: PointerEvent): void {
         <label v-if="props.options.ratingSlots.length > 0" class="rating-sort-control">
           <span class="filter-note">{{ t('filter.sortByRating') }}</span>
           <select
-            class="filter-select"
+            class="filter-select t3-library-text"
             data-testid="rating-sort-select"
-            :title="t('filter.authorRatingHint')"
-            :value="sortSlotId === undefined ? '' : `${sortSlotId}${sortApplyAuthorRating ? ':author' : ''}`"
+            :value="sortSlotId === undefined ? '' : String(sortSlotId)"
             @change="onRatingSortChange"
           >
             <option value="">{{ t('filter.sortNone') }}</option>
-            <template v-for="slot in props.options.ratingSlots" :key="slot.id">
-              <option :value="String(slot.id)">
-                {{ slot.name }} ↓
-              </option>
-              <option :value="`${slot.id}:author`">
-                {{ t('filter.sortByAuthorRating', { name: slot.name }) }}
-              </option>
-            </template>
+            <option v-for="slot in props.options.ratingSlots" :key="slot.id" :value="String(slot.id)">
+              {{ slotLabel(slot) }} ↓
+            </option>
           </select>
         </label>
       </div>

@@ -1,0 +1,9 @@
+{
+  "source": "D:\\Project\\TagTraceTrove\\apps\\web\\src\\offline\\offline-api.ts",
+  "candidate": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\recovery3-bundle-candidate.ts",
+  "sha256": "67e24865c00f71690d3d2cb6ec497722150be0cb441e65e6b2e8599f3d1ec3d3",
+  "lines": 5385,
+  "prefix1929Exact": true,
+  "virtualTestsPassed": 1793,
+  "scope": "Source restored from historical edits + compiled v40 behavior; original byte equality of suffix is not claimed; independent review and actual workspace gates pending"
+}

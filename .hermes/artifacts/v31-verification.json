@@ -1,0 +1,18 @@
+{
+  "candidate": "spikes/001-android-webview-shell/T3-C1-v31-multi-preview.apk",
+  "versionCode": 31,
+  "versionName": "0.0.31-c1-multi-preview",
+  "sha256": "27cb2dbe543979c4dddd6e17a27178db9b7d4c734f268ca8b3b1ed711705d1b2",
+  "standardTestCommand": "pnpm test --reporter=dot",
+  "standardTestsPassed": 671,
+  "isolatedSqlTestsPassed": 422,
+  "sourceGatesPassed": ["lint", "typecheck", "standard tests", "isolated SQL integration tests", "production build", "git diff --check"],
+  "androidTasksSucceeded": ["testDebugUnitTest", "assembleDebug"],
+  "identicalBundledWebResources": 7,
+  "signatureV2Verified": true,
+  "sameSignerAsV30": true,
+  "embeddedFeatureFlagVerified": "offlineMediaMultiplePreviews",
+  "deviceAcceptance": "UNVERIFIED",
+  "formalLibraryDeployment": "NOT_PERFORMED",
+  "sourceGateLog": ".hermes/artifacts/v31-source-gates.log"
+}

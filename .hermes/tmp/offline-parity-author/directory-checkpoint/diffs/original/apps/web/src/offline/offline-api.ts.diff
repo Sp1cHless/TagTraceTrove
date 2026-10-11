@@ -1,0 +1,386 @@
+--- original/apps/web/src/offline/offline-api.ts
++++ live/apps/web/src/offline/offline-api.ts
+@@ -580,6 +580,8 @@
+     producers:snapshot.payload.producers.map(row=>({...row,...(row.syncUid ? {syncUid:row.syncUid.toLowerCase()} : {})}))}};
+   const parsed = parsedEntryOperations(operations);
+   const deletedIds = new Set(snapshot.payload.entries.filter(row => parsed.some(op => op.operationKind === 'entry.delete' && op.entityUid === row.syncUid)).map(row => row.id));
++  const deletedProducerIds = new Set(snapshot.payload.producers.filter(row=>parsed.some(op=>op.operationKind==='producer.delete' && op.entityUid===row.syncUid)).map(row=>row.id));
++  const deletedDirectoryIds = new Set(snapshot.payload.authorDirectories.filter(row=>deletedProducerIds.has(row.producerId)).map(row=>row.id));
+   const entryOperations = parsed.filter(isEntryUpdateOperation);
+   const entryAuthorRelationOperations = parsed.filter((operation): operation is EntryAuthorsOperation | EntryAuthorCreateOperation => (
+     operation.operationKind === 'entry.authors.set' || operation.operationKind === 'entry.author.create-and-link'
+@@ -624,7 +626,7 @@
+     ...current, syncVersion: operation.baseVersion + 1, orderedTypes: [...operation.payload.orderedTypes],
+   }), snapshot.payload.galleryOrder);
+   const mediaOrderOperations = parsedMediaOrderOperations(operations);
+-  if (deletedIds.size === 0 && entryOperations.length === 0
++  if (deletedProducerIds.size === 0 && !parsed.some(row => row.operationKind === 'producer.create') && deletedIds.size === 0 && entryOperations.length === 0
+     && entryCreateOperations.length === 0
+     && mediaOrderOperations.length === 0
+     && entryAuthorRelationOperations.length === 0
+@@ -651,7 +653,15 @@
+     const patches = entryOperations.filter((operation) => operation.entityUid === entry.syncUid);
+     return patches.reduce((current, operation) => applyEntryPatch(current, operation.payload), entry);
+   });
+-  const producers = snapshot.payload.producers.map((producer) => {
++  const producerCreates = parsed.filter((row): row is Extract<SyncReplayRequest,{operationKind:'producer.create'}> => row.operationKind === 'producer.create');
++  const producerRows = [...snapshot.payload.producers];
++  for (const row of producerCreates) {
++    if (producerRows.some(owner => owner.syncUid === row.entityUid)) continue;
++    const id = localCollectionId(row.entityUid);
++    if (producerRows.some(owner => owner.id === id)) throw new Error('Local Author ID collision');
++    producerRows.push({id,syncUid:row.entityUid,syncVersion:1,...row.payload,galleryAnchor:null});
++  }
++  const producers = producerRows.map((producer) => {
+     const patches = producerUpdateOperations.filter((operation) => operation.entityUid === producer.syncUid);
+     return patches.reduce((current, operation) => ({
+       ...current,
+@@ -1168,26 +1178,26 @@
+       ...snapshot.payload,
+       galleryOrder,
+       entries: entries.filter(row => !deletedIds.has(row.id)),
+-      producers,
+-      entryProducers: entryProducers.filter(row => !deletedIds.has(row.entryId)),
++      producers:producers.filter(row=>!deletedProducerIds.has(row.id)),
++      entryProducers: entryProducers.filter(row => !deletedIds.has(row.entryId) && !deletedProducerIds.has(row.producerId)),
+       tags,
+       tagGroups,
+       entryTags: entryTags.filter(row => !deletedIds.has(row.entryId)),
+       producerTags,
+-      producerTagAssignments,
++      producerTagAssignments:producerTagAssignments.filter(row=>!deletedProducerIds.has(row.producerId)),
+       entryContents: entryContents.filter(row => !deletedIds.has(row.entryId)),
+       ratingSlots,
+       ratingLayouts,
+       collections,
+-      collectionMembers: collectionMembers.filter(row => !('entryId' in row) || !deletedIds.has(row.entryId)),
+-      authorDirectories,
+-      authorDirectorySets,
+-      authorDirectoryEntries: authorDirectoryEntries.filter(row => !deletedIds.has(row.entryId)),
++      collectionMembers: collectionMembers.filter(row => ('entryId' in row ? !deletedIds.has(row.entryId) : !deletedProducerIds.has(row.producerId))),
++      authorDirectories:authorDirectories.filter(row=>!deletedProducerIds.has(row.producerId)),
++      authorDirectorySets:authorDirectorySets?.filter(row=>!deletedProducerIds.has(row.producerId)),
++      authorDirectoryEntries: authorDirectoryEntries.filter(row => !deletedIds.has(row.entryId) && !deletedDirectoryIds.has(row.directoryId) && !deletedProducerIds.has(row.producerId)),
+       entryUsage: [...usageByEntryId.values()].filter(row => !deletedIds.has(row.entryId)).sort((left, right) => left.entryId - right.entryId),
+       viewLaterEntries: viewLaterEntries.filter(row => !deletedIds.has(row.subjectId)),
+-      viewLaterProducers,
++      viewLaterProducers:viewLaterProducers.filter(row=>!deletedProducerIds.has(row.subjectId)),
+       entryRatingValues: entryRatingValues.filter(row => !deletedIds.has(row.entryId)),
+-      producerRatingValues,
++      producerRatingValues:producerRatingValues.filter(row=>!deletedProducerIds.has(row.producerId)),
+     },
+   };
+ }
+@@ -1777,7 +1787,7 @@
+ 
+   async function enqueueDurably(operation: PendingSyncOperation): Promise<void> {
+     if (!hasOutbox(store)) throw new Error('Offline mutation storage is unavailable');
+-    if (operation.entityKind === 'entry' && (await store.list()).some(row => row.operationKind === 'entry.delete' && row.entityUid === operation.entityUid)) {
++    if ((operation.entityKind === 'entry' || operation.entityKind === 'producer') && (await store.list()).some(row => row.operationKind === `${operation.entityKind}.delete` && row.entityUid === operation.entityUid)) {
+       throw new Error('Entry deletion is already queued; retain its original operation before editing');
+     }
+     // Only NEW envelopes acquire the complete crossqueue Entry revision.
+@@ -1911,7 +1921,8 @@
+       throw new Error('This offline copy has not enabled offline Author profile editing; update it while online');
+     }
+     const active = await readActiveSnapshot(store);
+-    const original = active?.snapshot.payload.producers.find((producer) => producer.id === authorId);
++    const existingRows = hasOutbox(store) ? await store.list() : [];
++    const original = active === null ? undefined : snapshotWithOverlays(active.snapshot, existingRows.filter(row => row.operationKind === 'producer.create')).payload.producers.find((producer) => producer.id === authorId);
+     if (active === null || original?.syncUid === undefined || original.syncVersion === undefined) {
+       throw transportError ?? new Error('Author is unavailable in the offline copy or is missing stable identity/version');
+     }
+@@ -3228,10 +3239,13 @@
+ 
+   async function producerCreationDependencies(snapshot: SyncSnapshot, operations: PendingSyncOperation[], uids: string[], ownerUid: string) {
+     const sources = parsedEntryOperations(operations.filter(row => row.clientId === clientId && row.libraryId === snapshot.header.libraryId && row.syncEpoch === snapshot.header.syncEpoch));
+-    const dependencies = sources.filter((row): row is EntryAuthorCreateOperation => row.operationKind === 'entry.author.create-and-link' && row.entityUid !== ownerUid.toLowerCase() && uids.map(uid=>uid.toLowerCase()).includes(row.payload.producerUid));
++    const dependencies = sources.flatMap(row => {
++      const producerUid = row.operationKind === 'producer.create' ? row.entityUid : row.operationKind === 'entry.author.create-and-link' && row.entityUid !== ownerUid.toLowerCase() ? row.payload.producerUid : undefined;
++      return producerUid && uids.map(uid=>uid.toLowerCase()).includes(producerUid) ? [{opId:row.opId,producerUid}] : [];
++    });
+     if (dependencies.length && await store.readMeta('capability.offlineCrossEntryPendingAuthors') !== '1') throw new Error('Cross-Entry pending Authors are not supported');
+     if (dependencies.some(source => operations.find(row => row.opId === source.opId)?.status !== 'pending')) throw new Error('Pending Author source is blocked');
+-    return dependencies.length ? {producerCreates: dependencies.map(row => ({producerUid:row.payload.producerUid,createOpId:row.opId}))} : {};
++    return dependencies.length ? {producerCreates: dependencies.map(row => ({producerUid:row.producerUid,createOpId:row.opId}))} : {};
+   }
+ 
+   async function pendingAuthorContext(localKey: string) {
+@@ -3520,7 +3534,8 @@
+       const activeBeforeReplay = replayBase ? replayBase.active : await readActiveSnapshot(store);
+       const appliedOperations: SyncReplayRequest[] = [];
+       const entryDeleteReceipts = new Map<string, {entityId:number; resourceVersion:number; serverSeq:number}>();
+-      const appliedReceipts = new Map<string, {resourceVersion:number; serverSeq:number}>();
++      const producerDeleteReceipts = new Map<string, {entityId:number; resourceVersion:number; serverSeq:number}>();
++      const appliedReceipts = new Map<string, {entityId:number | undefined; resourceVersion:number; serverSeq:number}>();
+       const appliedMetadataOwnerIds = new Map<string, number>();
+       const appliedProducerIds = new Map<string, number>();
+       const appliedTagIds = new Map<string, number>();
+@@ -3564,7 +3579,33 @@
+         ownerBytes.set(operation.entityUid, new Map(proof.refs.flatMap((ref,i)=>proof!.originals[i] ? [[ref,proof!.originals[i]!] as const] : [])));
+       }
+       let maxAppliedServerSeq = -1;
+-      const replayPlan = mutationQueuePlan(operations);
++      // A Directory-set is an independent revision owner, never the Producer UID.
++      // Only a verified snapshot may establish its owned scope. Keep that typed
++      // foreground proof bound to the exact envelope through an absent-owner ACK retry.
++      const directoryScopes = new Map<string, {producerUid:string;producerId:number}>();
++      for (const row of operations) {
++        if (row.operationKind !== 'author.directories.set') continue;
++        const fingerprint = operationFingerprint(row);
++        const key = 'authorDirectoryScope.' + row.opId;
++        const active = activeBeforeReplay?.snapshot;
++        const set = active?.payload.authorDirectorySets?.find(set => set.syncUid === row.entityUid);
++        const producer = active?.payload.producers.find(producer => producer.id === set?.producerId);
++        if (set && producer?.syncUid && active?.header.libraryId === row.libraryId && active.header.syncEpoch === row.syncEpoch) {
++          const scope = {producerUid:producer.syncUid,producerId:producer.id};
++          directoryScopes.set(row.opId,scope);
++          await store.writeMeta(key,JSON.stringify({fingerprint,scope}));
++        } else {
++          const saved = await store.readMeta(key);
++          if (saved) {
++            try {
++              const value = JSON.parse(saved) as {fingerprint:string;scope:{producerUid:string;producerId:number}};
++              if (value.fingerprint === fingerprint && typeof value.scope.producerUid === 'string'
++                && Number.isSafeInteger(value.scope.producerId) && value.scope.producerId > 0) directoryScopes.set(row.opId,value.scope);
++            } catch { /* Unknown scope remains held; native raw JSON is not authority. */ }
++          }
++        }
++      }
++      const replayPlan = mutationQueuePlan(operations,new Map([...directoryScopes].map(([id,scope])=>[id,`producer:${scope.producerUid}`])));
+       const blockedEntities = new Set<string>();
+       const blockedRatingSlotUids = new Set<string>();
+       let replayError: string | null = null;
+@@ -3778,7 +3819,7 @@
+           // snapshot; retain the established typed proof checks above. Present
+           // predecessors must settle in this same ordered foreground replay.
+           const unsettled=plan?.dependencies.some(id=>operations.some(row=>row.opId.toLowerCase()===id.toLowerCase()) && !appliedOperations.some(row=>row.opId.toLowerCase()===id.toLowerCase()));
+-          if(missingFlags.length || unsettled) {
++          if(missingFlags.length || unsettled || (operation.operationKind === 'author.directories.set' && !directoryScopes.has(operation.opId))) {
+             replayError ??= missingFlags.length ? `Current required capability unavailable: ${missingFlags.join(', ')}` : 'A dependency is held; original work remains queued';
+             blockedEntities.add(entityKey);continue;
+           }
+@@ -3791,6 +3832,12 @@
+           operation = authorIdentityView(operation);
+           if (result.status === 'applied') {
+             if (result.opId.toLowerCase() !== operation.opId.toLowerCase()) throw new Error('Replay receipt identity mismatch');
++            if (operation.operationKind === 'producer.delete') {
++              if (result.entityId === undefined || result.resourceVersion !== operation.baseVersion + 1 || result.serverSeq <= 0) throw new Error('Author delete receipt identity/version is invalid');
++              const original = activeBeforeReplay?.snapshot.payload.producers.find(row => row.syncUid === operation.entityUid);
++              if (original && original.id !== result.entityId) throw new Error('Author delete receipt has a different owner');
++              producerDeleteReceipts.set(operation.entityUid, {entityId:result.entityId,resourceVersion:result.resourceVersion,serverSeq:result.serverSeq});
++            }
+             if (operation.operationKind === 'entry.delete') {
+               if (result.entityId === undefined || result.resourceVersion !== operation.baseVersion + 1 || result.serverSeq <= 0) throw new Error('Entry delete receipt identity/version is invalid');
+               const original = activeBeforeReplay?.snapshot.payload.entries.find(row => row.syncUid === operation.entityUid);
+@@ -3836,7 +3883,7 @@
+               if (result.entityId === undefined && operation.payload.parentCreateOpId !== undefined) throw new Error('Author receipt has no Producer identity');
+               if (result.entityId !== undefined) appliedProducerIds.set(operation.payload.producerUid, result.entityId);
+             }
+-            appliedReceipts.set(operation.opId, {resourceVersion:result.resourceVersion, serverSeq:result.serverSeq});
++            appliedReceipts.set(operation.opId, {entityId:result.entityId, resourceVersion:result.resourceVersion, serverSeq:result.serverSeq});
+             appliedOperations.push(operation);
+             maxAppliedServerSeq = Math.max(maxAppliedServerSeq, result.serverSeq);
+             attemptedOpId = null;
+@@ -3967,6 +4014,22 @@
+               && row.changeKind === 'delete' && row.resourceVersion === receipt.resourceVersion && row.record === null)) throw new Error('Entry deletion needs an authoritative matching delete tombstone journal');
+             await store.writeMeta(proofKey, proofIdentity);
+           }
++          for (const [uid, receipt] of producerDeleteReceipts) {
++            const operation = appliedOperations.find(row => row.operationKind === 'producer.delete' && row.entityUid === uid)!;
++            if (snapshot.payload.producers.some(row => row.syncUid === uid || row.id === receipt.entityId)
++              || snapshot.header.libraryId !== operation.libraryId || snapshot.header.syncEpoch !== operation.syncEpoch
++              || (snapshot.header.changeSeq ?? -1) < receipt.serverSeq || !online.fetchSyncChanges || !candidate.acknowledgement) throw new Error('Author deletion needs verified absence, cursor coverage and durable ACK support');
++            const proofKey = 'producerDeleteProof.' + operation.opId;
++            const proofIdentity = JSON.stringify({receipt,fingerprint:operationFingerprint(operations.find(row => row.opId === operation.opId)!)});
++            // Previously verified foreground journal proof remains valid after ACK
++            // advances the feed cursor beyond this immutable deletion.
++            if (await store.readMeta(proofKey) === proofIdentity) continue;
++            const proof = await online.fetchSyncChanges({libraryId:operation.libraryId,syncEpoch:operation.syncEpoch,
++              protocolVersion:candidate.acknowledgement.protocolVersion,clientId,afterSeq:receipt.serverSeq-1,limit:1});
++            if (!proof.changes.some(row => row.seq === receipt.serverSeq && row.entityKind === 'producer' && row.entityUid.toLowerCase() === uid.toLowerCase()
++              && row.changeKind === 'delete' && row.resourceVersion === receipt.resourceVersion && row.record === null)) throw new Error('Author deletion needs an authoritative matching delete tombstone journal');
++            await store.writeMeta(proofKey, proofIdentity);
++          }
+           // Only matching journal/absence/cursor proof above can authorize a
+           // predecessor whose receipt causally precedes the final delete.
+           const settledBeforeDelete = (operation: SyncReplayRequest): boolean => {
+@@ -3978,8 +4041,70 @@
+               || receipt.resourceVersion >= deletion.resourceVersion) throw new Error('Entry deletion cannot settle a noncausal predecessor');
+             return true;
+           };
++          const settledBeforeProducerDelete = (operation: SyncReplayRequest): boolean => {
++            if (operation.entityKind !== 'producer' || operation.operationKind === 'producer.delete') return false;
++            const deletion = producerDeleteReceipts.get(operation.entityUid);
++            if (!deletion) return false;
++            const receipt = appliedReceipts.get(operation.opId);
++            const last = appliedOperations.findIndex(row => row.operationKind === 'producer.delete' && row.entityUid === operation.entityUid);
++            const original = operations.find(row => row.opId === operation.opId);
++            const ownerId = receipt?.entityId ?? activeBeforeReplay?.snapshot.payload.producers.find(row => row.syncUid === operation.entityUid)?.id;
++            if (!original || original.entityKind !== 'producer' || original.entityUid !== operation.entityUid
++              || original.libraryId !== operation.libraryId || original.syncEpoch !== operation.syncEpoch
++              || !receipt || (ownerId !== undefined && ownerId !== deletion.entityId) || appliedOperations.indexOf(operation) >= last
++              || receipt.serverSeq <= 0 || receipt.serverSeq >= deletion.serverSeq
++              || receipt.resourceVersion < operation.baseVersion || receipt.resourceVersion >= deletion.resourceVersion) {
++              throw new Error('Author deletion cannot settle a foreign or noncausal predecessor');
++            }
++            return true;
++          };
++          // Every removed Producer write needs its own original receipt, not just
++          // the last folded value. Delete journal/absence/cursor were verified above.
++          for (const operation of appliedOperations) settledBeforeProducerDelete(operation);
++          for (const operation of appliedOperations) {
++            if (operation.operationKind !== 'author.directories.set') continue;
++            const scope = directoryScopes.get(operation.opId);
++            const receipt = appliedReceipts.get(operation.opId);
++            const original = operations.find(row => row.opId === operation.opId);
++            if (!scope || !receipt || !original || original.entityUid !== operation.entityUid
++              || original.libraryId !== operation.libraryId || original.syncEpoch !== operation.syncEpoch
++              || receipt.resourceVersion < operation.baseVersion || receipt.serverSeq <= 0) throw new Error('Directory settlement needs its original receipt and trusted owned scope');
++            const deletion = producerDeleteReceipts.get(scope.producerUid);
++            if (deletion) {
++              const last = appliedOperations.findIndex(row => row.operationKind === 'producer.delete' && row.entityUid === scope.producerUid);
++              // Compare versions only within Directory-set; cross-owner causality is serverSeq.
++              if (scope.producerId !== deletion.entityId || appliedOperations.indexOf(operation) >= last
++                || receipt.serverSeq >= deletion.serverSeq
++                || snapshot.payload.authorDirectorySets?.some(row => row.syncUid === operation.entityUid || row.producerId === scope.producerId)
++                || snapshot.payload.authorDirectories.some(row => row.producerId === scope.producerId)) throw new Error('Author deletion cannot settle a foreign or noncausal Directory predecessor');
++            } else {
++              const set = snapshot.payload.authorDirectorySets?.find(row => row.syncUid === operation.entityUid);
++              const later = appliedOperations.some(row => row.operationKind === 'author.directories.set' && row.entityUid === operation.entityUid && appliedOperations.indexOf(row) > appliedOperations.indexOf(operation));
++              const desired = operation.payload.directories.map(directory => ({...directory,entries:directory.entries.filter(entry => {
++                const deleted = entryDeleteReceipts.get(entry.syncUid);
++                if (!deleted) return true;
++                const last = appliedOperations.findIndex(row => row.operationKind === 'entry.delete' && row.entityUid === entry.syncUid);
++                if (appliedOperations.indexOf(operation) >= last || receipt.serverSeq >= deleted.serverSeq) throw new Error('Entry deletion cannot settle a noncausal Directory membership');
++                return false;
++              })}));
++              if (!set || set.producerId !== scope.producerId || set.syncVersion < receipt.resourceVersion
++                || (!later && JSON.stringify(producerDirectoriesFromSnapshot(snapshot,scope.producerId)) !== JSON.stringify(desired))) throw new Error('Snapshot refresh failed: Directory final owner/value is missing');
++            }
++          }
+           // Verify the final extension timeline before publishing or ACKing a candidate.
+           // Cursor coverage alone does not prove the new nullable fields or rating class.
++          const profiles = new Map<string,Record<string,unknown>>();
++          for (const op of appliedOperations) if (op.operationKind === 'producer.create' || op.operationKind === 'producer.update') {
++            profiles.set(op.entityUid,{...profiles.get(op.entityUid),...op.payload});
++          }
++          for (const [uid,desired] of profiles) {
++            const writes = appliedOperations.filter(row => row.entityUid === uid && (row.operationKind === 'producer.create' || row.operationKind === 'producer.update'));
++            if (writes.length && writes.every(settledBeforeProducerDelete)) continue;
++            const owner = snapshot.payload.producers.find(row => row.syncUid === uid);
++            const create = appliedOperations.find(row => row.operationKind === 'producer.create' && row.entityUid === uid);
++            if (!owner || (create && owner.id !== appliedReceipts.get(create.opId)?.entityId)
++              || Object.entries(desired).some(([key,value]) => Reflect.get(owner,key) !== value)) throw new Error('Snapshot refresh failed: standalone Author profile/identity is missing');
++          }
+           const durations = new Map<string, number | null>();
+           const anchors = new Map<string, string | null>();
+           const selfValues = new Map<string, ProducerRatingOperation>();
+@@ -3998,11 +4123,14 @@
+             if (!owner || (original && owner.id !== original.id) || owner.durationSeconds !== desired) throw new Error('Snapshot refresh failed: duration final value or owner is missing');
+           }
+           for (const [uid, desired] of anchors) {
++            const writes = appliedOperations.filter(row => row.entityUid === uid && row.operationKind === 'producer.update' && row.payload.galleryAnchor !== undefined);
++            if (writes.length && writes.every(settledBeforeProducerDelete)) continue;
+             const owner = snapshot.payload.producers.find(row => row.syncUid === uid);
+             const original = activeBeforeReplay?.snapshot.payload.producers.find(row => row.syncUid === uid);
+             if (!owner || (original && owner.id !== original.id) || owner.galleryAnchor !== desired) throw new Error('Snapshot refresh failed: stored Author anchor is missing');
+           }
+           for (const operation of selfValues.values()) {
++            if (settledBeforeProducerDelete(operation)) continue;
+             const owner = snapshot.payload.producers.find(row => row.syncUid === operation.entityUid);
+             const slot = snapshot.payload.ratingSlots.find(row => row.syncUid === operation.payload.slotUid);
+             const original = activeBeforeReplay?.snapshot.payload.producers.find(row => row.syncUid === operation.entityUid);
+@@ -4322,6 +4450,56 @@
+ 
+   const facade: GalleryApi = {
+     ...online,
++    async deleteAuthor(entryId) {
++      if (entryId <= 0) throw new Error('Pending Author creation must be reconciled before ordinary deletion');
++      if (!hasOutbox(store)) throw new Error('Author deletion needs a durable local queue');
++      const active = await readActiveSnapshot(store);
++      let owner: Pick<SyncSnapshot['payload']['producers'][number], 'id' | 'syncUid' | 'syncVersion'> | undefined = active?.snapshot.payload.producers.find(row => row.id === entryId);
++      let identity: {libraryId:string;syncEpoch:string} | undefined = active?.snapshot.header;
++      let onlineIdentity = false;
++      if (!owner?.syncUid || !owner.syncVersion) {
++        // Connected ordinary actions must not require Download offline library.
++        // Resolve only this row, never fabricate a UID/version or use numeric DELETE.
++        if (!isOnlineMode() || !online.getAuthorSyncIdentity) throw new Error('Author deletion needs a saved stable identity; refresh this offline copy');
++        await ensureClientIdentity();
++        const current = await online.getAuthorSyncIdentity(entryId);
++        if (active && (current.libraryId !== active.snapshot.header.libraryId || current.syncEpoch !== active.snapshot.header.syncEpoch)) {
++          throw new Error('Author deletion identity differs from this offline copy');
++        }
++        const queued = await store.list();
++        if (queued.some(row => row.libraryId !== current.libraryId || row.syncEpoch !== current.syncEpoch)) throw new Error('Retain queued work before changing sync identity');
++        if (queued.some(row => row.operationKind === 'producer.create' && row.entityUid === current.syncUid)) {
++          // An uncertain create's children use origin ownership, not ordinary
++          // row-version arithmetic. Verify/ACK them before sealing deletion;
++          // never guess their future version or rewrite attempted originals.
++          await replayPendingOperations();
++          if ((await store.list()).some(row => row.entityUid === current.syncUid)) throw new Error('Pending Author creation needs reconciliation before ordinary deletion');
++          const reconciled = (await readActiveSnapshot(store))?.snapshot.payload.producers.find(row => row.syncUid === current.syncUid);
++          if (!reconciled?.syncVersion || reconciled.id !== entryId) throw new Error('Pending Author creation has no verified surviving identity');
++          owner = reconciled;
++        } else owner = current;
++        identity = current;
++        onlineIdentity = true;
++      }
++      if (!identity || !owner?.syncUid || !owner.syncVersion) throw new Error('Author deletion needs a saved stable identity; refresh this offline copy');
++      if (await store.readMeta('capability.offlineMutations') !== '1' || await store.readMeta('capability.offlineAuthorDelete') !== '1') throw new Error('Refresh this offline copy to enable Author deletion');
++      const rows = await store.list();
++      if (rows.some(row => row.operationKind === 'producer.delete' && row.entityUid === owner.syncUid)) return;
++      const prior = parsedEntryOperations(rows).filter(row => row.entityKind === 'producer' && row.entityUid === owner.syncUid);
++      const media: never[] = [];
++      if (onlineIdentity && media.length) throw new Error('Reconcile queued media before deleting an Author missing from the saved copy');
++      const baseVersion = onlineIdentity
++        ? Math.max(owner.syncVersion, ...prior.map(row => row.baseVersion + producerVersionDelta(row)))
++        : owner.syncVersion + prior.reduce((n,row) => n + producerVersionDelta(row),0);
++      const op = createPendingSyncOperation({clientId, libraryId:identity.libraryId, syncEpoch:identity.syncEpoch,
++        entityKind:'producer',entityUid:owner.syncUid,operationKind:'producer.delete',
++        baseVersion,
++        baseValues:{},payload:{}}, {randomUUID});
++      // Always persist before attempting transport: uncertain online deletion retries
++      // the original UUID/body through receipts, never numeric DELETE or new identity.
++      await enqueueDurably(op); invalidateOfflineLibrary(); await setReplayStateFromStore();
++      if (isOnlineMode()) await replayPendingOperations();
++    },
+     async deleteEntry(entryId) {
+       if (entryId <= 0) throw new Error('Pending Entry creation must be reconciled before ordinary deletion');
+       if (!hasOutbox(store)) throw new Error('Entry deletion needs a durable local queue');
+@@ -4555,7 +4733,7 @@
+         const result = await online.getSyncCapabilities();
+         if(result.featureFlags?.offlineMutations !== undefined)await store.writeMeta('capability.offlineMutations',result.featureFlags.offlineMutations === true ? '1' : '0');
+         if(result.featureFlags?.offlineEntryUpdate !== undefined)await store.writeMeta('capability.offlineEntryUpdate',result.featureFlags.offlineEntryUpdate === true ? '1' : '0');
+-         for (const flag of ['offlineEntryDelete', 'offlineEntryDuration', 'offlineAuthorSelfRatings', 'offlineRatingSlotDelete']) {
++         for (const flag of ['offlineAuthorDelete', 'offlineStandaloneAuthorCreate', 'offlineEntryDelete', 'offlineEntryDuration', 'offlineAuthorSelfRatings', 'offlineRatingSlotDelete']) {
+            await store.writeMeta(`capability.${flag}`, result.featureFlags?.offlineMutations === true && result.featureFlags[flag] === true ? '1' : '0');
+          }
+         await store.writeMeta(GALLERY_ORDER_CAPABILITY_KEY, result.featureFlags?.offlineMutations === true && result.featureFlags.offlineGalleryOrder === true ? '1' : '0');
+@@ -5043,6 +5221,26 @@
+         }
+       });
+     },
++    async createAuthor(input) {
++      if (!hasOutbox(store)) throw new Error('Author creation is not available under offline: durable storage missing');
++      if (await store.readMeta('capability.offlineStandaloneAuthorCreate') !== '1') {
++        if (isOnlineMode()) return online.createAuthor(input);
++        throw new Error('Author creation is not available under offline; refresh metadata while connected');
++      }
++      const active = await readActiveSnapshot(store);
++      const identity = isOnlineMode() ? await online.getSyncCapabilities() : active?.snapshot.header;
++      if (!identity) throw new Error('Author creation is not available under offline: saved identity missing');
++      const payload = {name:input.name.trim(),occupation:input.occupation ?? null,artworkRef:input.artworkRef ?? null,content:input.content ?? null};
++      if (!payload.name) throw new Error('Author name cannot be empty');
++      const entityUid = randomUUID().toLowerCase();
++      const operation = createPendingSyncOperation({clientId,libraryId:identity.libraryId,syncEpoch:identity.syncEpoch,
++        entityKind:'producer',entityUid,operationKind:'producer.create',baseVersion:0,baseValues:{},payload},{randomUUID});
++      await enqueueDurably(operation);invalidateOfflineLibrary();await setReplayStateFromStore();
++      if (isOnlineMode()) await replayPendingOperations();
++      const refreshed = await readActiveSnapshot(store);
++      const owner = refreshed?.snapshot.payload.producers.find(row => row.syncUid === entityUid);
++      return producerRecordFromSnapshot(owner ?? {id:localCollectionId(entityUid),syncUid:entityUid,syncVersion:1,...payload});
++    },
+     async updateAuthor(authorId, input) {
+       return diagnoseMutation('producer-profile-update', PRODUCER_PROFILE_CAPABILITY_KEY, async () => {
+         if (mode === 'offline') return enqueueProducerProfileUpdate(authorId, input);

@@ -1,0 +1,45 @@
+{
+  "time": "2026-10-09T13:51:47.470524+00:00",
+  "exit": 0,
+  "command": [
+    "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "--config",
+    "vitest.integration.config.ts",
+    "apps/web/tests/offline-author-parity.integration.test.ts",
+    "--maxWorkers",
+    "2",
+    "--testTimeout",
+    "30000",
+    "-t",
+    "known offline Author delete refuses"
+  ],
+  "owned": {
+    "apps/web/src/offline/offline-api.ts": "982b69cb25178c4dddf6331007664e277c97ffbcee9bb452b6496b57a9598805",
+    "apps/web/src/offline/pending-work-restore.ts": "db9124b09d3e45730e1b4e6fab8e86f67a7ab25e694835b6fd471e79899298fd",
+    "apps/web/tests/offline-author-parity.integration.test.ts": "c3c80e10f3c9eb4da19cdc9c3872e1b6cd2381b04c602161acfa06887d306461"
+  },
+  "externalBefore": {
+    "apps/server/src/http/app.ts": "54fc2b1c7aa2af4bc79e211f7d6e4e580f0770a71399379a62c83e8f8cf40012",
+    "apps/web/src/api/gallery.ts": "1709c2c7bbfcbf26d33680ad612aaabadbf487d1a39988454c8505a76a56129a",
+    "apps/server/src/repositories/producer-repository.ts": "60696db372b2c376eda491e98bec85903051d9a703cebd7a0b03e549d64cd6b9",
+    "apps/server/src/repositories/producer-tag-repository.ts": "9755ce1288ba973ac112ef631c91cf6dce142fcc40dd47748cdb1e4823eb0a03",
+    "apps/server/src/sync/media-replay-service.ts": "32a30d63813c59c236f93cf345488fbfc7b58a82617581cbc87cf162cb7faa80",
+    "apps/server/src/sync/online-entry-create.ts": "02d4c3772075ff80c92254d37336bc9849c32c8010126ac9d62390f0e7e965e9",
+    "apps/server/src/sync/replay-service.ts": "81aeedc7f31d27b2a418f50825ed320467a25523e41716f57d7d2c0dda4728fc",
+    "apps/server/src/sync/snapshot-delta.ts": "45880aa8243371dc51dda208970a23bf08e7aee78d3eb45fd8c1159dfc259a38",
+    "apps/server/src/sync/sync-service.ts": "fe8409dfd0fb1126c63dc6aa89092f46851a51ec454ec7ac4a7a78e0f09678aa"
+  },
+  "externalAfter": {
+    "apps/server/src/http/app.ts": "54fc2b1c7aa2af4bc79e211f7d6e4e580f0770a71399379a62c83e8f8cf40012",
+    "apps/web/src/api/gallery.ts": "1709c2c7bbfcbf26d33680ad612aaabadbf487d1a39988454c8505a76a56129a",
+    "apps/server/src/repositories/producer-repository.ts": "60696db372b2c376eda491e98bec85903051d9a703cebd7a0b03e549d64cd6b9",
+    "apps/server/src/repositories/producer-tag-repository.ts": "9755ce1288ba973ac112ef631c91cf6dce142fcc40dd47748cdb1e4823eb0a03",
+    "apps/server/src/sync/media-replay-service.ts": "32a30d63813c59c236f93cf345488fbfc7b58a82617581cbc87cf162cb7faa80",
+    "apps/server/src/sync/online-entry-create.ts": "02d4c3772075ff80c92254d37336bc9849c32c8010126ac9d62390f0e7e965e9",
+    "apps/server/src/sync/replay-service.ts": "81aeedc7f31d27b2a418f50825ed320467a25523e41716f57d7d2c0dda4728fc",
+    "apps/server/src/sync/snapshot-delta.ts": "45880aa8243371dc51dda208970a23bf08e7aee78d3eb45fd8c1159dfc259a38",
+    "apps/server/src/sync/sync-service.ts": "fe8409dfd0fb1126c63dc6aa89092f46851a51ec454ec7ac4a7a78e0f09678aa"
+  }
+}

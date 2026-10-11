@@ -28,6 +28,20 @@ describe('createApiClient', () => {
     );
   });
 
+  it('retains the HTTP status when an upstream error is HTML rather than JSON', async () => {
+    const client = createApiClient({
+      baseUrl: 'http://127.0.0.1:8765/api/',
+      fetchImplementation: async () => new Response('<html>Unavailable</html>', {
+        status: 503,
+        headers: { 'Content-Type': 'text/html' },
+      }),
+    });
+    await expect(client.request('entries/query')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 503,
+    });
+  });
+
   it('preserves HTTP status and server error payloads', async () => {
     const client = createApiClient({
       baseUrl: 'http://127.0.0.1:8765/api/',

@@ -68,6 +68,13 @@ if defined T3_WEB_BUILD (
   )
 )
 
+rem Encrypted pairing (Settings - Connect to APP) needs the private address the
+rem phone will dial; without it the server never starts its TLS listener. An
+rem already-set value wins, so a multi-interface machine can pin the address.
+if not defined T3_PAIRED_HOST (
+  for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$ip = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -match '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)' } | Select-Object -First 1 -ExpandProperty IPAddress; if ($ip) { Write-Output $ip }"`) do set "T3_PAIRED_HOST=%%I"
+)
+
 cd apps\server
 if not defined T3_OPEN_BROWSER set T3_OPEN_BROWSER=1
 echo Starting T3 at http://127.0.0.1:8765

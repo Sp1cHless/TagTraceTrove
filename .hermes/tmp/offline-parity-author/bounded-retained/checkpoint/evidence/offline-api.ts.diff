@@ -1,0 +1,20 @@
+--- continuation-start/apps/web/src/offline/offline-api.ts
++++ checkpoint/apps/web/src/offline/offline-api.ts
+@@ -4007,7 +4007,7 @@
+           let candidate = store.captureSnapshot && store.installSnapshot && store.compareSnapshotMeta && online.fetchSnapshotDelta && online.ackSnapshotDelta
+             ? await fetchSnapshotCandidate(online, activeBeforeReplay, await online.getSyncCapabilities(), clientId, await readSnapshotMediaMode(store))
+             : { snapshot: await online.fetchSyncSnapshot() };
+-          if (entryDeleteReceipts.size && !candidate.acknowledgement && online.fetchSnapshotDelta && online.ackSnapshotDelta) {
++          if ((entryDeleteReceipts.size || producerDeleteReceipts.size) && !candidate.acknowledgement && online.fetchSnapshotDelta && online.ackSnapshotDelta) {
+             candidate = await fetchSnapshotCandidate(online, { generationId: 0, snapshot: candidate.snapshot }, await online.getSyncCapabilities(), clientId, await readSnapshotMediaMode(store));
+           }
+           const snapshot = candidate.snapshot;
+@@ -4501,7 +4501,7 @@
+         onlineIdentity = true;
+       }
+       if (!identity || !owner?.syncUid || !owner.syncVersion) throw new Error('Author deletion needs a saved stable identity; refresh this offline copy');
+-      if (await store.readMeta('capability.offlineMutations') !== '1' || await store.readMeta('capability.offlineAuthorDelete') !== '1') throw new Error('Refresh this offline copy to enable Author deletion');
++      if (await store.readMeta('capability.offlineMutations') !== '1' || await store.readMeta('capability.offlineAuthorDelete') !== '1') throw new Error(isOnlineMode() ? 'Refresh this offline copy to enable Author deletion' : 'Author deletion is not available under offline');
+       const rows = await store.list();
+       if (rows.some(row => row.operationKind === 'producer.delete' && row.entityUid === owner.syncUid)) return;
+       const prior = parsedEntryOperations(rows).filter(row => row.entityKind === 'producer' && row.entityUid === owner.syncUid);

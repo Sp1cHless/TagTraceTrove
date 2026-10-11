@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-10-06T06:30:07.937Z" hostname="LAPTOP-70QV4MNN" time="201.991">
+  <properties/>
+  <testcase name="all23KindsEachRequiredFlagAbsentAndFalseRetainOriginalWithZeroMutations" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="24.077"/>
+  <testcase name="all23EnabledKindsSendExactOriginalAcceptContractReceiptButRetainRows" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="17.223"/>
+  <testcase name="rotatedActualSqlEpochPreflightZeroWritesRetainsOperationAndBytes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="16.019"/>
+  <testcase name="cachedCompletedInvalidReceiptsNeverGrantDependencies" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="16.0"/>
+  <testcase name="malformedStatusHoldsDependentButIndependentOwnerExecutes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="16.042"/>
+  <testcase name="malformedResourceKindHoldsDependentButIndependentOwnerExecutes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="16.078"/>
+  <testcase name="malformedOpIdHoldsDependentButIndependentOwnerExecutes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="16.042"/>
+  <testcase name="capabilityHeldOwnerDoesNotBlockIndependentOwner" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="16.039"/>
+  <testcase name="replacedActualCertificatePreflightZeroWritesRetainsOperationAndBytes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="16.117"/>
+  <testcase name="revokedActualSessionPreflightZeroWritesRetainsOperationAndBytes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="16.097"/>
+  <testcase name="malformedLibraryHoldsDependentButIndependentOwnerExecutes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="16.15"/>
+  <testcase name="malformedEpochHoldsDependentButIndependentOwnerExecutes" classname="com.speechless666.t3.spike.NativeWorkerAuthorityAcceptanceJvmTest" time="16.107"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

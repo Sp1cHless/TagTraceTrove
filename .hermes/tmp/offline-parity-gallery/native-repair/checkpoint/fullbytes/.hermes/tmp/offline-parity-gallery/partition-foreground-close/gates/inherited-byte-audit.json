@@ -1,0 +1,12 @@
+{
+  "expectedOwnedChanges": [
+    "apps/web/src/offline/offline-api.ts",
+    "apps/web/tests/offline-gallery-partition-retained.integration.test.ts",
+    "packages/shared/src/schemas/sync.ts",
+    "apps/web/src/api/gallery.ts",
+    "apps/server/src/http/app.ts",
+    "apps/web/src/GalleryApp.vue"
+  ],
+  "unexpectedChanged": [],
+  "inheritedEntries": 478
+}

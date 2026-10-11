@@ -1,0 +1,16 @@
+[
+  {
+    "path": "CURRENT.md",
+    "originalSha256": "dc05cf2b5b1ae67ce9b06b7a98dd77a8b2502c230f3e39dc663df287528bc0dd",
+    "currentSha256": "75bbf90562d9bfb0dc66d12c00fbc000c4e907fc3d30179c2a5b1e98fb2ba6c4",
+    "originalSize": 19251,
+    "currentSize": 19381
+  },
+  {
+    "path": ".hermes/artifacts/offline-parity-implementation-board.md",
+    "originalSha256": "c366a414bbd06d8013adf5e10ab0178e6f52b80fda6fc2b38dd80050e557f068",
+    "currentSha256": "926d82b564cd126d978eb40803276cf481dd9adcec2a5deb0c401a77e7978d02",
+    "originalSize": 4124,
+    "currentSize": 4214
+  }
+]

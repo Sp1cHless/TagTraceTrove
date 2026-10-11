@@ -1,0 +1,57 @@
+{
+  "sourceSha256": {
+    ".hermes/artifacts/quick-author-entrypoints-implementation.md": "4f7a86759f9bc37afcd94cf01fd77d4c8203c4233c0d6a1b5c90db16c1bc41aa",
+    ".hermes/tmp/quick-author-entrypoints/index.html": "5d0978467b4826e2764cfd9296ccb6544d2a947a1ef39c83f2ddcbceea523cbe",
+    ".hermes/tmp/quick-author-entrypoints/main.ts": "b3edd056bc58bb96f1907a576f13cd152d384c988716c4d4ecaeb7fd98b1ed9b",
+    ".hermes/tmp/quick-author-entrypoints/viewports.html": "1f3f1b9ddcb05ae0bedebba623da32521f42213bc0832b99618ddf0f189add0c",
+    ".hermes/tmp/quick-author-entrypoints/vite.config.mjs": "b113b6f975f792ee2fc64daf363017a1687816e4e6443b599737c94772ec682b",
+    "apps/server/src/repositories/producer-tag-repository.ts": "9755ce1288ba973ac112ef631c91cf6dce142fcc40dd47748cdb1e4823eb0a03",
+    "apps/web/src/AddEntryPage.vue": "2f5b8d7ec58e8d36212b22aa680eca78aa3c5eaa274f846cfeeefe03097e7e6b",
+    "apps/web/src/AuthorPage.vue": "365d5df3da79875e7f97abcbaf89b057c3a8c6d1c8d6629190c877edbfe5a5cb",
+    "apps/web/src/GalleryApp.vue": "332c73de0893c89e357bfbf7af6a9a96e54178f71dcde12cf5b8127bbff3699c",
+    "apps/web/src/api/gallery.ts": "7994c4b4485d48e29d2bcea2bbfebb9774798660d85e20bab63ccd34fbe9dc84",
+    "apps/web/src/i18n.ts": "36196a56e67b1dacab1dad79f573c35dcf52a16865e87787d7ad462b0c815e44",
+    "apps/web/src/offline/offline-library.ts": "caa0ba348b29047841c7d107eca28642511600d441b1e3c18c2352696fc9fb60",
+    "apps/web/tests/gallery-app.test.ts": "21d7bc4f323f660cff957f2573df2c3d5fbefa2f618e554d51669a896b29a066",
+    "apps/web/tests/quick-author-entrypoints.integration.test.ts": "205cff468e7c74a21392e4f6596703540be6afd12e74e326b72465174ec5ca52",
+    "apps/web/tests/quick-author-ui.integration.test.ts": "68c12515e7d85af7c06802aba8bd394f62be1269d5b7c620808066c0ed91ee04",
+    "spikes/001-android-webview-shell/android/app/build.gradle": "b34b4bd712705c9dae3c184c96d32dbf034563b2d18783fe61a17e9c306d1629",
+    "vitest.integration.config.ts": "62ae630d2f64ed3b560fc884f6c0f86d6ffb10e08470274adb420c2c4fc9b9b4"
+  },
+  "packagedWebSha256": {
+    "assets/public/assets/index-DbekoYM1.js": "1002ed8d8c58551c0a2ab9f11a600277bd83513ad1b4a66389ddc1016de6da5c",
+    "assets/public/assets/index-y_phWG8t.css": "92f7b1334fcbf86eee97b9707d8428d351575c91ecb1d30c2d746045dd38a9df",
+    "assets/public/cordova.js": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "assets/public/cordova_plugins.js": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "assets/public/icons/icon-maskable.svg": "fa501d4d85841e4d66e0ae8540be4dabfd076ccdb8088df51f27ad9fa1e3f875",
+    "assets/public/icons/icon.svg": "f36cf6bb3367b74cb9883526b4e9c4bae47961925f18d577eb0ee7a35507cff8",
+    "assets/public/index.html": "2999614b2b9e59b7f1f2144541319210b28989b4be34708d97c0150f9d59b158",
+    "assets/public/manifest.webmanifest": "dc57617567f3995981e16fa5a4da6361f8d82d999a4cf53cd3f2ffcacb1287b5",
+    "assets/public/sw.js": "f581e027fb7dd31206c69f4048018116d59b1534e0b13720002543abce903d6c"
+  },
+  "apk": {
+    "apk": "D:\\Project\\TagTraceTrove\\spikes\\001-android-webview-shell\\T3-v43-offline-quick-duration-author-filter.apk",
+    "sha256": "4faf8f23383b43ca65c3b45008e75159658192653c8fe3fc8f1407c999c4f2f1",
+    "size": 5830456,
+    "matchedWebFiles": [
+      "assets/index-DbekoYM1.js",
+      "assets/index-y_phWG8t.css",
+      "icons/icon-maskable.svg",
+      "icons/icon.svg",
+      "index.html",
+      "manifest.webmanifest",
+      "sw.js"
+    ],
+    "markers": [
+      "0.0.43-c3-quick-duration-author-filter"
+    ],
+    "sameSignerAs": "D:\\Project\\TagTraceTrove\\spikes\\001-android-webview-shell\\T3-v42-offline-duration-author.apk",
+    "certificate": "Signer #1 certificate SHA-256 digest: 1035333c6fa6a18e40398739adda5a2640e6c9cf38e94bea1bf58118eb5fdf41",
+    "package": "package: name='com.speechless666.t3.spike' versionCode='43' versionName='0.0.43-c3-quick-duration-author-filter' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'"
+  },
+  "defaultTests": 1219,
+  "integrationTests": 672,
+  "nativeTests": 60,
+  "device": "UNVERIFIED",
+  "deployment": "NOT PERFORMED"
+}

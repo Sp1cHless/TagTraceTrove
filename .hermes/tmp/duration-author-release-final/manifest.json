@@ -1,0 +1,60 @@
+{
+  "sourceSha256": {
+    "apps/web/tests/duration-author-offline.integration.test.ts": "7b9b8a1ffc744c83674c0f83894921966919d1c300490f504dc1fe9c587bd204",
+    "packages/shared/src/schemas/sync.ts": "dc908ee2ac386337029b9b0244ec88aeca872095e96bcadd169bc2d84debd0d9",
+    "apps/server/src/sync/sync-service.ts": "d3dbf8d87745a6e3767ea4e62cead0b7bda1451ddf948d2f43a5e522c2de4af1",
+    "apps/server/src/sync/replay-service.ts": "fae50f889029efe689f1768cffbb2d0891207d7b33ae9bd8244fc4b1ceb293fd",
+    "apps/web/src/offline/offline-library.ts": "c7f3e5c315c07fa0f919454581a248a8eb3bac7e89a7d1b3f5cc9bf457df3ad8",
+    "apps/web/src/offline/offline-api.ts": "9d373ae1a9a88772ad59e3881cbb534187b1feba8479bed228f6048d765c6b81",
+    "apps/server/src/repositories/producer-repository.ts": "60696db372b2c376eda491e98bec85903051d9a703cebd7a0b03e549d64cd6b9",
+    "apps/web/src/api/gallery.ts": "33e441e880aa8d4997d6efdc26c8b5d28ae9c4187449c178f65f8b67936594ef",
+    "apps/web/tests/author-rating-parity.integration.test.ts": "1610ecf972df4030e38d3eb211877ea30bc0a2e43ccdff474b17ee0eee1b87e0",
+    "apps/web/src/offline/sync-mutation-plan.ts": "a05178ba09bd231c7054bfe711d5dc72d459d9c82232771bfb10fbf334102503",
+    "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/NativeMutationPlan.java": "6ca8d13fb7804a229e1b69851d054f41ccd189ba83c1ec344c8e801d4828dcc0",
+    "apps/web/src/offline/pending-work-restore.ts": "04bc1795ff773360bf1cd33fe96ba69519e98546afa0aa3a8fe1f99544a5f9e6",
+    "apps/web/src/components/EntryStatsRow.vue": "f9a4ac81f32893b72718d0eab36e6d0f5260f42106eef1b45ebb3991b8f5b7ee",
+    "apps/web/tests/duration-author-safety.integration.test.ts": "a75b6f018717e9809787da4b05d63a5fcc66a50cc4fd59c1fd4807b4c26336a0",
+    "apps/web/tests/duration-author-ui.test.ts": "4fa7adc7a72d449be134c570329f42679f6246939da01216442d22c5c6bfd237",
+    "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/DurationAuthorPlanJvmTest.java": "a1aa0d2d4e1dc0baf71b054278e32a5c9dca91da7da81fa4c844ff8c440b694a",
+    "apps/web/tests/author-self-offline.integration.test.ts": "7af0466cd168a6ca6c17c171861904a5fe56353703b71ae1541245bb89fb142a",
+    "apps/web/tests/duration-author-capabilities.test.ts": "247fde86fa5364a1591d18ea67f3e12ddb1820ad313630b50bc457eba256ad2f",
+    "apps/web/src/GalleryApp.vue": "aa41be4b82467f2141f4ddac852a784995069913a5968f75e39ecf5ae7428cc3",
+    "apps/web/tests/gallery-app.test.ts": "a0682b14324833c3ffae1c4ab11d3ca2262890c9d365a1c28c4fdb48b78823c4",
+    "spikes/001-android-webview-shell/android/app/build.gradle": "73ec02f21828f1f250b7df8c74276d37b038865c25ceb9ad9f77fc0f8002c409"
+  },
+  "packagedWebSha256": {
+    "assets/public/assets/index-BtGX_SHH.js": "b46dac87637623f092026d4f9108aa56a1375c4e0d1012565f8dbf2354125054",
+    "assets/public/assets/index-r7U5d4bq.css": "fb549dfcdddb02c14b896103d0b3cf15f443378f14d6380868889484e74e30f1",
+    "assets/public/cordova.js": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "assets/public/cordova_plugins.js": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "assets/public/icons/icon-maskable.svg": "fa501d4d85841e4d66e0ae8540be4dabfd076ccdb8088df51f27ad9fa1e3f875",
+    "assets/public/icons/icon.svg": "f36cf6bb3367b74cb9883526b4e9c4bae47961925f18d577eb0ee7a35507cff8",
+    "assets/public/index.html": "18e19a7ab92570e8ba86798f36d0ced0361bff9db151777542e388bd63a6e20b",
+    "assets/public/manifest.webmanifest": "dc57617567f3995981e16fa5a4da6361f8d82d999a4cf53cd3f2ffcacb1287b5",
+    "assets/public/sw.js": "5a9379e4280d95cbc98d0af0ff8df713cee5ba9fef7029c5115b7db93ef17e4d"
+  },
+  "apk": {
+    "apk": "D:\\Project\\TagTraceTrove\\spikes\\001-android-webview-shell\\T3-v42-offline-duration-author.apk",
+    "sha256": "0c7638a39384577227d854f5165996f89b6abf475428012ce66083bfa089fc0b",
+    "size": 5829676,
+    "matchedWebFiles": [
+      "assets/index-BtGX_SHH.js",
+      "assets/index-r7U5d4bq.css",
+      "icons/icon-maskable.svg",
+      "icons/icon.svg",
+      "index.html",
+      "manifest.webmanifest",
+      "sw.js"
+    ],
+    "markers": [
+      "0.0.42-c3-duration-author-offline"
+    ],
+    "sameSignerAs": "D:\\Project\\TagTraceTrove\\spikes\\001-android-webview-shell\\T3-v41-offline-gallery-preview.apk",
+    "certificate": "Signer #1 certificate SHA-256 digest: 1035333c6fa6a18e40398739adda5a2640e6c9cf38e94bea1bf58118eb5fdf41",
+    "package": "package: name='com.speechless666.t3.spike' versionCode='42' versionName='0.0.42-c3-duration-author-offline' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'"
+  },
+  "rootTests": 1212,
+  "integrationTests": 655,
+  "nativeTests": 60,
+  "scope": "validated v42 bytes, no phone/deploy evidence"
+}

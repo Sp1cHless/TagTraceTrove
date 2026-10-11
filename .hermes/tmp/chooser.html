@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>SiteProbe 标注</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; font:13px/1.5 system-ui,sans-serif; background:#14161a; color:#e6e6e6; }
+  header { padding:10px 14px; border-bottom:1px solid #2a2e35; position:sticky; top:0;
+           background:#14161a; }
+  header .url { color:#8aa0b8; word-break:break-all; }
+  main { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:12px;
+         padding:14px; }
+  .card { border:1px solid #2a2e35; border-radius:6px; padding:8px; }
+  .card.picked { border-color:#4a9e5c; }
+  .card img { max-width:100%; max-height:190px; border-radius:4px; background:#000;
+              display:block; margin:0 auto 6px; }
+  .card .t { font-weight:600; word-break:break-all; }
+  .card code { display:block; background:#101317; padding:2px 4px; border-radius:3px;
+               color:#8aa0b8; word-break:break-all; margin:4px 0; user-select:text; }
+  button { background:#26456b; color:#e6e6e6; border:1px solid #4a9eff; border-radius:6px;
+           padding:4px 8px; cursor:pointer; }
+  .hint { color:#6b7480; font-size:12px; }
+</style></head><body>
+<header>
+  <div class="url" id="url"></div>
+  <div class="hint" id="intro"></div>
+  <div class="hint" id="status"></div>
+</header>
+<main id="grid"></main>
+<script>
+const DATA = {"url": "https://www.bilinovel.com/wenku/weekvisit_64-63_0_0_0_0_0_0_1_0.html", "text": {"docTitle": "SiteProbe 标注", "pickHint": "先点左侧字段，再点右侧候选即可指派。", "noRuleHint": "候选列表里没有的值无法在此选择——那需要手写规则或补一个采集通道。", "save": "保存标注", "saveNote": "没标任何东西的字段不会被记录；「本作品没有这项」也是有效答案。", "needField": "先选一个左侧字段。", "searchPlaceholder": "搜索候选的值或来源", "kindAll": "全部", "unassigned": "未指派", "absentValue": "（本作品没有这项，不记录）", "absentButton": "— 本作品没有这项", "accept": "✓ 对", "reject": "✗ 错，我来选", "unreadable": "(读不到值)", "openPicture": "打开图片", "pictureFailed": "图片无法加载", "source": "来源", "sourceCount": "{count} 项", "sourceOpen": "（点开看出处）", "ambiguous": "· 规则会匹配多个元素，需验证", "noMatches": "没有匹配的候选。", "counted": "（{count} 项）", "tooMany": "共 {count} 条候选，这里只列出前 {max} 条（用搜索或类型筛选缩小范围）。", "submitting": "提交中…", "saveFailed": "保存失败：{error}", "savedNext": "已保存：{fields}。正在打开下一个网页的适配器标注…下一个适配器将会应用你标注的规则，尝试选择正确的词条，可以进行修正；如果全部正确就继续看下个网页的适配器。", "savedLast": "已经全部完成，适配器已经存储完毕，请回到 T³ 界面继续。", "picture": "图片{order}", "pictureBare": "图片", "siteOf": "第{cn}个网站（{index}/{total}）"}, "save_url": "/api/choose?token=kwJPqmHJ2ijvAV0Tr6Gr4w", "cards": [{"title": "9.7 让声称女性之间不可能的女孩，在百日内彻底沦陷的百合故事。 『女生之间什么的不可能……本该是这样的！』 这是一个从日常开始", "link": "/novel/2906.html", "cover": "2906s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/2/2906/2906s.jpg?1768676528", "index": 0, "thumb": "/cover?i=0&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.8 败北女角太多了！ 平常担任班上背景人物的我──温水和彦，偶然目击人气女同学八奈见杏菜被男生甩掉的失恋现场。 「他明明..", "link": "/novel/3095.html", "cover": "3095s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/3/3095/3095s.jpg?1783845093", "index": 1, "thumb": "/cover?i=1&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.6 妹妹是不能当女友的，可是…… 这是一段无论发生什么最终都“绝对”会与世界上最可爱的妹妹结为连理的恋爱喜剧！ 樱羽雪季是是", "link": "/novel/3343.html", "cover": "3343s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/3/3343/3343s.jpg?1753186598", "index": 2, "thumb": "/cover?i=2&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.3 人妻教师与班上女高中生陷入爱恋 「老师这么温柔，会害我不小心爱上妳喔！」 莓原树──年纪超过二十五岁，已婚。职业是高中老", "link": "/novel/4526.html", "cover": "4526s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/4/4526/4526s.jpg?1779197027", "index": 3, "thumb": "/cover?i=3&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.9 我们不可能成为恋人！绝对不行。 (※似乎可行？) 「我再也不要孤零零的了！我要赢得最棒的高中生活！」 舍弃孤零零的中学时", "link": "/novel/2727.html", "cover": "2727s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/2/2727/2727s.jpg?1789756824", "index": 4, "thumb": "/cover?i=4&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.6 想回到原世界的我，與絕對不想讓我回去的她們 被討厭的我改變之後，她們的愛開始變得沉重 睜開眼睛時，我——菊池隼汰所處的世", "link": "/novel/5336.html", "cover": "5336s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/5/5336/5336s.jpg?1791031859", "index": 5, "thumb": "/cover?i=5&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.8 玩乐关系 人人皆有秘密，彼此保持着博弈关系的恋爱喜剧开幕。 高中辍学，在桌游咖啡厅「KURUMAZA」 任职代理... ", "link": "/novel/4649.html", "cover": "4649s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/4/4649/4649s.jpg?1790256445", "index": 6, "thumb": "/cover?i=6&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.6 欢迎来到实力至上主义的教室 真正的实力、平等究竟为何？ 几乎百分之百实现升学、就业目标的全国首屈一指的名校──高度育成高", "link": "/novel/8.html", "cover": "8s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/0/8/8s.jpg?1789917798", "index": 7, "thumb": "/cover?i=7&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.5 不时轻声地以俄语遮羞的邻座艾莉同学 「И наменятоже обрати внимание.」 「啊？妳说什么？」 ", "link": "/novel/2939.html", "cover": "2939s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/2/2939/2939s.jpg?1785695270", "index": 8, "thumb": "/cover?i=8&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.8 借给朋友500圆，他竟然拿妹妹来抵债，我到底该如何是好 宫前朱莉突然来到白木求居住的公寓。 朱莉是一位关心哥哥的好女孩，", "link": "/novel/3676.html", "cover": "3676s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/3/3676/3676s.jpg?1725870148", "index": 9, "thumb": "/cover?i=9&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.8 义妹生活 高中生浅村悠太，由于父亲再婚，和学年第一美少女绫濑沙季成为同住一个屋檐下的兄妹。都见过双亲感情破... 作者三", "link": "/novel/2890.html", "cover": "2890s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/2/2890/2890s.jpg?1782111384", "index": 10, "thumb": "/cover?i=10&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.9 安达与岛村 高一女学生安达与岛村是好朋友，她们总是腻在一起聊天，偶尔打桌球，培育著名为友情的情感。 然而某天... 作者", "link": "/novel/2059.html", "cover": "2059s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/2/2059/2059s.jpg?1789151749", "index": 11, "thumb": "/cover?i=11&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.7 关于我在无意间被隔壁的天使变成废柴这件事 藤宫周所住公寓的隔壁，住着学校第一的美少女椎名真昼。自从周看到真昼在雨中淋得全", "link": "/novel/2547.html", "cover": "2547s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/2/2547/2547s.jpg?1773576177", "index": 12, "thumb": "/cover?i=12&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.0 同班同学的残念系美少女，就算付钱也想和我交朋友 为了维持自己的尼特生活，出羽结梦拜托我「希望能和我成为朋友」。又是央求我", "link": "/novel/5412.html", "cover": "5412s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/5/5412/5412s.jpg?1790686097", "index": 13, "thumb": "/cover?i=13&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.9 配角在学院中生存 (三流反派的学院生存记) 我穿越成了我喜欢的游戏中的一个三流配角。 而且已经落魄退场了。 我没有什么野", "link": "/novel/4519.html", "cover": "4519s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/4/4519/4519s.jpg?1755618941", "index": 14, "thumb": "/cover?i=14&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.7 女主角們都想殺掉我 為了拯救陷入絕望的黑暗幻想遊戲世界，我強忍淚水毀滅了世界，並殺死魔王而得以回歸。 現在，我打算利..", "link": "/novel/4279.html", "cover": "4279s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/4/4279/4279s.jpg?1789737354", "index": 15, "thumb": "/cover?i=15&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.9 文学少女 圣条学园的文艺社只有两名社员——社长天野远子以及社员井上心叶。 文笔优美的心叶升上高二便接下招揽新... 作者", "link": "/novel/88.html", "cover": "88s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/0/88/88s.jpg?1712496903", "index": 16, "thumb": "/cover?i=16&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.7 一周一次买下同班同学的那些事【Web版】 宫城每周付一次五千日元给仙台。 五千日元用于买下仙台的三个小时，期间宫城获得命", "link": "/novel/3605.html", "cover": "3605s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/3/3605/3605s.jpg?1753907141", "index": 17, "thumb": "/cover?i=17&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.9 果然我的青春恋爱喜剧搞错了 「我的青春怎么会变成这样！」 高中生八幡生性别扭，不屈服于孤独，没有半个朋友，更不用提女朋友", "link": "/novel/2.html", "cover": "2s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/0/2/2s.jpg?1728369776", "index": 18, "thumb": "/cover?i=18&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.3 已婚高中女老师爱上自己班上女学生的故事 「老师，妳是我第一个对象。」 莓原树。二十岁后半的年纪。已婚。职业是高中教师。 ", "link": "/novel/4162.html", "cover": "4162s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/4/4162/4162s.jpg?1741008170", "index": 19, "thumb": "/cover?i=19&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.9 小书痴的下克上 ～为了成为图书管理员不择手段～ 从小就是个超级书痴的女大学生丽乃，爱书爱到希望在书堆里死去。该说是「梦想", "link": "/novel/73.html", "cover": "73s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/0/73/73s.jpg?1744134291", "index": 20, "thumb": "/cover?i=20&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.7 我和班上第二可爱的女生成为朋友 连点头之交都没几个的我──前原真树交到了第一个朋友——朝凪海。 男生们都说朝凪同学是「班", "link": "/novel/3765.html", "cover": "3765s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/3/3765/3765s.jpg?1782068859", "index": 21, "thumb": "/cover?i=21&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.7 转学后班上的清纯可爱美少女，竟是小时候玩在一起的哥儿们 「我们永远都是好朋友喔！」孩提时代的某个夏日尾声，隼人跟最麻吉的", "link": "/novel/3109.html", "cover": "3109s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/3/3109/3109s.jpg?1785337648", "index": 22, "thumb": "/cover?i=22&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.8 我买下了与她的每周密会 ～以五千圆为借口，共度两人时光～ 她──宫城很奇怪，居然每周一次花上五千圆，买下可以命令我的权力", "link": "/novel/3805.html", "cover": "3805s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/3/3805/3805s.jpg?1778947167", "index": 23, "thumb": "/cover?i=23&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "10.0 欢迎来到实力至上主义的教室 3年级篇 好啦，开始真正的实力主义吧。 经历二年级最后一场「学年末特别考试」后，原本是一年", "link": "/novel/5370.html", "cover": "5370s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/5/5370/5370s.jpg?1789821889", "index": 24, "thumb": "/cover?i=24&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "8.4 边缘人的我因换座位而被S级美少女围绕展开了秘密关系。 我的平静校园生活，就这样结束了…… 边缘人阿宅泉谷谅太换了座位后，", "link": "/novel/5419.html", "cover": "5419s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/5/5419/5419s.jpg?1790923633", "index": 25, "thumb": "/cover?i=25&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.3 我当备胎女友也没关系。 ★尽管怀里抱着妳，心里想的人却是她…… ★100%不健全、不纯洁又危险的恋爱泥沼。 「我也把桐岛", "link": "/novel/3080.html", "cover": "3080s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/3/3080/3080s.jpg?1778321980", "index": 26, "thumb": "/cover?i=26&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.1 成功回避死亡结局的美少女游戏女主们似乎读到了我的【日记本】，并知道了我的秘密 女主角们都成了崇拜我的危险病娇。这到底是为", "link": "/novel/5190.html", "cover": "5190s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/5/5190/5190s.jpg?1789312801", "index": 27, "thumb": "/cover?i=27&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.1 败给性格恶劣的天才儿时玩伴，初体验全部被她夺走 吉泽若叶的儿时玩伴──梅园小牧，是个完美无瑕的存在。品行端正、才貌双全的", "link": "/novel/3984.html", "cover": "3984s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/3/3984/3984s.jpg?1788026827", "index": 28, "thumb": "/cover?i=28&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}, {"title": "9.9 才女的侍从 贵族学校的第一千金只对我撒娇！ 表面上完美无缺的她，竟是生活能力零的懒鬼!? 与爱撒娇又懒散的千... 作者", "link": "/novel/2960.html", "cover": "2960s.jpg", "cover_url": "https://www.bilinovel.com/files/article/image/2/2960/2960s.jpg?1788030090", "index": 29, "thumb": "/cover?i=29&token=kwJPqmHJ2ijvAV0Tr6Gr4w"}]};
+const T = DATA.text;
+const fill = (template, values) => template.replace(/\{(\w+)\}/g,
+  (whole, name) => (name in values ? String(values[name]) : whole));
+const grid = document.getElementById('grid');
+document.getElementById('url').textContent = DATA.url;
+document.getElementById('intro').textContent = fill(T.count, { count: DATA.cards.length });
+for (const card of DATA.cards) {
+  const box = document.createElement('div'); box.className = 'card';
+  if (card.thumb) {
+    const img = document.createElement('img');
+    img.loading = 'lazy'; img.src = card.thumb;
+    img.onerror = () => {
+      const note = document.createElement('div');
+      note.className = 'hint'; note.textContent = T.pictureFailed;
+      img.replaceWith(note);
+    };
+    box.appendChild(img);
+  }
+  const title = document.createElement('div'); title.className = 't';
+  title.textContent = '[' + card.index + '] ' + card.title;
+  box.appendChild(title);
+  const link = document.createElement('code'); link.textContent = card.link;
+  box.appendChild(link);
+  const button = document.createElement('button');
+  button.textContent = T.use;
+  button.onclick = async () => {
+    document.getElementById('status').textContent = T.submitting;
+    try {
+      const reply = await fetch(DATA.save_url, {method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({index: card.index})});
+      const result = await reply.json();
+      if (result.ok) {
+        box.className = 'card picked';
+        document.getElementById('status').textContent = fill(T.chosen, { index: card.index });
+      } else {
+        document.getElementById('status').textContent = fill(T.saveFailed, { error: result.error || '' });
+      }
+    } catch (error) {
+      document.getElementById('status').textContent = fill(T.saveFailed, { error: String(error) });
+    }
+  };
+  box.appendChild(button);
+  grid.appendChild(box);
+}
+</script>
+</body></html>

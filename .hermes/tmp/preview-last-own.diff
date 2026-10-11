@@ -1,0 +1,269 @@
+--- start/apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -41,6 +41,7 @@
+ import { getClientIdentity, readSnapshotMediaMode } from './client-identity.js';
+ import { evictEntryMediaRefs } from './offline-media.js';
+ import { cachedMediaObjectUrls } from './cached-media-object-urls.js';
++import { matchCachedMediaResponse } from './cached-media-response.js';
+ import {
+   ACTIVE_GENERATION_KEY,
+   applySnapshot,
+@@ -3487,6 +3488,40 @@
+       const appliedContentOwnerIds = new Map<string, number>();
+       const appliedMedia: StagedMediaUpload[] = [];
+       const mediaReceipts = new Map<string, import('@t3/shared').SyncMediaUploadResult>();
++      const deletionProofs = new Map<string, {entityId:number; refs:string[]; originals:Array<{sourceRef:string; sha256:string}|null>}>();
++      const deletionReceipts = new Map<string, {entityId:number; resourceVersion:number}>();
++      // Capture original cached bytes BEFORE replay can rename positional files.
++      // Persist separately from the immutable request, so response/ACK loss cannot
++      // turn a reused filename into evidence of the original picture's identity.
++      const ownerBytes = new Map<string, Map<string, {sourceRef:string; sha256:string}>>();
++      for (const operation of parsedMediaOrderOperations(operations)) {
++        if (mediaBeforeReplay.some(row=>row.entryUid===operation.entityUid)) continue;
++        const key = `mediaOrderOriginalBytes:${operation.opId}`;
++        const fingerprint = operationFingerprint(operations.find(row=>row.opId===operation.opId)!);
++        const saved = await store.readMeta(key);
++        let proof: {entityId:number; refs:string[]; originals:Array<{sourceRef:string; sha256:string}|null>} | undefined;
++        if (saved) {
++          const value = JSON.parse(saved) as {fingerprint:string; proof:typeof proof};
++          if (value.fingerprint === fingerprint) proof = value.proof;
++        }
++        if (!proof) {
++          const owner = activeBeforeReplay?.snapshot.payload.entries.find(row=>row.syncUid===operation.entityUid);
++          if (!owner) continue;
++          let bytes = ownerBytes.get(operation.entityUid);
++          if (!bytes) {
++            bytes = new Map();
++            for (const ref of [...(owner.coverRef ? [owner.coverRef] : []), ...owner.previewRefs]) {
++              const response = await matchCachedMediaResponse(online.assetUrl(ref));
++              if (response) bytes.set(ref, {sourceRef:ref, sha256:await sha256Hex(await response.blob())});
++            }
++          }
++          proof = {entityId:owner.id, refs:renamedEntryMediaRefs(owner.id, operation.payload.refs),
++            originals:operation.payload.refs.map(ref=>bytes.get(ref) ?? null)};
++          await store.writeMeta(key, JSON.stringify({fingerprint, proof}));
++        }
++        deletionProofs.set(operation.opId, proof);
++        ownerBytes.set(operation.entityUid, new Map(proof.refs.flatMap((ref,i)=>proof!.originals[i] ? [[ref,proof!.originals[i]!] as const] : [])));
++      }
+       let maxAppliedServerSeq = -1;
+       const replayPlan = mutationQueuePlan(operations);
+       const blockedEntities = new Set<string>();
+@@ -3714,6 +3749,10 @@
+           const result = await online.replaySyncOperation(operation);
+           operation = authorIdentityView(operation);
+           if (result.status === 'applied') {
++            if (operation.operationKind === 'entry.media.set' && deletionProofs.has(operation.opId)) {
++              if (result.opId !== operation.opId || result.entityId === undefined) throw new Error('Media order receipt has invalid owner identity');
++              deletionReceipts.set(operation.opId, {entityId:result.entityId, resourceVersion:result.resourceVersion});
++            }
+             if (operation.operationKind === 'entry.facet.create') {
+               if (result.opId.toLowerCase() !== operation.opId.toLowerCase() || !Number.isSafeInteger(result.entityId) || result.entityId! <= 0) throw new Error('Facet receipt has invalid identity');
+               appliedFacetIds.set(operation.entityUid.toLowerCase(), result.entityId!);
+@@ -3971,6 +4010,26 @@
+             })
+               .sort((a, b) => a.name.localeCompare(b.name));
+             if (JSON.stringify(actual) !== JSON.stringify(desired)) throw new Error('Snapshot refresh failed: pending Tag desired set is missing');
++          }
++          const lastDeletion = new Map<string, SyncEntryMediaOperation>();
++          for (const operation of appliedOperations) {
++            if (operation.operationKind === 'entry.media.set' && deletionProofs.has(operation.opId)) lastDeletion.set(operation.entityUid,operation);
++          }
++          for (const operation of lastDeletion.values()) {
++            const proof = deletionProofs.get(operation.opId)!;
++            const receipt = deletionReceipts.get(operation.opId)!;
++            const owner = snapshot.payload.entries.find(row=>row.syncUid===operation.entityUid);
++            if (!owner || owner.id !== proof.entityId || owner.id !== receipt.entityId || (owner.syncVersion ?? 0) < receipt.resourceVersion
++              || JSON.stringify([...(owner.coverRef ? [owner.coverRef] : []), ...owner.previewRefs]) !== JSON.stringify(proof.refs)) {
++              throw new Error('Snapshot refresh failed: media order survivors are missing from the authoritative Entry');
++            }
++            for (const [i, original] of proof.originals.entries()) {
++              // No cache bytes means no byte-identity claim. Never hash a renamed
++              // URL after mutation and pretend it proves the reviewed original.
++              if (!original) continue;
++              const response = await fetch(online.assetUrl(proof.refs[i]!), {cache:'no-store'});
++              if (!response.ok || await sha256Hex(await response.blob()) !== original.sha256) throw new Error('Snapshot refresh failed: media order survivor bytes do not match the cached original');
++            }
+           }
+           for (const upload of appliedMedia) {
+             if (!upload.existingEntry) continue;
+--- start/apps/web/tests/existing-entry-media-vertical.test.ts
++++ apps/web/tests/existing-entry-media-vertical.test.ts
+@@ -71,12 +71,37 @@
+  const bytes=await sharp({create:{width:2,height:2,channels:4,background:'#336699ff'}}).png().toBuffer();
+  const file=()=>new File([bytes],'original.png',{type:'image/png'}) as unknown as globalThis.File;
+  return {temp,root,entry,trace,nativeTrace,online,file,get store(){return store;},get api(){return api;},
+-  assetFault(value: 'wrong' | 'missing' | 'failed'){assetFault=value;},rejectCover(){rejectCover=true;},loseUpload(){loseUpload=true;},loseReplay(){loseReplay=true;},loseAck(){loseAck=true;},omitMedia(){omitMedia=true;},downgrade(value: 'absent' | 'false' = 'absent'){downgrade=value;},
++  assetFault(value: 'wrong' | 'missing' | 'failed' | null){assetFault=value;},correctSnapshot(){omitMedia=false;},rejectCover(){rejectCover=true;},loseUpload(){loseUpload=true;},loseReplay(){loseReplay=true;},loseAck(){loseAck=true;},omitMedia(){omitMedia=true;},downgrade(value: 'absent' | 'false' = 'absent'){downgrade=value;},
+   async cold(){store.close();store=openStore();api=createOfflineAwareGalleryApi(online,store,native());await api.preferOfflineSnapshot!();},
+   async cleanup(){store.close();await new Promise<void>(resolve=>server.close(()=>resolve()));temp.cleanup();rmSync(root,{recursive:true,force:true});}
+  };
+ }
+ describe('existing Entry real cold client/server media vertical',()=>{
++ it.each(['incomplete','wrong'] as const)('deletion-only refuses %s survivor proof before activation ACK and cleanup',async fault=>{
++  const h=await harness();const priorCaches=globalThis.caches;const cached=new Map<string,Response>();
++  Object.defineProperty(globalThis,'caches',{configurable:true,value:{open:async()=>({match:async(key:unknown)=>cached.get(String(key))?.clone(),delete:async(key:unknown)=>cached.delete(String(key))})}});
++  try{
++   const images=await Promise.all(['#ff0000ff','#00ff00ff','#0000ffff'].map(async background=>new File([await sharp({create:{width:2,height:2,channels:4,background}}).png().toBuffer()],'image.png',{type:'image/png'}) as unknown as globalThis.File));
++   await h.online.uploadEntryMedia(h.entry.id,'cover',images[0]!);for(const image of images.slice(1))await h.online.uploadEntryMedia(h.entry.id,'preview',image);
++   await applySnapshot(await h.online.fetchSyncSnapshot({media:'none'}),{store:h.store,expectedBase:await readActiveSnapshot(h.store)});
++   const entry=await h.api.getEntry(h.entry.id);
++   for(const ref of [entry.coverRef!,...entry.previewRefs])cached.set(h.online.assetUrl(ref),new Response(readFileSync(join(h.root,ref.replace('/api/assets/','')))));
++   const survivorUrl=h.online.assetUrl(entry.previewRefs[1]!);const originalBytes=Buffer.from(await cached.get(survivorUrl)!.clone().arrayBuffer());
++   await h.api.setEntryMediaOrder!(entry.id,[entry.coverRef!,entry.previewRefs[1]!]);const original=(await h.store.list())[0]!;
++   await h.cold();const base=await readActiveSnapshot(h.store);if(fault==='incomplete')h.omitMedia();else h.assetFault('wrong');
++   await h.api.replayOfflineOperations!();
++   expect(await h.store.list()).toEqual([expect.objectContaining({opId:original.opId,payload:original.payload,baseValues:original.baseValues,status:'pending'})]);
++   expect(await readActiveSnapshot(h.store)).toEqual(base);expect(await h.store.readMeta('verifiedReplayProjection')).toBeNull();
++   expect(h.trace.filter(row=>row.path.includes('/sync/ack'))).toEqual([]);expect(Buffer.from(await cached.get(survivorUrl)!.clone().arrayBuffer())).toEqual(originalBytes);
++   h.correctSnapshot();h.assetFault(null);await h.cold();h.loseAck();await h.api.replayOfflineOperations!();
++   expect(await h.store.list()).toHaveLength(1);expect(await h.store.readMeta('pendingSnapshotAck')).not.toBeNull();
++   expect(Buffer.from(await cached.get(survivorUrl)!.clone().arrayBuffer())).toEqual(originalBytes);
++   await h.cold();await h.api.replayOfflineOperations!();expect(await h.store.list()).toEqual([]);
++   const sent=h.trace.filter(row=>row.path.includes('/sync/replay'));for(const row of sent)expect(row.body).toEqual(sent[0]!.body);
++   expect(h.temp.database.prepare('SELECT COUNT(*) FROM sync_operation_receipts').pluck().get()).toBe(1);
++   const current=await h.online.getEntry(entry.id);expect(readFileSync(join(h.root,current.previewRefs[0]!.replace('/api/assets/','')))).toEqual(originalBytes);
++  }finally{Object.defineProperty(globalThis,'caches',{configurable:true,value:priorCaches});await h.cleanup();}
++ },30000);
+  it.each(['wrong','missing','failed'] as const)('retains exact staged bytes and does not validate or ACK a legal snapshot with %s asset bytes',async fault=>{
+   const h=await harness();try{
+    await h.api.uploadEntryMedia(h.entry.id,'preview',h.file());const original=(await h.store.listMedia())[0]!;
+--- start/apps/server/tests/fixtures/paired-bootstrap-bytes.mts
++++ apps/server/tests/fixtures/paired-bootstrap-bytes.mts
+@@ -0,0 +1,81 @@
++import { readFile, mkdtemp, rm } from 'node:fs/promises';
++import { tmpdir, networkInterfaces } from 'node:os';
++import { join } from 'node:path';
++import { createInterface } from 'node:readline';
++import { createRequire } from 'node:module';
++import { runInNewContext } from 'node:vm';
++import assert from 'node:assert/strict';
++import { File } from 'node:buffer';
++import { createTempFileDatabase } from '../../src/database/testing.js';
++import { applyAllMigrations } from '../../src/database/migrations.js';
++import { createEntry } from '../../src/repositories/entry-repository.js';
++import { createApiApp } from '../../src/http/app.js';
++import { getSyncIdentity } from '../../src/sync/sync-service.js';
++import { startSecurePairingListener, privateHttpsHost } from '../../src/http/secure-pairing.js';
++
++// Node owns only the real isolated server and production JS caller. JVM owns
++// claimed PairingState, authorization revalidation, pinning and raw transport.
++const address=Object.values(networkInterfaces()).flat().find(row=>{if(!row || row.family!=='IPv4' || row.internal)return false;try{privateHttpsHost(row.address);return true;}catch{return false;}})?.address;
++assert.ok(address,'Private IPv4 required by existing production pairing policy');
++const root=await mkdtemp(join(tmpdir(),'t3-bootstrap-bytes-'));
++const temp=createTempFileDatabase();applyAllMigrations(temp.database);
++const entry=createEntry(temp.database,{title:'Paired byte caller',type:'comic'});
++const app=createApiApp(temp.database,{assetRoot:join(root,'assets')});
++const trace:Array<{path:string;authorized:boolean}>=[];
++let fault:'wrong'|'missing'|null=null;
++const runtime=await startSecurePairingListener({configDirectory:join(root,'auth'),libraryId:getSyncIdentity(temp.database).libraryId,hostname:address,advertisedHost:address,port:0,fetch:async request=>{
++ const url=new URL(request.url);trace.push({path:url.pathname+url.search,authorized:!!request.headers.get('authorization')});
++ const response=await app.fetch(request);
++ if(fault && url.pathname.startsWith('/api/assets/'))return new Response(new Uint8Array([0,255,128,1]),{status:fault==='missing'?404:200,headers:{'content-type':'image/png'}});
++ return response;
++}});
++const output=(value:unknown)=>process.stdout.write(JSON.stringify(value)+'\n');
++const inputLines=createInterface({input:process.stdin});
++const lines=inputLines[Symbol.asyncIterator]();
++const receive=async()=>{const row=await lines.next();assert.ok(!row.done);return JSON.parse(row.value);};
++const priorFetch=globalThis.fetch;
++let store:{close():void}|undefined;
++try{
++ output(runtime.issue());assert.equal((await receive()).ready,true);
++ const bridgeCalls:Array<{path:string;method:string;contentType:string|null;body?:string}>=[];
++ let originalFetchCalls=0;
++ const window={fetch:async()=>{originalFetchCalls++;return new Response('unapproved URL not paired',{status:418});},addEventListener:()=>{},Capacitor:{nativePromise:async(plugin:string,method:string,args:{path:string;method:string;contentType:string|null;body?:string})=>{
++  assert.equal(plugin,'T3PairedTransport');assert.equal(method,'request');
++  assert.deepEqual(Object.keys(args).sort(),['body','contentType','method','path']);
++  bridgeCalls.push(args);output({request:args});const result=await receive();assert.ok(!('token' in result));return result;
++ }}};
++ const prepare=await readFile(new URL('../../../../spikes/001-android-webview-shell/prepare-web.mjs',import.meta.url),'utf8');
++ const script=prepare.match(/const pairingBootstrap = String\.raw`([\s\S]*?)`;/)![1]!.match(/<script>([\s\S]*?)<\/script>/)![1]!;
++ runInNewContext(script,{window,location:{href:'https://localhost/'},Request,Response,URL,DOMException,Uint8Array,atob,btoa});
++ globalThis.fetch=window.fetch as typeof fetch;
++ const web='../../../web/src/';
++ const {createApiClient}=await import(web+'api/client.ts');const {createGalleryApi}=await import(web+'api/gallery.ts');
++ const {createOfflineAwareGalleryApi}=await import(web+'offline/offline-api.ts');
++ const {createIndexedDbOfflineStore}=await import(web+'offline/indexeddb-snapshot-store.ts');
++ const {applySnapshot,readActiveSnapshot}=await import(web+'offline/snapshot-store.ts');
++ const require=createRequire(new URL('../../../web/package.json',import.meta.url));const {IDBFactory}=require('fake-indexeddb');
++ const indexedDB=new IDBFactory(),databaseName='paired-bootstrap-'+crypto.randomUUID();
++ const online=createGalleryApi(createApiClient({baseUrl:'https://localhost/api/'}),'https://localhost/');
++ let durable=createIndexedDbOfflineStore({indexedDB,databaseName});store=durable;
++ let api=createOfflineAwareGalleryApi(online,durable);await api.getSyncCapabilities({replay:false});
++ await durable.writeMeta('snapshotMediaMode','none');await applySnapshot(await online.fetchSyncSnapshot({media:'none'}),{store:durable,expectedBase:null});await api.preferOfflineSnapshot();
++ const {default:sharp}=await import('sharp');const bytes=await sharp({create:{width:3,height:3,channels:4,background:'#138efaff'}}).png().toBuffer();
++ assert.ok(bytes.some((byte:number)=>byte===0));assert.ok(bytes.some((byte:number)=>byte>127));
++ await api.uploadEntryMedia(entry.id,'preview',new File([bytes],'binary.png',{type:'image/png'}));const original=(await durable.listMedia())[0];const base=await readActiveSnapshot(durable);
++ const cold=async()=>{durable.close();durable=createIndexedDbOfflineStore({indexedDB,databaseName});store=durable;api=createOfflineAwareGalleryApi(online,durable);await api.preferOfflineSnapshot();};
++ for(const value of ['wrong','missing'] as const){
++  fault=value;await cold();await api.replayOfflineOperations();const retained=(await durable.listMedia())[0];
++  assert.equal(retained.uploadId,original.uploadId);assert.equal(retained.sha256,original.sha256);assert.deepEqual(retained.existingEntry,original.existingEntry);assert.deepEqual(Buffer.from(await retained.blob.arrayBuffer()),bytes);
++  assert.deepEqual(await readActiveSnapshot(durable),base);assert.equal(await durable.readMeta('verifiedReplayProjection'),null);assert.equal(trace.filter(row=>row.path.includes('/sync/ack')).length,0);
++ }
++ fault=null;await cold();await api.replayOfflineOperations();assert.deepEqual(await durable.listMedia(),[]);
++ const current=await online.getEntry(entry.id);const ref=current.previewRefs[0];
++ const query='?version=a%2Fb&raw=1';const raw=await fetch(online.assetUrl(ref)+query);assert.equal(raw.status,200);assert.deepEqual(Buffer.from(await raw.arrayBuffer()),bytes);
++ assert.equal(bridgeCalls.at(-1)!.path,ref+query);assert.ok(trace.some(row=>row.path===ref+query && row.authorized));
++ const count=bridgeCalls.length;
++ for(const url of ['https://evil.invalid/api/assets/entries/1/preview.png','http://localhost/api/sync/capabilities','https://localhost/not-api'])assert.equal((await fetch(url)).status,418);
++ assert.equal(bridgeCalls.length,count);assert.equal(originalFetchCalls,3);
++ assert.ok(trace.every(row=>row.authorized));assert.ok(trace.filter(row=>row.path.includes('/api/assets/')).length>=3);
++ output({done:true,pass:true,wrongMissingRetained:true,canonicalQuery:true,rawBytes:bytes.length,authenticatedRequests:trace.length,bridgeCalls:bridgeCalls.length,unapprovedNotPaired:3});
++}catch(error){output({done:true,pass:false,error:String(error),stack:error instanceof Error?error.stack:undefined});process.exitCode=1;}
++finally{inputLines.close();process.stdin.pause();globalThis.fetch=priorFetch;store?.close();await runtime.close();temp.cleanup();await rm(root,{recursive:true,force:true});}
+--- start/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/PairedBootstrapBytesTest.java
++++ spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/PairedBootstrapBytesTest.java
+@@ -0,0 +1,52 @@
++package com.speechless666.t3.spike;
++
++import org.junit.Test;
++import static org.junit.Assert.*;
++import org.json.JSONObject;
++import java.io.BufferedReader;
++import java.io.InputStreamReader;
++import java.io.PrintWriter;
++import java.nio.charset.StandardCharsets;
++import java.nio.file.Path;
++import java.util.Base64;
++import java.util.concurrent.TimeUnit;
++
++/** Typed bridge adapter forwards every JS request to real claimed/pinned native
++ * transport. No synthetic bytes, JS-visible credentials or trust bypass. */
++public class PairedBootstrapBytesTest {
++    @Test public void productionBootstrapVerifierUsesAuthenticatedPinnedOriginalBytes() throws Exception {
++        String repository=System.getenv("T3_TEST_REPO"); assertNotNull(repository);
++        Process child=new ProcessBuilder("node",Path.of(repository,"apps/server/node_modules/tsx/dist/cli.mjs").toString(),Path.of(repository,"apps/server/tests/fixtures/paired-bootstrap-bytes.mts").toString()).redirectError(ProcessBuilder.Redirect.INHERIT).start();
++        BufferedReader reader=new BufferedReader(new InputStreamReader(child.getInputStream(),StandardCharsets.UTF_8));
++        PrintWriter writer=new PrintWriter(child.getOutputStream(),true,StandardCharsets.UTF_8);
++        try {
++            String qr=reader.readLine();assertNotNull("Isolated authenticated fixture starts",qr);
++            PairingState state=PairingState.claim(qr);state.verify();
++            state=PairingState.parse(state.serialize().toString()); // native-owned cold credential
++            writer.println("{\"ready\":true}");
++            int requests=0;boolean done=false;
++            for(String line;(line=reader.readLine())!=null;) {
++                JSONObject message=new JSONObject(line);
++                if(message.optBoolean("done")) {
++                    assertTrue(message.toString(),message.getBoolean("pass"));
++                    System.out.println("paired-bootstrap-byte-caller "+message);
++                    assertTrue(message.getBoolean("wrongMissingRetained"));assertTrue(message.getBoolean("canonicalQuery"));
++                    assertEquals(3,message.getInt("unapprovedNotPaired"));assertTrue(message.getInt("rawBytes")>0);
++                    assertEquals(requests,message.getInt("bridgeCalls"));done=true;break;
++                }
++                JSONObject args=message.getJSONObject("request");
++                assertFalse("Token never enters JS bridge arguments",args.has("token"));assertFalse(args.has("authorization"));
++                assertTrue(args.length()==3 || args.length()==4);
++                assertTrue(args.getString("path").startsWith("/api/"));
++                // Same authority and transport operations as PairedTransportPlugin.request.
++                state.verify();
++                byte[] body=args.isNull("body")?null:Base64.getDecoder().decode(args.getString("body"));
++                PinnedLanTransport.Result result=state.transport.request(args.getString("path"),args.getString("method"),args.isNull("contentType")?null:args.getString("contentType"),body,state.token);
++                JSONObject reply=new JSONObject().put("status",result.status).put("url","https://localhost"+result.path).put("contentType",result.contentType==null?JSONObject.NULL:result.contentType).put("body",Base64.getEncoder().encodeToString(result.bytes));
++                assertFalse(reply.toString().contains(state.token));writer.println(reply);requests++;
++            }
++            assertTrue("Actual JS production caller completed",done);
++            assertTrue(child.waitFor(20,TimeUnit.SECONDS));assertEquals(0,child.exitValue());
++        } finally {writer.close();if(!child.waitFor(15,TimeUnit.SECONDS))child.destroyForcibly();}
++    }
++}

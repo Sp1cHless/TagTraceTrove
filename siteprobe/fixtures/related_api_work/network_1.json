@@ -1,0 +1,20 @@
+{
+  "url": "https://api.fixture.test/video/AB12CD34/related",
+  "body": {
+    "results": [
+      {
+        "title": "Some Other Work",
+        "user": {
+          "name": "Someone Else"
+        }
+      },
+      {
+        "title": "Yet Another Work",
+        "user": {
+          "name": "Third Person"
+        }
+      }
+    ],
+    "limit": 32
+  }
+}

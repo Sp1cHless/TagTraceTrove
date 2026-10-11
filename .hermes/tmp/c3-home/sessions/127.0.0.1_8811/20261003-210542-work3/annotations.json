@@ -1,0 +1,77 @@
+{
+  "url": "http://127.0.0.1:8811/work/3.html",
+  "mode": "confirm",
+  "fields": {
+    "title": "作品三",
+    "creator": "作者丙",
+    "cover": "http://127.0.0.1:8811/img/cover3.png",
+    "tags": [
+      "标签A",
+      "标签E"
+    ]
+  },
+  "picks": {},
+  "verdicts": {},
+  "absent": [],
+  "hypotheses": {
+    "title": {
+      "value": "作品三",
+      "score": 5,
+      "rule": {
+        "from": "html",
+        "document": "page",
+        "select": "h1.work-title",
+        "text": true,
+        "matches": 1
+      },
+      "from": [
+        "markup",
+        "markup"
+      ]
+    },
+    "creator": {
+      "value": "作者丙",
+      "score": 1,
+      "rule": {
+        "from": "html",
+        "document": "page",
+        "select": "a.author",
+        "text": true,
+        "matches": 1
+      },
+      "from": [
+        "markup"
+      ]
+    },
+    "cover": {
+      "value": "http://127.0.0.1:8811/img/cover3.png",
+      "score": 6,
+      "rule": {
+        "from": "meta",
+        "document": "page",
+        "property": "og:image"
+      },
+      "from": [
+        "markup",
+        "markup"
+      ]
+    },
+    "tags": {
+      "value": [
+        "标签A",
+        "标签E"
+      ],
+      "score": null,
+      "rule": {
+        "from": "html",
+        "document": "page",
+        "select": "a.tag",
+        "text": true,
+        "list": true
+      },
+      "from": [
+        "confirmed"
+      ]
+    }
+  }
+}

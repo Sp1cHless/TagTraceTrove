@@ -1,0 +1,23 @@
+{
+  "focused": {
+    "command": [
+      "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "--config",
+      "vitest.integration.config.ts",
+      "apps/web/tests/offline-author-parity.integration.test.ts",
+      "--maxWorkers=2",
+      "--testTimeout=30000",
+      "--reporter=json",
+      "--outputFile=D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-author\\seed-closure-focused.json"
+    ],
+    "cwd": "D:\\Project\\TagTraceTrove",
+    "exit": 0,
+    "success": true,
+    "numPassedTests": 15,
+    "numFailedTests": 0,
+    "numPendingTests": 0,
+    "numTotalTests": 15
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "url": "http://127.0.0.1:8811/work/2.html",
+  "mode": "annotate",
+  "fields": {
+    "title": "作品二",
+    "creator": "作者乙",
+    "cover": "http://127.0.0.1:8811/img/cover2.png"
+  },
+  "picks": {
+    "title": "cand_0002",
+    "creator": "cand_0008",
+    "cover": "cand_0001"
+  },
+  "verdicts": {},
+  "absent": [],
+  "hypotheses": {
+    "title": {
+      "value": "作品二",
+      "score": 5,
+      "rule": {
+        "from": "html",
+        "document": "page",
+        "select": "h1.work-title",
+        "text": true,
+        "matches": 1
+      },
+      "from": [
+        "markup",
+        "markup"
+      ],
+      "candidate_id": "cand_0002"
+    },
+    "creator": {
+      "value": "作者乙",
+      "score": 1,
+      "rule": {
+        "from": "html",
+        "document": "page",
+        "select": "a.author",
+        "text": true,
+        "matches": 1
+      },
+      "from": [
+        "markup"
+      ],
+      "candidate_id": "cand_0008"
+    },
+    "cover": {
+      "value": "http://127.0.0.1:8811/img/cover2.png",
+      "score": 6,
+      "rule": {
+        "from": "meta",
+        "document": "page",
+        "property": "og:image"
+      },
+      "from": [
+        "markup",
+        "markup"
+      ],
+      "candidate_id": "cand_0001"
+    }
+  }
+}

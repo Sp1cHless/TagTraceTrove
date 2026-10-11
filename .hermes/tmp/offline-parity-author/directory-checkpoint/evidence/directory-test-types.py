@@ -1,0 +1,5 @@
+from guard import edit
+p='apps/web/tests/offline-author-parity.integration.test.ts'
+edit(p,"after.payload.collectionMembers.map(({sortOrder,...row})=>row)","after.payload.collectionMembers.map(({position,...row})=>row)")
+edit(p,"row.producerId!==f.author.id).map(({sortOrder,...row})=>row)","row.producerId!==f.author.id).map(({position,...row})=>row)")
+edit(p,"const replay=f.online.replaySyncOperation.bind(f.online);vi.spyOn(f.online,'replaySyncOperation').mockImplementation(async operation=>{const receipt=await replay(operation);return operation.operationKind==='author.directories.set' && receipt.status==='applied'?{...receipt,...(mode==='wrong UUID'?{opId:randomUUID()}:{serverSeq:Number.MAX_SAFE_INTEGER})}:receipt;});", "const replay=f.online.replaySyncOperation!.bind(f.online);f.online.replaySyncOperation=async operation=>{const receipt=await replay(operation);return operation.operationKind==='author.directories.set' && receipt.status==='applied'?{...receipt,...(mode==='wrong UUID'?{opId:randomUUID()}:{serverSeq:Number.MAX_SAFE_INTEGER})}:receipt;};")

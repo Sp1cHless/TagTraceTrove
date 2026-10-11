@@ -1,0 +1,30 @@
+--- before/packages/shared/src/schemas/sync.ts
++++ working/packages/shared/src/schemas/sync.ts
+@@ -103,6 +103,18 @@
+   entityKind: z.literal('entry_facet'),
+ } as const;
+ 
++const syncProducerCreateOperationSchema = z.strictObject({
++  ...syncReplayBaseShape, entityKind: z.literal('producer'), operationKind: z.literal('producer.create'),
++  baseVersion: z.literal(0), baseValues: z.strictObject({}),
++  payload: z.strictObject({ name: z.string().trim().min(1), occupation: z.string().nullable(),
++    artworkRef: z.string().nullable(), content: z.string().nullable() }),
++});
++
++const syncProducerDeleteOperationSchema = z.strictObject({
++  ...syncReplayBaseShape, entityKind:z.literal('producer'), operationKind:z.literal('producer.delete'),
++  baseVersion:z.number().int().positive(),baseValues:z.strictObject({}),payload:z.strictObject({}),
++});
++
+ const syncProducerReplayBaseShape = {
+   ...syncReplayBaseShape,
+   entityKind: z.literal('producer'),
+@@ -939,6 +951,8 @@
+   syncEntryContentsOperationSchema,
+   syncProducerViewLaterOperationSchema,
+   syncProducerRatingOperationSchema,
++  syncProducerDeleteOperationSchema,
++  syncProducerCreateOperationSchema,
+   syncProducerUpdateOperationSchema,
+   syncProducerTagsOperationSchema,
+   syncRatingLayoutSlotsOperationSchema,

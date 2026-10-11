@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "generated_by": "siteprobe-builder",
+  "kind": "declarative",
+  "source": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\c3-home\\sessions\\127.0.0.1_8811\\20261003-220230-work1",
+  "fields": [
+    "author",
+    "cover_url",
+    "tags",
+    "title"
+  ],
+  "passthrough": [],
+  "unverified": [],
+  "adapter_beside": null,
+  "t3_needs": []
+}

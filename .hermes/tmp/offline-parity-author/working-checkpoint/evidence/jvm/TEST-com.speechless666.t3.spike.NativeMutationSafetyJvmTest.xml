@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.speechless666.t3.spike.NativeMutationSafetyJvmTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-10-09T08:53:55.199Z" hostname="LAPTOP-70QV4MNN" time="3.496">
+  <properties/>
+  <testcase name="unchangedOriginalCanRestageAtNewRevisionButStaleActivationCannotWin" classname="com.speechless666.t3.spike.NativeMutationSafetyJvmTest" time="3.203"/>
+  <testcase name="lateOldOwnerResultCannotSettleTheNewLease" classname="com.speechless666.t3.spike.NativeMutationSafetyJvmTest" time="0.056"/>
+  <testcase name="productionCancellationDeletesUnsealedFilesAndPersistsBothIdentities" classname="com.speechless666.t3.spike.NativeMutationSafetyJvmTest" time="0.053"/>
+  <testcase name="explicitGenericResumeRechecksImmutableBodyGenerationAndRefusesConflictReplay" classname="com.speechless666.t3.spike.NativeMutationSafetyJvmTest" time="0.042"/>
+  <testcase name="cancelledUnsealedOperationIdentityCannotLaterSeal" classname="com.speechless666.t3.spike.NativeMutationSafetyJvmTest" time="0.033"/>
+  <testcase name="completedSettlementBeforeLaterCancellationKeepsItsReceiptAndOriginal" classname="com.speechless666.t3.spike.NativeMutationSafetyJvmTest" time="0.035"/>
+  <testcase name="genericDiscardTombstoneRejectsLateRestageAfterPrune" classname="com.speechless666.t3.spike.NativeMutationSafetyJvmTest" time="0.039"/>
+  <testcase name="oldCapturedNumericGenerationCannotReplaceNewGeneration" classname="com.speechless666.t3.spike.NativeMutationSafetyJvmTest" time="0.034"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

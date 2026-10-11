@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.speechless666.t3.spike.NativeEntryMultiAuthorConversionJvmTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-10T17:48:18.076Z" hostname="LAPTOP-70QV4MNN" time="85.32">
+  <properties/>
+  <testcase name="g2" classname="com.speechless666.t3.spike.NativeEntryMultiAuthorConversionJvmTest" time="85.32"/>
+  <system-out><![CDATA[CAP_CELLS 4 absent/false zeroPOST original retained recovery actualSQL; legacy owners-absence NOT enriched
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

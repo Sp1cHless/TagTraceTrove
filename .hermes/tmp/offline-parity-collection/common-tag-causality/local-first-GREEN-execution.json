@@ -1,0 +1,18 @@
+{
+  "argv": [
+    "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "--config",
+    "vitest.integration.config.ts",
+    "apps/web/tests/offline-collection-common-tag.integration.test.ts",
+    "--maxWorkers=2",
+    "--testTimeout=30000",
+    "-t",
+    "causality trusted local",
+    "--reporter=json",
+    "--outputFile=D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\common-tag-causality\\local-first-GREEN.json"
+  ],
+  "exitCode": 1,
+  "timeoutSeconds": 180
+}

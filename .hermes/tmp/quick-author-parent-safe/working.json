@@ -1,0 +1,8 @@
+{
+  "apps/web/src/AuthorPage.vue": {
+    "beforeSha256": "cac1cee8f63ba3d88b33295a5c300bc03fe529a8ee472e672d23889ec7a058f8",
+    "sha256": "365d5df3da79875e7f97abcbaf89b057c3a8c6d1c8d6629190c877edbfe5a5cb",
+    "bytes": 114576,
+    "scope": "actual-shell360 browser-observed RED targeted responsive fix"
+  }
+}

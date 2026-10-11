@@ -1,4 +1,4 @@
-import type { PendingSyncOperation } from './outbox-store.js';
+import { operationFingerprint, type PendingSyncOperation } from './outbox-store.js';
 
 export type StagedMediaStatus = 'pending' | 'failed';
 
@@ -7,8 +7,10 @@ export interface StagedMediaUpload {
   libraryId: string;
   syncEpoch: string;
   entryUid: string;
+  existingEntry?: { expectedCoverRef: string | null; expectedPreviewRefs: string[] } | undefined;
+  replace?: boolean | undefined;
   kind: 'cover' | 'preview';
-  ordinal: 0;
+  ordinal: number;
   mimeType: 'image/avif' | 'image/gif' | 'image/jpeg' | 'image/png' | 'image/webp';
   byteLength: number;
   sha256: string;
@@ -18,7 +20,10 @@ export interface StagedMediaUpload {
   lastError: string | null;
 }
 
+export interface ExistingMediaGuard { snapshot: string; media: string; revision: string; operations: string }
 export interface MediaOutboxStore {
+  cancelExistingEntryPreviews?(entryUid: string, retainedIds: string[], guard: ExistingMediaGuard): Promise<void>;
+  enqueueExistingEntryMedia?(upload: StagedMediaUpload, guard: ExistingMediaGuard): Promise<void>;
   enqueueEntryCreate(
     operation: PendingSyncOperation,
     media: StagedMediaUpload[],
@@ -29,6 +34,26 @@ export interface MediaOutboxStore {
     patch: Partial<Pick<StagedMediaUpload, 'status' | 'lastAttemptAt' | 'lastError'>>,
   ): Promise<void>;
   removeMedia(uploadId: string): Promise<void>;
+}
+
+export function mediaQueueIdentity(rows: StagedMediaUpload[]): string {
+  return JSON.stringify([...rows].sort((a,b) => a.uploadId.localeCompare(b.uploadId)).map(row => [
+    row.uploadId,row.libraryId,row.syncEpoch,row.entryUid,row.kind,row.ordinal,row.mimeType,row.byteLength,row.sha256,
+    row.existingEntry === undefined ? null : [row.existingEntry.expectedCoverRef,row.existingEntry.expectedPreviewRefs],
+    row.status,row.lastAttemptAt,row.lastError,
+  ]));
+}
+
+export function operationQueueIdentity(rows: PendingSyncOperation[]): string {
+  return JSON.stringify(rows.map(row => [operationFingerprint(row),row.status,row.lastAttemptAt,row.lastError]));
+}
+
+export function validateExistingMediaStage(raw: unknown, revision: unknown, rows: StagedMediaUpload[], upload: StagedMediaUpload, guard: ExistingMediaGuard, capability: unknown, operations: PendingSyncOperation[]): void {
+  if (operationQueueIdentity(operations) !== guard.operations) throw new Error('Pending operation queue changed; review the Entry and try again');
+  if (capability !== '1' || raw !== guard.snapshot || (revision ?? '0') !== guard.revision || mediaQueueIdentity(rows) !== guard.media) throw new Error('Offline copy or pending media changed; try again');
+  const snapshot = JSON.parse(String(raw)) as import('@t3/shared').SyncSnapshot;
+  const owner = snapshot.payload.entries.find(row => row.syncUid === upload.entryUid);
+  if (!owner || upload.libraryId !== snapshot.header.libraryId || upload.syncEpoch !== snapshot.header.syncEpoch || !upload.existingEntry || rows.some(row => row.uploadId === upload.uploadId)) throw new Error('Existing Entry media identity is unavailable');
 }
 
 function cloneMedia(value: StagedMediaUpload): StagedMediaUpload {

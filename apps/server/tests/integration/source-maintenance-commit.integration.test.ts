@@ -1,7 +1,8 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { createLibraryBackup } from '../../src/database/backup-restore.js';
 import { openDatabase } from '../../src/database/connection.js';
 import type { T3Database } from '../../src/database/connection.js';
 import { applyAllMigrations } from '../../src/database/migrations.js';
@@ -21,6 +22,29 @@ import {
   CommitConflictError,
   CommitStaleError,
 } from '../../src/source-maintenance/commit-service.js';
+
+vi.mock('../../src/database/backup-restore.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/database/backup-restore.js')>();
+  return { ...actual, createLibraryBackup: vi.fn(actual.createLibraryBackup) };
+});
+
+function duringBackup(count = 1): { started: Promise<void>; release: () => void } {
+  const backup = vi.mocked(createLibraryBackup);
+  let release!: () => void;
+  let entered!: () => void;
+  let arrivals = 0;
+  const started = new Promise<void>((resolve) => { entered = resolve; });
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  for (let i = 0; i < count; i += 1) {
+    backup.mockImplementationOnce(async () => {
+      arrivals += 1;
+      if (arrivals === count) entered();
+      await gate;
+      return { backupDir: 'test-backup' } as Awaited<ReturnType<typeof createLibraryBackup>>;
+    });
+  }
+  return { started, release };
+}
 
 const TARGET_ORIGIN = 'https://fake.test';
 
@@ -102,6 +126,59 @@ function contentBytes(fixture: Fixture, entryId: number): Array<{ content: strin
 }
 
 describe('source maintenance commit service', () => {
+  it('does not commit twice when two calls passed review before either backup finishes', async () => {
+    const fixture = seed();
+    try {
+      accept(fixture, 'blueBox', `${TARGET_ORIGIN}/work/100`);
+      updateRunStatus(fixture.database, fixture.runId, 'review');
+      const gate = duringBackup(2);
+      const options = { database: fixture.database, databasePath: fixture.databasePath, runId: fixture.runId };
+      const first = commitSourceMaintenanceRun(options);
+      const second = commitSourceMaintenanceRun(options);
+      await gate.started;
+      gate.release();
+      const results = await Promise.allSettled([first, second]);
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+      expect(contentBytes(fixture, entryIdOf(fixture, 'blueBox'))).toHaveLength(2);
+    } finally {
+      fixture.cleanup();
+    }
+  }, 30000);
+  it('preserves cancellation made during backup without appending contents', async () => {
+    const fixture = seed();
+    try {
+      accept(fixture, 'blueBox', `${TARGET_ORIGIN}/work/100`);
+      updateRunStatus(fixture.database, fixture.runId, 'review');
+      const gate = duringBackup();
+      const pending = commitSourceMaintenanceRun({ database: fixture.database, databasePath: fixture.databasePath, runId: fixture.runId });
+      await gate.started;
+      updateRunStatus(fixture.database, fixture.runId, 'cancelled');
+      gate.release();
+      await expect(pending).rejects.toThrow(CommitConflictError);
+      expect(getRun(fixture.database, fixture.runId)?.status).toBe('cancelled');
+      expect(contentBytes(fixture, entryIdOf(fixture, 'blueBox'))).toHaveLength(1);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+  it('rejects a decision changed during backup without writing the old URL', async () => {
+    const fixture = seed();
+    try {
+      accept(fixture, 'blueBox', `${TARGET_ORIGIN}/work/100`);
+      updateRunStatus(fixture.database, fixture.runId, 'review');
+      const gate = duringBackup();
+      const pending = commitSourceMaintenanceRun({ database: fixture.database, databasePath: fixture.databasePath, runId: fixture.runId });
+      await gate.started;
+      patchItem(fixture.database, fixture.runId, entryIdOf(fixture, 'blueBox'), { decision: 'skip', selectedUrl: null });
+      gate.release();
+      await expect(pending).rejects.toThrow(CommitStaleError);
+      expect(getRun(fixture.database, fixture.runId)?.status).toBe('review');
+      expect(contentBytes(fixture, entryIdOf(fixture, 'blueBox'))).toHaveLength(1);
+    } finally {
+      fixture.cleanup();
+    }
+  });
   it('appends accepted target URLs as new Source URL Contents and commits the run', async () => {
     const fixture = seed();
     try {

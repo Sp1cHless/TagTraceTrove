@@ -1,0 +1,854 @@
+{
+  "version": 1,
+  "scope": "finite Collection origin only",
+  "entries": [
+    {
+      "category": "source/test",
+      "live": "apps\\web\\src\\offline\\collection-delete.ts",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\apps\\web\\src\\offline\\collection-delete.ts",
+      "bytes": 5038,
+      "sha256": "18a63ecf7335c5f2c337122ab118b0cafce597dc201d0a8014a354c39f37c2a7",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "source/test",
+      "live": "apps\\web\\src\\offline\\pending-work-restore.ts",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\apps\\web\\src\\offline\\pending-work-restore.ts",
+      "bytes": 27398,
+      "sha256": "0689cfd726b84371f87cf663bacfcdc6f673d1c4f00adac641bcc9e1e9373f09",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "source/test",
+      "live": "apps\\web\\tests\\offline-collection-delete.integration.test.ts",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\apps\\web\\tests\\offline-collection-delete.integration.test.ts",
+      "bytes": 29081,
+      "sha256": "05950c3faa1ae0ca51fa0b35dbb4066bc9b09600e6d03585bacc4006e9e5925a",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "source/test",
+      "live": "apps\\web\\src\\offline\\offline-api.ts",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\apps\\web\\src\\offline\\offline-api.ts",
+      "bytes": 369765,
+      "sha256": "369c503b143997384da8f774e4c0a1cb572e1c5c15a3c64dc933d28609c4401a",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "report",
+      "live": ".hermes\\artifacts\\offline-parity-collection-origin.md",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\artifacts\\offline-parity-collection-origin.md",
+      "bytes": 10376,
+      "sha256": "201c1786f0da0a51d0ba95773714b19f04d18366eb75577805f8d35d05a94ffe",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\before-manifest.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\before-manifest.json",
+      "bytes": 655,
+      "sha256": "6f149939241a2f013839f0c37ef78f3b594d8400a494f4d6aac1312fec25a6b7",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\causal-receipt-red.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\causal-receipt-red.json",
+      "bytes": 8234,
+      "sha256": "f5fbc0c5b2143eb63e977568bca3197a1de2b01266c01f48a7b4277fe56d21bd",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\causal-receipt-red.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\causal-receipt-red.log",
+      "bytes": 124,
+      "sha256": "6881cd7d8363cbb3f68ad674ed0e62af38b28c4cb99364fc31387c9c6d61b0d2",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\cells-red.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\cells-red.json",
+      "bytes": 9864,
+      "sha256": "77f3873ea408ec9c2d5db593fd80fc0f91362a351e6859037e1b5b8d40732394",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\cells-red.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\cells-red.log",
+      "bytes": 115,
+      "sha256": "56512ad2994e3d0a259348fce5242ee4d7253c392428ce736335c36a4a919c72",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-closed-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-closed-guard.json",
+      "bytes": 3850,
+      "sha256": "c8c9a1cfe033650184cb8297f0987a8c1276ac316565e066b142250360121ab5",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-closed.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-closed.json",
+      "bytes": 8582,
+      "sha256": "4b99e8964735b52eb2d1250e80785a0b43f6d1a0e88a607f05912fc1f6539017",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-closed.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-closed.log",
+      "bytes": 123,
+      "sha256": "9f4583a136acddb0594e36808d44c8c59c274d559f562dddcc0330ab3e562d3d",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-delete.ts.diff",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-delete.ts.diff",
+      "bytes": 2910,
+      "sha256": "93d47eaf7251aa7bf04be0f1fb74a0b6272d63a4fe95b6d502196d6a6cd8e2ed",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-delete.ts.final.diff",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-delete.ts.final.diff",
+      "bytes": 2910,
+      "sha256": "93d47eaf7251aa7bf04be0f1fb74a0b6272d63a4fe95b6d502196d6a6cd8e2ed",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-final-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-final-guard.json",
+      "bytes": 3849,
+      "sha256": "86bee2fa9a1cbc22dcc8eb6619d559f110a62e8d644ef0557033c15a1eaed169",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-final.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-final.json",
+      "bytes": 8591,
+      "sha256": "ad6c348de58f50fde0210d01b10bd33a0e3d4b1dbfcff15fc490bf36b07a4e68",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-final.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\collection-final.log",
+      "bytes": 122,
+      "sha256": "5d7a0a7a9f133a02d15695f1df217cbe54aa6d0d537a7fda09149cf582df4309",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\common-tag-red-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\common-tag-red-guard.json",
+      "bytes": 4388,
+      "sha256": "f5b3d1bac75bea7750efb514d8308c477aaaa3720c1bfd8102f0a22f704e54c9",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\common-tag-red.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\common-tag-red.json",
+      "bytes": 2042,
+      "sha256": "d1a788d47a9a635ef617fbd4d35cff1da58add2a237b129fab98c4ae0e54d891",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\common-tag-red.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\common-tag-red.log",
+      "bytes": 120,
+      "sha256": "8f6cc9080685f518d1fcd9466871eba6e89d0fa8d754f1406fda3c613ce14dbe",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\dependency-provenance.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\dependency-provenance.json",
+      "bytes": 1347,
+      "sha256": "183dd2e38b37d07d4e94c9bc3ad16458411bab49d9857f7a80ba6e5632f7ca8f",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\expected-owned.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\expected-owned.json",
+      "bytes": 655,
+      "sha256": "b5221fc335a8291be22837a0219ecf0025adeba043bbc1fbe5d45aeade523634",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\final-collection-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\final-collection-guard.json",
+      "bytes": 3849,
+      "sha256": "076b82797046b155b1ac5dfb0ee61b3b5631f8957fc054d1937fc7878aa51371",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\final-collection-sealed-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\final-collection-sealed-guard.json",
+      "bytes": 4360,
+      "sha256": "619d1a72bab564a953e3cb5f30d613e6b33994c316eacdadfbcd7b5cfc33b5fe",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\final-collection-sealed.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\final-collection-sealed.json",
+      "bytes": 8901,
+      "sha256": "3ec628bb57a56876567ec5b76fe1720dc43ba12af9f9bdd27ba4d557d1e40d06",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\final-collection-sealed.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\final-collection-sealed.log",
+      "bytes": 129,
+      "sha256": "ccb180f68453345daeff7060710a082e3782e44a78fa7e7a40cbaa5af6ab1151",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\final-collection.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\final-collection.json",
+      "bytes": 8585,
+      "sha256": "95c0a6bf0633bcf034beace96eec374a6ac97d6c5b5e51480368d56854111dee",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\final-collection.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\final-collection.log",
+      "bytes": 122,
+      "sha256": "03649d161e281459eac451d6426977b8e49ba91d7c5b0152d7de9fb6fea7b334",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\first-green.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\first-green.json",
+      "bytes": 8593,
+      "sha256": "32650b67ef24abc301850911db0a07c5da2094e24ed64a26330a82f0c75264ef",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\first-green.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\first-green.log",
+      "bytes": 117,
+      "sha256": "7ce7846f8ec53d13ec92561cfbabea5a9c80c452fcc1f1bf322ae5b0af678db0",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default-closed-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default-closed-guard.json",
+      "bytes": 4058,
+      "sha256": "77f633850cbb9af5296eb26eb0b042411b9916a472fbbee2b5c268cc13a7b4d0",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default-closed.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default-closed.json",
+      "bytes": 34594,
+      "sha256": "e0a6d7621df84c0f3e8b8d238c292fab9be05ce6182409e1c18f5e4cbcd6bb1d",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default-closed.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default-closed.log",
+      "bytes": 128,
+      "sha256": "aad4362a49893147e13254f77305a11dc4d3422b0bd69ed443af152801793df2",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default-guard.json",
+      "bytes": 4051,
+      "sha256": "78f7798214582ff339ad8d265433e52bd394e2e6a435ac8f87de0dd7772620f7",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default-sealed-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default-sealed-guard.json",
+      "bytes": 4058,
+      "sha256": "9a592635ad2597fbd365d74a5f50dd0d9cb078cfb535912f598179eca714bfa1",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default-sealed.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default-sealed.json",
+      "bytes": 34606,
+      "sha256": "a077a88daf6651a763e6137135866ac5434f21344032d0116e3d64d74940b4ad",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default-sealed.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default-sealed.log",
+      "bytes": 128,
+      "sha256": "6ee3a9259633e85fbf6824d209c8191e26c0fa0fb766b3434c28a69ba2401525",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default.json",
+      "bytes": 34585,
+      "sha256": "54a7e1ab60a8550a830dd3380dcf233b52ea5aeafad60ca6fb9ac478d2ec7a3b",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-default.log",
+      "bytes": 121,
+      "sha256": "01574a14394587725972b1d25734b0f1b0804fcf1de27c4a5d5123e20db9a8e3",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration-closed-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration-closed-guard.json",
+      "bytes": 4083,
+      "sha256": "c5977570bdffd9e03490cbee5d32f0898f50217dec369e4c0b40017fc0598d0e",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration-closed.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration-closed.json",
+      "bytes": 19005,
+      "sha256": "afdce7f9600928b238b3d100231b9083a0be1589fb44af6cd1ae7550f0d9583f",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration-closed.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration-closed.log",
+      "bytes": 132,
+      "sha256": "319aff2a4dedf39babc5a720c47e8fc809ccb139128ff80c85fbc6ee6bb8d80a",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration-guard.json",
+      "bytes": 4076,
+      "sha256": "716ab5b267cda9f83f286817bc357e507cf2eb549b6f0147fe5a393d4a200a02",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration-sealed-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration-sealed-guard.json",
+      "bytes": 4083,
+      "sha256": "1ce94859611188d60f815852015774e7f0349546ed3ce9bc684827e30dcd9254",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration-sealed.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration-sealed.json",
+      "bytes": 19028,
+      "sha256": "87b3bcb437dbc7948761ea6eb0f895b1e5af79119992b82c861ac9e53c60535e",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration-sealed.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration-sealed.log",
+      "bytes": 132,
+      "sha256": "318a8881a1aa455a23e1d0bfbeafb9915fa6bd5489229c7d67005062ec858da2",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration.json",
+      "bytes": 19048,
+      "sha256": "e09af2b6e2e518c3dc97a29f1d24f1274784d3e31f152bb42406b49427e8f135",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\nearest-integration.log",
+      "bytes": 125,
+      "sha256": "ea3f23381398e268467368ce1b32d537b736b3e090a8c0cf116d4a3c30653d9f",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\new-cells.source",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\new-cells.source",
+      "bytes": 5802,
+      "sha256": "1a6fe77971136dea6bcb0d4b6d4ce0a9493d7638eb08e622c5d7196ba5445f1e",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\newfile-markers.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\newfile-markers.json",
+      "bytes": 406,
+      "sha256": "03bfb55639c64059a8fb8ca60b999f433617378b1b2cdf553b5607b557ec2ada",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\offline-api.ts.diff",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\offline-api.ts.diff",
+      "bytes": 2109,
+      "sha256": "8f34dfa71fce845ac3ce4a6f28c52c121ddee84c5063e61e38fcdc3493763820",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\offline-api.ts.final.diff",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\offline-api.ts.final.diff",
+      "bytes": 3214,
+      "sha256": "e3203c00c6dc7b7a19acc734a378535b16223edef6f7ec9ac4ad90166d89d8e3",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\offline-collection-delete.integration.test.ts.final.diff",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\offline-collection-delete.integration.test.ts.final.diff",
+      "bytes": 6957,
+      "sha256": "70ba333153371e1ba60f7311e3936ea5ab3f67047ff9fcc8f066490521d9a5f6",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\ordinary-delete-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\ordinary-delete-guard.json",
+      "bytes": 3913,
+      "sha256": "7d7a7b389960a57a644478338630805f6e5b2ae7c159e6e8488bd163e8e08a80",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\ordinary-delete.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\ordinary-delete.json",
+      "bytes": 1663,
+      "sha256": "e96de365b7de8d41f2a7f0a2d7c4942750b2d4dae6d6f572a82df5d6d31f0188",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\ordinary-delete.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\ordinary-delete.log",
+      "bytes": 121,
+      "sha256": "c545a9303fcbffe2b7f9186b2b404f7c76a088d43ad4698c086b40017d12d461",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\owned-lint-closed-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\owned-lint-closed-guard.json",
+      "bytes": 3632,
+      "sha256": "8fe0a9fa3f0480f7adaa57d1803f59cab99ea8ce20cdfb020d890e649e12c7dd",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\owned-lint-closed.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\owned-lint-closed.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\owned-lint-final-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\owned-lint-final-guard.json",
+      "bytes": 3632,
+      "sha256": "c3263d662a26fc39f36fcb46d9248695306b44dbf9bfa0db5ce65b3a9635d332",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\owned-lint-final.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\owned-lint-final.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\owned-lint-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\owned-lint-guard.json",
+      "bytes": 3672,
+      "sha256": "e38433e659b72bb89bab24749005155e188335dc83cdb055636ff8a957ef6fb0",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\owned-lint.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\owned-lint.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\parent-root-red.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\parent-root-red.json",
+      "bytes": 7236,
+      "sha256": "d5a016b8f1aecb0c3f0b2e1559b9b1a33309e7be4891cfce51827d6af1d28216",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\parent-root-red.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\parent-root-red.log",
+      "bytes": 123,
+      "sha256": "bd46b64979426dd17390f60d8df6bcaa67808a796e05d87af91e3751cf44f481",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\pending-work-restore.ts.diff",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\pending-work-restore.ts.diff",
+      "bytes": 1922,
+      "sha256": "ced22342f5168a50170ecf7a154f22f8546a7499e428076c00f37e59ff72e941",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\pending-work-restore.ts.final.diff",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\pending-work-restore.ts.final.diff",
+      "bytes": 2048,
+      "sha256": "ec3cd7051cfca2054acab3b0ef7c5f4711581c13fa88b9179deb061ae1f7aec2",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\prior-delete-report.md",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\prior-delete-report.md",
+      "bytes": 9647,
+      "sha256": "9694672ec03b52dfd15a85ae579e6d424382abb57d2e80e4c012e2637e0b4d84",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\prior-origin-before-manifest.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\prior-origin-before-manifest.json",
+      "bytes": 707,
+      "sha256": "9a9bb52d58aba3adba389c12c7145bfce79fe7fd5434f1c04887c56596a555ef",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\root-first.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\root-first.json",
+      "bytes": 7244,
+      "sha256": "1e6ec15ea411dcc4f325f93d2fef6d0b3a53d62666d0118f3b5826a727197747",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\root-first.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\root-first.log",
+      "bytes": 116,
+      "sha256": "de5354e714ffb63c0d94fa050bc229c15b3e9b142d9e5efc8077e71ef0763020",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\root-green.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\root-green.json",
+      "bytes": 6885,
+      "sha256": "0b1761c7e7b3d8e2dfe8bb81bf760f9f6e5ee5a243ba699f128654fab05e3ba2",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\root-green.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\root-green.log",
+      "bytes": 116,
+      "sha256": "68e9e87a82205b94deae359df242f7dc882b0dcb0ecb42f664a3fe95921af720",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\scope-byte-guards.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\scope-byte-guards.json",
+      "bytes": 289,
+      "sha256": "180beaf0f8f51cd17585fe4a30ad13b25dac73d2cb32f737f77a76015d52bef9",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\scoped-diff-closed-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\scoped-diff-closed-guard.json",
+      "bytes": 3586,
+      "sha256": "8a04c92dd6aab79bee96cb1114a71d451d680e2c924bda7e15f42cde5a2a2bd0",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\scoped-diff-closed.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\scoped-diff-closed.log",
+      "bytes": 128,
+      "sha256": "d762b94e78df0626b247b344fb793f1e36dba8073889bdba042d96db491467f6",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\scoped-diff-final-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\scoped-diff-final-guard.json",
+      "bytes": 3586,
+      "sha256": "aeaf41bd8a5545f3914487e0078594910c5d896ec6803bd5ce6c0ccf432e6c69",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\scoped-diff-final.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\scoped-diff-final.log",
+      "bytes": 128,
+      "sha256": "d762b94e78df0626b247b344fb793f1e36dba8073889bdba042d96db491467f6",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\scoped-diff-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\scoped-diff-guard.json",
+      "bytes": 3626,
+      "sha256": "80b444a6a5d73722896d534ade40cfa47fc830131f11484c8488f865cef51951",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\scoped-diff.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\scoped-diff.log",
+      "bytes": 128,
+      "sha256": "d762b94e78df0626b247b344fb793f1e36dba8073889bdba042d96db491467f6",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\server-types-final-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\server-types-final-guard.json",
+      "bytes": 3476,
+      "sha256": "a9fe12e7e50ee2d85b436c6724e6a18b025caf809e49c03268be6cefe9af6b48",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\server-types-final.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\server-types-final.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\server-types-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\server-types-guard.json",
+      "bytes": 3516,
+      "sha256": "becde9440be43742b52fb05333d90783b699acb64a838d4f0b91ca660824e901",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\server-types.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\server-types.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\shared-types-final-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\shared-types-final-guard.json",
+      "bytes": 3480,
+      "sha256": "648087556aaacaadddd48772b7739d33431bb4b3f67b9b093bd21e21fa859392",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\shared-types-final.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\shared-types-final.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\shared-types-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\shared-types-guard.json",
+      "bytes": 3520,
+      "sha256": "5639f20051f241088067b7d8708f80f2a2cddab2857ebbb8f4283b3e8bca19bf",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\shared-types.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\shared-types.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\web-types-closed-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\web-types-closed-guard.json",
+      "bytes": 3510,
+      "sha256": "526ded1400a3d53c64742f7d62e5a365f2ee9515b32c2c2d7278fbd2463d9edd",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\web-types-closed.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\web-types-closed.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\web-types-final-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\web-types-final-guard.json",
+      "bytes": 3803,
+      "sha256": "161d2ba9c5fc6f85f948f8ae297f43fc127c99b03107a8236bd6ba3772fa5011",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\web-types-final.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\web-types-final.log",
+      "bytes": 270,
+      "sha256": "4c51cacb93acaa6783d5edc594ba708c9e7f10df24294ef04a55501c25ae1b2b",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\web-types-guard.json",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\web-types-guard.json",
+      "bytes": 3561,
+      "sha256": "e917ecdad8b21f5ab4798a80c08a75bbf9563f6555f47748a750c2abc4d86be2",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\web-types.log",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\web-types.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\before\\apps\\web\\src\\offline\\collection-delete.ts",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\before\\apps\\web\\src\\offline\\collection-delete.ts",
+      "bytes": 3636,
+      "sha256": "fcf28dcd0bd91a66c6e6e4aa3433731b09fc17f4a5622b2a35b39e543c21637c",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\before\\apps\\web\\src\\offline\\offline-api.ts",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\before\\apps\\web\\src\\offline\\offline-api.ts",
+      "bytes": 369188,
+      "sha256": "2fa64e27490aa128b617d12535417f0cbda22310a8f5a143667321d1533943d3",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\before\\apps\\web\\src\\offline\\pending-work-restore.ts",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\before\\apps\\web\\src\\offline\\pending-work-restore.ts",
+      "bytes": 26503,
+      "sha256": "e787ffdd1ccb5d8fc0bad076b719f1ae583bc95657bc0ddc6617455aaf5628a1",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\before\\apps\\web\\tests\\offline-collection-delete.integration.test.ts",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\before\\apps\\web\\tests\\offline-collection-delete.integration.test.ts",
+      "bytes": 22563,
+      "sha256": "9375bb5fc56ce93bf1d1543bc1af70fa4458d10a785723db957853ac5f61965d",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\apps\\server\\src\\database\\migrations\\028_author_resource_sync.sql",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\apps\\server\\src\\database\\migrations\\028_author_resource_sync.sql",
+      "bytes": 25354,
+      "sha256": "a9b86901b93087165ae9d1c4f574e15f3697266100d44091eee5f44a1a3f85fe",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\apps\\server\\src\\database\\migrations\\037_gallery_order_sync.sql",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\apps\\server\\src\\database\\migrations\\037_gallery_order_sync.sql",
+      "bytes": 38817,
+      "sha256": "39904508f711bf9c1ac7bcc8bcb6a6eb72b8c968a5065e275bc62c2368649c68",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\apps\\server\\src\\database\\migrations\\042_standalone_author_directory_seed.sql",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\apps\\server\\src\\database\\migrations\\042_standalone_author_directory_seed.sql",
+      "bytes": 1249,
+      "sha256": "ee9dccd44efe6cf383633d7e44ebab39368a58a9e8c1da0f6d971c362cdbb008",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\apps\\server\\src\\http\\app.ts",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\apps\\server\\src\\http\\app.ts",
+      "bytes": 101101,
+      "sha256": "d4ae18b1fde4f3525f8ccebc6d0c3ed6f0222cca1e8aa607d17af3a773e89f63",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\apps\\server\\src\\repositories\\collection-repository.ts",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\apps\\server\\src\\repositories\\collection-repository.ts",
+      "bytes": 18537,
+      "sha256": "f7011273420eddb731d101f0a110513174c80b92c07992642c6acde1f7cdfb97",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\apps\\web\\src\\api\\gallery.ts",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\apps\\web\\src\\api\\gallery.ts",
+      "bytes": 66900,
+      "sha256": "6e5d9475a19ac1544cd89d0a3d0581326f3c97a9ab60546725bf9db1a12e3dac",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\apps\\web\\src\\offline\\sync-mutation-plan.ts",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\apps\\web\\src\\offline\\sync-mutation-plan.ts",
+      "bytes": 9290,
+      "sha256": "265c1ecac2a456c55e02028f8fb1fe121d8891c6306588fd1970ab96c0dcb745",
+      "liveSavedShaEqual": true
+    },
+    {
+      "category": "evidence/before/dependency",
+      "live": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\packages\\shared\\src\\schemas\\sync.ts",
+      "saved": ".hermes\\tmp\\offline-parity-collection\\origin-resume\\archive\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\dependencies\\packages\\shared\\src\\schemas\\sync.ts",
+      "bytes": 59998,
+      "sha256": "41a33d667586e825f0761593f93e1f9fd6bd8a12fc00a26dd928d0200726341d",
+      "liveSavedShaEqual": true
+    }
+  ]
+}

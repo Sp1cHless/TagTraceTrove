@@ -1,0 +1,92 @@
+--- directory-start/apps/web/src/offline/offline-api.ts
++++ live/apps/web/src/offline/offline-api.ts
+@@ -1192,7 +1192,7 @@
+       collectionMembers: collectionMembers.filter(row => ('entryId' in row ? !deletedIds.has(row.entryId) : !deletedProducerIds.has(row.producerId))),
+       authorDirectories:authorDirectories.filter(row=>!deletedProducerIds.has(row.producerId)),
+       authorDirectorySets:authorDirectorySets?.filter(row=>!deletedProducerIds.has(row.producerId)),
+-      authorDirectoryEntries: authorDirectoryEntries.filter(row => !deletedIds.has(row.entryId) && !deletedDirectoryIds.has(row.directoryId)),
++      authorDirectoryEntries: authorDirectoryEntries.filter(row => !deletedIds.has(row.entryId) && !deletedDirectoryIds.has(row.directoryId) && !deletedProducerIds.has(row.producerId)),
+       entryUsage: [...usageByEntryId.values()].filter(row => !deletedIds.has(row.entryId)).sort((left, right) => left.entryId - right.entryId),
+       viewLaterEntries: viewLaterEntries.filter(row => !deletedIds.has(row.subjectId)),
+       viewLaterProducers:viewLaterProducers.filter(row=>!deletedProducerIds.has(row.subjectId)),
+@@ -3579,7 +3579,33 @@
+         ownerBytes.set(operation.entityUid, new Map(proof.refs.flatMap((ref,i)=>proof!.originals[i] ? [[ref,proof!.originals[i]!] as const] : [])));
+       }
+       let maxAppliedServerSeq = -1;
+-      const replayPlan = mutationQueuePlan(operations);
++      // A Directory-set is an independent revision owner, never the Producer UID.
++      // Only a verified snapshot may establish its owned scope. Keep that typed
++      // foreground proof bound to the exact envelope through an absent-owner ACK retry.
++      const directoryScopes = new Map<string, {producerUid:string;producerId:number}>();
++      for (const row of operations) {
++        if (row.operationKind !== 'author.directories.set') continue;
++        const fingerprint = operationFingerprint(row);
++        const key = 'authorDirectoryScope.' + row.opId;
++        const active = activeBeforeReplay?.snapshot;
++        const set = active?.payload.authorDirectorySets?.find(set => set.syncUid === row.entityUid);
++        const producer = active?.payload.producers.find(producer => producer.id === set?.producerId);
++        if (set && producer?.syncUid && active?.header.libraryId === row.libraryId && active.header.syncEpoch === row.syncEpoch) {
++          const scope = {producerUid:producer.syncUid,producerId:producer.id};
++          directoryScopes.set(row.opId,scope);
++          await store.writeMeta(key,JSON.stringify({fingerprint,scope}));
++        } else {
++          const saved = await store.readMeta(key);
++          if (saved) {
++            try {
++              const value = JSON.parse(saved) as {fingerprint:string;scope:{producerUid:string;producerId:number}};
++              if (value.fingerprint === fingerprint && typeof value.scope.producerUid === 'string'
++                && Number.isSafeInteger(value.scope.producerId) && value.scope.producerId > 0) directoryScopes.set(row.opId,value.scope);
++            } catch { /* Unknown scope remains held; native raw JSON is not authority. */ }
++          }
++        }
++      }
++      const replayPlan = mutationQueuePlan(operations,new Map([...directoryScopes].map(([id,scope])=>[id,`producer:${scope.producerUid}`])));
+       const blockedEntities = new Set<string>();
+       const blockedRatingSlotUids = new Set<string>();
+       let replayError: string | null = null;
+@@ -3793,7 +3819,7 @@
+           // snapshot; retain the established typed proof checks above. Present
+           // predecessors must settle in this same ordered foreground replay.
+           const unsettled=plan?.dependencies.some(id=>operations.some(row=>row.opId.toLowerCase()===id.toLowerCase()) && !appliedOperations.some(row=>row.opId.toLowerCase()===id.toLowerCase()));
+-          if(missingFlags.length || unsettled) {
++          if(missingFlags.length || unsettled || (operation.operationKind === 'author.directories.set' && !directoryScopes.has(operation.opId))) {
+             replayError ??= missingFlags.length ? `Current required capability unavailable: ${missingFlags.join(', ')}` : 'A dependency is held; original work remains queued';
+             blockedEntities.add(entityKey);continue;
+           }
+@@ -4035,6 +4061,36 @@
+           // Every removed Producer write needs its own original receipt, not just
+           // the last folded value. Delete journal/absence/cursor were verified above.
+           for (const operation of appliedOperations) settledBeforeProducerDelete(operation);
++          for (const operation of appliedOperations) {
++            if (operation.operationKind !== 'author.directories.set') continue;
++            const scope = directoryScopes.get(operation.opId);
++            const receipt = appliedReceipts.get(operation.opId);
++            const original = operations.find(row => row.opId === operation.opId);
++            if (!scope || !receipt || !original || original.entityUid !== operation.entityUid
++              || original.libraryId !== operation.libraryId || original.syncEpoch !== operation.syncEpoch
++              || receipt.resourceVersion < operation.baseVersion || receipt.serverSeq <= 0) throw new Error('Directory settlement needs its original receipt and trusted owned scope');
++            const deletion = producerDeleteReceipts.get(scope.producerUid);
++            if (deletion) {
++              const last = appliedOperations.findIndex(row => row.operationKind === 'producer.delete' && row.entityUid === scope.producerUid);
++              // Compare versions only within Directory-set; cross-owner causality is serverSeq.
++              if (scope.producerId !== deletion.entityId || appliedOperations.indexOf(operation) >= last
++                || receipt.serverSeq >= deletion.serverSeq
++                || snapshot.payload.authorDirectorySets?.some(row => row.syncUid === operation.entityUid || row.producerId === scope.producerId)
++                || snapshot.payload.authorDirectories.some(row => row.producerId === scope.producerId)) throw new Error('Author deletion cannot settle a foreign or noncausal Directory predecessor');
++            } else {
++              const set = snapshot.payload.authorDirectorySets?.find(row => row.syncUid === operation.entityUid);
++              const later = appliedOperations.some(row => row.operationKind === 'author.directories.set' && row.entityUid === operation.entityUid && appliedOperations.indexOf(row) > appliedOperations.indexOf(operation));
++              const desired = operation.payload.directories.map(directory => ({...directory,entries:directory.entries.filter(entry => {
++                const deleted = entryDeleteReceipts.get(entry.syncUid);
++                if (!deleted) return true;
++                const last = appliedOperations.findIndex(row => row.operationKind === 'entry.delete' && row.entityUid === entry.syncUid);
++                if (appliedOperations.indexOf(operation) >= last || receipt.serverSeq >= deleted.serverSeq) throw new Error('Entry deletion cannot settle a noncausal Directory membership');
++                return false;
++              })}));
++              if (!set || set.producerId !== scope.producerId || set.syncVersion < receipt.resourceVersion
++                || (!later && JSON.stringify(producerDirectoriesFromSnapshot(snapshot,scope.producerId)) !== JSON.stringify(desired))) throw new Error('Snapshot refresh failed: Directory final owner/value is missing');
++            }
++          }
+           // Verify the final extension timeline before publishing or ACKing a candidate.
+           // Cursor coverage alone does not prove the new nullable fields or rating class.
+           const profiles = new Map<string,Record<string,unknown>>();

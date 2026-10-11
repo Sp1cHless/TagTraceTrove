@@ -1,0 +1,740 @@
+{
+  "candidate": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\recovery2-snapshot-candidate.ts",
+  "line_count": 5341,
+  "normalized_lf_sha256": "4f35e9ba8c05d705a2d0597d5ad57dc121d649b2748c1d09ae3085a73d216efc",
+  "prefix_exact": true,
+  "actual_missing_text_not_invented": true,
+  "latest_read_uncovered_candidate_ranges": [
+    [
+      1930,
+      2145
+    ],
+    [
+      2178,
+      2205
+    ],
+    [
+      2274,
+      3383
+    ],
+    [
+      3939,
+      3959
+    ],
+    [
+      4031,
+      4045
+    ],
+    [
+      4117,
+      4125
+    ],
+    [
+      4180,
+      4233
+    ],
+    [
+      4275,
+      4276
+    ],
+    [
+      4300,
+      4810
+    ],
+    [
+      4828,
+      4832
+    ],
+    [
+      4861,
+      5341
+    ]
+  ],
+  "latest_read_evidence": [
+    {
+      "message": 129595,
+      "snapshot": [
+        4038,
+        4071
+      ],
+      "candidate": [
+        3997,
+        4030
+      ]
+    },
+    {
+      "message": 129595,
+      "snapshot": [
+        4093,
+        4127
+      ],
+      "candidate": [
+        4046,
+        4080
+      ]
+    },
+    {
+      "message": 129599,
+      "snapshot": [
+        4120,
+        4163
+      ],
+      "candidate": [
+        4073,
+        4116
+      ]
+    },
+    {
+      "message": 129599,
+      "snapshot": [
+        4177,
+        4189
+      ],
+      "candidate": [
+        4126,
+        4138
+      ]
+    },
+    {
+      "message": 129599,
+      "snapshot": [
+        4190,
+        4214
+      ],
+      "candidate": [
+        4140,
+        4164
+      ]
+    },
+    {
+      "message": 129604,
+      "snapshot": [
+        2130,
+        2161
+      ],
+      "candidate": [
+        2146,
+        2177
+      ]
+    },
+    {
+      "message": 129604,
+      "snapshot": [
+        2162,
+        2229
+      ],
+      "candidate": [
+        2206,
+        2273
+      ]
+    },
+    {
+      "message": 129642,
+      "snapshot": [
+        1100,
+        1139
+      ],
+      "candidate": [
+        1106,
+        1145
+      ]
+    },
+    {
+      "message": 129642,
+      "snapshot": [
+        1140,
+        1169
+      ],
+      "candidate": [
+        1147,
+        1176
+      ]
+    },
+    {
+      "message": 129643,
+      "snapshot": [
+        3490,
+        3554
+      ],
+      "candidate": [
+        3458,
+        3522
+      ]
+    },
+    {
+      "message": 129653,
+      "snapshot": [
+        4020,
+        4071
+      ],
+      "candidate": [
+        3979,
+        4030
+      ]
+    },
+    {
+      "message": 129653,
+      "snapshot": [
+        4093,
+        4163
+      ],
+      "candidate": [
+        4046,
+        4116
+      ]
+    },
+    {
+      "message": 129653,
+      "snapshot": [
+        4177,
+        4189
+      ],
+      "candidate": [
+        4126,
+        4138
+      ]
+    },
+    {
+      "message": 129669,
+      "snapshot": [
+        3416,
+        3510
+      ],
+      "candidate": [
+        3384,
+        3478
+      ]
+    },
+    {
+      "message": 129670,
+      "snapshot": [
+        3610,
+        3744
+      ],
+      "candidate": [
+        3578,
+        3712
+      ]
+    },
+    {
+      "message": 129671,
+      "snapshot": [
+        3870,
+        3951
+      ],
+      "candidate": [
+        3838,
+        3919
+      ]
+    },
+    {
+      "message": 129672,
+      "snapshot": [
+        910,
+        942
+      ],
+      "candidate": [
+        916,
+        948
+      ]
+    },
+    {
+      "message": 129673,
+      "snapshot": [
+        255,
+        296
+      ],
+      "candidate": [
+        256,
+        297
+      ]
+    },
+    {
+      "message": 129678,
+      "snapshot": [
+        1310,
+        1389
+      ],
+      "candidate": [
+        1318,
+        1397
+      ]
+    },
+    {
+      "message": 129679,
+      "snapshot": [
+        906,
+        960
+      ],
+      "candidate": [
+        912,
+        966
+      ]
+    },
+    {
+      "message": 129694,
+      "snapshot": [
+        1318,
+        1383
+      ],
+      "candidate": [
+        1326,
+        1391
+      ]
+    },
+    {
+      "message": 129714,
+      "snapshot": [
+        1435,
+        1475
+      ],
+      "candidate": [
+        1443,
+        1483
+      ]
+    },
+    {
+      "message": 129733,
+      "snapshot": [
+        1493,
+        1519
+      ],
+      "candidate": [
+        1509,
+        1535
+      ]
+    },
+    {
+      "message": 129734,
+      "snapshot": [
+        3780,
+        3834
+      ],
+      "candidate": [
+        3748,
+        3802
+      ]
+    },
+    {
+      "message": 129770,
+      "snapshot": [
+        3430,
+        3604
+      ],
+      "candidate": [
+        3398,
+        3572
+      ]
+    },
+    {
+      "message": 129794,
+      "snapshot": [
+        4865,
+        4881
+      ],
+      "candidate": [
+        4811,
+        4827
+      ]
+    },
+    {
+      "message": 129794,
+      "snapshot": [
+        4882,
+        4909
+      ],
+      "candidate": [
+        4833,
+        4860
+      ]
+    },
+    {
+      "message": 129795,
+      "snapshot": [
+        570,
+        608
+      ],
+      "candidate": [
+        571,
+        609
+      ]
+    },
+    {
+      "message": 129801,
+      "snapshot": [
+        627,
+        654
+      ],
+      "candidate": [
+        633,
+        660
+      ]
+    },
+    {
+      "message": 129807,
+      "snapshot": [
+        1460,
+        1475
+      ],
+      "candidate": [
+        1468,
+        1483
+      ]
+    },
+    {
+      "message": 129807,
+      "snapshot": [
+        1493,
+        1569
+      ],
+      "candidate": [
+        1509,
+        1585
+      ]
+    },
+    {
+      "message": 129913,
+      "snapshot": [
+        3430,
+        3604
+      ],
+      "candidate": [
+        3398,
+        3572
+      ]
+    },
+    {
+      "message": 129939,
+      "snapshot": [
+        1460,
+        1475
+      ],
+      "candidate": [
+        1468,
+        1483
+      ]
+    },
+    {
+      "message": 129939,
+      "snapshot": [
+        1493,
+        1569
+      ],
+      "candidate": [
+        1509,
+        1585
+      ]
+    },
+    {
+      "message": 130043,
+      "snapshot": [
+        4212,
+        4224
+      ],
+      "candidate": [
+        4126,
+        4138
+      ]
+    },
+    {
+      "message": 130043,
+      "snapshot": [
+        4225,
+        4264
+      ],
+      "candidate": [
+        4140,
+        4179
+      ]
+    },
+    {
+      "message": 130047,
+      "snapshot": [
+        4340,
+        4359
+      ],
+      "candidate": [
+        4255,
+        4274
+      ]
+    },
+    {
+      "message": 130047,
+      "snapshot": [
+        4361,
+        4379
+      ],
+      "candidate": [
+        4277,
+        4295
+      ]
+    },
+    {
+      "message": 130062,
+      "snapshot": [
+        4320,
+        4360
+      ],
+      "candidate": [
+        4234,
+        4274
+      ]
+    },
+    {
+      "message": 130062,
+      "snapshot": [
+        4362,
+        4384
+      ],
+      "candidate": [
+        4277,
+        4299
+      ]
+    },
+    {
+      "message": 130128,
+      "snapshot": [
+        4036,
+        4106
+      ],
+      "candidate": [
+        3960,
+        4030
+      ]
+    },
+    {
+      "message": 130128,
+      "snapshot": [
+        4128,
+        4198
+      ],
+      "candidate": [
+        4046,
+        4116
+      ]
+    },
+    {
+      "message": 130130,
+      "snapshot": [
+        1470,
+        1482
+      ],
+      "candidate": [
+        1471,
+        1483
+      ]
+    },
+    {
+      "message": 130130,
+      "snapshot": [
+        1500,
+        1529
+      ],
+      "candidate": [
+        1509,
+        1538
+      ]
+    },
+    {
+      "message": 130130,
+      "snapshot": [
+        4190,
+        4198
+      ],
+      "candidate": [
+        4108,
+        4116
+      ]
+    },
+    {
+      "message": 130130,
+      "snapshot": [
+        4212,
+        4234
+      ],
+      "candidate": [
+        4126,
+        4148
+      ]
+    },
+    {
+      "message": 130132,
+      "snapshot": [
+        1,
+        115
+      ],
+      "candidate": [
+        1,
+        115
+      ]
+    },
+    {
+      "message": 130132,
+      "snapshot": [
+        1300,
+        1359
+      ],
+      "candidate": [
+        1301,
+        1360
+      ]
+    },
+    {
+      "message": 130132,
+      "snapshot": [
+        3460,
+        3473
+      ],
+      "candidate": [
+        3393,
+        3406
+      ]
+    },
+    {
+      "message": 130132,
+      "snapshot": [
+        3537,
+        3579
+      ],
+      "candidate": [
+        3470,
+        3512
+      ]
+    },
+    {
+      "message": 130132,
+      "snapshot": [
+        3740,
+        3909
+      ],
+      "candidate": [
+        3673,
+        3842
+      ]
+    },
+    {
+      "message": 130134,
+      "snapshot": [
+        1250,
+        1268
+      ],
+      "candidate": [
+        1250,
+        1268
+      ]
+    },
+    {
+      "message": 130134,
+      "snapshot": [
+        1269,
+        1300
+      ],
+      "candidate": [
+        1270,
+        1301
+      ]
+    },
+    {
+      "message": 130134,
+      "snapshot": [
+        260,
+        281
+      ],
+      "candidate": [
+        260,
+        281
+      ]
+    },
+    {
+      "message": 130134,
+      "snapshot": [
+        3480,
+        3517
+      ],
+      "candidate": [
+        3413,
+        3450
+      ]
+    },
+    {
+      "message": 130134,
+      "snapshot": [
+        3930,
+        4005
+      ],
+      "candidate": [
+        3863,
+        3938
+      ]
+    },
+    {
+      "message": 130134,
+      "snapshot": [
+        895,
+        939
+      ],
+      "candidate": [
+        895,
+        939
+      ]
+    },
+    {
+      "message": 130253,
+      "snapshot": [
+        3590,
+        3735
+      ],
+      "candidate": [
+        3514,
+        3659
+      ]
+    },
+    {
+      "message": 130253,
+      "snapshot": [
+        275,
+        302
+      ],
+      "candidate": [
+        275,
+        302
+      ]
+    }
+  ],
+  "known_unresolved": {
+    "assignEntryTag": [
+      4499,
+      4520
+    ],
+    "diagnostic": "TS2322: reconstructed historical assignEntryTag still returns Promise<void>; current GalleryApi expects assigned Tag DTO|null. No actual replacement body located. Do not fabricate return logic.",
+    "unanchored_snapshot_original_ranges": [
+      [
+        129794,
+        4865,
+        4910
+      ],
+      [
+        130047,
+        4340,
+        4380
+      ],
+      [
+        130062,
+        4320,
+        4385
+      ]
+    ]
+  },
+  "invariants": {
+    "async function enqueueGalleryOrder": 1,
+    "async setGalleryOrder": 1,
+    "async getClientId": 1,
+    "store.writeMeta(GALLERY_ORDER_CAPABILITY_KEY": 1,
+    "const stagedObjectUrls": 1
+  },
+  "limitations": [
+    "Suffix has real older baseline + history changes, but ranges not in latest-read coverage are NOT independently proven equal to final pre-truncation source.",
+    "No production file writes and no database/assets writes.",
+    "TypeScript virtual-host check against existing project: no syntax errors; one candidate-file TS2322. No runtime/gate claim."
+  ]
+}

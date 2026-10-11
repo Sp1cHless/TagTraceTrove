@@ -1,0 +1,22 @@
+[
+  {
+    "path": "apps/web/src/offline/collection-delete.ts",
+    "sha256": "fcf28dcd0bd91a66c6e6e4aa3433731b09fc17f4a5622b2a35b39e543c21637c",
+    "bytes": 3636
+  },
+  {
+    "path": "apps/web/src/offline/offline-api.ts",
+    "sha256": "2fa64e27490aa128b617d12535417f0cbda22310a8f5a143667321d1533943d3",
+    "bytes": 369188
+  },
+  {
+    "path": "apps/web/src/offline/pending-work-restore.ts",
+    "sha256": "e787ffdd1ccb5d8fc0bad076b719f1ae583bc95657bc0ddc6617455aaf5628a1",
+    "bytes": 26503
+  },
+  {
+    "path": "apps/web/tests/offline-collection-delete.integration.test.ts",
+    "sha256": "114727d845c12cfc9cfe10ae478c52b56157aa766c3c6c469c5613dcb73dc16d",
+    "bytes": 20597
+  }
+]

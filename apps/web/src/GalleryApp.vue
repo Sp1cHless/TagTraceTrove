@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
-import { multiAuthorProducerName } from '@t3/shared';
+import { DEFAULT_CONTENT_KINDS, multiAuthorProducerName } from '@t3/shared';
 import type { GalleryApi, GalleryAuthorSummary, GalleryEntrySummary } from './api/gallery.js';
 import {
   type AuthorDetailResponse,
@@ -12,9 +12,14 @@ import {
   CollectionRecordDto,
   SearchScope,
   TagSearchHit,
+  type SyncCapabilities,
+  type SyncReplayOperation,
+  type EntryTagAssignment,
 } from '@t3/shared';
 import AddAuthorPage from './AddAuthorPage.vue';
+import EntryStatsRow from './components/EntryStatsRow.vue';
 import AddEntryPage, { type ManualEntryDraft } from './AddEntryPage.vue';
+import SecurePairingSettings from './components/SecurePairingSettings.vue';
 import AdvancedEditingPage from './AdvancedEditingPage.vue';
 import AuthorPage from './AuthorPage.vue';
 import RecentViewPage from './RecentViewPage.vue';
@@ -37,6 +42,7 @@ import {
 } from './stores/preferences.js';
 import SearchPage from './SearchPage.vue';
 import { entryCardMediaRef, entryStackLayerStyle, entryStackLayers } from './entry-media-stack.js';
+import { touchOnlyDevice } from './touch.js';
 import { accent, accentPresets, accentSwatchColors, rowsPerPage, rowsPerPageOptions, showNsfw } from './stores/preferences.js';
 import type { NavigationCounts } from '@t3/shared';
 import { useArmableAction } from './armable.js';
@@ -46,11 +52,12 @@ import AppIcon from './components/AppIcon.vue';
 import IconButton from './components/IconButton.vue';
 import LazyCardImage from './components/LazyCardImage.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
-import OfflineLibrarySettings from './components/OfflineLibrarySettings.vue';
 import { supportedLocales, useI18n, type Locale } from './i18n.js';
 import { createMemorySnapshotStore, type SnapshotStore } from './offline/snapshot-store.js';
 import type { OfflineApiState } from './offline/offline-api.js';
 import { isOfflineTransportError } from './api/transport-error.js';
+import { randomUuid } from './offline/random-id.js';
+import { localCollectionId } from './offline/offline-api.js';
 
 import { createNavigationMemory, navigationMemoryKey } from './navigation-memory.js';
 
@@ -87,13 +94,45 @@ type TagResults = EntryTagResults | AuthorTagResults;
 type SearchOrigin = { searchQuery: string; searchScope: SearchScope };
 type EntryOrigin = AuthorLocation | { tagResults: EntryTagResults } | SearchOrigin;
 type CreationView = 'entry' | 'author';
-const props = defineProps<{ api: GalleryApi; offlineStore?: SnapshotStore; offlineState?: OfflineApiState }>();
+const props = defineProps<{
+  api: GalleryApi;
+  offlineStore?: SnapshotStore;
+  offlineState?: OfflineApiState;
+  startupReady?: Promise<unknown>;
+}>();
 // main.ts always supplies IndexedDB. The in-memory fallback keeps component
 // fixtures and embedders deterministic without touching browser storage.
 const offlineStore = props.offlineStore ?? createMemorySnapshotStore();
 const offlineDiagnosticsOpen = ref(false);
 const offlineDiagnosticsText = ref('');
-const DIAGNOSTIC_BUILD = '0.0.8-c2-offline-rating';
+const DIAGNOSTIC_BUILD = '0.0.49-c3-offline-parity-r2';
+// Milliseconds since WebView navigation, retained across later reconnects.
+const startupMilestones: { snapshotReadyAtMs: number | null; galleriesReadyAtMs: number | null } = {
+  snapshotReadyAtMs: null,
+  galleriesReadyAtMs: null,
+};
+// An unpaired shell (failed or cancelled first pairing) answers every API call
+// with a rejection, so the app would render as a dead, empty surface with no
+// way back to the scan prompt. Probe the shell once; an unpaired shell gets an
+// explicit, always-available pairing screen instead of that dead end.
+const nativePairingBridge = (window as unknown as {
+  Capacitor?: { nativePromise?: (plugin: string, method: string, args: Record<string, unknown>) => Promise<unknown> };
+}).Capacitor;
+const nativePairingRequired = ref(false);
+onMounted(async () => {
+  if (nativePairingBridge?.nativePromise === undefined
+    || document.querySelector('meta[name="t3-native-shell"]') === null) return;
+  try {
+    const status = await nativePairingBridge.nativePromise('T3PairedTransport', 'status', {}) as { paired?: boolean };
+    nativePairingRequired.value = status.paired !== true;
+  } catch {
+    // Unreadable pairing storage is exactly the re-pair situation.
+    nativePairingRequired.value = true;
+  }
+});
+function openNativePairing(): void {
+  void nativePairingBridge?.nativePromise?.('T3PairedTransport', 'pair', {});
+}
 
 async function refreshOfflineDiagnostics(): Promise<void> {
   const list = (offlineStore as SnapshotStore & {
@@ -118,6 +157,9 @@ async function refreshOfflineDiagnostics(): Promise<void> {
     diagnosticBuild: DIAGNOSTIC_BUILD,
     capturedAt: new Date().toISOString(),
     mode: props.offlineState?.mode ?? null,
+    connectionPhase: props.offlineState?.connectionPhase ?? null,
+    lastLocalLoadMs: props.offlineState?.lastLocalLoadMs ?? null,
+    startupMilestones,
     lastFallbackAt: props.offlineState?.lastFallbackAt ?? null,
     pendingCount: props.offlineState?.pendingCount ?? null,
     conflictCount: props.offlineState?.conflictCount ?? null,
@@ -129,10 +171,37 @@ async function refreshOfflineDiagnostics(): Promise<void> {
     mutationDiagnostics: props.offlineState?.mutationDiagnostics ?? [],
     metadata: {
       activeGeneration: await readMeta('activeGeneration'),
+      offlineMutations: await readMeta('capability.offlineMutations'),
+      offlineEntryUpdate: await readMeta('capability.offlineEntryUpdate'),
+      completeSnapshotDelta: await readMeta('capability.completeSnapshotDelta'),
+      offlineMediaUpload: await readMeta('capability.offlineMediaUpload'),
+      offlineMediaMultiplePreviews: await readMeta('capability.offlineMediaMultiplePreviews'),
+      existingEntryMedia: await readMeta('capability.existingEntryMedia'),
       offlineEntryCreate: await readMeta('capability.offlineEntryCreate'),
       offlineUsageEvents: await readMeta('capability.offlineUsageEvents'),
       offlineEntryViewLater: await readMeta('capability.offlineEntryViewLater'),
       offlineEntryRating: await readMeta('capability.offlineEntryRating'),
+      offlineEntryAuthors: await readMeta('capability.offlineEntryAuthors'),
+      offlineAuthorCreate: await readMeta('capability.offlineAuthorCreate'),
+      offlineEntryTags: await readMeta('capability.offlineEntryTags'),
+      offlineEntryFacetCreate: await readMeta('capability.offlineEntryFacetCreate'),
+      offlineEntryTagVocabulary: await readMeta('capability.offlineEntryTagVocabulary'),
+      offlinePendingEntryTagCreation: await readMeta('capability.offlinePendingEntryTagCreation'),
+      offlinePendingEntryTags: await readMeta('capability.offlinePendingEntryTags'),
+      offlinePendingEntryAuthors: await readMeta('capability.offlinePendingEntryAuthors'),
+      offlinePendingEntryMetadata: await readMeta('capability.offlinePendingEntryMetadata'),
+      offlinePendingEntryContents: await readMeta('capability.offlinePendingEntryContents'),
+      offlinePendingEntryAuthorCreate: await readMeta('capability.offlinePendingEntryAuthorCreate'),
+      offlineCrossEntryPendingAuthors: await readMeta('capability.offlineCrossEntryPendingAuthors'),
+      offlineEntryContents: await readMeta('capability.offlineEntryContents'),
+      offlineProducerViewLater: await readMeta('capability.offlineProducerViewLater'),
+      offlineProducerRating: await readMeta('capability.offlineProducerRating'),
+      offlineProducerProfile: await readMeta('capability.offlineProducerProfile'),
+      offlineProducerTags: await readMeta('capability.offlineProducerTags'),
+      offlineRatingSlotLayout: await readMeta('capability.offlineRatingSlotLayout'),
+      offlineCollectionProducerMembership: await readMeta('capability.offlineCollectionProducerMembership'),
+      offlineCollectionManagement: await readMeta('capability.offlineCollectionManagement'),
+      offlineAuthorDirectories: await readMeta('capability.offlineAuthorDirectories'),
     },
     outbox: Array.isArray(operations)
       ? operations.map((operation) => ({ kind: operation.operationKind, status: operation.status }))
@@ -283,12 +352,14 @@ const entryTitleInput = ref<HTMLInputElement | null>(null);
 const creationView = ref<CreationView | null>(null);
 const sectionName = ref('');
 const facetName = ref('');
+const entryFacetSaving = ref(false);
 const draggedTagId = ref<number | null>(null);
 const selectedTagId = ref<number | null>(null);
 const selectedTagFacetId = ref<number | null>(null);
 const sectionEditorOpen = ref(false);
 const facetEditorSectionId = ref<number | null>(null);
 const tagEditorFacetId = ref<number | null>(null);
+const entryTagSaving = ref(false);
 // Relation autocomplete: eligibility, ordering and already-bound exclusions
 // are server responsibilities; the editor submits canonical names (select) or
 // the typed text (create) and never auto-submits on blur.
@@ -321,6 +392,17 @@ function suggestAuthors(query: string, excludeIds: number[], signal: AbortSignal
 }
 
 const editingTagId = ref<number | null>(null);
+/** The Section being renamed in place, and the text in its input. */
+/** A work's date may be a year, a year and month, or a full date — and nothing else. */
+const DATE_PREFIX_PATTERN = /^\d{4}(-\d{2})?(-\d{2})?$/u;
+/**
+ * Which interactions are available here. A pointer drags a Tag; a touch screen has to select it and
+ * then say where it goes. Telling either one the other's gesture is a hint that cannot be followed,
+ * so the hint follows this instead.
+ */
+const touchOnly = ref(false);
+const editingSectionId = ref<number | null>(null);
+const editingSectionName = ref('');
 const editingTagName = ref('');
 const contentEditorOpen = ref(false);
 const contentType = ref('');
@@ -338,6 +420,79 @@ const theme = ref<Theme>('light');
 // switches to its confirm copy) and run on the second — no native dialogs.
 const { armedKey, arm, disarm } = useArmableAction();
 const settingsOpen = ref(false);
+const settingsPanelRoot = ref<HTMLElement | null>(null);
+/**
+ * On a phone the Settings panel is a sheet over the page's own card, and it must
+ * sit in exactly that card's box — the same left, right and top, so the width
+ * always matches whatever the layout does. Repeating the card's inset
+ * expressions left the panel a few pixels narrower and shifted, with a sliver of
+ * the card showing along its right edge. Measured from the card instead. The
+ * bottom is deliberately free: the card behind may be shorter or taller.
+ */
+const settingsPanelStyle = ref<Record<string, string>>({});
+// The same boundary as the phone layout's `max-width: 44rem`, derived from the
+// root font size so it cannot drift from the stylesheet.
+function settingsSheetApplies(): boolean {
+  const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const breakpoint = 44 * (Number.isFinite(rootFontSize) ? rootFontSize : 16);
+  return globalThis.innerWidth <= breakpoint;
+}
+function measureSettingsPanelBox(correct = false): void {
+  const panel = settingsPanelRoot.value;
+  if (!settingsOpen.value || !settingsSheetApplies() || panel === null) {
+    settingsPanelStyle.value = {};
+    return;
+  }
+  // Resolved inside the app's own tree, not the document: the sheet and the card
+  // are siblings there, and a detached tree (tests) has no document to search.
+  const card = panel.closest('.gallery-app')?.querySelector<HTMLElement>('.content-panel') ?? null;
+  if (card === null) {
+    settingsPanelStyle.value = {};
+    return;
+  }
+  const rect = card.getBoundingClientRect();
+  if (correct) {
+    // The sheet's `position: fixed` is resolved against the header — an ancestor
+    // with a `backdrop-filter` becomes the containing block — so viewport
+    // coordinates land off by that ancestor's own origin (measured: 8px on both
+    // axes). Correct by what actually rendered; one pass converges and it holds
+    // whatever the layout does.
+    const rendered = panel.getBoundingClientRect();
+    const askedLeft = Number.parseFloat(settingsPanelStyle.value.left ?? '0');
+    const askedTop = Number.parseFloat(settingsPanelStyle.value.top ?? '0');
+    settingsPanelStyle.value = {
+      ...settingsPanelStyle.value,
+      left: `${Math.round(askedLeft + (rect.left - rendered.left))}px`,
+      top: `${Math.round(askedTop + (rect.top - rendered.top))}px`,
+    };
+    return;
+  }
+  settingsPanelStyle.value = {
+    left: `${Math.round(rect.left)}px`,
+    right: 'auto',
+    width: `${Math.round(rect.width)}px`,
+    top: `${Math.round(rect.top)}px`,
+    maxHeight: `${Math.max(160, Math.round(globalThis.innerHeight - rect.top - 12))}px`,
+  };
+  globalThis.requestAnimationFrame(() => { measureSettingsPanelBox(true); });
+}
+function onSettingsViewportChange(): void {
+  if (settingsOpen.value) measureSettingsPanelBox();
+}
+watch(settingsOpen, (open) => {
+  // The `then` callback would receive the resolved value as its first argument,
+  // which is the "correct the rendered offset" flag here.
+  if (open) void nextTick().then(() => { measureSettingsPanelBox(); });
+  else settingsPanelStyle.value = {};
+});
+onMounted(() => {
+  globalThis.addEventListener('resize', onSettingsViewportChange);
+  globalThis.visualViewport?.addEventListener('resize', onSettingsViewportChange);
+});
+onUnmounted(() => {
+  globalThis.removeEventListener('resize', onSettingsViewportChange);
+  globalThis.visualViewport?.removeEventListener('resize', onSettingsViewportChange);
+});
 const mobileNavigationOpen = ref(false);
 const MOBILE_NAVIGATION_HISTORY_KEY = 't3MobileNavigation';
 let mobileNavigationHistoryArmed = false;
@@ -350,6 +505,8 @@ const viewLaterKind = ref<'entry' | 'author'>('entry');
 const viewLaterTab = ref('');
 const collectionsView = ref(false);
 const randomView = ref(false);
+const homePageRef = ref<{ reload: () => Promise<void> } | null>(null);
+
 const authorPageRef = ref<{
   goBack: () => void | Promise<void>;
   waitUntilReady: () => Promise<void>;
@@ -403,6 +560,46 @@ const entryCollectionOptions = ref<CollectionMenuOption[]>([]);
 const entryCollectionIds = ref<number[]>([]);
 const entryCollectionMenuOpen = ref(false);
 const entryCollectionRoot = ref<HTMLElement | null>(null);
+// The trigger sits near an edge — the action row is top-right on a phone, the
+// stat row bottom-left — so the menu is placed from the trigger's measured
+// position: flipped up when there is no room below, and anchored to whichever
+// side has room. The stylesheet used to assume a top-left trigger on phones,
+// which pushed half the menu off the right edge (seen on the device). The
+// numbers below mirror the menu's own CSS (min-width 12rem, 0.3rem offset).
+const entryCollectionDropUp = ref(false);
+const entryCollectionMenuStyle = ref<Record<string, string>>({});
+const COLLECTION_MENU_MIN_WIDTH = 12 * 16;
+const COLLECTION_MENU_GAP = 0.3 * 16;
+const COLLECTION_MENU_VIEWPORT_MARGIN = 2.5 * 16;
+function measureEntryCollectionPlacement(): void {
+  const root = entryCollectionRoot.value;
+  if (root === null) {
+    entryCollectionDropUp.value = false;
+    entryCollectionMenuStyle.value = {};
+    return;
+  }
+  const rect = root.getBoundingClientRect();
+  const viewport = globalThis.visualViewport;
+  const viewportWidth = viewport === undefined || viewport === null
+    ? globalThis.innerWidth
+    : Math.min(globalThis.innerWidth, viewport.width + viewport.offsetLeft);
+  const viewportBottom = viewport === undefined || viewport === null
+    ? globalThis.innerHeight
+    : Math.min(globalThis.innerHeight, viewport.height + viewport.offsetTop);
+  entryCollectionDropUp.value = viewportBottom - rect.bottom < 15 * 16;
+  const width = Math.min(
+    COLLECTION_MENU_MIN_WIDTH,
+    Math.max(0, viewportWidth - COLLECTION_MENU_VIEWPORT_MARGIN),
+  );
+  const roomLeft = rect.right - COLLECTION_MENU_GAP;
+  const roomRight = viewportWidth - rect.left - COLLECTION_MENU_GAP;
+  const anchorRight = roomLeft >= width || roomLeft >= roomRight;
+  const maxWidth = Math.floor(Math.max(0, Math.min(width, anchorRight ? roomLeft : roomRight)));
+  entryCollectionMenuStyle.value = anchorRight
+    ? { left: 'auto', right: '0', maxWidth: `${maxWidth}px` }
+    : { left: '0', right: 'auto', maxWidth: `${maxWidth}px` };
+}
+watch(entryCollectionMenuOpen, (open) => { if (open) measureEntryCollectionPlacement(); });
 function onDocumentPointerDownForEntryCollection(event: PointerEvent): void {
   if (!entryCollectionMenuOpen.value) return;
   const root = entryCollectionRoot.value;
@@ -414,7 +611,63 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
 const searchView = ref(false);
 const searchQuery = ref('');
 const searchScope = ref<SearchScope>('entries');
-const sidebarSearchQuery = ref('');
+/**
+ * The sidebar's exchange mode: the gallery list can be moved up and down.
+ *
+ * A Gallery is a projection of `entries.type`, so it had no order of its own and the list fell back to
+ * the alphabet — measured on a real library with seven galleries, the two used every day sat wherever
+ * their spelling put them. While this is on, each row carries the same pair of arrows the Collections
+ * page moves folders with, and the button itself takes the "applied" look the view-later switches use.
+ */
+const galleryOrdering = ref(false);
+
+/** Where a Gallery sits in the list the *server* will be given: the whole list, hidden ones included. */
+function galleryIndex(type: string): number {
+  return galleries.value.findIndex((gallery) => gallery.type === type);
+}
+
+function canMoveGallery(type: string, delta: -1 | 1): boolean {
+  const index = visibleGalleries.value.findIndex((gallery) => gallery.type === type);
+  return index >= 0 && index + delta >= 0 && index + delta < visibleGalleries.value.length;
+}
+
+/**
+ * Move one Gallery past its neighbour, then store the whole list.
+ *
+ * The move happens locally first so the row follows the finger, and the order is written afterwards;
+ * a write that fails puts the list back and says why, rather than leaving the sidebar showing an
+ * order the library does not have.
+ */
+async function moveGallery(type: string, delta: -1 | 1): Promise<void> {
+  if (!canMoveGallery(type, delta)) return;
+  const visibleIndex = visibleGalleries.value.findIndex((gallery) => gallery.type === type);
+  const neighbour = visibleGalleries.value[visibleIndex + delta]!;
+  const index = galleryIndex(type);
+  const target = galleryIndex(neighbour.type);
+  if (index < 0 || target < 0) return;
+  const before = galleries.value;
+  const next = [...before];
+  [next[index], next[target]] = [next[target]!, next[index]!];
+  galleries.value = next;
+  try {
+    await props.api.setGalleryOrder(next.map((gallery) => gallery.type));
+    error.value = null;
+  } catch (cause) {
+    galleries.value = before;
+    error.value = cause instanceof Error ? cause.message : String(cause);
+  }
+}
+
+/**
+ * Whether the sidebar has anything to navigate.
+ *
+ * An empty library shows the invitation instead of a list of dead ends — which is what the sidebar
+ * did before the shortcuts moved into their own pinned block, and this keeps that.
+ */
+const sidebarHasNavigation = computed(() => (
+  !loading.value && (galleries.value.length > 0 || authors.value.length > 0)
+));
+
 const authorSearchOrigin = ref<SearchOrigin | null>(null);
 
 // Whole-gallery partitions are stored server-side; the show-NSFW switch is a
@@ -629,8 +882,13 @@ function closeAdvanced(): void {
   advancedView.value = false;
 }
 
+/**
+ * The search door. It used to be a field in the sidebar; it is an icon now, and the field it opened
+ * belongs to the Search page itself — where the results are, and where the query can be changed
+ * without going back.
+ */
 function openSearch(): void {
-  searchQuery.value = sidebarSearchQuery.value.trim();
+  searchQuery.value = '';
   searchScope.value = 'entries';
   leaveAllViews();
   searchView.value = true;
@@ -644,7 +902,6 @@ function preserveSearchContext(query: string, scope: SearchScope): SearchOrigin 
   const context = { searchQuery: query, searchScope: scope };
   searchQuery.value = query;
   searchScope.value = scope;
-  sidebarSearchQuery.value = query;
   return context;
 }
 
@@ -717,6 +974,21 @@ async function openTagFromSearch(
     error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
   }
 }
+
+watch([showNsfw, entryNsfwTypes], () => {
+  if (showNsfw.value) return;
+  if (activeType.value && entryNsfwTypes.value.has(activeType.value)) {
+    galleryEntriesRequestSeq += 1;
+    activeType.value = null;
+    entries.value = [];
+    galleryResultTotal.value = 0;
+    facetFilterOptions.value = null;
+  }
+  if (activeEntry.value && entryNsfwTypes.value.has(activeEntry.value.type)) {
+    activeEntry.value = null;
+    entryOrigin.value = null;
+  }
+});
 
 watch(showNsfw, () => {
   void refreshNavigationCounts();
@@ -846,9 +1118,253 @@ function mediaPrevious(): void {
 function mediaNext(): void {
   if (mediaIndex.value < mediaSlides.value.length - 1) mediaIndex.value += 1;
 }
-function isBasicSection(section: { name: string }): boolean {
-  const name = section.name.trim();
-  return /^basic\s*information$/i.test(name) || /^basic$/i.test(name);
+// The strip mode is a pointer affordance — a phone keeps the one-at-a-time
+// viewer (and gets its own floating add control instead).
+const mediaExpanded = ref(false);
+const mediaViewerRoot = ref<HTMLElement | null>(null);
+// The strip adopts the cover's own rendered height, so a mixed portrait set
+// hangs off the first landscape image instead of the tallest one.
+const mediaStripHeight = ref<number | null>(null);
+const mediaAddInput = ref<HTMLInputElement | null>(null);
+const mediaUploading = ref(false);
+const mediaUploadError = ref<string | null>(null);
+const desktopMedia = computed(() => !touchOnly.value);
+const mediaAddAvailable = computed(() => editingEntry.value && mediaSlides.value.length < 4);
+/**
+ * The strip's height comes from the pictures themselves: the first one sets the
+ * proportion (a face-on, same-size set lands exactly on the cover's own shape),
+ * and the total width is what keeps the whole row inside the column — never a
+ * clamp on a single image, which is what produced letterboxed white bars.
+ */
+const stripMaxHeight = 24 * 16;
+// The height the cover already renders at in the single-image view; the strip
+// keeps that size and only shrinks when the whole row would not fit.
+const singleViewHeight = ref<number | null>(null);
+function measureMediaStrip(): void {
+  if (!mediaExpanded.value) return;
+  const root = mediaViewerRoot.value;
+  const strip = root?.querySelector<HTMLElement>('.entry-media-strip') ?? null;
+  if (root === null || strip === null) return;
+  // The strip is the boundary: its own box is the column it has to fit in.
+  const images = [...strip.querySelectorAll<HTMLImageElement>('.entry-media-slide img')];
+  if (images.length === 0) return;
+  const gap = 8;
+  const width = strip.clientWidth || root.clientWidth;
+  const usable = width - gap * (images.length - 1);
+  if (usable <= 0) return;
+  const aspectOf = (image: HTMLImageElement): number | null => (
+    image.naturalWidth > 0 && image.naturalHeight > 0 ? image.naturalWidth / image.naturalHeight : null
+  );
+  const first = images.map(aspectOf).find((aspect) => aspect !== null) ?? 1;
+  const aspects = images.map((image) => aspectOf(image) ?? first);
+  const sum = aspects.reduce((total, aspect) => total + aspect, 0);
+  if (sum <= 0) return;
+  // Two bounds, and the strip takes the smaller: the size the cover already has
+  // on its own (so a face-on set looks exactly like the single view), and the
+  // size at which the whole row still fits the column. Flooring keeps a
+  // rounded pixel from painting past the column's edge.
+  const coverSize = singleViewHeight.value ?? stripMaxHeight;
+  const height = Math.floor(Math.min(coverSize, usable / sum, stripMaxHeight));
+  mediaStripHeight.value = Math.max(64, height);
+}
+function currentStrip(): HTMLElement | null {
+  return mediaViewerRoot.value?.querySelector<HTMLElement>('.entry-media-strip') ?? null;
+}
+// Watching the strip's own width is what keeps the row inside its column when
+// anything else moves it — a side panel opening, the window resizing, the
+// browser zooming. Height changes are our own doing and must not re-enter.
+let stripObserver: ResizeObserver | null = null;
+let observedStripWidth = 0;
+function observeStrip(): void {
+  const strip = currentStrip();
+  if (strip === null || typeof ResizeObserver === 'undefined') return;
+  stripObserver?.disconnect();
+  observedStripWidth = strip.clientWidth;
+  stripObserver = new ResizeObserver(() => {
+    const width = currentStrip()?.clientWidth ?? 0;
+    if (width === 0 || width === observedStripWidth) return;
+    observedStripWidth = width;
+    measureMediaStrip();
+  });
+  stripObserver.observe(strip);
+}
+function unobserveStrip(): void {
+  stripObserver?.disconnect();
+  stripObserver = null;
+  observedStripWidth = 0;
+}
+/**
+ * Re-runs the geometry for whatever the strip holds now, and again as the
+ * pictures decode: a cached image can finish loading in the same tick its
+ * element was created, so the load event alone is not a reliable signal, and a
+ * measurement taken before the first decode has no aspect to work from.
+ */
+function syncMediaStrip(): void {
+  measureMediaStrip();
+  requestAnimationFrame(() => measureMediaStrip());
+  globalThis.setTimeout(() => measureMediaStrip(), 150);
+  globalThis.setTimeout(() => measureMediaStrip(), 400);
+  const strip = currentStrip();
+  for (const image of strip?.querySelectorAll('img') ?? []) {
+    if (image.complete || image.dataset.stripObserved === '1') continue;
+    image.dataset.stripObserved = '1';
+    image.addEventListener('load', measureMediaStrip, { once: true });
+  }
+  observeStrip();
+}
+async function openMediaExpanded(): Promise<void> {
+  // Read the cover's own rendered height before the layout switches.
+  const single = mediaViewerRoot.value?.querySelector<HTMLImageElement>('img') ?? null;
+  singleViewHeight.value = single !== null && single.clientHeight > 0 ? single.clientHeight : null;
+  mediaExpanded.value = true;
+  await nextTick();
+  syncMediaStrip();
+}
+function closeMediaExpanded(): void {
+  mediaExpanded.value = false;
+  unobserveStrip();
+}
+// Media can change while the strip is open — adding, deleting, moving — and the
+// geometry has to follow the list it now shows.
+watch([mediaSlides, () => mediaExpanded.value], async () => {
+  if (!mediaExpanded.value) { unobserveStrip(); return; }
+  await nextTick();
+  syncMediaStrip();
+}, { flush: 'post' });
+function requestMediaUpload(): void {
+  if (!mediaAddAvailable.value || mediaUploading.value) return;
+  mediaAddInput.value?.click();
+}
+// A connection failure that has healed must not keep its banner: when the
+// connection state settles back online, stale connection-failure messages at
+// the top of the page clear themselves (they used to need an app restart).
+watch([() => props.offlineState?.mode, () => props.offlineState?.connectionPhase], ([mode, phase]) => {
+  if (mode === 'online' && phase === null && error.value !== null) error.value = null;
+});
+
+// Media editing (delete / move) speaks one command: the whole list in its new
+// order, the first ref being the cover.
+const mediaEditMode = ref(false);
+const mediaSaving = ref(false);
+const mediaRemovalBlockReason=ref<string|null>(null);
+let mediaPolicyGeneration=0;
+watch([activeEntry,mediaEditMode],async([entry])=>{
+  const generation=++mediaPolicyGeneration;
+  if(!entry){mediaRemovalBlockReason.value=null;return;}
+  if(entry.id<=0){mediaRemovalBlockReason.value=t('media.blockNoServerRow');return;}
+  mediaRemovalBlockReason.value=props.api.getEntryMediaRemovalBlockReason ? t('media.blockChecking') : null;
+  try {
+    const reason=await props.api.getEntryMediaRemovalBlockReason?.(entry.id) ?? null;
+    if(generation===mediaPolicyGeneration)mediaRemovalBlockReason.value=reason;
+  }catch{if(generation===mediaPolicyGeneration)mediaRemovalBlockReason.value=t('media.blockUncertain');}
+});
+// Media keeps positional names, so an edited list hands the browser the SAME
+// image URL for different bytes; a fresh element (keyed by this) is what makes
+// it re-read them. The URL itself stays untouched, so the offline copy's cached
+// pictures keep matching.
+const mediaRevision = ref(0);
+// Leaving the Entry's edit mode takes the picture editors with it: their X and
+// move arrows are edit-mode controls, and leaving them on screen after the mode
+// ended reads as a stuck page (reported after a slow save).
+watch(editingEntry, (editing) => {
+  if (!editing) {
+    mediaEditMode.value = false;
+    unobserveStrip();
+  }
+});
+async function commitMediaOrder(refs: string[]): Promise<void> {
+  const entry = activeEntry.value;
+  if (entry === null || mediaSaving.value || mediaRemovalBlockReason.value) return;
+  mediaSaving.value = true;
+  mediaUploadError.value = null;
+  try {
+    await props.api.setEntryMediaOrder?.(entry.id, refs);
+    mediaRevision.value += 1;
+    await reloadActiveEntry();
+  } catch (cause) {
+    mediaUploadError.value = cause instanceof Error ? cause.message : t('media.editFailed');
+  } finally {
+    mediaSaving.value = false;
+  }
+}
+function removeMediaAt(index: number): void {
+  const refs = [...mediaSlides.value];
+  if (index < 0 || index >= refs.length) return;
+  refs.splice(index, 1);
+  void commitMediaOrder(refs);
+}
+function swapMedia(index: number, delta: number): void {
+  const refs = [...mediaSlides.value];
+  const target = index + delta;
+  if (target < 0 || target >= refs.length) return;
+  [refs[index], refs[target]] = [refs[target]!, refs[index]!];
+  void commitMediaOrder(refs);
+}
+async function chooseMediaUpload(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0] ?? null;
+  input.value = '';
+  const entry = activeEntry.value;
+  if (file === null || entry === null) return;
+  mediaUploading.value = true;
+  mediaUploadError.value = null;
+  try {
+    // An absent cover takes the new image as the cover; otherwise it appends as
+    // the next preview. Both ride the same upload the composer and Quick import
+    // already use, offline queue included.
+    await props.api.uploadEntryMedia(entry.id, entry.coverRef === null ? 'cover' : 'preview', file);
+    mediaRevision.value += 1;
+    await reloadActiveEntry();
+  } catch (cause) {
+    mediaUploadError.value = cause instanceof Error ? cause.message : t('media.addFailed');
+  } finally {
+    mediaUploading.value = false;
+  }
+}
+async function reloadActiveEntry(): Promise<void> {
+  if (activeEntry.value) await openEntry(activeEntry.value.id);
+}
+
+/**
+ * Deleting a rating dimension, in two steps.
+ *
+ * The dimension is shared by the whole Gallery — every Entry of the type loses the row, its values
+ * go with it — so a dialog asks before anything is sent. (An inline "armed" button is what this page
+ * uses for deletes whose blast radius is the card on screen.)
+ */
+const deleteRatingTarget = ref<{ slotId: number; name: string } | null>(null);
+
+function beginRatingDelete(slotId: number, name: string): void {
+  if (!editingEntry.value) return;
+  deleteRatingTarget.value = { slotId, name };
+}
+
+async function confirmRatingDelete(): Promise<void> {
+  const entry = activeEntry.value;
+  const target = deleteRatingTarget.value;
+  if (!entry || target === null) return;
+  try {
+    await props.api.deleteEntryRatingSlot(entry.id, target.slotId);
+    deleteRatingTarget.value = null;
+    // Invalidate the type's backing Gallery before refresh: a late old query
+    // must not reinstall deleted-dimension values or counts.
+    if (activeType.value === entry.type) {
+      galleryEntriesRequestSeq += 1;
+      entries.value = [];
+      galleryResultTotal.value = 0;
+      facetFilters.value = {
+        ...facetFilters.value,
+        ratingConditions: facetFilters.value.ratingConditions.filter(row => row.slotId !== target.slotId),
+        ratingSort: facetFilters.value.ratingSort?.slotId === target.slotId ? null : facetFilters.value.ratingSort,
+      };
+      galleryPage.value = 1;
+      await Promise.all([loadGalleryEntries(), refreshFacetFilterOptions()]);
+    }
+    await reloadActiveEntry();
+  } catch (cause) {
+    deleteRatingTarget.value = null;
+    error.value = cause instanceof Error ? cause.message : t('error.deleteEntry');
+  }
 }
 
 async function deleteActiveEntry(): Promise<void> {
@@ -905,9 +1421,7 @@ async function deleteActiveEntry(): Promise<void> {
 }
 // Layout template: rebuild this type's shared Section/Facet structure from
 // the open Entry and re-map every Entry's tags onto it (see
-// applyLayoutTemplate on the server). `showEmptyFacets` reveals empty named
-// Facets so the rebuilt structure is visible even before tags are added.
-const showEmptyFacets = ref(false);
+// applyLayoutTemplate on the server).
 const templateBusy = ref(false);
 const templateNotice = ref<string | null>(null);
 let templateNoticeTimer: number | null = null;
@@ -1035,6 +1549,25 @@ async function refreshGalleries(): Promise<void> {
   galleries.value = await props.api.listGalleries();
 }
 
+/**
+ * Re-read the Gallery's filter options.
+ *
+ * They are not a static list: the server derives them from the tags that actually exist on that
+ * type's Entries, in Facets that have a name. So they go stale the moment a tag is assigned, moved
+ * or removed — and the reported bug was exactly that: a Gallery was opened while it had no tags (no
+ * filter row), a tag was added inside one of its Entries, and coming back showed the old empty
+ * options. Reading them again when the Gallery is shown is the one place that covers every route
+ * back to it.
+ */
+async function refreshFacetFilterOptions(): Promise<void> {
+  if (!activeType.value) return;
+  try {
+    facetFilterOptions.value = await props.api.listFacetFilterOptions(activeType.value);
+  } catch {
+    // A stale filter row is not worth an error of its own: selecting the Gallery again re-reads it.
+  }
+}
+
 async function refreshAuthors(): Promise<void> {
   authors.value = await props.api.listAuthors();
 }
@@ -1049,14 +1582,23 @@ async function selectGallery(
   preserveScrollHistory = false,
 ): Promise<void> {
   leaveAllViews(keepEntry, preserveScrollHistory);
+  entries.value = [];
+  galleryResultTotal.value = 0;
+  facetFilterOptions.value = null;
   activeType.value = entryType;
   facetFilters.value = { conditions: [], authorIds: [], ratingConditions: [], ratingSort: null, usageConditions: [], usageSort: null };
   galleryPage.value = navigationMemory.pages.get(`gallery:${entryType}`) ?? 1;
-  const [, filterOptions] = await Promise.all([
-    loadGalleryEntries(),
-    props.api.listFacetFilterOptions(entryType),
-  ]);
-  facetFilterOptions.value = filterOptions;
+  try {
+    const [, filterOptions] = await Promise.all([
+      loadGalleryEntries(),
+      props.api.listFacetFilterOptions(entryType),
+    ]);
+    if (activeType.value === entryType) facetFilterOptions.value = filterOptions;
+  } catch (cause) {
+    if (activeType.value === entryType) {
+      error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
+    }
+  }
 }
 
 async function loadGalleryEntries(): Promise<void> {
@@ -1447,7 +1989,6 @@ async function closeEntry(): Promise<void> {
     if ('searchQuery' in entryOrigin.value) {
       searchQuery.value = entryOrigin.value.searchQuery;
       searchScope.value = entryOrigin.value.searchScope;
-      sidebarSearchQuery.value = entryOrigin.value.searchQuery;
       entryOrigin.value = null;
       activeEntry.value = null;
       activeType.value = null;
@@ -1475,6 +2016,9 @@ async function closeEntry(): Promise<void> {
   resetLayoutEditors();
   restoreReturnView();
   await restorePreviousScroll();
+  // The Entry may have been edited (a tag added, a Facet created) while it was open, and those are
+  // what the filter row is built from.
+  await refreshFacetFilterOptions();
 }
 
 function restoreReturnView(): void {
@@ -1586,7 +2130,6 @@ async function restoreAuthorTagResults(): Promise<void> {
   if (authorSearchOrigin.value !== null) {
     searchQuery.value = authorSearchOrigin.value.searchQuery;
     searchScope.value = authorSearchOrigin.value.searchScope;
-    sidebarSearchQuery.value = authorSearchOrigin.value.searchQuery;
     authorSearchOrigin.value = null;
     authorView.value = false;
     authorTarget.value = null;
@@ -1617,7 +2160,6 @@ async function closeTagResults(): Promise<void> {
     } else {
       searchQuery.value = current.sourceSearchQuery ?? '';
       searchScope.value = current.sourceSearchScope ?? 'entries';
-      sidebarSearchQuery.value = searchQuery.value;
       searchView.value = true;
     }
     await restorePreviousScroll();
@@ -1786,7 +2328,16 @@ async function convertEntryAuthors(): Promise<void> {
   multiAuthorBusy.value = true;
   try {
     const result = await props.api.convertEntryAuthors(entry.id);
-    await Promise.all([refreshAuthors(), openEntry(entry.id)]);
+    // Invalidate the type's backing Gallery before refresh: a late old query
+    // must not reinstall pre-conversion author cards or filter options.
+    if (activeType.value === entry.type) {
+      galleryEntriesRequestSeq += 1;
+      entries.value = [];
+      galleryResultTotal.value = 0;
+      galleryPage.value = 1;
+      await Promise.all([loadGalleryEntries(), refreshFacetFilterOptions()]);
+    }
+    await Promise.all([refreshAuthors(), refreshGalleries(), openEntry(entry.id)]);
     showMultiAuthorNotice(t('entry.multiAuthorDone', {
       count: result.convertedAuthors.length,
       name: result.multiAuthorName,
@@ -1798,9 +2349,49 @@ async function convertEntryAuthors(): Promise<void> {
   }
 }
 
+/**
+ * The Content rows worth showing: in read mode a row with no text is a slot nobody filled, not
+ * content — the built-in kinds (`source url`, `description`) exist for every work, and the rule is
+ * that a work which has nothing to say about one does not show it. In edit mode every row is shown,
+ * empty ones included, because that is where they get filled or removed.
+ */
+const visibleContents = computed(() => {
+  const rows = activeEntry.value?.contents ?? [];
+  return editingEntry.value ? rows : rows.filter((row) => row.content.trim() !== '');
+});
+
+/**
+ * The Content kinds this Gallery's works use, offered as one-click labels in the add form.
+ *
+ * The built-ins are not optional — a Gallery always has `source url` and `description` — so a failed
+ * load degrades to those rather than to an empty row of choices.
+ */
+const contentKindOptions = ref<string[]>([...DEFAULT_CONTENT_KINDS]);
+
+async function loadContentKinds(entryType: string): Promise<void> {
+  try {
+    contentKindOptions.value = await props.api.listContentKinds(entryType);
+  } catch (cause) {
+    contentKindOptions.value = [...DEFAULT_CONTENT_KINDS];
+    console.warn('Content kinds unavailable, offering the built-ins', cause);
+  }
+}
+
+function openContentEditor(): void {
+  contentEditorOpen.value = true;
+  const entryType = activeEntry.value?.type.trim() ?? '';
+  if (entryType !== '') void loadContentKinds(entryType);
+}
+
 async function createContent(): Promise<void> {
   if (!activeEntry.value) return;
   const entryId = activeEntry.value.id;
+  if (contentBody.value.trim() === '') {
+    // An empty Content row is a slot, and a slot is not content: it would render as a blank line and
+    // re-appear as a "default" the work never had. The form asks for text instead.
+    error.value = t('content.bodyRequired');
+    return;
+  }
   const nextSortOrder = activeEntry.value.contents.reduce(
     (highest, item) => Math.max(highest, item.sortOrder),
     -1,
@@ -1956,24 +2547,55 @@ async function moveRatingSlot(slotId: number, direction: -1 | 1): Promise<void> 
   }
 }
 
-async function submitEntryTag(facetId: number, name: string): Promise<void> {
-  if (!activeEntry.value || name.trim() === '') return;
-  error.value = null;
-  try {
-    await props.api.assignEntryTag(activeEntry.value.id, {
-      facetId,
-      name,
-    });
-    tagEditorFacetId.value = null;
-    const entryId = activeEntry.value.id;
-    await openEntry(entryId);
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : t('error.addTag');
+/**
+ * Put a just-recorded tag on screen from the write's own answer. The tag is
+ * already there (on the server, or in the offline copy), and re-reading the
+ * whole Entry over the network to see it cost 1.2s with a live server and up to
+ * the read timeout whenever the connection was bad — the user's "sometimes it
+ * does not refresh and you have to wait". False when the answer cannot be
+ * placed (unknown Facet), in which case the caller falls back to the read.
+ */
+function applyEntryTagAssignment(assignment: EntryTagAssignment): boolean {
+  const entry = activeEntry.value;
+  const facet = entry?.sections.flatMap((section) => section.facets)
+    .find((row) => row.id === assignment.facetId);
+  if (entry === null || facet === undefined) return false;
+  if (!facet.tags.some((tag) => tag.normalizedName === assignment.normalizedName)) {
+    facet.tags = [...facet.tags, {
+      id: assignment.tagId,
+      name: assignment.name,
+      normalizedName: assignment.normalizedName,
+    }].sort((left, right) => left.normalizedName.localeCompare(right.normalizedName));
   }
+  return true;
+}
+
+async function submitEntryTag(facetId: number, name: string): Promise<void> {
+  const entryId = activeEntry.value?.id;
+  if (entryId === undefined || entryTagSaving.value || name.trim() === '') return;
+  entryTagSaving.value = true; error.value = null;
+  try {
+    const assignment = await props.api.assignEntryTag(entryId, { facetId, name });
+    if (activeEntry.value?.id !== entryId) return;
+    tagEditorFacetId.value = null;
+    if (assignment !== null && assignment !== undefined && applyEntryTagAssignment(assignment)) {
+      // Recorded and shown; the authoritative re-read only reconciles in the
+      // background, so a slow or unreachable server no longer holds the row.
+      void openEntry(entryId).then(() => {
+        if (error.value && activeEntry.value?.id === entryId) error.value = t('search.pendingTagsRefreshError');
+      });
+      return;
+    }
+    await openEntry(entryId);
+    if (error.value && activeEntry.value?.id === entryId) error.value = t('search.pendingTagsRefreshError');
+  } catch (cause) {
+    if (activeEntry.value?.id === entryId) error.value = cause instanceof Error ? cause.message : t('error.addTag');
+  } finally { entryTagSaving.value = false; }
 }
 
 async function createNamedFacet(sectionId: number): Promise<void> {
-  if (!activeEntry.value) return;
+  if (!activeEntry.value || entryFacetSaving.value) return;
+  const entryId = activeEntry.value.id;
   const newFacetName = facetName.value.trim();
   if (newFacetName === '') return;
   error.value = null;
@@ -1989,20 +2611,27 @@ async function createNamedFacet(sectionId: number): Promise<void> {
     facetEditorSectionId.value = null;
     return;
   }
+  entryFacetSaving.value = true;
+  let committed = false;
   try {
     await props.api.createFacet({
       sectionId,
       name: newFacetName,
     });
-    await openEntry(activeEntry.value.id);
+    committed = true;
+    if (activeEntry.value?.id !== entryId) return;
+    facetName.value = '';
+    facetEditorSectionId.value = null;
+    await openEntry(entryId);
+    if (error.value) { error.value = t('search.pendingTagsRefreshError'); return; }
     tagEditorFacetId.value = activeEntry.value?.sections
       .find((section) => section.id === sectionId)
       ?.facets.find((facet) => facet.name === newFacetName)?.id ?? null;
     facetName.value = '';
     facetEditorSectionId.value = null;
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : t('error.createFacet');
-  }
+    if (activeEntry.value?.id === entryId) error.value = committed ? t('search.pendingTagsRefreshError') : cause instanceof Error ? cause.message : t('error.createFacet');
+  } finally { entryFacetSaving.value = false; }
 }
 
 async function moveFacet(sectionId: number, facetId: number, offset: -1 | 1): Promise<void> {
@@ -2026,6 +2655,58 @@ async function moveFacet(sectionId: number, facetId: number, offset: -1 | 1): Pr
   }
 }
 
+/**
+ * A Section is the heading above its Facets, and it was the one part of the board with no controls:
+ * a name could be given when it was created and never changed, and there was no way to drop one. The
+ * two operations below are the Facet pair (`removeFacet` / `saveTagRename`) applied to the heading —
+ * same arm-then-confirm, same reload, same error surface — because they destroy the same kind of data.
+ */
+function startSectionRename(section: { id: number; name: string }): void {
+  editingSectionId.value = section.id;
+  editingSectionName.value = section.name;
+}
+
+function cancelSectionRename(): void {
+  editingSectionId.value = null;
+  editingSectionName.value = '';
+}
+
+async function saveSectionRename(sectionId: number): Promise<void> {
+  if (!activeEntry.value || editingSectionId.value !== sectionId) return;
+  const name = editingSectionName.value.trim();
+  if (name === '') {
+    cancelSectionRename();
+    return;
+  }
+  const entryId = activeEntry.value.id;
+  error.value = null;
+  try {
+    await props.api.renameSection(sectionId, name);
+    cancelSectionRename();
+    await openEntry(entryId);
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.renameSection');
+  }
+}
+
+async function removeSection(section: { id: number; name: string }): Promise<void> {
+  if (!activeEntry.value) return;
+  if (!arm(`delete-section-${section.id}`)) return;
+  disarm(`delete-section-${section.id}`);
+  error.value = null;
+  try {
+    await props.api.deleteSection(section.id);
+    await openEntry(activeEntry.value.id);
+  } catch (cause) {
+    // The server refuses a Section that still has tags assigned to it. Repeating that sentence helps
+    // nobody; naming the Section and the next step does.
+    const message = cause instanceof Error ? cause.message : '';
+    error.value = /assigned tags/u.test(message)
+      ? t('error.sectionHasTags', { name: section.name })
+      : message || t('error.deleteSection');
+  }
+}
+
 async function removeFacet(facetId: number): Promise<void> {
   if (!activeEntry.value) return;
   const facet = activeEntry.value.sections
@@ -2044,13 +2725,16 @@ async function removeFacet(facetId: number): Promise<void> {
 }
 
 function visibleFacets(section: EntryDetailResponse['sections'][number]) {
-  if (showEmptyFacets.value) {
-    // Show every named Facet (even empty ones) plus any unnamed Facet that
-    // carries tags or is being edited — empty unnamed Facets stay hidden.
+  if (editingEntry.value) {
+    // Editing shows every named Facet whether or not it carries tags — one
+    // Gallery shares one template, so the information surface being edited
+    // should read the same on every Entry — plus any unnamed Facet that
+    // carries tags or is being edited (a blank unnamed one has nothing to edit).
     return section.facets.filter((facet) => facet.name.length > 0
       || facet.tags.length > 0
       || tagEditorFacetId.value === facet.id);
   }
+  // Reading keeps an empty Facet hidden: there is nothing in it to read.
   return section.facets.filter((facet) => facet.tags.length > 0
     || (facet.name.length > 0 && tagEditorFacetId.value === facet.id));
 }
@@ -2142,14 +2826,21 @@ async function removeTag(tagId: number): Promise<void> {
  * list lengths remain the fallback for a client whose server has no counts route.
  */
 const navigationCounts = ref<NavigationCounts | null>(null);
+function isOfflineNow(): boolean {
+  return props.offlineState?.mode === 'offline';
+}
 
 async function refreshNavigationCounts(): Promise<void> {
-  if (props.api.getNavigationCounts === undefined) {
+  // The offline library already provides visible Authors/View-later state. This
+  // online-only count endpoint must not hold a saved copy behind a native HTTP
+  // timeout after a cold launch with the desktop server stopped.
+  if (isOfflineNow() || props.api.getNavigationCounts === undefined) {
     navigationCounts.value = null;
     return;
   }
   try {
-    navigationCounts.value = await props.api.getNavigationCounts(showNsfw.value);
+    const counts = await props.api.getNavigationCounts(showNsfw.value);
+    if (!isOfflineNow()) navigationCounts.value = counts;
   } catch {
     navigationCounts.value = null;
   }
@@ -2164,16 +2855,22 @@ const visibleViewLaterCount = computed(() => (
     : navigationCounts.value.viewLaterEntries + navigationCounts.value.viewLaterAuthors
 ));
 
+let startupComplete = false;
 async function initialize(): Promise<void> {
   try {
     // Home is the default view: nothing is selected until the user picks a
     // Gallery (homepage design guide §10 — no first-gallery fallback).
-    await Promise.all([
-      refreshGalleries(),
-      refreshAuthors(),
-      initializeViewLater(props.api),
-      refreshNavigationCounts(),
-    ]);
+    // Gallery doors are the first usable screen. Authors, View later and
+    // sidebar counts fill in reactively; none may gate the initial paint.
+    const reportSupplementaryError = (cause: unknown): void => {
+      if (props.offlineState?.mode === 'offline' && isOfflineTransportError(cause)) return;
+      error.value = cause instanceof Error ? cause.message : t('error.loadGalleries');
+    };
+    void refreshNavigationCounts();
+    void refreshAuthors().catch(reportSupplementaryError);
+    void initializeViewLater(props.api).catch(reportSupplementaryError);
+    await refreshGalleries();
+    startupMilestones.galleriesReadyAtMs ??= Math.round(performance.now());
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.loadGalleries');
   } finally {
@@ -2181,8 +2878,57 @@ async function initialize(): Promise<void> {
   }
 }
 
+/**
+ * Re-read every surface that can be stale after the data underneath it changed:
+ * a connection transition, or the offline copy being downloaded, cleared or
+ * restored from Settings. Home reads once when it mounts, and a selected
+ * Gallery's card list stays mounted behind the detail — both kept showing the
+ * old data until the page was entered again (found on the phone). The Home ref
+ * is null whenever Home is not the visible page, so this costs nothing there.
+ */
+async function reloadVisibleSurfaces(): Promise<void> {
+  await initialize();
+  const refreshes: Array<Promise<unknown>> = [];
+  if (activeType.value !== null) refreshes.push(loadGalleryEntries());
+  if (activeEntry.value !== null) refreshes.push(reloadActiveEntry());
+  if (homePageRef.value !== null) refreshes.push(Promise.resolve(homePageRef.value.reload()));
+  await Promise.allSettled(refreshes);
+}
+
+// A successful capability probe can arrive without a Wi-Fi event. Refresh
+// visible data after either transition; never keep an empty online projection
+// pinned over an installed offline copy (or vice versa).
+watch(() => props.offlineState?.mode, (next, previous) => {
+  if (!startupComplete || next === previous || next === undefined) return;
+  void reloadVisibleSurfaces();
+});
+
+watch(() => props.offlineState?.lastReplaySnapshotSeq, (next, previous) => {
+  if (!startupComplete || next === undefined || next === null || next === previous) return;
+  const author = authorTarget.value;
+  if (author !== null) {
+    const reconciled = props.offlineState?.reconciledAuthorIds?.[String(author.authorId)];
+    if (reconciled !== undefined) authorTarget.value = { ...author, authorId: reconciled };
+  }
+  void initialize().then(async () => {
+    const refreshes: Array<Promise<unknown>> = [];
+    if (activeType.value !== null) refreshes.push(loadGalleryEntries());
+    if (activeEntry.value !== null) refreshes.push(reloadActiveEntry());
+    await Promise.allSettled(refreshes);
+  });
+});
+
+let entryCreateAttemptUid: string | undefined;
+// The exact atomic create command of an uncertain online submit. Retrying it
+// verbatim is what makes the attempt safe: the server receipt keyed by opId
+// answers the replay instead of creating a second Entry.
+let entryCreateAttempt: SyncReplayOperation | undefined;
 function openCreation(view: CreationView): void {
   closeMobileNavigation();
+  // Reopening the composer starts a new draft; retries within the same open form
+  // must keep the identity of any online request whose response was uncertain.
+  entryCreateAttemptUid = undefined;
+  entryCreateAttempt = undefined;
   creationView.value = view;
   tagResults.value = null;
   activeEntry.value = null;
@@ -2196,74 +2942,314 @@ function openCreation(view: CreationView): void {
   advancedView.value = false;
 }
 
+const pendingEntryMedia = ref<{ entryId: number; uploads: Array<{ kind: 'cover' | 'preview'; file: File }> } | null>(null);
+
+async function retryEntryMedia(): Promise<void> {
+  const pending = pendingEntryMedia.value;
+  if (!pending || submitting.value) return;
+  submitting.value = true;
+  try {
+    while (pending.uploads.length > 0) {
+      const upload = pending.uploads[0]!;
+      await props.api.uploadEntryMedia(pending.entryId, upload.kind, upload.file);
+      pending.uploads.shift();
+    }
+    pendingEntryMedia.value = null;
+    error.value = null;
+    await refreshGalleries();
+    await openEntry(pending.entryId);
+  } catch (cause) {
+    error.value = `${t('entry.createdButIncomplete', { id: pending.entryId })} ${cause instanceof Error ? cause.message : t('error.createEntry')}`;
+  } finally {
+    submitting.value = false;
+  }
+}
+
 async function submitEntry(draft: ManualEntryDraft): Promise<void> {
   error.value = null;
   submitting.value = true;
   const targetType = draft.type;
-  const enqueueOffline = async (cause?: unknown): Promise<void> => {
+  let createdId: number | undefined;
+  let createUid = entryCreateAttemptUid;
+  const enqueueOffline = async (cause?: unknown, presetOperation?: SyncReplayOperation): Promise<string | undefined> => {
     if (props.api.enqueueOfflineEntryCreate === undefined) {
       throw cause ?? new Error('Offline Entry creation is unavailable');
     }
+    // Match online creation: Source is ordinary Content, followed by the
+    // explicitly entered initial rows. The facade assigns durable Content UIDs.
+    const contents = [
+      ...(draft.sourceUrl ? [{ contentType: 'Source URL', content: draft.sourceUrl }] : []),
+      ...(draft.contents ?? []),
+    ];
     const input = {
       title: draft.title,
       type: targetType,
       uploadDate: draft.uploadDate,
       pageCount: draft.pageCount,
+      ...(draft.durationSeconds === null ? {} : { durationSeconds: draft.durationSeconds }),
       ratings: draft.ratings.flatMap((rating) => (
         rating.stars === null ? [] : [{ slotId: rating.slotId, stars: rating.stars }]
       )),
       viewLater: draft.viewLater,
+      ...(createUid === undefined ? {} : { syncUid: createUid }),
+      ...(contents.length ? { contents } : {}),
       coverFile: draft.coverFile,
-      previewFile: draft.previewFile,
+      previewFile: draft.previewFiles[0] ?? null,
+      previewFiles: draft.previewFiles,
+      ...(presetOperation === undefined ? {} : { presetCreateOperation: presetOperation }),
     };
-    if (cause === undefined) await props.api.enqueueOfflineEntryCreate(input);
-    else await props.api.enqueueOfflineEntryCreate(input, cause);
+    if (cause === undefined) {
+      const queued = await props.api.enqueueOfflineEntryCreate(input);
+      return queued?.localKey;
+    }
+    const queued = await props.api.enqueueOfflineEntryCreate(input, cause);
+    return queued?.localKey;
+  };
+  /**
+   * Every create changes the Gallery card list and the sidebar counts, whether
+   * it committed on the server or only queued in the offline copy. The queued
+   * paths return early, so this runs on each of them too — without it a work
+   * created offline only appeared after switching galleries (found on the
+   * phone, twice: the committed path was fixed first, the queued path kept it).
+   */
+  const refreshAfterEntryCreate = async (): Promise<void> => {
+    await refreshGalleries();
+    await refreshFacetFilterOptions();
+    if (activeType.value !== null) await loadGalleryEntries();
+  };
+  // The atomic create command (plan §27.2): metadata, ratings, View later and
+  // initial Content travel as one retryable server command; media stays on its
+  // own idempotent channel. An uncertain transport failure resolves through
+  // the identical operation — its receipt, or a durable offline replay of it.
+  const submitEntryCreateCommand = async (
+    capabilities: SyncCapabilities,
+  ): Promise<{ kind: 'created'; entryId: number } | { kind: 'enqueued-offline' } | { kind: 'new-gallery' }> => {
+    const replay = props.api.replaySyncOperation;
+    if (replay === undefined) throw new Error(t('entry.createCommandUnavailable'));
+    let operation = entryCreateAttempt;
+    if (operation === undefined) {
+      if (createUid === undefined) {
+        createUid = randomUuid();
+        entryCreateAttemptUid = createUid;
+      }
+      const clientId = (await props.api.getClientId?.()) ?? randomUuid();
+      const contents = [
+        ...(draft.sourceUrl ? [{ contentType: 'Source URL', content: draft.sourceUrl }] : []),
+        ...(draft.contents ?? []),
+      ];
+      operation = {
+        opId: randomUuid(),
+        clientId,
+        libraryId: capabilities.libraryId,
+        syncEpoch: capabilities.syncEpoch,
+        entityKind: 'entry',
+        entityUid: createUid,
+        operationKind: 'entry.create',
+        baseVersion: 0,
+        baseValues: {},
+        clientCreatedAt: new Date().toISOString(),
+        payload: {
+          title: draft.title.trim(),
+          type: targetType.trim(),
+          uploadDate: draft.uploadDate,
+          pageCount: draft.pageCount,
+          ...(draft.durationSeconds === null ? {} : { durationSeconds: draft.durationSeconds }),
+          ratings: draft.ratings.flatMap((rating) => (
+            rating.stars === null ? [] : [{ slotId: rating.slotId, stars: rating.stars }]
+          )),
+          viewLater: draft.viewLater,
+          ...(contents.length ? { contents: contents.map((row, sortOrder) => ({
+            syncUid: randomUuid(), contentType: row.contentType.trim(), content: row.content.trim(), sortOrder,
+          })) } : {}),
+        },
+      };
+      entryCreateAttempt = operation;
+    }
+    let result;
+    try {
+      result = await replay(operation);
+    } catch (cause) {
+      if (!isOfflineTransportError(cause)) throw cause;
+      // The command may have committed; only its identical replay can tell.
+      // A durable offline copy can carry that exact operation, so the queued
+      // create resolves the ambiguity on reconnect instead of duplicating.
+      await enqueueOffline(cause, operation);
+      entryCreateAttempt = undefined;
+      return { kind: 'enqueued-offline' };
+    }
+    // A receipt failure or an epoch mismatch is definitive: this opId can
+    // never apply, so the attempt identity must not survive it.
+    entryCreateAttempt = undefined;
+    if (result.status === 'applied' && result.entityId !== undefined) {
+      return { kind: 'created', entryId: result.entityId };
+    }
+    if (result.status === 'resnapshot-required') {
+      throw new Error(t('entry.createCommandResnapshot'));
+    }
+    if (result.status === 'failed' && result.errorCode === 'invalid-create'
+      && /existing Gallery/i.test(result.detail ?? '')) {
+      // The typed Gallery name does not exist yet. The command channel keeps
+      // the offline guarantee that a create uses an existing Gallery, so a
+      // new Gallery goes back to the legacy request shape — allowed there,
+      // and safe because the failed receipt proves nothing was created.
+      return { kind: 'new-gallery' };
+    }
+    if (result.status === 'failed') {
+      throw new Error(result.detail ?? t('error.createEntry'));
+    }
+    throw new Error(t('error.createEntry'));
   };
   try {
     if (props.offlineState?.mode === 'offline') {
-      if (draft.openInEditor === true) {
-        throw new Error(t('entry.advancedEditingRequiresConnection'));
+      const queued = await enqueueOffline();
+      if (draft.authorName !== undefined && draft.authorName.trim() !== '' && queued !== undefined) {
+        await props.api.enqueueOfflinePendingEntryAuthorCreate?.(queued, draft.authorName.trim());
       }
-      await enqueueOffline();
       creationView.value = null;
+      await refreshAfterEntryCreate();
+      // Create-then-edit works offline: metadata/Tag/Author saves on the queued
+      // work ride the pending machinery under the same durable parent create.
+      if (draft.openInEditor === true && queued !== undefined) {
+        const localEntryId = localCollectionId(queued.slice(6));
+        await viewEntry(localEntryId);
+        if (activeEntry.value?.id === localEntryId) startEditing();
+      }
       return;
     }
-    let created;
+    let supportsOnlineClaim = false;
+    let capabilities: SyncCapabilities | undefined;
     try {
-      created = await props.api.createEntry({
-        title: draft.title,
-        type: targetType,
-        uploadDate: draft.uploadDate,
-        ...(draft.pageCount === null ? {} : { pageCount: draft.pageCount }),
-      });
+      capabilities = await props.api.getSyncCapabilities();
+      supportsOnlineClaim = capabilities.featureFlags.onlineEntryCreateClaim === true;
     } catch (cause) {
+      // No create request was sent; a transport failure is safe to queue directly.
       if (draft.openInEditor === true && isOfflineTransportError(cause)) {
         throw new Error(t('entry.advancedEditingRequiresConnection'));
       }
       await enqueueOffline(cause);
       creationView.value = null;
+      await refreshAfterEntryCreate();
       return;
     }
-    if (draft.coverFile) await props.api.uploadEntryMedia(created.id, 'cover', draft.coverFile);
-    if (draft.previewFile) await props.api.uploadEntryMedia(created.id, 'preview', draft.previewFile);
-    for (const rating of draft.ratings) {
-      if (rating.stars === null) continue;
-      await props.api.setEntryRating(created.id, rating.slotId, rating.stars);
+    // After an uncertain claimed POST, a downgraded server must not receive a
+    // no-UID legacy retry (nor convert this ambiguity into a new queued create).
+    if (!supportsOnlineClaim && createUid !== undefined) {
+      throw new Error(t('entry.legacyCreateUncertain'));
     }
-    if (draft.viewLater) await addEntriesToViewLater(props.api, [created.id]);
-    await refreshGalleries();
+    // The legacy request shape stays for servers without the atomic command
+    // and for a newly typed Gallery: see the new-gallery fallback below.
+    const legacyOnlineCreate = async (): Promise<'created' | 'enqueued-offline'> => {
+      try {
+        // A negotiated claim lets the online attempt and its uncertain-response
+        // fallback share one identity. Older servers keep their legacy request shape.
+        if (supportsOnlineClaim && createUid === undefined) {
+          createUid = randomUuid();
+          entryCreateAttemptUid = createUid;
+        }
+        createdId = (await props.api.createEntry({
+          title: draft.title,
+          type: targetType,
+          ...(createUid === undefined ? {} : { syncUid: createUid }),
+          uploadDate: draft.uploadDate,
+          ...(draft.pageCount === null ? {} : { pageCount: draft.pageCount }),
+          ...(draft.durationSeconds === null ? {} : { durationSeconds: draft.durationSeconds }),
+        })).id;
+        if (draft.authorName !== undefined && draft.authorName.trim() !== '') {
+          await props.api.linkEntryAuthorByName?.(createdId, draft.authorName.trim());
+        }
+        return 'created';
+      } catch (cause) {
+        if (draft.openInEditor === true && isOfflineTransportError(cause)) {
+          throw new Error(t('entry.advancedEditingRequiresConnection'));
+        }
+        if (!supportsOnlineClaim && isOfflineTransportError(cause)) {
+          // The legacy POST may already have committed. No shared identity can
+          // prove that an offline create would not make a second Entry.
+          throw new Error(t('entry.legacyCreateUncertain'));
+        }
+        await enqueueOffline(cause);
+        return 'enqueued-offline';
+      }
+    };
+    let usedCreateCommand = false;
+    if (capabilities !== undefined && capabilities.featureFlags.onlineEntryCreateCommand === true) {
+      const outcome = await submitEntryCreateCommand(capabilities);
+      if (outcome.kind === 'enqueued-offline') {
+        creationView.value = null;
+        await refreshAfterEntryCreate();
+        return;
+      }
+      if (outcome.kind === 'new-gallery') {
+        if (await legacyOnlineCreate() === 'enqueued-offline') {
+          creationView.value = null;
+          await refreshAfterEntryCreate();
+          return;
+        }
+      } else {
+        createdId = outcome.entryId;
+        usedCreateCommand = true;
+        if (draft.authorName !== undefined && draft.authorName.trim() !== '') {
+          // The server resolves spellings through the producer vocabulary: an
+          // existing Author (or an alias) is linked, a new name creates one.
+          await props.api.linkEntryAuthorByName?.(createdId, draft.authorName.trim());
+        }
+      }
+    } else {
+      if (await legacyOnlineCreate() === 'enqueued-offline') {
+        creationView.value = null;
+        return;
+      }
+    }
+    pendingEntryMedia.value = { entryId: createdId!, uploads: [
+      ...(draft.coverFile ? [{ kind: 'cover' as const, file: draft.coverFile }] : []),
+      ...draft.previewFiles.map((file) => ({ kind: 'preview' as const, file })),
+    ] };
+    while (pendingEntryMedia.value.uploads.length > 0) {
+      const upload = pendingEntryMedia.value.uploads[0]!;
+      await props.api.uploadEntryMedia(createdId!, upload.kind, upload.file);
+      pendingEntryMedia.value.uploads.shift();
+    }
+    pendingEntryMedia.value = null;
+    if (!usedCreateCommand) {
+      // Legacy multi-request chain: the atomic command payload already carried
+      // everything below, so only the older request shape writes them here.
+      // The address the work was read from becomes the Entry's Source.
+      // Content that contains its URL, which is how the import path stores one too — so this writes
+      // the same kind of Content the import writes, under the same content type.
+      if (draft.sourceUrl) {
+        await props.api.createEntryContent(createdId!, {
+          contentType: 'Source URL',
+          content: draft.sourceUrl,
+        });
+      }
+      for (const content of draft.contents ?? []) {
+        await props.api.createEntryContent(createdId!, content);
+      }
+      for (const rating of draft.ratings) {
+        if (rating.stars === null) continue;
+        await props.api.setEntryRating(createdId!, rating.slotId, rating.stars);
+      }
+      if (draft.viewLater) await addEntriesToViewLater(props.api, [createdId!]);
+    }
+    await refreshAfterEntryCreate();
     // Jump straight into the freshly created Entry for a quick check.
     creationView.value = null;
     await refreshAuthors();
-    await viewEntry(created.id);
+    await viewEntry(createdId!);
     // Handed over from the composer's template button: open the new work's
     // editor, where an existing template is already applied and a missing one is
     // visible as the empty structure it still needs.
-    if (draft.openInEditor === true && activeEntry.value?.id === created.id) {
+    if (draft.openInEditor === true && activeEntry.value?.id === createdId!) {
       startEditing();
     }
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : t('error.createEntry');
+    if (createdId !== undefined) {
+      // The server already created this Entry; retrying the composer would duplicate it.
+      creationView.value = null;
+      error.value = `${t('entry.createdButIncomplete', { id: createdId })} ${cause instanceof Error ? cause.message : t('error.createEntry')}`;
+    } else {
+      error.value = cause instanceof Error ? cause.message : t('error.createEntry');
+    }
   } finally {
     submitting.value = false;
   }
@@ -2294,13 +3280,24 @@ async function finishImport(
   entryIds: number[] = [],
   viewLater = false,
   existingEntryIds: number[] = [],
+  openInEditor = false,
 ): Promise<void> {
   if (viewLater) await addEntriesToViewLater(props.api, entryIds);
   creationView.value = null;
   batchReview.value = null;
   await Promise.all([refreshGalleries(), refreshAuthors()]);
+  await refreshFacetFilterOptions();
   // What the run produced is both halves: the works it created and the ones the
   // library already had, which the folder it came from still says something about.
+  if (openInEditor && entryIds.length > 0) {
+    // The review's "create your own template": this Gallery had no structure to commit into, so the
+    // work is created (without its Tags, which the review said) and opened where the structure is
+    // built. Finishing that edit raises the app's own apply-to-all prompt — the same one the quick
+    // page's template door ends at.
+    await viewEntry(entryIds[0]!);
+    if (activeEntry.value?.id === entryIds[0]) startEditing();
+    return;
+  }
   if (entryIds.length === 1 && existingEntryIds.length === 0) {
     await viewEntry(entryIds[0]!);
   } else if (entryIds.length + existingEntryIds.length > 0) {
@@ -2357,6 +3354,8 @@ async function finishBatchImport(
     };
     void refreshGalleries();
     void refreshAuthors();
+    // A committed batch files tags, which is what the Gallery's filter row lists.
+    void refreshFacetFilterOptions();
   }
 }
 
@@ -2467,10 +3466,16 @@ function handleWindowFocus(): void {
 }
 
 onMounted(() => {
+  touchOnly.value = touchOnlyDevice();
   window.addEventListener('focus', handleWindowFocus);
   window.addEventListener('popstate', handlePopState);
   window.addEventListener('keydown', handleGlobalKeydown);
-  void initialize();
+  const start = async (): Promise<void> => {
+    startupMilestones.snapshotReadyAtMs ??= Math.round(performance.now());
+    await initialize();
+    startupComplete = true;
+  };
+  void (props.startupReady ?? Promise.resolve()).then(start, start);
 });
 onUnmounted(() => {
   window.removeEventListener('focus', handleWindowFocus);
@@ -2532,7 +3537,7 @@ onUnmounted(() => {
           :aria-expanded="settingsOpen"
           @click="toggleSettings"
         />
-        <section v-if="settingsOpen" data-testid="settings-panel" class="settings-panel">
+        <section v-if="settingsOpen" ref="settingsPanelRoot" data-testid="settings-panel" class="settings-panel" :style="settingsPanelStyle">
           <h2>{{ t('settings.title') }}</h2>
           <label class="checkbox-label" data-testid="show-nsfw-toggle">
             <input v-model="showNsfw" type="checkbox">
@@ -2571,7 +3576,9 @@ onUnmounted(() => {
               />
             </span>
           </label>
-          <OfflineLibrarySettings :api="api" :store="offlineStore" />
+          <!-- The mobile connection is a quick setting; the offline copy is not
+               (it lives on the Advanced function page). -->
+          <SecurePairingSettings />
           <button
             data-testid="advanced-entry"
             class="advanced-entry"
@@ -2587,6 +3594,7 @@ onUnmounted(() => {
 
     <div
       v-if="props.offlineState?.mode === 'offline'
+        || props.offlineState?.connectionPhase
         || (props.offlineState?.pendingCount ?? 0) > 0
         || (props.offlineState?.conflictCount ?? 0) > 0
         || (props.offlineState?.failedCount ?? 0) > 0"
@@ -2594,7 +3602,11 @@ onUnmounted(() => {
       data-testid="offline-mode-banner"
       role="status"
     >
-      <span v-if="props.offlineState?.mode === 'offline'">{{ t('offline.modeBanner') }}</span>
+      <span v-if="props.offlineState?.connectionPhase === 'checking'" data-testid="offline-connection-status">{{ t('offline.checking') }}</span>
+      <span v-if="props.offlineState?.connectionPhase === 'switching'" data-testid="offline-connection-status">{{ t('offline.switching') }}</span>
+      <span v-if="props.offlineState?.connectionPhase === 'opening-copy'" data-testid="offline-connection-status">{{ t('offline.openingCopy') }}</span>
+      <span v-if="props.offlineState?.connectionPhase === 'no-copy'" data-testid="offline-connection-status">{{ t('offline.noCopy') }}</span>
+      <span v-if="props.offlineState?.mode === 'offline' && !props.offlineState?.connectionPhase">{{ t('offline.modeBanner') }}</span>
       <span v-if="(props.offlineState?.conflictCount ?? 0) > 0" data-testid="offline-conflict-count">
         {{ t('offline.conflictBanner', { count: props.offlineState?.conflictCount ?? 0 }) }}
       </span>
@@ -2619,7 +3631,7 @@ onUnmounted(() => {
         data-testid="offline-diagnostics-toggle"
         @click="toggleOfflineDiagnostics()"
       >
-        Diagnostics
+        {{ t('diagnostics.toggle') }}
       </button>
       <section
         v-if="offlineDiagnosticsOpen"
@@ -2627,9 +3639,9 @@ onUnmounted(() => {
         data-testid="offline-diagnostics"
       >
         <div class="offline-diagnostics-actions">
-          <strong>C2 runtime diagnostics</strong>
-          <button type="button" @click="refreshOfflineDiagnostics()">Refresh</button>
-          <button type="button" @click="copyOfflineDiagnostics()">Copy</button>
+          <strong>{{ t('diagnostics.title') }}</strong>
+          <button type="button" @click="refreshOfflineDiagnostics()">{{ t('diagnostics.refresh') }}</button>
+          <button type="button" @click="copyOfflineDiagnostics()">{{ t('diagnostics.copy') }}</button>
         </div>
         <pre>{{ offlineDiagnosticsText }}</pre>
       </section>
@@ -2659,24 +3671,45 @@ onUnmounted(() => {
             @click="closeMobileNavigation()"
           />
         </div>
-        <form
-          class="sidebar-search"
-          data-testid="sidebar-search-form"
-          @submit.prevent="openSearch"
-        >
-          <AppIcon name="search" :size="16" />
-          <input
-            v-model="sidebarSearchQuery"
-            data-testid="sidebar-search-input"
-            type="search"
-            :placeholder="t('search.sidebarPlaceholder')"
-            :aria-label="t('search.title')"
-            @focus="openSearch"
-          >
-          <button type="submit" :aria-label="t('search.submit')">→</button>
-        </form>
+        <!-- Three doors that used to cost the list a row each: a search field, a Home row, and the
+             exchange control. They sit in the heading's own row, so every row of height they gave up
+             goes to the Galleries. -->
         <div class="section-heading">
           <h2>{{ t('gallery.yours') }}</h2>
+          <div class="sidebar-tools">
+            <button
+              data-testid="sidebar-search"
+              class="sidebar-tool"
+              type="button"
+              :aria-label="t('search.title')"
+              :title="t('search.title')"
+              @click="openSearch"
+            >
+              <AppIcon name="search" :size="20" />
+            </button>
+            <button
+              data-testid="sidebar-home"
+              class="sidebar-tool"
+              type="button"
+              :aria-label="t('home.nav')"
+              :title="t('home.nav')"
+              @click="showHome"
+            >
+              <AppIcon name="homepage" :size="20" />
+            </button>
+            <button
+              data-testid="sidebar-exchange"
+              class="sidebar-tool"
+              :class="{ 'sidebar-tool-active': galleryOrdering }"
+              type="button"
+              :aria-label="t('gallery.reorder')"
+              :title="t('gallery.reorder')"
+              :aria-pressed="galleryOrdering"
+              @click="galleryOrdering = !galleryOrdering"
+            >
+              <AppIcon name="exchange" :size="20" />
+            </button>
+          </div>
           <span>{{ visibleGalleries.length }}</span>
         </div>
         <p v-if="loading" class="muted">{{ t('gallery.loading') }}</p>
@@ -2684,27 +3717,52 @@ onUnmounted(() => {
           {{ t('gallery.empty') }}
         </p>
         <nav v-else class="gallery-list" :aria-label="t('gallery.navigation')">
-          <button
-            data-testid="home-navigation"
-            type="button"
-            class="gallery-link author-link"
-            :class="{ active: isHomeView }"
-            @click="showHome"
-          >
-            <span>{{ t('home.nav') }}</span>
-          </button>
-          <button
+          <div
             v-for="gallery in visibleGalleries"
             :key="gallery.type"
-            type="button"
-            class="gallery-link"
-            :class="{ active: activeType === gallery.type }"
-            :data-gallery-type="gallery.type"
-            @click="selectGallery(gallery.type)"
+            class="gallery-row"
           >
-            <span>{{ gallery.type }}{{ gallery.nsfw ? ' 🔞' : '' }}</span>
-            <span class="count">{{ gallery.entryCount }}</span>
-          </button>
+            <button
+              type="button"
+              class="gallery-link"
+              :class="{ active: activeType === gallery.type }"
+              :data-gallery-type="gallery.type"
+              @click="selectGallery(gallery.type)"
+            >
+              <span>{{ gallery.type }}{{ gallery.nsfw ? ' 🔞' : '' }}</span>
+              <span class="count">{{ gallery.entryCount }}</span>
+            </button>
+            <!-- The exchange control's own arrows, the ones the Collections page moves folders with:
+                 shown only while the list is being ordered, so the ordinary sidebar stays a menu. -->
+            <div v-if="galleryOrdering" class="gallery-order-controls">
+              <button
+                type="button"
+                class="gallery-order-button"
+                :data-testid="`gallery-move-up-${gallery.type}`"
+                :aria-label="t('gallery.moveUp', { name: gallery.type })"
+                :disabled="!canMoveGallery(gallery.type, -1)"
+                @click.stop="moveGallery(gallery.type, -1)"
+              >↑</button>
+              <button
+                type="button"
+                class="gallery-order-button"
+                :data-testid="`gallery-move-down-${gallery.type}`"
+                :aria-label="t('gallery.moveDown', { name: gallery.type })"
+                :disabled="!canMoveGallery(gallery.type, 1)"
+                @click.stop="moveGallery(gallery.type, 1)"
+              >↓</button>
+            </div>
+          </div>
+        </nav>
+
+        <!-- Everything from here down is pinned to the bottom of the sidebar, and the gallery list
+             scrolls above it. Measured on a phone: with seven galleries the shortcuts and both
+             buttons were pushed off the drawer entirely, so the common actions were unreachable
+             exactly when the library grew. The pinned block is one piece with the sidebar (no gap,
+             no second card) and the list slides under its top edge — see `.sidebar-pinned` in the
+             styles. -->
+        <div class="sidebar-pinned">
+        <nav v-if="sidebarHasNavigation" class="sidebar-shortcuts" :aria-label="t('gallery.navigation')">
           <button
             v-if="authors.length > 0"
             data-testid="author-navigation"
@@ -2764,21 +3822,26 @@ onUnmounted(() => {
           >
             {{ t('entry.new') }}
           </button>
-          <button
-            data-testid="add-author-navigation"
-            class="secondary-button"
-            type="button"
-            @click="openCreation('author')"
-          >
-            {{ t('author.new') }}
-          </button>
+        </div>
         </div>
       </aside>
 
       <section class="content-panel">
-        <p v-if="error" class="error-message" role="alert">{{ error }}</p>
+        <button v-if="pendingEntryMedia" data-testid="retry-entry-media" type="button" :disabled="submitting" @click="retryEntryMedia">
+        {{ t('media.retryForEntry', { id: pendingEntryMedia.entryId }) }}
+      </button>
+      <p v-if="error" class="error-message" role="alert">{{ error }}</p>
+        <section v-if="nativePairingRequired" class="pairing-gate" data-testid="pairing-gate">
+          <h2>{{ t('pairing.gateTitle') }}</h2>
+          <p class="muted">{{ t('pairing.gateBody') }}</p>
+          <ol>
+            <li>{{ t('pairing.gateStepDesktop') }}</li>
+            <li>{{ t('pairing.gateStepExpiry') }}</li>
+          </ol>
+          <button type="button" class="primary-button" data-testid="pairing-gate-scan" @click="openNativePairing">{{ t('pairing.gateScan') }}</button>
+        </section>
         <SearchPage
-          v-if="searchView"
+          v-else-if="searchView"
           :api="api"
           :initial-query="searchQuery"
           :initial-scope="searchScope"
@@ -2791,15 +3854,21 @@ onUnmounted(() => {
         <AdvancedEditingPage
           v-else-if="advancedView"
           :api="api"
+          :store="offlineStore"
+          :online="props.offlineState?.mode !== 'offline' && props.offlineState?.connectionPhase !== 'no-copy'"
           @back="closeAdvanced"
           @authors-changed="refreshAuthors"
+          @updated="reloadVisibleSurfaces"
         />
         <AddEntryPage
           v-else-if="creationView === 'entry'"
           :api="api"
           :authors="authors"
           :gallery-types="galleries.map((gallery) => gallery.type)"
+          :galleries="galleries.map((gallery) => ({ type: gallery.type, nsfw: gallery.nsfw }))"
           :submitting="submitting"
+          :submit-error="error"
+          :offline-state="offlineState"
           @back="creationView = null"
           @submit="submitEntry"
           @imported="finishImport"
@@ -2820,7 +3889,7 @@ onUnmounted(() => {
             }) }}
           </button>
           <p class="eyebrow">{{ t(`tag.${tagResults.kind}Results`) }}</p>
-          <h2>{{ tagResults.tagName }}</h2>
+          <h2 class="t3-library-text">{{ tagResults.tagName }}</h2>
           <p
             v-if="tagResults.kind === 'entry'"
             class="muted"
@@ -2864,14 +3933,14 @@ onUnmounted(() => {
                     loading="lazy"
                     decoding="async"
                   />
-                  <span v-if="entryStackLayers(entry).length === 0" class="entry-placeholder" aria-hidden="true">
+                  <span v-if="entryStackLayers(entry).length === 0" class="entry-placeholder t3-library-text" aria-hidden="true">
                     {{ entry.title.slice(0, 1).toUpperCase() }}
                   </span>
                   <span v-if="entry.likeCount > 0" class="entry-like-badge" data-testid="entry-like-badge">
                     👍 {{ entry.likeCount }}
                   </span>
                 </div>
-                <span class="entry-meta"><strong>{{ entry.title }}</strong><small>{{ entry.type }}</small></span>
+                <span class="entry-meta"><strong class="t3-library-text">{{ entry.title }}</strong><small>{{ entry.type }}</small></span>
               </button>
             </article>
             <article
@@ -2885,10 +3954,10 @@ onUnmounted(() => {
                 :data-tag-author-id="author.id"
                 @click="openTagAuthor(author)"
               >
-                <span class="entry-placeholder" aria-hidden="true">
+                  <span class="entry-placeholder t3-library-text" aria-hidden="true">
                   {{ author.name.slice(0, 1).toUpperCase() }}
                 </span>
-                <span class="entry-meta"><strong>{{ author.name }}</strong></span>
+                <span class="entry-meta"><strong class="t3-library-text">{{ author.name }}</strong></span>
               </button>
             </article>
           </PagedCardGrid>
@@ -2994,7 +4063,7 @@ onUnmounted(() => {
                 @click="openEntryFromBatchReview(entry.id)"
               >
                 <div class="entry-stack">
-                  <span v-if="(entry.coverRef || entry.previewRef) === null" class="entry-placeholder" aria-hidden="true">
+                  <span v-if="(entry.coverRef || entry.previewRef) === null" class="entry-placeholder t3-library-text" aria-hidden="true">
                     {{ entry.title.slice(0, 1).toUpperCase() }}
                   </span>
                   <LazyCardImage
@@ -3007,7 +4076,7 @@ onUnmounted(() => {
                   />
                 </div>
                 <span class="entry-meta">
-                  <strong>{{ entry.title }}</strong>
+                  <strong class="t3-library-text">{{ entry.title }}</strong>
                   <small>{{ entry.type }}</small>
                   <small
                     v-if="batchReview.existingEntryIds.includes(entry.id)"
@@ -3086,15 +4155,16 @@ onUnmounted(() => {
                     : armedKey === 'apply-tag-layout' ? t('tagLayout.applyConfirmShort', { type: activeEntry?.type }) : t('tagLayout.save') }}
                 </button>
 
+
                 <button
-                  data-testid="toggle-empty-facets"
+                  data-testid="media-edit-toggle"
                   class="secondary-button"
-                  :class="{ 'toolbar-action-active': showEmptyFacets }"
+                  :class="{ 'toolbar-action-primary': mediaEditMode }"
                   type="button"
-                  @click="showEmptyFacets = !showEmptyFacets"
-                >
-                  {{ showEmptyFacets ? t('template.hideEmptyFacets') : t('template.showEmptyFacets') }}
-                </button>
+                  :disabled="mediaSaving || mediaSlides.length === 0"
+                  :aria-pressed="mediaEditMode"
+                  @click="mediaEditMode = !mediaEditMode"
+                >{{ mediaEditMode ? t('media.editDone') : t('media.editPreviews') }}</button>
                 <button
                   data-testid="delete-entry"
                   class="secondary-button danger-button"
@@ -3138,6 +4208,8 @@ onUnmounted(() => {
                   v-if="entryCollectionMenuOpen"
                   id="entry-collection-menu"
                   class="add-to-collection-menu"
+                  :class="{ 'drop-up': entryCollectionDropUp }"
+                  :style="entryCollectionMenuStyle"
                   role="menu"
                 >
                   <p v-if="entryCollectionOptions.length === 0" class="muted">
@@ -3148,7 +4220,7 @@ onUnmounted(() => {
                     :key="collection.id"
                     type="button"
                     role="menuitemcheckbox"
-                    class="add-to-collection-option"
+                    class="add-to-collection-option t3-library-text"
                     :class="{ 'is-member': entryCollectionIds.includes(collection.id) }"
                     :aria-checked="entryCollectionIds.includes(collection.id)"
                     :title="entryCollectionIds.includes(collection.id)
@@ -3198,7 +4270,8 @@ onUnmounted(() => {
             <h2
               v-else
               data-testid="entry-title"
-              :class="{ 'editable-entry-title': editingEntry }"
+                          class="t3-library-text"
+                          :class="{ 'editable-entry-title': editingEntry }"
               :title="editingEntry ? t('entry.renameHint') : undefined"
               @dblclick="beginEntryTitleEdit"
             >{{ activeEntry.title }}</h2>
@@ -3219,30 +4292,177 @@ onUnmounted(() => {
             </span>
           </div>
 
-          <div v-if="mediaSlides.length > 0" class="entry-media-viewer">
-            <LazyCardImage
-              class="entry-media-image"
-              :src="api.assetUrl(mediaSlides[mediaIndex] ?? '')"
-              :alt="activeEntry.title"
-            />
+          <div
+            v-if="mediaSlides.length > 0 || mediaAddAvailable"
+            ref="mediaViewerRoot"
+            class="entry-media-viewer"
+            :class="{ 'is-empty': mediaSlides.length === 0, expanded: mediaExpanded }"
+          >
+            <!-- Expanded (desktop): every image in one row, left to right, the
+                 cover's own height setting the strip's. -->
+            <div
+              v-if="mediaExpanded && desktopMedia && mediaSlides.length > 0"
+              class="entry-media-strip"
+              :style="mediaStripHeight === null ? undefined : { height: `${mediaStripHeight}px` }"
+            >
+              <div v-for="(ref, index) in mediaSlides" :key="ref" class="entry-media-slide">
+                <LazyCardImage
+                  class="entry-media-image"
+                  :src="api.assetUrl(ref)"
+                  :alt="activeEntry?.title ?? ''"
+                  :refresh-token="mediaRevision"
+                />
+                <template v-if="mediaEditMode">
+                  <button
+                    class="media-delete"
+                    type="button"
+                    data-testid="media-delete"
+                                        :disabled="mediaSaving || !!mediaRemovalBlockReason"
+                    :aria-label="t('media.delete')"
+                    @click="removeMediaAt(index)"
+                  >
+                    <AppIcon name="delete" :size="20" />
+                  </button>
+                  <!-- Swapping is what renames the files on the server, so it is
+                       offered where the whole strip is visible. -->
+                  <button
+                    v-if="index > 0"
+                    class="media-nav media-move-prev"
+                    type="button"
+                    data-testid="media-move-prev"
+                                        :disabled="mediaSaving || !!mediaRemovalBlockReason"
+                    :aria-label="t('media.moveEarlier')"
+                    @click="swapMedia(index, -1)"
+                  >‹</button>
+                  <button
+                    v-if="index < mediaSlides.length - 1"
+                    class="media-nav media-move-next"
+                    type="button"
+                    data-testid="media-move-next"
+                                        :disabled="mediaSaving || !!mediaRemovalBlockReason"
+                    :aria-label="t('media.moveLater')"
+                    @click="swapMedia(index, 1)"
+                  >›</button>
+                </template>
+                <!-- Inside the last image's right edge, so a full strip has no
+                     white gutter and reads symmetric. -->
+                <button
+                  v-if="index === mediaSlides.length - 1"
+                  class="media-collapse"
+                  type="button"
+                  data-testid="media-collapse"
+                  :aria-label="t('media.collapse')"
+                  @click="closeMediaExpanded"
+                >
+                  <AppIcon name="collapse" :size="20" />
+                </button>
+              </div>
+            </div>
+            <template v-else>
+              <button
+                v-if="mediaSlides.length === 0"
+                class="media-add-empty"
+                type="button"
+                data-testid="media-add-empty"
+                :disabled="mediaUploading"
+                :aria-label="t('media.add')"
+                @click="requestMediaUpload"
+              >
+                <AppIcon name="add" :size="24" />
+              </button>
+              <template v-else>
+                <!-- The frame is exactly as wide as the picture, so the pager,
+                     counter and delete always sit ON the picture rather than in
+                     whatever space the viewer has left over. -->
+                <div class="entry-media-frame">
+                <LazyCardImage
+                  class="entry-media-image"
+                  :src="api.assetUrl(mediaSlides[mediaIndex] ?? '')"
+                  :alt="activeEntry?.title ?? ''"
+                  :refresh-token="mediaRevision"
+                  keep-last-on-src-change
+                />
+                <button
+                  v-if="mediaSlides.length > 1 && mediaIndex > 0"
+                  class="media-nav media-prev"
+                  type="button"
+                  :aria-label="t('media.previous')"
+                  @click="mediaPrevious"
+                >‹</button>
+                <button
+                  v-if="mediaSlides.length > 1 && mediaIndex < mediaSlides.length - 1"
+                  class="media-nav media-next"
+                  type="button"
+                  :aria-label="t('media.next')"
+                  @click="mediaNext"
+                >›</button>
+                <span v-if="mediaSlides.length > 1" class="media-count">
+                  {{ mediaIndex + 1 }} / {{ mediaSlides.length }}
+                </span>
+                <!-- A phone has no strip mode: the add and delete controls float
+                     on the cover's centre, add first. -->
+                <button
+                  v-if="mediaAddAvailable && !desktopMedia"
+                  class="media-add-floating"
+                  :class="{ 'with-delete': mediaEditMode }"
+                  type="button"
+                  data-testid="media-add-floating"
+                  :disabled="mediaUploading"
+                  :aria-label="t('media.add')"
+                  @click="requestMediaUpload"
+                >
+                  <AppIcon name="add" :size="24" />
+                </button>
+                <button
+                  v-if="mediaEditMode"
+                  class="media-delete"
+                  :class="{ 'floating': !desktopMedia }"
+                  type="button"
+                  data-testid="media-delete"
+                                      :disabled="mediaSaving || !!mediaRemovalBlockReason"
+                  :aria-label="t('media.delete')"
+                  @click="removeMediaAt(mediaIndex)"
+                >
+                  <AppIcon name="delete" :size="20" />
+                </button>
+                </div>
+              </template>
+            </template>
+            <!-- Outside the image, mid-height: the marked position. -->
             <button
-              v-if="mediaIndex > 0"
-              class="media-nav media-prev"
+              v-if="desktopMedia && mediaSlides.length > 1 && !mediaExpanded"
+              class="media-expand"
               type="button"
-              :aria-label="t('media.previous')"
-              @click="mediaPrevious"
-            >‹</button>
+              data-testid="media-expand"
+              :aria-label="t('media.expand')"
+              @click="openMediaExpanded"
+            >
+              <AppIcon name="expand" :size="20" />
+            </button>
+            <!-- Right of the expand control in edit mode, and plain when this
+                 work has no cover yet (that button is the placeholder). -->
             <button
-              v-if="mediaIndex < mediaSlides.length - 1"
-              class="media-nav media-next"
+              v-if="mediaAddAvailable && desktopMedia && mediaSlides.length > 0"
+              class="media-add-slot"
               type="button"
-              :aria-label="t('media.next')"
-              @click="mediaNext"
-            >›</button>
-            <span v-if="mediaSlides.length > 1" class="media-count">
-              {{ mediaIndex + 1 }} / {{ mediaSlides.length }}
-            </span>
+              data-testid="media-add-slot"
+              :disabled="mediaUploading"
+              :aria-label="t('media.add')"
+              @click="requestMediaUpload"
+            >
+              <AppIcon name="add" :size="24" />
+            </button>
+            <p v-if="mediaEditMode && mediaRemovalBlockReason" data-testid="media-removal-reason" role="status">{{ mediaRemovalBlockReason }}</p>
+            <p v-if="mediaUploadError" class="media-add-error" role="alert">{{ mediaUploadError }}</p>
           </div>
+          <input
+            ref="mediaAddInput"
+            class="media-add-file"
+            type="file"
+            accept="image/*"
+            data-testid="media-add-file"
+            @change="chooseMediaUpload"
+          >
 
           <section v-if="activeEntry.producers.length || editingEntry" class="detail-section">
             <h3>{{ t('entry.producers') }}</h3>
@@ -3251,7 +4471,7 @@ onUnmounted(() => {
                 <button
                   v-if="!editingEntry"
                   type="button"
-                  class="detail-chip detail-chip-link"
+                  class="detail-chip detail-chip-link t3-library-text"
                   :data-entry-author-id="producer.id"
                   @click="openAuthorFromEntry(producer.id)"
                 >
@@ -3259,7 +4479,7 @@ onUnmounted(() => {
                 </button>
                 <span
                   v-else
-                  class="detail-chip"
+                  class="detail-chip t3-library-text"
                   :data-entry-author-id="producer.id"
                 >
                   {{ producer.name }}
@@ -3345,29 +4565,86 @@ onUnmounted(() => {
 
           <div data-testid="entry-information-board" class="information-board">
             <p v-if="editingEntry" data-testid="tag-move-hint" class="tag-move-hint">
-              {{ t('tag.moveHint') }}
+              {{ touchOnly ? t('tag.moveHintTouch') : t('tag.moveHintDrag') }}
             </p>
-            <p v-if="activeEntry.sections.length === 0" class="information-empty">
+            <!-- A work's own facts — its page count, a video's runtime, its date — sit at the right
+                 of the FIRST Section's title, whatever that Section is called, and in this same place
+                 when the work has no Section at all, so the position never depends on what a person
+                 named things. -->
+            <EntryStatsRow
+              v-if="activeEntry.sections.length === 0"
+              :api="api"
+              :entry-id="activeEntry.id"
+              :page-count="activeEntry.pageCount"
+              :duration-seconds="activeEntry.durationSeconds"
+              :upload-date="activeEntry.uploadDate"
+                :editing="editingEntry"
+                :show-empty="editingEntry"
+                @saved="reloadActiveEntry"
+              />
+              <p v-if="activeEntry.sections.length === 0" class="information-empty">
               {{ t('information.empty') }}
             </p>
             <section
-              v-for="section in activeEntry.sections"
+              v-for="(section, sectionIndex) in activeEntry.sections"
               :key="section.id"
               class="information-section"
               :data-section-id="section.id"
             >
               <header class="information-section-header">
-                <h3>{{ section.name }}</h3>
-                <span
-                  v-if="isBasicSection(section) && (activeEntry.pageCount !== null || activeEntry.uploadDate)"
-                  class="information-stats"
-                >
-                  <span v-if="activeEntry.pageCount !== null" class="information-stat">
-                    {{ t('entry.pageCount', { count: activeEntry.pageCount }) }}
-                  </span>
-                  <span v-if="activeEntry.uploadDate" class="information-stat">
-                    {{ t('entry.uploadDate', { date: activeEntry.uploadDate }) }}
-                  </span>
+                <div class="information-section-title">
+                    <h3 v-if="editingSectionId !== section.id" class="t3-library-text">{{ section.name }}</h3>
+                  <input
+                    v-else
+                    v-model="editingSectionName"
+                    class="information-section-rename"
+                    :data-rename-section-id="section.id"
+                    :size="inlineInputSize(editingSectionName)"
+                    required
+                    autocomplete="off"
+                    :aria-label="t('section.namePlaceholder')"
+                    @click.stop
+                    @keydown.enter.prevent="saveSectionRename(section.id)"
+                    @keydown.esc.prevent="cancelSectionRename"
+                    @blur="saveSectionRename(section.id)"
+                  >
+                  <!-- Edit mode only, and plain buttons: nothing here is revealed on hover, so a
+                       touch screen reaches them the same way a mouse does. They sit beside the name
+                       they act on, which leaves the right edge to the page count and the date —
+                       where those have always been, and where they stay on a Section that has none. -->
+                  <div v-if="editingEntry" class="information-section-actions">
+                    <button
+                      v-if="editingSectionId !== section.id"
+                      type="button"
+                      class="secondary-button section-action"
+                      :data-rename-section-button="section.id"
+                      @click.stop="startSectionRename(section)"
+                    >{{ t('section.rename') }}</button>
+                    <button
+                      type="button"
+                      class="secondary-button section-action"
+                      :class="{ 'armable-armed': armedKey === `delete-section-${section.id}` }"
+                      :data-delete-section-button="section.id"
+                      :disabled="editingSectionId === section.id"
+                      :title="armedKey === `delete-section-${section.id}` ? t('section.deleteConfirm', { name: section.name }) : undefined"
+                      @click.stop="removeSection(section)"
+                    >{{ armedKey === `delete-section-${section.id}` ? t('common.confirm') : t('section.delete') }}</button>
+                  </div>
+                </div>
+                <!-- The row's right edge, as it always was. A work with none of these values shows
+                     nothing here — unless "show empty facets" is on, which is the switch that already
+                     reveals empty Facets, and then each missing value appears as its own chip. -->
+                <span v-if="sectionIndex === 0" class="information-stats">
+                  <EntryStatsRow
+                    :api="api"
+                    :entry-id="activeEntry.id"
+                    :page-count="activeEntry.pageCount"
+                    :duration-seconds="activeEntry.durationSeconds"
+                    :upload-date="activeEntry.uploadDate"
+                    :editing="editingEntry"
+                    :show-empty="editingEntry"
+                    @saved="reloadActiveEntry"
+                  />
                 </span>
               </header>
               <div class="facet-table">
@@ -3382,7 +4659,7 @@ onUnmounted(() => {
                   @drop="moveDraggedTag(facet.id)"
                 >
                   <div class="facet-label-column" data-facet-label>
-                    <span v-if="facet.name" class="facet-name">{{ facet.name }}</span>
+                        <span v-if="facet.name" class="facet-name t3-library-text">{{ facet.name }}</span>
                     <div
                       v-if="editingEntry && facet.name"
                       class="facet-sort-controls"
@@ -3424,7 +4701,7 @@ onUnmounted(() => {
                         <button
                           v-if="!editingEntry"
                           type="button"
-                          class="detail-chip detail-chip-link"
+                          class="detail-chip detail-chip-link t3-library-text"
                           :data-detail-tag-id="tag.id"
                           @click="openEntryTag(tag)"
                         >
@@ -3432,7 +4709,7 @@ onUnmounted(() => {
                         </button>
                         <span
                           v-else
-                          class="detail-chip draggable-chip"
+                          class="detail-chip draggable-chip t3-library-text"
                           :class="{ 'tag-move-selected': selectedTagId === tag.id }"
                           :draggable="editingTagId !== tag.id"
                           :data-detail-tag-id="tag.id"
@@ -3650,7 +4927,18 @@ onUnmounted(() => {
                 class="rating-row"
                 :data-rating-slot-id="row.slotId"
               >
-                <span class="rating-name">{{ row.name }}</span>
+                        <span class="rating-name t3-library-text">{{ row.name }}</span>
+                <!-- Left of the arrows, and a different thing from the × inside the star picker:
+                     this removes the DIMENSION for the whole Gallery, that one clears this value. -->
+                <button
+                  v-if="editingEntry"
+                  type="button"
+                  class="rating-delete-button"
+                  :data-delete-rating-slot-id="row.slotId"
+                  :title="t('rating.deleteDimension')"
+                  :aria-label="t('rating.deleteDimension')"
+                  @click="beginRatingDelete(row.slotId, row.name)"
+                >×</button>
                 <span
                   v-if="editingEntry && activeEntry.ratings.length > 1"
                   class="rating-sort-controls"
@@ -3737,13 +5025,13 @@ onUnmounted(() => {
               </form>
             </div>
           </section>
-          <section v-if="activeEntry.contents.length || editingEntry" class="detail-section content-section">
+          <section v-if="visibleContents.length > 0 || editingEntry" class="detail-section content-section">
             <h3>{{ t('content.title') }}</h3>
-            <p v-if="activeEntry.contents.length === 0" class="content-empty">
+            <p v-if="visibleContents.length === 0" class="content-empty">
               {{ t('content.empty') }}
             </p>
             <div
-              v-for="(content, contentIndex) in activeEntry.contents"
+              v-for="(content, contentIndex) in visibleContents"
               :key="content.id"
               class="content-item"
               :data-content-id="content.id"
@@ -3795,7 +5083,7 @@ onUnmounted(() => {
                       type="button"
                       :data-move-content-down-id="content.id"
                       :aria-label="t('content.moveDown', { label: content.contentType })"
-                      :disabled="contentIndex === activeEntry.contents.length - 1"
+                      :disabled="contentIndex === visibleContents.length - 1"
                       @click="moveContent(content.id, 1)"
                     >
                       ↓
@@ -3822,14 +5110,14 @@ onUnmounted(() => {
                 </div>
                 <a
                   v-if="isHttpUrl(content.content)"
-                  class="content-link"
+                          class="content-link t3-library-text"
                   :href="content.content"
                   target="_blank"
                   rel="noopener noreferrer"
                   :data-source-url-content-id="content.id"
                   @click="openSourceUrl($event, content.content)"
                 >{{ content.content }}</a>
-                <p v-else>{{ content.content }}</p>
+                      <p v-else class="t3-library-text">{{ content.content }}</p>
               </template>
             </div>
             <div v-if="editingEntry" class="add-content-control">
@@ -3838,7 +5126,7 @@ onUnmounted(() => {
                 data-testid="add-content-button"
                 class="add-button"
                 type="button"
-                @click="contentEditorOpen = true"
+                @click="openContentEditor"
               >
                 {{ t('content.add') }}
               </button>
@@ -3848,6 +5136,22 @@ onUnmounted(() => {
                 class="content-editor"
                 @submit.prevent="createContent"
               >
+                <!--
+                  The kinds this Gallery already uses, so a work's `description` or `source url` is a
+                  click rather than a spelling exercise. Kept as plain buttons in the form's own row:
+                  the label field stays free text, and the chips only fill it.
+                -->
+                <div class="content-kind-chips" data-testid="content-kind-chips">
+                  <button
+                    v-for="kind in contentKindOptions"
+                    :key="kind"
+                    type="button"
+                    class="content-kind-chip"
+                    :class="{ 'content-kind-chip-active': contentType === kind }"
+                    :data-content-kind="kind"
+                    @click="contentType = kind"
+                  >{{ kind }}</button>
+                </div>
                 <label>
                   {{ t('content.label') }}
                   <input
@@ -3864,6 +5168,7 @@ onUnmounted(() => {
                     v-model="contentBody"
                     name="content"
                     rows="4"
+                    required
                     :placeholder="t('content.bodyPlaceholder')"
                   />
                 </label>
@@ -3951,7 +5256,7 @@ onUnmounted(() => {
                     loading="lazy"
                     decoding="async"
                   />
-                  <span v-if="entryStackLayers(entry).length === 0" class="entry-placeholder" aria-hidden="true">
+                  <span v-if="entryStackLayers(entry).length === 0" class="entry-placeholder t3-library-text" aria-hidden="true">
                     {{ entry.title.slice(0, 1).toUpperCase() }}
                   </span>
                   <span v-if="entry.likeCount > 0" class="entry-like-badge" data-testid="entry-like-badge">
@@ -3959,7 +5264,7 @@ onUnmounted(() => {
                   </span>
                 </div>
                 <span class="entry-meta">
-                  <strong>{{ entry.title }}</strong>
+                  <strong class="t3-library-text">{{ entry.title }}</strong>
                   <small>{{ entry.type }}</small>
                   <small
                     v-if="showUsageOnCards"
@@ -3980,13 +5285,16 @@ onUnmounted(() => {
           </PagedCardGrid>
         </template>
         <HomePage
-          v-else-if="!loading"
+          v-else-if="!loading && props.offlineState?.connectionPhase !== 'no-copy'"
+          ref="homePageRef"
           :api="api"
           @open-entry="openEntryFromHome"
           @open-gallery="selectGallery"
           @create-entry="openCreation('entry')"
-          @create-author="openCreation('author')"
         />
+        <p v-else-if="props.offlineState?.connectionPhase === 'no-copy'" data-testid="offline-unavailable" class="muted">
+          {{ t('offline.noCopy') }}
+        </p>
       </section>
     </main>
 
@@ -4008,6 +5316,33 @@ onUnmounted(() => {
         data-testid="floating-scroll-top"
         @click="scrollToTop"
       />
+    </div>
+
+    <div v-if="deleteRatingTarget !== null" class="template-prompt-overlay" role="presentation">
+      <section
+        class="template-prompt-dialog"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="t('rating.deleteTitle', { name: deleteRatingTarget.name })"
+        data-testid="rating-delete-confirmation"
+      >
+        <h2>{{ t('rating.deleteTitle', { name: deleteRatingTarget.name }) }}</h2>
+        <p class="muted">{{ t('rating.deleteConfirm') }}</p>
+        <div class="template-prompt-actions">
+          <button
+            type="button"
+            class="secondary-button"
+            data-testid="rating-delete-cancel"
+            @click="deleteRatingTarget = null"
+          >{{ t('rating.deleteCancel') }}</button>
+          <button
+            type="button"
+            class="secondary-button danger-button"
+            data-testid="rating-delete-confirm"
+            @click="confirmRatingDelete"
+          >{{ t('rating.deleteAction') }}</button>
+        </div>
+      </section>
     </div>
 
     <div v-if="templatePromptOpen" class="template-prompt-overlay" role="presentation">
@@ -4121,22 +5456,158 @@ h2 { margin-bottom: 0; }
 .offline-diagnostics-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; margin-bottom: 0.45rem; }
 .offline-diagnostics-actions strong { margin-right: auto; }
 .offline-diagnostics pre { overflow: auto; max-height: 18rem; margin: 0; padding: 0.65rem; border-radius: var(--radius-control); background: var(--surface); font: 0.72rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-word; user-select: text; }
+.pairing-gate { max-width: 34rem; margin: 3rem auto; padding: 1.25rem 1.5rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--surface); display: flex; flex-direction: column; gap: 0.75rem; }
+.pairing-gate h2 { margin: 0; }
+.pairing-gate p, .pairing-gate ol { margin: 0; padding-left: 1.25rem; }
+.pairing-gate .primary-button { align-self: flex-start; }
 
 .app-layout { display: grid; grid-template-columns: 18rem minmax(0, 1fr); gap: 1rem; }
 .sidebar,
 .content-panel { border: 1px solid var(--border-subtle); border-radius: var(--radius-panel); background: var(--surface); box-shadow: var(--shadow-panel); }
 .sidebar { padding: 1rem; }
+/* On a wide screen the sidebar keeps its own height and sticks to the top: the gallery list scrolls
+   inside it, so the shortcuts and the button stay where they are however many galleries there are.
+   Measured with seven galleries: the sidebar grew to 811px while the window was 800, which put "New
+   Entry" 131px below the fold — the same complaint the phone's drawer had, one breakpoint up. */
+@media (min-width: 44rem) {
+  /* The shortcut rows are shorter here than on a phone: 44px is a touch target, and a mouse does not
+     need one. That is what pays for the last gallery row — the sidebar's height is the window's, so
+     every pixel the pinned block gives up goes to the list. */
+  .sidebar-shortcuts .gallery-link { padding: 0.45rem 0.75rem; }
+  .sidebar {
+    position: sticky;
+    top: 1rem;
+    /* Its own height, not the row's: as a stretched grid item it grew or shrank with whatever page
+       was beside it, and the list inside it moved with it. The sidebar is the same box on every page
+       now, and a short list leaves room at the bottom rather than spreading itself out. */
+    align-self: start;
+    height: calc(100vh - 2rem);
+    height: calc(100dvh - 2rem);
+    /* The window, so the gallery list gets everything the pinned block does not need — measured at
+       1280x800 with seven galleries: 420px, about eight and a half rows.
+       The trade, stated rather than hidden: the sidebar's own top sits below the app header, so at the
+       very top of the page its last ~100px is under the fold. One small scroll sticks it to the
+       window's top edge (16px) and then the whole thing, pinned block included, is in view. */
+
+  }
+}
 .content-panel { min-height: 30rem; padding: clamp(1rem, 3vw, 1.75rem); }
-.sidebar-search { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.35rem; margin-bottom: 1rem; padding: 0.5rem 0.6rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--surface-muted); }
-.sidebar-search .app-icon { color: var(--icon-muted); transition: color var(--transition-duration) ease; }
-.sidebar-search:focus-within { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 18%, transparent); }
-.sidebar-search:focus-within .app-icon { color: var(--accent); }
-.sidebar-search input { min-width: 0; padding: 0; border: 0; outline: 0; color: var(--text-primary); background: transparent; font: inherit; }
-.sidebar-search button { padding: 0.1rem 0.25rem; border: 0; color: var(--accent); background: transparent; font: inherit; cursor: pointer; }
-.section-heading { margin-bottom: 0.8rem; }
+
+/* The heading's row now carries the three doors, so it is as tall as they are (44px, a touch
+   target) — which ate most of the row the removed search field gave back. The margin and the list's
+   own bottom padding are trimmed by the same reasoning, to hand the list a whole row rather than
+   seven tenths of one: measured on a phone, the drawer's list went 340px -> 376px with the field
+   gone, and these two give it the rest. */
+.section-heading { margin-bottom: 0.45rem; }
+/* One line, with the three doors in the same row: the title is short and the row is the sidebar's
+   width, so wrapping it would only push the list down. */
+.sidebar .section-heading h2 { white-space: nowrap; }
 .section-heading h2 { font-size: 0.95rem; }
 .section-heading > span, .count { color: var(--text-muted); font-size: 0.78rem; }
-.gallery-list { display: grid; gap: 0.35rem; }
+/* The three doors in the heading's own row — search, Home, and the exchange control. They used to
+   cost the list a row each (a search field and a Home row); here they cost it nothing, and every row
+   they gave up went to the Galleries. */
+.sidebar-tools { display: flex; align-items: center; gap: 0.3rem; }
+.sidebar-tool {
+  display: inline-grid;
+  place-items: center;
+  width: var(--icon-button-size);
+  height: var(--icon-button-size);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--icon-muted);
+  background: transparent;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: color var(--transition-duration) ease, background-color var(--transition-duration) ease,
+    border-color var(--transition-duration) ease, transform var(--transition-duration) ease;
+}
+.sidebar-tool:hover { color: var(--accent); background: var(--surface-hover); border-color: var(--border-strong); }
+.sidebar-tool:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+/* Search and Home do their work at once, so the only thing left to say is that the finger landed. */
+.sidebar-tool:active { transform: scale(0.9); }
+/* The exchange control is a *mode*, so it says so and keeps saying it — the same applied look the
+   view-later switches use, which is what "颜色加深表示状态应用" asks for. */
+.sidebar-tool-active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.sidebar-tool-active:active { transform: none; }
+
+/* A row is the Gallery and, while the list is being ordered, its two arrows. */
+.gallery-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.15rem; }
+.gallery-order-controls { display: grid; grid-template-columns: repeat(2, auto); gap: 0.1rem; }
+.gallery-order-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--accent);
+  background: transparent;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.gallery-order-button:hover:not(:disabled), .gallery-order-button:focus-visible:not(:disabled) { background: var(--accent-soft); outline: none; }
+.gallery-order-button:disabled { opacity: 0.3; cursor: default; }
+/* The sidebar is one column: the heading stays put, the gallery list takes the middle
+   and scrolls, and everything from the shortcuts down is pinned to the bottom. Measured on a phone
+   with seven galleries: the shortcuts and both buttons were pushed off the drawer, so the common
+   actions became unreachable exactly when the library grew. */
+.sidebar { display: flex; flex-direction: column; min-height: 0; }
+.gallery-list {
+  display: grid;
+  gap: 0.35rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  /* The rows keep their own height and the leftover space stays blank. Without this a grid stretches
+     its rows to fill the box, so the same seven galleries sat 49px apart on one page and 54px apart
+     on another — measured between Home and Search, where the sidebar's height differed and every row
+     with it. A blank stretch under the last Gallery is the cheaper of the two: the spacing a person
+     reads down is the same everywhere. */
+  align-content: start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  /* Room for the last row to clear the wash below it, so scrolling to the end does not leave the
+     last gallery half-dissolved — the wash fades from nothing, so a few pixels of overlap cost
+     nothing and the row is worth more. */
+  padding-bottom: 1rem;
+}
+/* Pinned: no gap and no second card, so it reads as part of the sidebar rather than a panel stuck
+   to it. */
+.sidebar-pinned { flex: 0 0 auto; display: grid; gap: 0.75rem; }
+.sidebar-shortcuts { display: grid; gap: 0.35rem; }
+/* The list slides *into* the pinned block rather than being cut off by it: a short fade in the
+   sidebar's own colour on the block's top edge, which costs no layout space (the negative margin)
+   and cannot be clicked through. */
+.sidebar-pinned::before {
+  content: '';
+  display: block;
+  height: 1.5rem;
+  margin-top: -1.5rem;
+  /* A faint wash of the theme colour along the boundary, fading up into the list, so a gallery
+     passing it looks like it is tucking into the block below rather than being cut by it. Faint on
+     purpose (a few percent): it should read as the pocket's mouth, not as a band of its own. The
+     stops keep it in the accent's own family and land on the sidebar's surface, so it never becomes
+     a visible edge against the panel. */
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 5%, transparent) 45%,
+    color-mix(in srgb, var(--accent) 13%, var(--surface)) 100%
+  );
+  /* The wash's own corners are rounded like everything else on the panel — the colour only reaches
+     the bottom edge, so rounding the two bottom corners is what the eye reads as "rounded ends".
+     `--radius-control`, the same step the rows above and the controls beside it use. */
+  border-bottom-left-radius: var(--radius-control);
+  border-bottom-right-radius: var(--radius-control);
+  pointer-events: none;
+}
 .gallery-link { display: flex; justify-content: space-between; width: 100%; padding: 0.65rem 0.75rem; border-color: transparent; border-radius: 0.65rem; color: var(--text-primary); background: transparent; text-align: left; }
 .gallery-link:hover, .gallery-link.active { color: var(--tag-text); background: var(--tag-background); border-color: var(--tag-border); }
 
@@ -4161,12 +5632,50 @@ h2 { margin-bottom: 0; }
 .entry-stack-image { position: absolute; display: block; box-sizing: border-box; border: 1px solid color-mix(in srgb, var(--border-subtle) 75%, transparent); border-radius: 0.15rem; box-shadow: 0 0.18rem 0.45rem rgb(15 23 42 / 16%); transform-style: preserve-3d; }
 .entry-stack-image:first-child { box-shadow: 0 0.28rem 0.7rem rgb(15 23 42 / 22%); }
 .entry-stack .entry-placeholder { height: 100%; }
-.entry-media-viewer { position: relative; margin: 1rem 0 1.25rem; max-width: 24rem; }
+.entry-media-viewer { position: relative; display: flex; align-items: center; gap: 0.4rem; margin: 1rem 0 1.25rem; max-width: 24rem; }
+/* Sizes to the picture, never to the column: a portrait keeps its own width
+   (no letterbox bars) and the controls keep the picture's edges. */
+.entry-media-frame { position: relative; display: inline-flex; max-width: 100%; }
+.entry-media-frame .entry-media-image { width: auto; max-width: 100%; height: auto; }
+.entry-media-viewer.is-empty { max-width: 24rem; }
+/* Expanded, the strip is allowed the whole content column — the measurement
+   above divides exactly that width between the pictures. */
+.entry-media-viewer.expanded { max-width: 100%; }
 .entry-media-image { display: block; width: 100%; max-height: 24rem; object-fit: contain; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); background: var(--surface-muted); }
-.media-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 2rem; height: 2rem; border: 0; border-radius: 999px; color: var(--text-primary); background: rgb(0 0 0 / 45%); font-size: 1.25rem; line-height: 1; cursor: pointer; }
+.media-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 2.5rem; height: 2.5rem; border: 0; border-radius: 999px; color: #fff; background: rgb(0 0 0 / 55%); font-size: 1.25rem; line-height: 1; cursor: pointer; }
 .media-prev { left: 0.5rem; }
 .media-next { right: 0.5rem; }
-.media-count { position: absolute; bottom: 0.5rem; right: 0.5rem; padding: 0.15rem 0.5rem; border-radius: 999px; color: var(--text-primary); background: rgb(0 0 0 / 45%); font-size: 0.75rem; }
+.media-count { position: absolute; bottom: 0.5rem; right: 0.5rem; padding: 0.15rem 0.5rem; border-radius: 999px; color: #fff; background: rgb(0 0 0 / 55%); font-size: 0.75rem; }
+/* The expand control sits outside the image at mid-height (the marked spot);
+   the add slot follows it on the right, so the two never overlap. */
+.media-expand, .media-add-slot, .media-collapse { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); color: var(--text-muted); background: var(--surface); cursor: pointer; transition: color var(--transition-duration) ease, border-color var(--transition-duration) ease; }
+.media-expand { flex: 0 0 auto; width: 2rem; height: 3rem; }
+.media-expand:hover, .media-add-slot:hover, .media-collapse:hover, .media-add-empty:hover, .media-add-floating:hover { color: var(--accent); border-color: var(--accent); }
+/* Same height as the image beside it, deliberately much narrower. */
+.media-add-slot { flex: 0 0 auto; width: 2rem; height: 3rem; }
+.media-add-empty { display: flex; align-items: center; justify-content: center; width: 100%; height: 12rem; border: 1px dashed var(--border-subtle); border-radius: var(--radius-card); color: var(--text-muted); background: var(--surface-muted); cursor: pointer; }
+.media-add-floating { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border: 0; border-radius: 999px; color: #fff; background: rgb(0 0 0 / 55%); cursor: pointer; }
+/* Inside the right edge of the last image, mirroring the pager arrows. */
+.media-collapse { position: absolute; top: 50%; right: 0.5rem; transform: translateY(-50%); width: 2.5rem; height: 2.5rem; border: 0; border-radius: 999px; color: #fff; background: rgb(0 0 0 / 55%); }
+/* Delete sits on the picture itself (any display mode); the move arrows reuse
+   the pager's own circles so a strip of them reads as one control family. */
+.media-delete { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border: 0; border-radius: 999px; color: #fff; background: rgb(0 0 0 / 55%); cursor: pointer; }
+.media-delete:hover { background: rgb(150 20 20 / 75%); }
+/* On a phone the add control moves up so the pair stays centred as one block. */
+.media-add-floating.with-delete { top: calc(50% - 2.4rem); }
+.media-delete.floating { top: calc(50% + 2.4rem); }
+.media-move-prev { left: 0.5rem; }
+.media-move-next { right: 0.5rem; }
+.entry-media-slide .media-nav { top: 50%; }
+.media-strip-note, .media-add-error { flex: 1 0 100%; }
+.media-add-error { margin: 0; color: var(--danger, #b4232a); font-size: 0.85rem; }
+.media-add-file { display: none; }
+/* Widen past the single-image column so four images still fit. Each picture
+   keeps its own proportion at the shared height — the measurement above made
+   that height fit the column, so nothing is cropped and nothing is padded. */
+.entry-media-strip { display: flex; align-items: stretch; gap: 0.5rem; width: 100%; max-width: 100%; }
+.entry-media-slide { position: relative; flex: 0 0 auto; min-width: 0; height: 100%; }
+.entry-media-slide .entry-media-image { height: 100%; width: auto; max-width: none; max-height: none; }
 .entry-meta { display: grid; gap: 0.25rem; padding: 0.85rem; }
 .entry-meta small { color: var(--text-muted); }
 .secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; min-height: var(--control-min-height); padding: 0.45rem 0.7rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface); font: inherit; cursor: pointer; transition: color var(--transition-duration) ease, background-color var(--transition-duration) ease, border-color var(--transition-duration) ease; }
@@ -4208,8 +5717,16 @@ h2 { margin-bottom: 0; }
 .information-section + .information-section { border-top: 1px dashed var(--border-subtle); }
 .information-section-header h3 { margin-bottom: 0.55rem; font-size: 0.86rem; letter-spacing: 0.035em; }
 .information-section-header { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+/* The name and its edit-mode actions, together: the right edge of the row belongs to the stats. */
+.information-section-title { display: inline-flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.information-section-actions { display: inline-flex; align-items: center; gap: 0.4rem; }
+.section-action { padding: 0.3rem 0.7rem; font-size: 0.78rem; }
+/* Renaming happens in the heading itself, so the input inherits the heading's weight and size. */
+.information-section-rename { max-width: 100%; font: inherit; font-size: 0.86rem; letter-spacing: 0.035em; }
 .information-stats { display: inline-flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-bottom: 0.55rem; }
 .information-stat { color: var(--text-muted); font-size: 0.78rem; }
+/* The two values and their editors are `EntryStatsRow`; this is only where they are placed. */
+.information-stats { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.9rem; }
 .facet-table { display: grid; }
 .facet-row { display: grid; grid-template-columns: minmax(6.5rem, 9.5rem) minmax(0, 1fr); min-height: 2.8rem; border-radius: 0.55rem; }
 .facet-row:has(.draggable-chip:active) { background: var(--surface-muted); }
@@ -4257,6 +5774,10 @@ h2 { margin-bottom: 0; }
 .danger-button { border-color: #a12626; color: #a12626; }
 .armable-armed { border-color: #a12626; color: #a12626; background: #fff0f0; }
 .content-editor-actions { display: flex; gap: 0.5rem; }
+.content-kind-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.content-kind-chip { padding: 0.28rem 0.55rem; border: 1px solid var(--border-subtle); border-radius: 999px; color: var(--text-muted); background: var(--surface); font: inherit; font-size: 0.74rem; cursor: pointer; }
+.content-kind-chip:hover, .content-kind-chip:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+.content-kind-chip-active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .rating-rows { display: grid; gap: 0.35rem; }
 .rating-row { display: flex; align-items: center; gap: 0.85rem; min-height: 2rem; }
 .rating-name { min-width: 8rem; color: var(--text-muted); font-size: 0.8rem; }
@@ -4270,6 +5791,10 @@ h2 { margin-bottom: 0; }
 .rating-sort-controls { display: inline-flex; gap: 0.2rem; }
 .rating-sort-controls button { border: none; background: none; cursor: pointer; color: var(--text-muted); padding: 0 0.2rem; }
 .rating-sort-controls button:disabled { opacity: 0.3; cursor: default; }
+/* The dimension's own delete, left of the arrows: muted until hovered, because a person opens a
+   rating row for its stars and this is the one control in it that reaches every work of the Gallery. */
+.rating-delete-button { padding: 0.05rem 0.3rem; border: none; border-radius: 0.35rem; color: var(--text-muted); background: none; font-size: 0.9rem; line-height: 1; cursor: pointer; }
+.rating-delete-button:hover { color: var(--danger, #b3261e); background: color-mix(in srgb, var(--danger, #b3261e) 12%, transparent); }
 .add-rating-control { display: flex; }
 .content-item p { margin: 0.35rem 0 0; white-space: pre-wrap; }
 .content-link { display: inline-block; margin: 0.35rem 0 0; color: var(--accent); overflow-wrap: anywhere; }
@@ -4293,6 +5818,11 @@ h2 { margin-bottom: 0; }
 .error-message { padding: 0.75rem; border-radius: 0.6rem; color: #a12626; background: #fff0f0; }
 
 @media (max-width: 44rem) {
+  /* The settings panel is the frame's own surface on a phone: the header
+     becomes its positioning context and it stretches edge to edge, instead of
+     a narrower dropdown leaking the main frame behind it. */
+  .app-header { position: relative; }
+  .settings-panel { left: 0; right: 0; width: auto; max-width: none; }
   :global(body.t3-mobile-navigation-open) { overflow: hidden; }
   .gallery-app {
     min-height: 100dvh;
@@ -4318,6 +5848,8 @@ h2 { margin-bottom: 0; }
   .app-title-copy .subtitle { display: none; }
   .app-title-copy h1 { margin: 0; font-size: 1.15rem; }
   .header-controls { flex: 0 0 auto; flex-wrap: nowrap; justify-content: flex-end; gap: 0.25rem; }
+  /* Fallback box only: the sheet measures the page's own card when it opens and
+     sets left/width/top inline, so it always matches that card exactly. */
   .settings-panel {
     position: fixed;
     top: calc(max(0.75rem, env(safe-area-inset-top)) + var(--icon-button-size) + 0.5rem);
@@ -4332,6 +5864,12 @@ h2 { margin-bottom: 0; }
   .settings-panel .checkbox-label { min-height: 44px; }
   .accent-swatch { width: 44px; height: 44px; }
   .app-layout { grid-template-columns: 1fr; }
+  /* The floating Back / scroll-to-top block is fixed in the bottom-right corner, so whatever a page
+     ends with sits underneath it. Measured at a 390px viewport: the block covers 44×96px there while
+     the content reserved nothing at all (`padding-bottom: 0`) — and the import review's commit button,
+     full width and last on the page, landed exactly in it, so tapping Import hit "Back to top"
+     instead and nothing appeared to happen. Every page keeps room for the block now. */
+  .app-layout { padding-bottom: calc(7rem + env(safe-area-inset-bottom)); }
   .mobile-navigation-backdrop {
     position: fixed;
     z-index: 50;
@@ -4351,7 +5889,9 @@ h2 { margin-bottom: 0; }
     left: 0;
     width: min(20rem, calc(100vw - 3rem));
     max-width: 100%;
-    overflow-y: auto;
+    /* The drawer itself does not scroll: the gallery list inside it does, and the shortcuts stay
+       pinned to its bottom edge. */
+    overflow: hidden;
     overscroll-behavior: contain;
     padding:
       max(0.75rem, env(safe-area-inset-top))
@@ -4476,5 +6016,13 @@ h2 { margin-bottom: 0; }
   .facet-row { grid-template-columns: 1fr; }
   .facet-label-column { padding: 0.65rem 0 0.25rem; border-right: 0; }
   .facet-tag-column { padding: 0.25rem 0 0.65rem; }
+}
+
+/* A phone gets the same two actions on a Section, at a size a thumb can hit: the heading wraps and
+   the actions move to their own line rather than shrinking into untappable chips. */
+@media (max-width: 44rem) {
+  .information-section-header { flex-wrap: wrap; }
+  .information-section-actions { width: 100%; justify-content: flex-end; }
+  .section-action { min-height: 44px; }
 }
 </style>

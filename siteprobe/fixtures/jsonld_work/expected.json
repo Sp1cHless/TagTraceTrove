@@ -1,0 +1,13 @@
+{
+  "recall": [
+    "Salt and Iron",
+    "R. Okafor",
+    "2021-03-04",
+    "248",
+    "https://fixture.test/media/salt-and-iron.jpg"
+  ],
+  "provenance": {
+    "R. Okafor": "jsonld",
+    "https://fixture.test/media/salt-and-iron.jpg": "jsonld"
+  }
+}

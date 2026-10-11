@@ -168,6 +168,55 @@ describe('offline snapshot media cache', () => {
     expect(await stored.get(newImmutable)?.text()).toBe('new');
   });
 
+  it('fetches the actual original after a thumbnail alias exists, then reuses the verified original', async () => {
+    const source = '/api/assets/entries/1/cover.jpg';
+    const originalUrl = `https://t3.local${source}`;
+    const immutable = 'https://t3.local/api/assets/entries/1/thumbnails/cover.0123456789abcdef.webp';
+    const stored = new Map<string, Response>();
+    const cacheStorage = { async open() {
+      return {
+        async match(request: RequestInfo | URL) { return stored.get(String(request)); },
+        async put(request: RequestInfo | URL, response: Response) { stored.set(String(request), response); },
+      };
+    } };
+    const fetcher = vi.fn(async (request: RequestInfo | URL) => {
+      const url = String(request);
+      return responseAt(url === originalUrl ? originalUrl : immutable, url === originalUrl ? 'full-original' : 'thumbnail');
+    });
+    const options = { assetUrl: (ref: string) => `https://t3.local${ref}`, cacheStorage, fetcher };
+    expect((await cacheSnapshotMedia([source], options)).cached).toBe(1);
+    expect(await stored.get(originalUrl)?.text()).toBe('thumbnail');
+    expect((await cacheSnapshotMedia([source], { ...options, originals: true })).cached).toBe(1);
+    expect(fetcher).toHaveBeenCalledWith(originalUrl, { cache: 'no-cache' });
+    expect(await stored.get(originalUrl)?.text()).toBe('full-original');
+    expect((await cacheSnapshotMedia([source], { ...options, originals: true })).skipped).toBe(1);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not publish source/resolver aliases after the snapshot changes during a cache write', async () => {
+    const source = '/api/assets/entries/1/cover.jpg';
+    const original = `https://t3.local${source}`;
+    const immutable = 'https://t3.local/api/assets/entries/1/thumbnails/cover.0123456789abcdef.webp';
+    const stored = new Map<string, Response>();
+    let current = true;
+    const cacheStorage = { async open() { return {
+      async match(request: RequestInfo | URL) { return stored.get(String(request)); },
+      async put(request: RequestInfo | URL, response: Response) {
+        stored.set(String(request), response);
+        current = false;
+      },
+    }; } };
+    await cacheSnapshotMedia([source], {
+      assetUrl: (ref) => `https://t3.local${ref}`,
+      fetcher: async () => responseAt(immutable, 'old-thumbnail'),
+      cacheStorage,
+      isCurrent: async () => current,
+    });
+    expect(stored.has(immutable)).toBe(true); // The in-flight write is not cancellable.
+    expect(stored.has(original)).toBe(false);
+    expect(stored.has('https://t3.local/api/thumbnails/entries/1/cover.jpg')).toBe(false);
+  });
+
   it('continues after an individual media failure', async () => {
     const stored = new Map<string, Response>();
     const cacheStorage = {

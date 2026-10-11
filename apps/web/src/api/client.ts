@@ -82,7 +82,13 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         },
       );
 
-      const payload: unknown = await response.json();
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch (error) {
+        if (!response.ok) throw new ApiError(response.status, null);
+        throw error;
+      }
       if (!response.ok) {
         throw new ApiError(response.status, payload);
       }

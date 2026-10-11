@@ -1,0 +1,118 @@
+{
+  "results": [
+    {
+      "name": "nearest-sql-final",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--config",
+        "vitest.integration.config.ts",
+        "apps/web/tests/offline-collection-common-tag.integration.test.ts",
+        "apps/web/tests/offline-collection-delete.integration.test.ts",
+        "apps/web/tests/offline-collection-parity.integration.test.ts",
+        "apps/web/tests/offline-gallery-partition-retained.integration.test.ts",
+        "apps/web/tests/offline-gallery-partition.integration.test.ts",
+        "apps/web/tests/offline-gallery-type.integration.test.ts",
+        "apps/server/tests/integration/cross-path-entry-create.integration.test.ts",
+        "apps/server/tests/integration/gallery-order-sync.integration.test.ts",
+        "apps/server/tests/integration/gallery-partition-migration.integration.test.ts",
+        "apps/server/tests/integration/migration-runner.integration.test.ts",
+        "apps/server/tests/integration/partition-repository.integration.test.ts",
+        "apps/server/tests/integration/sync.integration.test.ts",
+        "apps/web/tests/offline-gallery-partition-foreground.integration.test.ts",
+        "--maxWorkers=2",
+        "apps/web/tests/offline-entry-rating-dimension.integration.test.ts",
+        "apps/web/tests/author-rating-parity.integration.test.ts",
+        "apps/server/tests/integration/rating-class-migration.integration.test.ts",
+        "apps/server/tests/integration/rating-repository.integration.test.ts",
+        "apps/server/tests/integration/rating-slot-sync-identity.integration.test.ts",
+        "apps/web/tests/offline-entry-rating-dimension-retained.integration.test.ts",
+        "apps/web/tests/offline-entry-multi-author.integration.test.ts",
+        "apps/server/tests/integration/entry-multi-author-sync.integration.test.ts",
+        "apps/web/tests/offline-entry-multi-author-retained.integration.test.ts",
+        "--reporter=json",
+        "--outputFile=D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-entry-multi-author\\retained\\gates\\nearest-sql-final.json"
+      ],
+      "exit": 0,
+      "output": "JSON report written to D:/Project/TagTraceTrove/.hermes/tmp/offline-parity-entry-multi-author/retained/gates/nearest-sql-final.json\n"
+    },
+    {
+      "name": "nearest-default-final",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "apps/web/tests/native-mutation-plan.test.ts",
+        "apps/web/tests/offline-api.test.ts",
+        "apps/web/tests/offline-gallery-order.test.ts",
+        "apps/web/tests/offline-library.test.ts",
+        "apps/web/tests/partition-visibility.test.ts",
+        "apps/web/tests/pending-work-restore.test.ts",
+        "--maxWorkers=2",
+        "--reporter=json",
+        "--outputFile=D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-entry-multi-author\\retained\\gates\\nearest-default-final.json"
+      ],
+      "exit": 0,
+      "output": "JSON report written to D:/Project/TagTraceTrove/.hermes/tmp/offline-parity-entry-multi-author/retained/gates/nearest-default-final.json\n"
+    },
+    {
+      "name": "shared-types-final",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/shared/tsconfig.json",
+        "--noEmit"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "name": "server-types-final",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "apps/server/tsconfig.json",
+        "--noEmit"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "name": "web-types-final",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "apps/web/node_modules/vue-tsc/bin/vue-tsc.js",
+        "-p",
+        "apps/web/tsconfig.json",
+        "--noEmit"
+      ],
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "name": "owned-lint-final",
+      "argv": [
+        "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+        "node_modules/eslint/bin/eslint.js",
+        "apps/web/src/offline/offline-api.ts",
+        "apps/web/src/offline/pending-work-restore.ts",
+        "apps/web/tests/offline-entry-multi-author-retained.integration.test.ts"
+      ],
+      "exit": 0,
+      "output": ""
+    }
+  ],
+  "before": {
+    "apps/web/src/offline/offline-api.ts": "0ba2f0df9fa1ba1a3cdb8e489dde65666f636c7936b0bbd4482ba39ce2271d2b",
+    "apps/web/src/offline/pending-work-restore.ts": "cf6ac844527dae6cdca4294c8dfd2e529e1c252cada8bedaecd5cbb4358edd89",
+    "apps/web/tests/offline-entry-multi-author-retained.integration.test.ts": "474432eedcfb6c07901422e1f359aa438ab82be02f2752cae40a4cc9ea8e9a28"
+  },
+  "after": {
+    "apps/web/src/offline/offline-api.ts": "0ba2f0df9fa1ba1a3cdb8e489dde65666f636c7936b0bbd4482ba39ce2271d2b",
+    "apps/web/src/offline/pending-work-restore.ts": "cf6ac844527dae6cdca4294c8dfd2e529e1c252cada8bedaecd5cbb4358edd89",
+    "apps/web/tests/offline-entry-multi-author-retained.integration.test.ts": "474432eedcfb6c07901422e1f359aa438ab82be02f2752cae40a4cc9ea8e9a28"
+  }
+}

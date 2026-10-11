@@ -8,6 +8,14 @@ import type { GalleryApi } from '../src/api/gallery.js';
 import { setLocale } from '../src/i18n.js';
 import { showNsfw } from '../src/stores/preferences.js';
 
+const reconciliation = vi.hoisted(() => ({ listener: null as null | ((ids: ReadonlyMap<number, number>) => void) }));
+vi.mock('../src/offline/offline-api.js', () => ({
+  subscribeCollectionReconciliation: vi.fn((_api, listener) => {
+    reconciliation.listener = listener;
+    return () => { reconciliation.listener = null; };
+  }),
+}));
+
 function entry(id: number, title: string) {
   return { id, title, type: 'manga', coverRef: null, previewRefs: [] };
 }
@@ -82,6 +90,33 @@ describe('CollectionsPage touch organization', () => {
   beforeEach(() => {
     setLocale('en');
     vi.stubGlobal('scrollTo', vi.fn());
+  });
+
+  it('keeps an open local Collection selected and reloads its authoritative members after replay', async () => {
+    let online = false;
+    const queryEntryPage = vi.fn(async (input) => ({
+      items: [], total: 0, page: input.page, pageSize: input.pageSize,
+    }));
+    const api = {
+      assetUrl: (path: string) => path,
+      listCollections: vi.fn(async () => [collection(online ? 72 : -1, 'Local shelf')]),
+      listGalleries: vi.fn(async () => []),
+      queryEntryPage,
+    } as unknown as GalleryApi;
+    const wrapper = mount(CollectionsPage, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-collection-id="-1"]').trigger('click');
+    await flushPromises();
+    expect(queryEntryPage).toHaveBeenLastCalledWith(expect.objectContaining({ collectionId: -1 }));
+
+    online = true;
+    expect(reconciliation.listener).not.toBeNull();
+    reconciliation.listener?.(new Map([[-1, 72]]));
+    await flushPromises();
+    expect(wrapper.get('[data-testid="collections-panel"]').text()).toContain('Local shelf');
+    expect(queryEntryPage).toHaveBeenLastCalledWith(expect.objectContaining({ collectionId: 72 }));
+    wrapper.unmount();
+    expect(reconciliation.listener).toBeNull();
   });
 
   it('opens each folder at the top and restores its parent scroll position', async () => {
@@ -253,6 +288,7 @@ describe('CollectionsPage touch organization', () => {
 
     expect(removeCollectionEntry).toHaveBeenCalledWith(1, 101);
     expect(addCollectionEntry).toHaveBeenCalledWith(2, 101);
+    expect(addCollectionEntry.mock.invocationCallOrder[0]!).toBeLessThan(removeCollectionEntry.mock.invocationCallOrder[0]!);
     expect(wrapper.find('[data-move-to-collection-id="2"]').exists()).toBe(false);
   });
 
@@ -271,6 +307,7 @@ describe('CollectionsPage touch organization', () => {
 
     expect(removeCollectionEntry).toHaveBeenCalledWith(2, 202);
     expect(addCollectionEntry).toHaveBeenCalledWith(1, 202);
+    expect(addCollectionEntry.mock.invocationCallOrder[0]!).toBeLessThan(removeCollectionEntry.mock.invocationCallOrder[0]!);
   });
 
   it('reorders top-level collections with 44px edit-mode controls', async () => {
@@ -285,6 +322,220 @@ describe('CollectionsPage touch organization', () => {
     await flushPromises();
 
     expect(reorderCollections).toHaveBeenCalledWith('entry', [3, 1]);
+  });
+
+  it('keeps hidden NSFW siblings in the full reorder vector while showing only SFW cards', async () => {
+    showNsfw.value = false;
+    const records = [
+      collection(1, 'First safe'),
+      { ...collection(2, 'Hidden'), nsfw: true },
+      collection(3, 'Second safe'),
+    ];
+    const reorderCollections = vi.fn(async () => undefined);
+    const api = {
+      assetUrl: (path: string) => path,
+      listCollections: vi.fn(async (kind: 'entry' | 'producer', includeNsfw?: boolean) => (
+        kind !== 'entry' ? [] : records.filter((row) => includeNsfw || !row.nsfw)
+      )),
+      listGalleries: vi.fn(async () => []),
+      reorderCollections,
+    } as unknown as GalleryApi;
+    const wrapper = mount(CollectionsPage, { props: { api } });
+    await flushPromises();
+    expect(wrapper.find('[data-collection-id="2"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="collections-edit-toggle"]').trigger('click');
+    await wrapper.get('[data-testid="move-collection-down-1"]').trigger('click');
+    await flushPromises();
+    expect(api.listCollections).toHaveBeenCalledWith('entry', true);
+    expect(reorderCollections).toHaveBeenCalledWith('entry', [2, 3, 1]);
+    wrapper.unmount();
+  });
+
+  it('does not apply a late NSFW-inclusive child summary after SFW mode reloads', async () => {
+    showNsfw.value = true;
+    let resolveInclusive!: (records: CollectionRecordDto[]) => void;
+    const inclusiveRecords = new Promise<CollectionRecordDto[]>((resolve) => {
+      resolveInclusive = resolve;
+    });
+    const safeRecords = [{
+      ...collection(1, 'Library', [], [collection(2, 'Sensitive folder')]),
+      galleryType: 'game',
+    }];
+    const inclusiveMember = {
+      ...entry(204, 'Sensitive work'),
+      coverRef: 'entries/204/cover.webp',
+    };
+    const inclusiveParent = {
+      ...collection(1, 'Library', [], [
+        { ...collection(2, 'Sensitive folder', [inclusiveMember]), entryCount: 1 },
+      ]),
+      galleryType: 'game',
+    };
+    let inclusiveRequestCount = 0;
+    const api = {
+      assetUrl: (path: string) => path,
+      listCollections: vi.fn(async (kind: 'entry' | 'producer', includeNsfw: boolean) => {
+        if (kind === 'producer') return [];
+        if (includeNsfw && inclusiveRequestCount++ === 0) return inclusiveRecords;
+        return includeNsfw ? [inclusiveParent] : safeRecords;
+      }),
+      listGalleries: vi.fn(async () => [gallery('game', false)]),
+      queryEntryPage: vi.fn(async (input) => ({
+        items: [], total: 0, page: input.page, pageSize: input.pageSize,
+      })),
+    } as unknown as GalleryApi;
+    const wrapper = mount(CollectionsPage, { props: { api } });
+    await flushPromises();
+    showNsfw.value = false;
+    await flushPromises();
+    await wrapper.get('[data-collection-id="1"]').trigger('click');
+    await flushPromises();
+
+    const childCard = wrapper.get('[data-collection-id="2"]');
+    expect(childCard.text()).toContain('0 works');
+    resolveInclusive([inclusiveParent]);
+    await flushPromises();
+    expect(childCard.text()).toContain('0 works');
+    expect(childCard.find('img').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('hides cached NSFW child previews while SFW list and child-summary reads are pending', async () => {
+    showNsfw.value = true;
+    const privateMember = {
+      ...entry(205, 'Sensitive cached work'),
+      coverRef: 'entries/205/private-cover.webp',
+    };
+    let resolveSensitiveChild!: (page: {
+      items: typeof privateMember[];
+      total: number;
+      page: number;
+      pageSize: number;
+    }) => void;
+    const delayedSensitiveChild = new Promise<{ items: typeof privateMember[]; total: number; page: number; pageSize: number }>(
+      (resolve) => { resolveSensitiveChild = resolve; },
+    );
+    let resolveSafeRecords!: (records: CollectionRecordDto[]) => void;
+    const delayedSafeRecords = new Promise<CollectionRecordDto[]>((resolve) => {
+      resolveSafeRecords = resolve;
+    });
+    const safeParent = {
+      ...collection(1, 'Library', [], [collection(2, 'Sensitive folder')]),
+      galleryType: 'game',
+    };
+    const inclusiveParent = {
+      ...collection(1, 'Library', [], [
+        { ...collection(2, 'Sensitive folder', [privateMember]), entryCount: 2 },
+      ]),
+      galleryType: 'game',
+    };
+    const api = {
+      assetUrl: (path: string) => path,
+      listCollections: vi.fn(async (kind: 'entry' | 'producer', includeNsfw: boolean) => {
+        if (kind === 'producer') return [];
+        return includeNsfw ? [inclusiveParent] : delayedSafeRecords;
+      }),
+      listGalleries: vi.fn(async () => [gallery('game', false)]),
+      queryEntryPage: vi.fn(async (input) => {
+        if (input.collectionId === 2 && input.includeNsfw) return delayedSensitiveChild;
+        return { items: [], total: 0, page: input.page, pageSize: input.pageSize };
+      }),
+    } as unknown as GalleryApi;
+    const wrapper = mount(CollectionsPage, { props: { api } });
+    await flushPromises();
+    const opening = wrapper.get('[data-collection-id="1"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-collection-id="2"] img').attributes('src')).toContain('private-cover.webp');
+
+    showNsfw.value = false;
+    await flushPromises();
+    expect(api.queryEntryPage).toHaveBeenCalledWith(expect.objectContaining({
+      collectionId: 2,
+      includeNsfw: true,
+    }));
+    expect(wrapper.find('[data-collection-id="2"]').exists()).toBe(false);
+
+    resolveSafeRecords([safeParent]);
+    await flushPromises();
+    expect(api.queryEntryPage).toHaveBeenCalledWith(expect.objectContaining({
+      collectionId: 2,
+      includeNsfw: false,
+    }));
+    resolveSensitiveChild({
+      items: [privateMember], total: 1, page: 1, pageSize: 3,
+    });
+    await opening;
+    await flushPromises();
+    const safeChildCard = wrapper.get('[data-collection-id="2"]');
+    expect(safeChildCard.text()).toContain('0 works');
+    expect(safeChildCard.find('img').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it.each([0, 1])('repairs child-folder previews when the compact summary is stale (count %i)', async (reportedCount) => {
+    showNsfw.value = true;
+    const member = {
+      ...entry(202, 'Child work'),
+      coverRef: null,
+      previewRefs: ['entries/202/preview.webp'],
+    };
+    const child = {
+      ...collection(2, 'Favorites', []),
+      entryCount: reportedCount,
+    };
+    const api = {
+      assetUrl: (path: string) => path,
+      listCollections: vi.fn(async (kind: 'entry' | 'producer') => (
+        kind === 'entry' ? [collection(1, 'Library', [], [child])] : []
+      )),
+      listGalleries: vi.fn(async () => []),
+      queryEntryPage: vi.fn(async (input) => ({
+        items: input.collectionId === 2 ? [member] : [],
+        total: input.collectionId === 2 ? 1 : 0,
+        page: input.page,
+        pageSize: input.pageSize,
+      })),
+    } as unknown as GalleryApi;
+    const wrapper = mount(CollectionsPage, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-collection-id="1"]').trigger('click');
+    await flushPromises();
+
+    const childCard = wrapper.get('[data-collection-id="2"]');
+    expect(childCard.text()).toContain('1 works');
+    expect(childCard.get('.directory-cover').attributes('data-cover-count')).toBe('1');
+    expect(childCard.get('.directory-cover img').attributes('src')).toContain('entries/202/preview.webp');
+    wrapper.unmount();
+  });
+
+  it('does not render zero when child member previews outnumber the stale summary count', async () => {
+    showNsfw.value = true;
+    const member = {
+      ...entry(203, 'Preview-only work'),
+      coverRef: null,
+      previewRefs: ['entries/203/preview.webp'],
+    };
+    const child = { ...collection(2, 'Preview folder', [member]), entryCount: 0 };
+    const api = {
+      assetUrl: (path: string) => path,
+      listCollections: vi.fn(async (kind: 'entry' | 'producer') => (
+        kind === 'entry' ? [collection(1, 'Library', [], [child])] : []
+      )),
+      listGalleries: vi.fn(async () => []),
+      queryEntryPage: vi.fn(async (input) => {
+        if (input.collectionId === 2) throw new Error('summary refresh unavailable');
+        return { items: [], total: 0, page: input.page, pageSize: input.pageSize };
+      }),
+    } as unknown as GalleryApi;
+    const wrapper = mount(CollectionsPage, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-collection-id="1"]').trigger('click');
+    await flushPromises();
+
+    const childCard = wrapper.get('[data-collection-id="2"]');
+    expect(childCard.text()).toContain('1 works');
+    expect(childCard.get('.directory-cover img').attributes('src')).toContain('entries/203/preview.webp');
+    wrapper.unmount();
   });
 
   it('splits Collection covers equally across one, two, or three displayed works', async () => {

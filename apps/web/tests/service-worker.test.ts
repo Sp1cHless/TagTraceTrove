@@ -2,13 +2,13 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  OFFLINE_MEDIA_CACHE,
   SW_VERSION,
   isCapabilities,
   isHashedBuildAsset,
   isLibraryMedia,
   isThumbnail,
   networkFirst,
+  offlineMediaCacheNames,
   shellUrls,
   strategyFor,
 } from '../src/sw/service-worker.js';
@@ -17,7 +17,7 @@ describe('service worker policy', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('shells out the versioned shell URLs for precache', () => {
-    expect(SW_VERSION).toBe('t3-shell-v5');
+    expect(SW_VERSION).toBe('t3-shell-v7');
     expect(shellUrls()).toEqual(['/', '/index.html', '/manifest.webmanifest']);
   });
 
@@ -30,9 +30,9 @@ describe('service worker policy', () => {
       .toMatchObject({ kind: 'network-only' });
   });
 
-  it('treats capabilities as network-first with a cache fallback', () => {
+  it('does not intercept capabilities, so a cached 200 cannot impersonate a live server', () => {
     expect(strategyFor('GET', 'https://t3.local/api/sync/capabilities'))
-      .toEqual({ kind: 'network-first', url: 'https://t3.local/api/sync/capabilities' });
+      .toEqual({ kind: 'network-only', url: 'https://t3.local/api/sync/capabilities' });
     expect(isCapabilities(new URL('https://t3.local/api/sync/capabilities'))).toBe(true);
   });
 
@@ -40,6 +40,12 @@ describe('service worker policy', () => {
     expect(isHashedBuildAsset('/assets/index-DUQy4ACC.js')).toBe(true);
     expect(isHashedBuildAsset('/assets/theme.css')).toBe(false);
     expect(isHashedBuildAsset('/assets/index.js')).toBe(false);
+    // A bundled UI font rides the same rule — but only because the build hashes it. One kept in
+    // `public/` would answer to `network-only` and never come back offline.
+    expect(strategyFor('GET', 'https://t3.local/assets/smiley-sans-oblique-K8hpreXB.woff2'))
+      .toEqual({ kind: 'immutable-asset', url: 'https://t3.local/assets/smiley-sans-oblique-K8hpreXB.woff2' });
+    expect(strategyFor('GET', 'https://t3.local/fonts/smiley-sans-oblique.woff2'))
+      .toEqual({ kind: 'network-only', url: 'https://t3.local/fonts/smiley-sans-oblique.woff2' });
     expect(isThumbnail(new URL('https://t3.local/api/thumbnails/abc512.webp'))).toBe(true);
     expect(strategyFor('GET', 'https://t3.local/assets/index-DUQy4ACC.js'))
       .toEqual({ kind: 'immutable-asset', url: 'https://t3.local/assets/index-DUQy4ACC.js' });
@@ -77,9 +83,10 @@ describe('service worker policy', () => {
   it('falls back to cached media when the desktop endpoint responds 503, but not 404', async () => {
     const cached = new Response('cached-image', { status: 200 });
     const match = vi.fn(async () => cached.clone());
+    const openedNames: string[] = [];
     vi.stubGlobal('caches', {
       async open(name: string) {
-        expect(name).toBe(OFFLINE_MEDIA_CACHE);
+        openedNames.push(name);
         return { match, async put() {} };
       },
     });
@@ -89,16 +96,21 @@ describe('service worker policy', () => {
     vi.stubGlobal('fetch', fetcher);
     const request = new Request('https://t3.local/api/thumbnails/entries/1/cover.webp');
 
-    const unavailable = await networkFirst(request, OFFLINE_MEDIA_CACHE, {
+    const names = offlineMediaCacheNames(request.url);
+    const unavailable = await networkFirst(request, names, {
       persistOnlineResponse: false,
       fallbackOnUnavailableResponse: true,
     });
     expect(await unavailable.text()).toBe('cached-image');
 
-    const missing = await networkFirst(request, OFFLINE_MEDIA_CACHE, {
+    const missing = await networkFirst(request, names, {
       persistOnlineResponse: false,
       fallbackOnUnavailableResponse: true,
     });
     expect(missing.status).toBe(404);
+    // The address's own bucket is tried before the pre-shard one, so media
+    // written before the split still answers offline reads.
+    expect(openedNames[0]).toBe(names[0]);
+    expect(names[1]).toBe('t3-offline-media-v1');
   });
 });

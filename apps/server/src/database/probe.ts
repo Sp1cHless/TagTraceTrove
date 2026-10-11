@@ -34,7 +34,8 @@ import {
   setSourceStatus,
   upsertItem,
 } from '../source-maintenance/repository.js';
-import { buildSyncCapabilities, buildSyncSnapshot, getSyncIdentity, rotateSyncEpoch } from '../sync/sync-service.js';
+import { ackSyncChanges, buildSyncCapabilities, buildSyncSnapshot, getSyncIdentity, readSyncChanges, rotateSyncEpoch } from '../sync/sync-service.js';
+import { createOnlineEntry } from '../sync/online-entry-create.js';
 import { createFacet, createSection } from '../repositories/layout-repository.js';
 import { assignProducerTag, findProducers } from '../repositories/producer-tag-repository.js';
 import { suggestTags } from '../repositories/suggestion-repository.js';
@@ -57,6 +58,7 @@ import {
   createProducerRatingSlot,
   createRatingSlot,
   findRatingSlotId,
+  listAuthorSelfRatings,
   listEntryRatings,
   listProducerRatings,
   setEntryRating,
@@ -128,6 +130,29 @@ export function runDatabaseProbe(): DatabaseProbeResult {
   };
 
   try {
+    check('schema-34 Entry Tag and Facet origin registries', () => {
+      const version = database.prepare('SELECT MAX(version) FROM schema_migrations').pluck().get() as number;
+      if (version < 34) return false;
+      return ['sync_offline_created_entry_facets', 'sync_offline_created_entry_tags', 'entry_tag_layouts', 'sync_entry_taxonomy_changes'].every(table =>
+        database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table) !== undefined);
+    });
+    check('schema-37 Gallery order sync scope', () => {
+      const version = database.prepare('SELECT MAX(version) FROM schema_migrations').pluck().get() as number;
+      return version >= 37 && database.prepare("SELECT 1 FROM gallery_order_scope WHERE id=1 AND sync_version>=1").get() !== undefined;
+    });
+    check('schema-38 Entry duration', () => {
+      const version = database.prepare('SELECT MAX(version) FROM schema_migrations').pluck().get() as number;
+      if (version < 38) return false;
+      return database.prepare("SELECT 1 FROM pragma_table_info('entries') WHERE name = 'duration_seconds'")
+        .get() !== undefined;
+    });
+    check('schema-36 stored Gallery order', () => {
+      const version = database.prepare('SELECT MAX(version) FROM schema_migrations').pluck().get() as number;
+      if (version < 36) return false;
+      return database.prepare(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='gallery_order'",
+      ).get() !== undefined;
+    });
     check('seed core scenario', () => {
       database.exec(`
         INSERT INTO entries (id, title, type) VALUES (1, 'Example Game', 'game');
@@ -174,6 +199,19 @@ export function runDatabaseProbe(): DatabaseProbeResult {
         && detail.sections[0]?.facets[0]?.name === ''
         && detail.producers[0]?.name === 'Example Creator'
         && detail.contents.length === 2;
+    });
+
+    check('store a work duration as the peer of its page count', () => {
+      // The whole point of the column is that a work with no pages still carries a fact, and that
+      // clearing it is an ordinary edit — most works have no runtime, so null must survive the trip
+      // back out of the detail the Entry page reads.
+      const stored = updateEntry(database, 1, { durationSeconds: 805 });
+      const readBack = getEntryDetail(database, 1)?.durationSeconds;
+      const cleared = updateEntry(database, 1, { durationSeconds: null });
+      return stored.durationSeconds === 805
+        && readBack === 805
+        && cleared.durationSeconds === null
+        && getEntryDetail(database, 1)?.durationSeconds === null;
     });
 
     check('find producer through an entry tag', () => {
@@ -537,7 +575,10 @@ export function runDatabaseProbe(): DatabaseProbeResult {
         pageSize: 10,
       }).items.map((entry) => entry.title);
 
-      return sortedTitles(false).join('|') === 'Probe own rating|Probe anthology|Probe inherited rating'
+      // One reading, not two: a work dimension is its own value and, where it has none, its Authors'
+      // summary of the same name. The older flag asks for exactly that, so both calls answer the
+      // same — and the four-Author anthology, which can inherit nothing, sinks.
+      return sortedTitles(false).join('|') === 'Probe inherited rating|Probe own rating|Probe anthology'
         && sortedTitles(true).join('|') === 'Probe inherited rating|Probe own rating|Probe anthology'
         && findRatingSlotId(database, 'producer', type, entrySlot.name) === authorSlotId;
     });
@@ -571,11 +612,14 @@ export function runDatabaseProbe(): DatabaseProbeResult {
     check('partition whole galleries and derive the author partition', () => {
       // Only whole Galleries are partitioned; an Author with any work in an
       // NSFW Gallery is an NSFW Author, and flipping the Gallery flips them.
+      const partitionOwner=database.prepare("SELECT sync_uid AS uid,sync_version AS version FROM gallery_partition_scopes WHERE entry_type='game'").get() as {uid:string;version:number};
       setGalleryPartition(database, 'game', true);
       const nsfwTypes = listNsfwGalleryTypes(database);
       const authorNsfw = authorHasNsfwWorks(database, 1, nsfwTypes);
       setGalleryPartition(database, 'game', false);
-      return nsfwTypes.has('game')
+      const advanced=database.prepare('SELECT sync_version FROM gallery_partition_scopes WHERE sync_uid=?').pluck().get(partitionOwner.uid);
+      const journal=database.prepare("SELECT COUNT(*) FROM sync_changes WHERE entity_kind='gallery_partition' AND entity_uid=? AND resource_version>?").pluck().get(partitionOwner.uid,partitionOwner.version);
+      return advanced===partitionOwner.version+2 && journal===2 && nsfwTypes.has('game')
         && authorNsfw
         && !listNsfwGalleryTypes(database).has('game')
         && !authorHasNsfwWorks(database, 1, listNsfwGalleryTypes(database));
@@ -799,6 +843,13 @@ export function runDatabaseProbe(): DatabaseProbeResult {
       && capabilities.snapshotFormatVersion === 2
       && capabilities.featureFlags.offlineMutations === true
       && capabilities.featureFlags.offlineEntryUpdate === true
+      && capabilities.featureFlags.offlineProducerViewLater === true
+      && capabilities.featureFlags.offlineRatingSlotLayout === true
+      && capabilities.featureFlags.offlineCollectionProducerMembership === true
+      && capabilities.featureFlags.offlineCollectionManagement === true
+      && capabilities.featureFlags.offlineAuthorDirectories === true
+      && capabilities.featureFlags.offlineEntryAuthors === true
+      && capabilities.featureFlags.offlineEntryTags === true
       && second.header.snapshotSeq === first.header.snapshotSeq + 1
       && second.header.changeSeq === first.header.changeSeq
       && first.header.checksum.length === 64
@@ -808,6 +859,208 @@ export function runDatabaseProbe(): DatabaseProbeResult {
         entry.syncUid !== undefined && entry.syncVersion !== undefined
       ))
     );
+  });
+
+  check('journal Entry Tag insert, update and delete', () => {
+    const entry = createEntry(database, { title: 'Tag journal probe', type: 'Probe' });
+    const section = createSection(database, { entryType: 'Probe', name: 'Tag journal' });
+    const other = createSection(database, { entryType: 'Probe', name: 'Tag journal other' });
+    const before = database.prepare('SELECT sync_uid AS syncUid, sync_version AS version FROM entries WHERE id = ?')
+      .get(entry.id) as { syncUid: string; version: number };
+    const beforeSeq = Number(database.prepare('SELECT COALESCE(MAX(seq), 0) FROM sync_changes').pluck().get());
+    const assigned = assignEntryTag(database, { entryId: entry.id, facetId: section.defaultFacetId, name: 'Probe tag journal' });
+    moveEntryTag(database, { entryId: entry.id, tagId: assigned.tagId, targetFacetId: other.defaultFacetId });
+    database.prepare('DELETE FROM entry_tags WHERE entry_id = ? AND tag_id = ?').run(entry.id, assigned.tagId);
+    const versions = database.prepare(`SELECT resource_version FROM sync_changes
+      WHERE entity_kind = 'entry' AND entity_uid = ? AND seq > ? ORDER BY seq`)
+      .pluck().all(before.syncUid, beforeSeq) as number[];
+    return versions.join(',') === [before.version + 1, before.version + 2, before.version + 3].join(',');
+  });
+
+  check('journal Entry Author link changes', () => {
+    const entry = createEntry(database, { title: 'Offline Author-link probe', type: 'Probe' });
+    const producer = createProducer(database, { name: 'Offline Author-link probe' });
+    const identity = database.prepare(
+      'SELECT sync_uid AS syncUid, sync_version AS syncVersion FROM entries WHERE id = ?',
+    ).get(entry.id) as { syncUid: string; syncVersion: number };
+    const beforeSeq = Number(database.prepare('SELECT COALESCE(MAX(seq), 0) FROM sync_changes').pluck().get());
+
+    linkEntryProducer(database, entry.id, producer.id);
+    const afterLink = Number(database.prepare('SELECT sync_version FROM entries WHERE id = ?')
+      .pluck().get(entry.id));
+    unlinkEntryProducer(database, entry.id, producer.id);
+    const afterUnlink = Number(database.prepare('SELECT sync_version FROM entries WHERE id = ?')
+      .pluck().get(entry.id));
+    const changes = database.prepare(`
+      SELECT resource_version AS resourceVersion FROM sync_changes
+      WHERE entity_kind = 'entry' AND entity_uid = ? AND seq > ? ORDER BY seq
+    `).all(identity.syncUid, beforeSeq) as Array<{ resourceVersion: number }>;
+
+    return afterLink === identity.syncVersion + 1
+      && afterUnlink === identity.syncVersion + 2
+      && changes.map(({ resourceVersion }) => resourceVersion).join(',')
+        === `${identity.syncVersion + 1},${identity.syncVersion + 2}`;
+  });
+
+  check('journal Producer View later membership', () => {
+    const producer = createProducer(database, { name: 'Offline Producer probe' });
+    const before = database.prepare(`
+      SELECT sync_uid AS syncUid, sync_version AS syncVersion FROM producers WHERE id = ?
+    `).get(producer.id) as { syncUid: string; syncVersion: number };
+    const beforeSeq = Number(database.prepare(
+      'SELECT COALESCE(MAX(seq), 0) FROM sync_changes',
+    ).pluck().get());
+
+    addViewLaterProducer(database, producer.id);
+    const afterAdd = Number(database.prepare(
+      'SELECT sync_version FROM producers WHERE id = ?',
+    ).pluck().get(producer.id));
+    const addChange = database.prepare(`
+      SELECT entity_kind AS entityKind, entity_uid AS entityUid,
+             resource_version AS resourceVersion
+      FROM sync_changes WHERE seq = ?
+    `).get(beforeSeq + 1) as {
+      entityKind: string; entityUid: string; resourceVersion: number;
+    } | undefined;
+
+    removeViewLaterProducer(database, producer.id);
+    const afterRemove = Number(database.prepare(
+      'SELECT sync_version FROM producers WHERE id = ?',
+    ).pluck().get(producer.id));
+    const producerChanges = Number(database.prepare(`
+      SELECT COUNT(*) FROM sync_changes
+      WHERE entity_kind = 'producer' AND entity_uid = ? AND seq > ?
+    `).pluck().get(before.syncUid, beforeSeq));
+    const snapshot = buildSyncSnapshot(database);
+    const projectedProducer = snapshot.payload.producers.find((row) => row.id === producer.id);
+
+    return before.syncVersion === 1
+      && /^[0-9a-f-]{36}$/u.test(before.syncUid)
+      && afterAdd === before.syncVersion + 1
+      && addChange?.entityKind === 'producer'
+      && addChange.entityUid === before.syncUid
+      && addChange.resourceVersion === afterAdd
+      && afterRemove === before.syncVersion + 2
+      && producerChanges === 2
+      && !listViewLaterProducerIds(database).includes(producer.id)
+      && projectedProducer?.syncUid === before.syncUid
+      && projectedProducer.syncVersion === afterRemove;
+  });
+
+  check('journal Producer tag identity and membership', () => {
+    const author = createProducer(database, { name: 'Producer tag probe' });
+    const before = database.prepare(`
+      SELECT sync_uid AS syncUid, sync_version AS syncVersion FROM producers WHERE id = ?
+    `).get(author.id) as { syncUid: string; syncVersion: number };
+    const beforeSeq = Number(database.prepare('SELECT COALESCE(MAX(seq), 0) FROM sync_changes').pluck().get());
+    database.prepare('INSERT INTO producer_tags (name, normalized_name) VALUES (?, ?)')
+      .run('Probe Tag', 'probe tag');
+    const tag = database.prepare('SELECT id, sync_uid AS syncUid FROM producer_tags WHERE normalized_name = ?')
+      .get('probe tag') as { id: number; syncUid: string };
+    database.prepare('INSERT INTO producer_tag_assignments (producer_id, tag_id) VALUES (?, ?)')
+      .run(author.id, tag.id);
+    database.prepare('UPDATE producer_tags SET name = ?, normalized_name = ? WHERE id = ?')
+      .run('Renamed Probe Tag', 'renamed probe tag', tag.id);
+    const after = Number(database.prepare('SELECT sync_version FROM producers WHERE id = ?').pluck().get(author.id));
+    const changes = database.prepare(`
+      SELECT resource_version AS resourceVersion FROM sync_changes
+      WHERE entity_kind = 'producer' AND entity_uid = ? AND seq > ? ORDER BY seq
+    `).all(before.syncUid, beforeSeq) as Array<{ resourceVersion: number }>;
+    const snapshot = buildSyncSnapshot(database);
+    const projectedTag = snapshot.payload.producerTags.find((row) => row.id === tag.id);
+    const assigned = snapshot.payload.producerTagAssignments.some((row) => (
+      row.producerId === author.id && row.tagId === tag.id
+    ));
+
+    return /^[0-9a-f-]{36}$/u.test(tag.syncUid)
+      && after === before.syncVersion + 2
+      && changes.map((change) => change.resourceVersion).join(',') === `${before.syncVersion + 1},${before.syncVersion + 2}`
+      && projectedTag?.syncUid === tag.syncUid
+      && projectedTag.name === 'Renamed Probe Tag'
+      && assigned;
+  });
+
+  check('journal Producer rating values', () => {
+    const author = createProducer(database, { name: 'Producer rating probe' });
+    const work = createEntry(database, { title: 'Producer rating probe work', type: 'game' });
+    linkEntryProducer(database, work.id, author.id);
+    const slot = createProducerRatingSlot(database, { producerId: author.id, name: 'Probe rating' });
+    const before = database.prepare(`
+      SELECT sync_uid AS syncUid, sync_version AS syncVersion FROM producers WHERE id = ?
+    `).get(author.id) as { syncUid: string; syncVersion: number };
+    const beforeSeq = Number(database.prepare('SELECT COALESCE(MAX(seq), 0) FROM sync_changes').pluck().get());
+    setProducerRating(database, { producerId: author.id, slotId: slot.id, stars: 4.5 });
+    const change = database.prepare(`
+      SELECT entity_kind AS entityKind, entity_uid AS entityUid, resource_version AS resourceVersion
+      FROM sync_changes WHERE seq = ?
+    `).get(beforeSeq + 1) as { entityKind: string; entityUid: string; resourceVersion: number } | undefined;
+    const afterVersion = Number(database.prepare('SELECT sync_version FROM producers WHERE id = ?').pluck().get(author.id));
+    return afterVersion === before.syncVersion + 1
+      && change?.entityKind === 'producer'
+      && change.entityUid === before.syncUid
+      && change.resourceVersion === afterVersion;
+  });
+
+  check('journal shared rating layouts, Collections, and Author Directories', () => {
+    const author = createProducer(database, { name: 'Resource owner probe' });
+    const work = createEntry(database, { title: 'Resource work', type: 'resource-probe' });
+    linkEntryProducer(database, work.id, author.id);
+    const producerBefore = Number(database.prepare(
+      'SELECT sync_version FROM producers WHERE id = ?',
+    ).pluck().get(author.id));
+    const directorySetBefore = Number(database.prepare(
+      'SELECT sync_version FROM author_directory_sets WHERE producer_id = ?',
+    ).pluck().get(author.id));
+    const beforeSeq = Number(database.prepare('SELECT COALESCE(MAX(seq), 0) FROM sync_changes').pluck().get());
+
+    createRatingSlot(database, { kind: 'producer', entryType: 'resource-probe', name: 'Axis' });
+    const layout = database.prepare(`
+      SELECT sync_uid AS syncUid, sync_version AS syncVersion
+      FROM rating_slot_layouts WHERE subject_kind = 'producer' AND entry_type = 'resource-probe'
+    `).get() as { syncUid: string; syncVersion: number };
+    const collection = createCollection(database, { kind: 'producer', title: 'Resource collection' });
+    addCollectionProducer(database, collection.id, author.id);
+    const collectionVersion = Number(database.prepare(
+      'SELECT sync_version FROM collections WHERE id = ?',
+    ).pluck().get(collection.id));
+
+    const directoryId = Number(database.prepare(`
+      INSERT INTO author_directories (producer_id, title, description, sort_order)
+      VALUES (?, 'Resource Directory', '', 0)
+    `).run(author.id).lastInsertRowid);
+    database.prepare(`
+      INSERT INTO author_directory_entries (directory_id, producer_id, entry_id, sort_order)
+      VALUES (?, ?, ?, 0)
+    `).run(directoryId, author.id, work.id);
+    const producerAfter = Number(database.prepare(
+      'SELECT sync_version FROM producers WHERE id = ?',
+    ).pluck().get(author.id));
+    const directorySetAfter = Number(database.prepare(
+      'SELECT sync_version FROM author_directory_sets WHERE producer_id = ?',
+    ).pluck().get(author.id));
+    const directoryUid = String(database.prepare(
+      'SELECT sync_uid FROM author_directories WHERE id = ?',
+    ).pluck().get(directoryId));
+    const journalKinds = database.prepare(`
+      SELECT entity_kind FROM sync_changes WHERE seq > ? ORDER BY seq
+    `).pluck().all(beforeSeq) as string[];
+    const snapshot = buildSyncSnapshot(database);
+    return layout.syncVersion === 2
+      && /^[0-9a-f-]{36}$/u.test(layout.syncUid)
+      && collectionVersion === 2
+      && /^[0-9a-f-]{36}$/u.test(directoryUid)
+      && directorySetAfter === directorySetBefore + 2
+      && producerAfter === producerBefore
+      && journalKinds.includes('rating_layout')
+      && journalKinds.includes('collection')
+      && journalKinds.includes('author_directory_set')
+      && snapshot.payload.collections.find((row) => row.id === collection.id)?.syncUid !== undefined
+      && snapshot.payload.authorDirectories.find((row) => row.id === directoryId)?.syncUid === directoryUid
+      && snapshot.payload.authorDirectorySets?.some((row) => (
+        row.producerId === author.id && row.syncVersion === directorySetAfter
+      )) === true
+      && snapshot.payload.ratingLayouts?.some((row) => row.syncUid === layout.syncUid) === true
+      && inspectDatabase(database).ok;
   });
 
   // Runs last: it merges every pending duplicate Author, so the database is not
@@ -848,6 +1101,65 @@ export function runDatabaseProbe(): DatabaseProbeResult {
       && listViewLaterProducerIds(database).includes(survivorId);
   });
 
+  check('durable bounded change feed acknowledgement', () => {
+    const identity = getSyncIdentity(database);
+    const input = { ...identity, protocolVersion: 1, clientId: 'probe', afterSeq: 0, limit: 1 };
+    const page = readSyncChanges(database, input);
+    if (page.changes.length !== 1 || page.nextSeq > page.highWaterSeq) return false;
+    const ack = ackSyncChanges(database, { ...identity, protocolVersion: 1, clientId: 'probe', cursorSeq: page.nextSeq });
+    return ack.ackSeq === page.nextSeq
+      && readSyncChanges(database, { ...input, afterSeq: page.nextSeq }).ackSeq === page.nextSeq;
+  });
+
+  check('idempotent online Entry claim', () => {
+    const input = {
+      title: 'Online claim probe', type: 'game', syncUid: '44444444-4444-4444-8444-444444444444',
+    };
+    const first = createOnlineEntry(database, input);
+    const retry = createOnlineEntry(database, input);
+    const collision = createOnlineEntry(database, { ...input, title: 'Different claim' });
+    return first.status === 'created' && retry.status === 'retry'
+      && first.entry?.id === retry.entry?.id && collision.status === 'conflict'
+      && database.prepare('SELECT COUNT(*) FROM entries WHERE sync_uid = ?')
+        .pluck().get(input.syncUid) === 1;
+  });
+
+  check('offline Producer causal registry', () => {
+    const columns = database.prepare('PRAGMA table_info(sync_offline_created_producers)').all() as Array<{name:string}>;
+    return ['producer_uid','producer_id','create_op_id','client_id','library_id','sync_epoch'].every(name => columns.some(row => row.name === name));
+  });
+    check('keep the Author\u2019s own rating class apart from the works summary', () => {
+      // Two classes, one subject: the works summary is what an unrated work inherits, the author's
+      // own dimensions are about the person and are never inherited. Same author, same Gallery,
+      // two partitions — and a work dimension brings the summary's dimension of the same name into
+      // being by itself, which is what keeps a Gallery's template and its authors in step.
+      const authorId = 1;
+      const selfSlot = createProducerRatingSlot(database, {
+        producerId: authorId, name: 'Charisma', kind: 'author_self',
+      });
+      setProducerRating(database, { producerId: authorId, slotId: selfSlot.id, stars: 5 });
+      const selfRows = listAuthorSelfRatings(database, authorId);
+      const summaryRows = listProducerRatings(database, authorId);
+      return selfRows.length === 1
+        && selfRows[0]?.name === 'Charisma'
+        && selfRows[0]?.stars === 5
+        // The summary never picks up the author's own dimension, and the own class never picks up
+        // the summary's names: they are separate partitions, not one list with a flag on it.
+        && summaryRows.every((row) => row.name !== 'Charisma')
+        && selfRows.every((row) => row.name !== 'Quality')
+        // 'Quality' and 'Taste' are work dimensions of 'game' (created above), so the summary has
+        // had both since they appeared.
+        && summaryRows.some((row) => row.name === 'Quality')
+        && summaryRows.some((row) => row.name === 'Taste');
+    });
+
+  check('standalone Author independent Directory seed insert and immutable binding', () => {
+    const seed='aaaaaaa1-1111-4111-8111-111111111111';
+    const id=Number(database.prepare('INSERT INTO producers (name,directory_set_seed_uid) VALUES (?,?)').run('Directory seed probe',seed).lastInsertRowid);
+    const set=database.prepare('SELECT sync_uid AS uid,sync_version AS version FROM author_directory_sets WHERE producer_id=?').get(id) as {uid:string;version:number};
+    let immutable=false;try {database.prepare('UPDATE producers SET directory_set_seed_uid=NULL WHERE id=?').run(id);}catch {immutable=true;}
+    return set.uid===seed && set.version===1 && immutable && buildSyncCapabilities(database, 'probe').featureFlags.offlineStandaloneAuthorDirectorySeed===true && inspectDatabase(database).ok;
+  });
   check('database doctor clean', () => inspectDatabase(database).ok);
   } finally {
     database.close();

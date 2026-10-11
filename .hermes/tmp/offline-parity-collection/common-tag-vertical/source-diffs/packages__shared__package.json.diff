@@ -1,0 +1,10 @@
+--- packages/shared/package.json fresh-before
++++ packages/shared/package.json latest
+@@ -9,6 +9,7 @@
+     "typecheck": "tsc -p tsconfig.json --noEmit"
+   },
+   "dependencies": {
++    "opencc-js": "^1.4.2",
+     "zod": "^4.5.4"
+   }
+ }

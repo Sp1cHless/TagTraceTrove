@@ -14,6 +14,9 @@ import {
   markRunningRunsPaused,
 } from '../../src/source-maintenance/job-manager.js';
 import { fakeAdapter } from '../../src/source-maintenance/adapters/fake.js';
+import { createMangabzAdapter } from '../../src/source-maintenance/adapters/mangabz.js';
+import { createEhentaiAdapter } from '../../src/source-maintenance/adapters/ehentai.js';
+import { createManhuaguiAdapter } from '../../src/source-maintenance/adapters/manhuagui.js';
 import { ProviderRateLimitedError, type TitleCatalogProvider } from '../../src/source-maintenance/catalog-provider.js';
 import type { SourceSearchAdapter, AdapterCandidate } from '../../src/source-maintenance/source-search-adapter.js';
 
@@ -80,7 +83,7 @@ describe('search job manager', () => {
       expect(outcome).toBe('review');
       const run = getRun(database, runId)!;
       expect(run.status).toBe('review');
-      expect(run.counts).toEqual({ total: 3, processed: 3, matched: 1, ambiguous: 0, noMatch: 2, errors: 0 });
+      expect(run.counts).toEqual({ total: 3, processed: 3, matched: 1, ambiguous: 1, noMatch: 2, errors: 0 });
 
       // 'Blue Box' resolves through the fixture catalog alias graph and the
       // fake target: unique alias hit + work kind + creator evidence.
@@ -92,6 +95,66 @@ describe('search job manager', () => {
       expect(blueBox.selectedUrl).toBe('https://fake.test/work/100');
       // The query budget keeps the full title plus separator variants only.
       expect(blueBox.queryTitles).toEqual(['blue box']);
+    } finally {
+      database.close();
+    }
+  });
+
+  it('keeps candidate catalog identities distinct and bridges an origin gallery id without auto-selection', async () => {
+    const { database } = seedDatabase();
+    try {
+      const adapter: SourceSearchAdapter = {
+        ...fakeAdapter,
+        async search({ title }) {
+          if (title !== 'blue box') return [];
+          return [
+            { url: 'https://fake.test/work/3133339', title: 'Unrelated label', catalogIds: ['ehentai:3133339'], adapterEvidence: {} },
+            { url: 'https://fake.test/work/other', title: 'Different work', catalogIds: ['ehentai:999', 'blue-box'], adapterEvidence: {} },
+            { url: 'https://fake.test/work/stranger', title: 'Stranger', catalogIds: ['ehentai:888'], adapterEvidence: {} },
+          ];
+        },
+      };
+      const entryId = seed(database, 'Blue Box', 'https://hitomi.la/g/blue-box-3133339.html');
+      const runId = makeRun(database);
+      expect(await executeSearchRun(database, runId, {
+        adapter, catalogProviders: [catalogProvider], delay: async () => undefined,
+      })).toBe('review');
+      const item = listRunItems(database, runId, 1, 20, 'all').items.find((row) => row.entryId === entryId)!;
+      expect(item.errorText).toBeNull();
+      const byUrl = new Map(item.candidates.map((candidate) => [candidate.url, candidate]));
+      expect(byUrl.get('https://fake.test/work/3133339')).toMatchObject({
+        catalogIds: ['ehentai:3133339'], band: 'strong-review',
+        reasons: ['external id equals the id embedded in the origin source URL'],
+      });
+      expect(byUrl.get('https://fake.test/work/other')).toMatchObject({
+        catalogIds: ['ehentai:999', 'blue-box'], band: 'strong-review',
+        reasons: expect.arrayContaining(['resolved to the same external catalog identity']),
+      });
+      expect(byUrl.get('https://fake.test/work/stranger')).toMatchObject({
+        catalogIds: ['ehentai:888'], band: 'ambiguous',
+        reasons: ['no trusted identity evidence (similarity alone is never eligible)'],
+      });
+      expect(item.selectedUrl).toBeNull();
+    } finally {
+      database.close();
+    }
+  });
+
+  it('flags a target URL shared by this Entry and another Entry as conflict before review', async () => {
+    const { database, entryIds } = seedDatabase();
+    try {
+      for (const entryId of entryIds.slice(0, 2)) {
+        createEntryContent(database, {
+          entryId, contentType: 'Source URL', content: 'https://fake.test/work/100', sortOrder: 1,
+        });
+      }
+      const runId = makeRun(database);
+      expect(await executeSearchRun(database, runId, {
+        adapter: fakeAdapter, catalogProviders: [catalogProvider], delay: async () => undefined,
+      })).toBe('review');
+      const item = listRunItems(database, runId, 1, 20, 'all').items.find((row) => row.entryId === entryIds[0])!;
+      expect(item.candidates.find((candidate) => candidate.url === 'https://fake.test/work/100')?.band).toBe('conflict');
+      expect(item.selectedUrl).toBeNull();
     } finally {
       database.close();
     }
@@ -199,6 +262,72 @@ describe('search job manager', () => {
     } finally {
       database.close();
     }
+  });
+
+  it.each([429, 503, 509, 403])('pauses on real E-Hentai HTTP %i without checkpointing later entries', async (status) => {
+    const { database } = seedDatabase();
+    try {
+      let calls = 0;
+      const adapter = createEhentaiAdapter(async () => {
+        calls += 1;
+        return new Response('', { status, headers: { 'retry-after': '30' } });
+      });
+      const runId = makeRun(database);
+      expect(await executeSearchRun(database, runId, {
+        adapter, delay: async () => undefined,
+      })).toBe('paused');
+      expect(calls).toBe(1);
+      expect(getRun(database, runId)!.counts).toMatchObject({ processed: 1, errors: 1 });
+      expect(listRunItems(database, runId, 1, 20, 'all').items).toHaveLength(1);
+    } finally { database.close(); }
+  });
+
+  it.each([429, 503, 509])('pauses on real Mangabz HTTP %i', async (status) => {
+    const { database } = seedDatabase();
+    try {
+      let calls = 0;
+      const adapter = createMangabzAdapter(async () => {
+        calls += 1;
+        return new Response('', { status });
+      });
+      const runId = makeRun(database);
+      expect(await executeSearchRun(database, runId, { adapter, delay: async () => undefined })).toBe('paused');
+      expect(calls).toBe(1);
+      expect(getRun(database, runId)!.counts.processed).toBe(1);
+    } finally { database.close(); }
+  });
+
+  it('pauses on real template-based Manhuagui HTTP 403', async () => {
+    const { database } = seedDatabase();
+    try {
+      let calls = 0;
+      const adapter = createManhuaguiAdapter(async () => {
+        calls += 1;
+        return new Response('', { status: 403 });
+      });
+      const runId = makeRun(database);
+      expect(await executeSearchRun(database, runId, { adapter, delay: async () => undefined })).toBe('paused');
+      expect(calls).toBe(1);
+      expect(getRun(database, runId)!.counts.processed).toBe(1);
+    } finally { database.close(); }
+  });
+
+  it('does not swallow a catalog provider rate limit before target search', async () => {
+    const { database } = seedDatabase();
+    try {
+      let targetCalls = 0;
+      const adapter: SourceSearchAdapter = { ...fakeAdapter, async search() { targetCalls += 1; return []; } };
+      const provider: TitleCatalogProvider = {
+        key: 'limited',
+        async lookup() { throw new ProviderRateLimitedError(30_000); },
+      };
+      const runId = makeRun(database);
+      expect(await executeSearchRun(database, runId, {
+        adapter, catalogProviders: [provider], delay: async () => undefined,
+      })).toBe('paused');
+      expect(targetCalls).toBe(0);
+      expect(getRun(database, runId)!.counts.processed).toBe(1);
+    } finally { database.close(); }
   });
 
   it('merges adapter candidates by canonical URL across query variants', async () => {

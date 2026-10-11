@@ -1,0 +1,18 @@
+[
+  {
+    "path": "apps/web/src/offline/offline-api.ts",
+    "sha256": "66d87078e721fe3299f3d479f24c2b7f8de1f80b4ea67ed1233c771180f7b95f"
+  },
+  {
+    "path": "apps/web/tests/existing-entry-media-vertical.test.ts",
+    "sha256": "ebbfbd1870a1ebc1766426d4eb02b58f74fa6d59deffa47fd1f54863f925669c"
+  },
+  {
+    "path": "apps/server/tests/fixtures/secure-pairing-native.mts",
+    "sha256": "c6743c7869e69a0374b27be46384077d929fc9c153e5900fc76340b96e22998f"
+  },
+  {
+    "path": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/SecurePairingTest.java",
+    "sha256": "ff1b2fa4b05ec1ba8b775c63fa0586aee99cbd9e68fa07849dba96a9dbf689b3"
+  }
+]

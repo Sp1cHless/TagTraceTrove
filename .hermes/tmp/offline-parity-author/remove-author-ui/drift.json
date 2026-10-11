@@ -1,0 +1,6 @@
+{
+  "apps/server/src/http/app.ts": {
+    "expected": "db20df0bab45324962737e7c42324dab056e4ccb1613f568c45dfd561b167fb8",
+    "actual": "54fc2b1c7aa2af4bc79e211f7d6e4e580f0770a71399379a62c83e8f8cf40012"
+  }
+}

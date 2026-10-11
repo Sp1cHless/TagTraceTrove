@@ -1,0 +1,3033 @@
+[
+  {
+    "locale": "en",
+    "tab": "tags",
+    "width": 360,
+    "card": {
+      "left": 25,
+      "right": 335
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 319.6
+    },
+    "controls": 17,
+    "textRects": 54,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "Aliases are optional. Saving one merges existing matching Tags and res",
+        "left": 40.390625,
+        "right": 327.5
+      },
+      {
+        "kind": "control",
+        "tag": "INPUT",
+        "id": "taxonomy-dictionary-input",
+        "left": 40.390625,
+        "right": 360.390625
+      },
+      {
+        "kind": "control",
+        "tag": "INPUT",
+        "id": "taxonomyAlias",
+        "left": 53.1875,
+        "right": 347.59375
+      },
+      {
+        "kind": "control",
+        "tag": "INPUT",
+        "id": "taxonomyCanonicalName",
+        "left": 53.1875,
+        "right": 347.59375
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 53.1875,
+        "right": 347.59375
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "taxonomy-group-pending",
+        "left": 40.390625,
+        "right": 360.390625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 347.171875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 339.578125
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 345.015625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 348.765625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 345.4375
+      },
+      {
+        "kind": "text",
+        "text": "— not mapped yet —",
+        "left": 286.09375,
+        "right": 334.109375
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "taxonomy-group-mapped",
+        "left": 40.390625,
+        "right": 360.390625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 347.171875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 339.578125
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 345.015625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 348.765625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 345.4375
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 347.171875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 339.578125
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 345.015625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 348.765625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 345.4375
+      },
+      {
+        "kind": "text",
+        "text": "Pick the tag to keep, then the tags to merge into it. Assignments move",
+        "left": 56.390625,
+        "right": 330.03125
+      },
+      {
+        "kind": "text",
+        "text": "Pick the tag to keep, then the tags to merge into it. Assignments move",
+        "left": 56.390625,
+        "right": 331.140625
+      },
+      {
+        "kind": "text",
+        "text": "Deletes the tag and removes it from every work that carried it. Unlike",
+        "left": 56.390625,
+        "right": 340.84375
+      },
+      {
+        "kind": "text",
+        "text": "Deletes the tag and removes it from every work that carried it. Unlike",
+        "left": 56.390625,
+        "right": 325.15625
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "en",
+    "tab": "sources",
+    "width": 360,
+    "card": {
+      "left": 25,
+      "right": 335
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 319.6
+    },
+    "controls": 11,
+    "textRects": 27,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "Source invalidation maintenance",
+        "left": 40.390625,
+        "right": 347.59375
+      },
+      {
+        "kind": "text",
+        "text": "Pick a broken Source, search a supported target site, review every hit",
+        "left": 40.390625,
+        "right": 1400.484375
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 69.390625,
+        "right": 1859.515625
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1867.515625,
+        "right": 5367.796875
+      },
+      {
+        "kind": "text",
+        "text": "Mark this Source group invalid after commit",
+        "left": 66.78125,
+        "right": 404.5
+      },
+      {
+        "kind": "text",
+        "text": "This only adds a badge. Old URLs stay visible and clickable.",
+        "left": 40.390625,
+        "right": 491.53125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 232.78125,
+        "right": 367.421875
+      },
+      {
+        "kind": "text",
+        "text": "Check adapter",
+        "left": 244.96875,
+        "right": 355.234375
+      },
+      {
+        "kind": "text",
+        "text": "Supported target: LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUn",
+        "left": 40.390625,
+        "right": 1872.5625
+      },
+      {
+        "kind": "text",
+        "text": "Status: review processed 1/1 · matched 1 · ambiguous 0 · no-match 0 · ",
+        "left": 40.390625,
+        "right": 639.21875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 40.390625,
+        "right": 1830.515625
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1830.515625,
+        "right": 5330.796875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 121.453125,
+        "right": 1911.578125
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1917.96875,
+        "right": 5418.25
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 64.390625,
+        "right": 1383.71875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 322.140625,
+        "right": 370.5625
+      },
+      {
+        "kind": "text",
+        "text": "Skip",
+        "left": 330.140625,
+        "right": 362.5625
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "en",
+    "tab": "offline",
+    "width": 360,
+    "card": {
+      "left": 25,
+      "right": 335
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 319.6
+    },
+    "controls": 10,
+    "textRects": 23,
+    "failures": [
+      {
+        "kind": "control",
+        "tag": "SELECT",
+        "id": "offline-media-mode",
+        "left": 148.859375,
+        "right": 328.859375
+      },
+      {
+        "kind": "text",
+        "text": "Original asset refs (comma or newline separated)",
+        "left": 40.390625,
+        "right": 419.4375
+      },
+      {
+        "kind": "control",
+        "tag": "TEXTAREA",
+        "id": "offline-selected-originals",
+        "left": 419.4375,
+        "right": 600.4375
+      },
+      {
+        "kind": "text",
+        "text": "Preload runs only while this app is open; interrupted downloads resume",
+        "left": 40.390625,
+        "right": 550.5
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-download",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Update offline library",
+        "left": 596.34375,
+        "right": 769.9375
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-sync-now",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Sync now",
+        "left": 644.984375,
+        "right": 721.28125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-export-pending",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Export pending work (private JSON)",
+        "left": 536.984375,
+        "right": 829.296875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "native-transfer-resume",
+        "left": 40.390625,
+        "right": 423.40625
+      },
+      {
+        "kind": "text",
+        "text": "Resume supported queued edits and images",
+        "left": 52.578125,
+        "right": 411.21875
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 423.40625,
+        "right": 1318.40625
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 40.390625,
+        "right": 688.046875
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 40.390625,
+        "right": 1294.078125
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Restore an exported pending-work file on this same device and library.",
+        "left": 218.046875,
+        "right": 1006.171875
+      },
+      {
+        "kind": "text",
+        "text": "Pending-work file",
+        "left": 1006.171875,
+        "right": 1141.21875
+      },
+      {
+        "kind": "control",
+        "tag": "INPUT",
+        "id": "offline-restore-file",
+        "left": 40.390625,
+        "right": 360.390625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-clear",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Clear offline library",
+        "left": 605.328125,
+        "right": 760.953125
+      },
+      {
+        "kind": "text",
+        "text": "Entry Content editing not enabled. Connect to the updated desktop serv",
+        "left": 40.390625,
+        "right": 589.3125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-check-support",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Check offline editing support",
+        "left": 565.140625,
+        "right": 801.125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-request-persistence",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Request persistent storage",
+        "left": 575.34375,
+        "right": 790.9375
+      },
+      {
+        "kind": "text",
+        "text": "The saved library supports browsing and selected Entry edits. Import, ",
+        "left": 40.390625,
+        "right": 843.03125
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "en",
+    "tab": "tags",
+    "width": 390,
+    "card": {
+      "left": 25,
+      "right": 365
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 349.6
+    },
+    "controls": 17,
+    "textRects": 54,
+    "failures": [
+      {
+        "kind": "control",
+        "tag": "INPUT",
+        "id": "taxonomy-dictionary-input",
+        "left": 40.390625,
+        "right": 360.390625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "taxonomy-group-pending",
+        "left": 40.390625,
+        "right": 360.390625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "taxonomy-group-mapped",
+        "left": 40.390625,
+        "right": 360.390625
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "en",
+    "tab": "sources",
+    "width": 390,
+    "card": {
+      "left": 25,
+      "right": 365
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 349.6
+    },
+    "controls": 11,
+    "textRects": 27,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "Pick a broken Source, search a supported target site, review every hit",
+        "left": 40.390625,
+        "right": 1400.484375
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 69.390625,
+        "right": 1859.515625
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1867.515625,
+        "right": 5367.796875
+      },
+      {
+        "kind": "text",
+        "text": "Mark this Source group invalid after commit",
+        "left": 66.78125,
+        "right": 404.5
+      },
+      {
+        "kind": "text",
+        "text": "This only adds a badge. Old URLs stay visible and clickable.",
+        "left": 40.390625,
+        "right": 491.53125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 232.78125,
+        "right": 367.421875
+      },
+      {
+        "kind": "text",
+        "text": "Check adapter",
+        "left": 244.96875,
+        "right": 355.234375
+      },
+      {
+        "kind": "text",
+        "text": "Supported target: LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUn",
+        "left": 40.390625,
+        "right": 1872.5625
+      },
+      {
+        "kind": "text",
+        "text": "Status: review processed 1/1 · matched 1 · ambiguous 0 · no-match 0 · ",
+        "left": 40.390625,
+        "right": 639.21875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 40.390625,
+        "right": 1830.515625
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1830.515625,
+        "right": 5330.796875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 121.453125,
+        "right": 1911.578125
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1917.96875,
+        "right": 5418.25
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 64.390625,
+        "right": 1383.71875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 322.140625,
+        "right": 370.5625
+      },
+      {
+        "kind": "text",
+        "text": "Skip",
+        "left": 330.140625,
+        "right": 362.5625
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "en",
+    "tab": "offline",
+    "width": 390,
+    "card": {
+      "left": 25,
+      "right": 365
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 349.6
+    },
+    "controls": 10,
+    "textRects": 23,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "Original asset refs (comma or newline separated)",
+        "left": 40.390625,
+        "right": 419.4375
+      },
+      {
+        "kind": "control",
+        "tag": "TEXTAREA",
+        "id": "offline-selected-originals",
+        "left": 419.4375,
+        "right": 600.4375
+      },
+      {
+        "kind": "text",
+        "text": "Preload runs only while this app is open; interrupted downloads resume",
+        "left": 40.390625,
+        "right": 550.5
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-download",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Update offline library",
+        "left": 596.34375,
+        "right": 769.9375
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-sync-now",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Sync now",
+        "left": 644.984375,
+        "right": 721.28125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-export-pending",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Export pending work (private JSON)",
+        "left": 536.984375,
+        "right": 829.296875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "native-transfer-resume",
+        "left": 40.390625,
+        "right": 423.40625
+      },
+      {
+        "kind": "text",
+        "text": "Resume supported queued edits and images",
+        "left": 52.578125,
+        "right": 411.21875
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 423.40625,
+        "right": 1318.40625
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 40.390625,
+        "right": 688.046875
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 40.390625,
+        "right": 1294.078125
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Restore an exported pending-work file on this same device and library.",
+        "left": 218.046875,
+        "right": 1006.171875
+      },
+      {
+        "kind": "text",
+        "text": "Pending-work file",
+        "left": 1006.171875,
+        "right": 1141.21875
+      },
+      {
+        "kind": "control",
+        "tag": "INPUT",
+        "id": "offline-restore-file",
+        "left": 40.390625,
+        "right": 360.390625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-clear",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Clear offline library",
+        "left": 605.328125,
+        "right": 760.953125
+      },
+      {
+        "kind": "text",
+        "text": "Entry Content editing not enabled. Connect to the updated desktop serv",
+        "left": 40.390625,
+        "right": 589.3125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-check-support",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Check offline editing support",
+        "left": 565.140625,
+        "right": 801.125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-request-persistence",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Request persistent storage",
+        "left": 575.34375,
+        "right": 790.9375
+      },
+      {
+        "kind": "text",
+        "text": "The saved library supports browsing and selected Entry edits. Import, ",
+        "left": 40.390625,
+        "right": 843.03125
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "en",
+    "tab": "tags",
+    "width": 430,
+    "card": {
+      "left": 25,
+      "right": 405
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 389.6
+    },
+    "controls": 17,
+    "textRects": 51,
+    "failures": [],
+    "errors": []
+  },
+  {
+    "locale": "en",
+    "tab": "sources",
+    "width": 430,
+    "card": {
+      "left": 25,
+      "right": 405
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 389.6
+    },
+    "controls": 11,
+    "textRects": 27,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "Pick a broken Source, search a supported target site, review every hit",
+        "left": 40.390625,
+        "right": 1400.484375
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 69.390625,
+        "right": 1859.515625
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1867.515625,
+        "right": 5367.796875
+      },
+      {
+        "kind": "text",
+        "text": "Mark this Source group invalid after commit",
+        "left": 66.78125,
+        "right": 404.5
+      },
+      {
+        "kind": "text",
+        "text": "This only adds a badge. Old URLs stay visible and clickable.",
+        "left": 40.390625,
+        "right": 491.53125
+      },
+      {
+        "kind": "text",
+        "text": "Supported target: LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUn",
+        "left": 40.390625,
+        "right": 1872.5625
+      },
+      {
+        "kind": "text",
+        "text": "Status: review processed 1/1 · matched 1 · ambiguous 0 · no-match 0 · ",
+        "left": 40.390625,
+        "right": 639.21875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 40.390625,
+        "right": 1830.515625
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1830.515625,
+        "right": 5330.796875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 121.453125,
+        "right": 1911.578125
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1917.96875,
+        "right": 5418.25
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 64.390625,
+        "right": 1383.71875
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "en",
+    "tab": "offline",
+    "width": 430,
+    "card": {
+      "left": 25,
+      "right": 405
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 389.6
+    },
+    "controls": 10,
+    "textRects": 23,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "Original asset refs (comma or newline separated)",
+        "left": 40.390625,
+        "right": 419.4375
+      },
+      {
+        "kind": "control",
+        "tag": "TEXTAREA",
+        "id": "offline-selected-originals",
+        "left": 419.4375,
+        "right": 600.4375
+      },
+      {
+        "kind": "text",
+        "text": "Preload runs only while this app is open; interrupted downloads resume",
+        "left": 40.390625,
+        "right": 550.5
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-download",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Update offline library",
+        "left": 596.34375,
+        "right": 769.9375
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-sync-now",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Sync now",
+        "left": 644.984375,
+        "right": 721.28125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-export-pending",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Export pending work (private JSON)",
+        "left": 536.984375,
+        "right": 829.296875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "native-transfer-resume",
+        "left": 40.390625,
+        "right": 423.40625
+      },
+      {
+        "kind": "text",
+        "text": "Resume supported queued edits and images",
+        "left": 52.578125,
+        "right": 411.21875
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 423.40625,
+        "right": 1318.40625
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 40.390625,
+        "right": 688.046875
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 40.390625,
+        "right": 1294.078125
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Restore an exported pending-work file on this same device and library.",
+        "left": 218.046875,
+        "right": 1006.171875
+      },
+      {
+        "kind": "text",
+        "text": "Pending-work file",
+        "left": 1006.171875,
+        "right": 1141.21875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-clear",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Clear offline library",
+        "left": 605.328125,
+        "right": 760.953125
+      },
+      {
+        "kind": "text",
+        "text": "Entry Content editing not enabled. Connect to the updated desktop serv",
+        "left": 40.390625,
+        "right": 589.3125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-check-support",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Check offline editing support",
+        "left": 565.140625,
+        "right": 801.125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-request-persistence",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Request persistent storage",
+        "left": 575.34375,
+        "right": 790.9375
+      },
+      {
+        "kind": "text",
+        "text": "The saved library supports browsing and selected Entry edits. Import, ",
+        "left": 40.390625,
+        "right": 843.03125
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "en",
+    "tab": "tags",
+    "width": 768,
+    "card": {
+      "left": 340.0625,
+      "right": 709.9375
+    },
+    "bounds": {
+      "left": 361.0625,
+      "right": 688.9375
+    },
+    "controls": 17,
+    "textRects": 41,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "Aliases are optional. Saving one merges existing matching Tags and res",
+        "left": 361.0625,
+        "right": 764.21875
+      },
+      {
+        "kind": "text",
+        "text": "Canonical name, e.g. 鲍勃",
+        "left": 655.4375,
+        "right": 716.46875
+      },
+      {
+        "kind": "text",
+        "text": "Canonical name, e.g. 鲍勃",
+        "left": 655.4375,
+        "right": 693.828125
+      },
+      {
+        "kind": "text",
+        "text": "Canonical name, e.g. 鲍勃",
+        "left": 655.4375,
+        "right": 706.8125
+      },
+      {
+        "kind": "control",
+        "tag": "INPUT",
+        "id": "taxonomyCanonicalName",
+        "left": 655.4375,
+        "right": 716.46875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 666.625,
+        "right": 729.671875
+      },
+      {
+        "kind": "text",
+        "text": "Save",
+        "left": 680.421875,
+        "right": 715.875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "taxonomy-group-pending",
+        "left": 361.0625,
+        "right": 768.046875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 369.859375,
+        "right": 2061.296875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "taxonomy-keep-1",
+        "left": 596.625,
+        "right": 730.59375
+      },
+      {
+        "kind": "text",
+        "text": "No mapping needed",
+        "left": 606.421875,
+        "right": 720.796875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 737.78125,
+        "right": 749.65625
+      },
+      {
+        "kind": "text",
+        "text": "×",
+        "left": 737.78125,
+        "right": 749.65625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "taxonomy-group-mapped",
+        "left": 361.0625,
+        "right": 768.046875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 369.859375,
+        "right": 2061.296875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 369.859375,
+        "right": 2061.296875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 737.78125,
+        "right": 749.65625
+      },
+      {
+        "kind": "text",
+        "text": "×",
+        "left": 737.78125,
+        "right": 749.65625
+      },
+      {
+        "kind": "text",
+        "text": "Pick the tag to keep, then the tags to merge into it. Assignments move",
+        "left": 377.0625,
+        "right": 733.328125
+      },
+      {
+        "kind": "text",
+        "text": "Deletes the tag and removes it from every work that carried it. Unlike",
+        "left": 377.0625,
+        "right": 748.53125
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "en",
+    "tab": "sources",
+    "width": 768,
+    "card": {
+      "left": 254.0625,
+      "right": 623.9375
+    },
+    "bounds": {
+      "left": 275.0625,
+      "right": 602.9375
+    },
+    "controls": 11,
+    "textRects": 27,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "Pick a broken Source, search a supported target site, review every hit",
+        "left": 275.0625,
+        "right": 1635.15625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 304.0625,
+        "right": 2094.1875
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 2102.1875,
+        "right": 5602.46875
+      },
+      {
+        "kind": "text",
+        "text": "Mark this Source group invalid after commit",
+        "left": 301.453125,
+        "right": 639.171875
+      },
+      {
+        "kind": "text",
+        "text": "This only adds a badge. Old URLs stay visible and clickable.",
+        "left": 275.0625,
+        "right": 726.203125
+      },
+      {
+        "kind": "text",
+        "text": "Supported target: LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUn",
+        "left": 275.0625,
+        "right": 2107.234375
+      },
+      {
+        "kind": "text",
+        "text": "Status: review processed 1/1 · matched 1 · ambiguous 0 · no-match 0 · ",
+        "left": 275.0625,
+        "right": 873.890625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 275.0625,
+        "right": 2065.1875
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 2065.1875,
+        "right": 5565.46875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 356.125,
+        "right": 2146.25
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 2152.640625,
+        "right": 5652.921875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 299.0625,
+        "right": 1618.390625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 556.8125,
+        "right": 605.234375
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "en",
+    "tab": "offline",
+    "width": 768,
+    "card": {
+      "left": 167.0625,
+      "right": 536.9375
+    },
+    "bounds": {
+      "left": 188.0625,
+      "right": 515.9375
+    },
+    "controls": 10,
+    "textRects": 23,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "Original asset refs (comma or newline separated)",
+        "left": 188.0625,
+        "right": 567.109375
+      },
+      {
+        "kind": "control",
+        "tag": "TEXTAREA",
+        "id": "offline-selected-originals",
+        "left": 567.109375,
+        "right": 748.109375
+      },
+      {
+        "kind": "text",
+        "text": "Preload runs only while this app is open; interrupted downloads resume",
+        "left": 188.0625,
+        "right": 698.171875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-download",
+        "left": 188.0625,
+        "right": 1473.5625
+      },
+      {
+        "kind": "text",
+        "text": "Update offline library",
+        "left": 744.015625,
+        "right": 917.609375
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-sync-now",
+        "left": 188.0625,
+        "right": 1473.5625
+      },
+      {
+        "kind": "text",
+        "text": "Sync now",
+        "left": 792.65625,
+        "right": 868.953125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-export-pending",
+        "left": 188.0625,
+        "right": 1473.5625
+      },
+      {
+        "kind": "text",
+        "text": "Export pending work (private JSON)",
+        "left": 684.65625,
+        "right": 976.96875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "native-transfer-resume",
+        "left": 188.0625,
+        "right": 571.078125
+      },
+      {
+        "kind": "text",
+        "text": "Resume supported queued edits and images",
+        "left": 200.25,
+        "right": 558.890625
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 571.078125,
+        "right": 1466.078125
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 188.0625,
+        "right": 835.71875
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 188.0625,
+        "right": 1441.75
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 188.0625,
+        "right": 1473.5625
+      },
+      {
+        "kind": "text",
+        "text": "Restore an exported pending-work file on this same device and library.",
+        "left": 365.71875,
+        "right": 1153.84375
+      },
+      {
+        "kind": "text",
+        "text": "Pending-work file",
+        "left": 1153.84375,
+        "right": 1288.890625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-clear",
+        "left": 188.0625,
+        "right": 1473.5625
+      },
+      {
+        "kind": "text",
+        "text": "Clear offline library",
+        "left": 753,
+        "right": 908.625
+      },
+      {
+        "kind": "text",
+        "text": "Entry Content editing not enabled. Connect to the updated desktop serv",
+        "left": 188.0625,
+        "right": 736.984375
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-check-support",
+        "left": 188.0625,
+        "right": 1473.5625
+      },
+      {
+        "kind": "text",
+        "text": "Check offline editing support",
+        "left": 712.8125,
+        "right": 948.796875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-request-persistence",
+        "left": 188.0625,
+        "right": 1473.5625
+      },
+      {
+        "kind": "text",
+        "text": "Request persistent storage",
+        "left": 723.015625,
+        "right": 938.609375
+      },
+      {
+        "kind": "text",
+        "text": "The saved library supports browsing and selected Entry edits. Import, ",
+        "left": 188.0625,
+        "right": 990.703125
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "zh",
+    "tab": "tags",
+    "width": 360,
+    "card": {
+      "left": 25,
+      "right": 335
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 319.6
+    },
+    "controls": 17,
+    "textRects": 52,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "别名是可选功能。保存后会合并现有匹配标签，并用于后续导入。",
+        "left": 40.390625,
+        "right": 352.390625
+      },
+      {
+        "kind": "control",
+        "tag": "INPUT",
+        "id": "taxonomy-dictionary-input",
+        "left": 40.390625,
+        "right": 360.390625
+      },
+      {
+        "kind": "control",
+        "tag": "INPUT",
+        "id": "taxonomyAlias",
+        "left": 53.1875,
+        "right": 347.59375
+      },
+      {
+        "kind": "control",
+        "tag": "INPUT",
+        "id": "taxonomyCanonicalName",
+        "left": 53.1875,
+        "right": 347.59375
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 53.1875,
+        "right": 347.59375
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "taxonomy-group-pending",
+        "left": 40.390625,
+        "right": 360.390625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 347.171875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 339.578125
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 345.015625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 348.765625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 345.4375
+      },
+      {
+        "kind": "text",
+        "text": "— 尚未映射 —",
+        "left": 286.09375,
+        "right": 340.109375
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "taxonomy-group-mapped",
+        "left": 40.390625,
+        "right": 360.390625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 347.171875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 339.578125
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 345.015625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 348.765625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 345.4375
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 347.171875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 339.578125
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 345.015625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 348.765625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 49.1875,
+        "right": 345.4375
+      },
+      {
+        "kind": "text",
+        "text": "选择要保留的标签,再选择并入它的标签。条目归属移到保留标签,被合并的标签彻底删除——旧名完全被保留项替代。",
+        "left": 56.390625,
+        "right": 333.96875
+      },
+      {
+        "kind": "text",
+        "text": "选择要保留的标签,再选择并入它的标签。条目归属移到保留标签,被合并的标签彻底删除——旧名完全被保留项替代。",
+        "left": 56.390625,
+        "right": 335.96875
+      },
+      {
+        "kind": "text",
+        "text": "删除该标签，并从所有使用过它的作品上移除。与合并不同，名字不会被保留。",
+        "left": 56.390625,
+        "right": 343.4375
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "zh",
+    "tab": "sources",
+    "width": 360,
+    "card": {
+      "left": 25,
+      "right": 335
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 319.6
+    },
+    "controls": 11,
+    "textRects": 29,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "选择失效的 Source,在支持的目标站搜索,逐项复核后一次性提交新的 Source URL。旧 URL 永不删除或替换;invalid 只",
+        "left": 40.390625,
+        "right": 967.859375
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 69.390625,
+        "right": 1859.515625
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1867.515625,
+        "right": 5367.796875
+      },
+      {
+        "kind": "text",
+        "text": "Commit 后将此 Source 组标记为失效",
+        "left": 66.78125,
+        "right": 338.3125
+      },
+      {
+        "kind": "text",
+        "text": "这只会添加徽标。旧 URL 仍然可见、可以点击。",
+        "left": 40.390625,
+        "right": 384.46875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 232.78125,
+        "right": 337.15625
+      },
+      {
+        "kind": "text",
+        "text": "检查适配器",
+        "left": 244.96875,
+        "right": 324.96875
+      },
+      {
+        "kind": "text",
+        "text": "已支持的目标站:LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 40.390625,
+        "right": 1847.6875
+      },
+      {
+        "kind": "text",
+        "text": "状态:review 已处理 1/1 · 匹配 1 · 歧义 0 · 无结果 0 · 出错 0",
+        "left": 40.390625,
+        "right": 462.390625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 40.390625,
+        "right": 1830.515625
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1830.515625,
+        "right": 5330.796875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 98.953125,
+        "right": 1889.078125
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1895.46875,
+        "right": 5395.75
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 64.390625,
+        "right": 1383.71875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 232.78125,
+        "right": 332.125
+      },
+      {
+        "kind": "text",
+        "text": "使用此 URL",
+        "left": 240.78125,
+        "right": 324.125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 341.71875,
+        "right": 389.71875
+      },
+      {
+        "kind": "text",
+        "text": "跳过",
+        "left": 349.71875,
+        "right": 381.71875
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "zh",
+    "tab": "offline",
+    "width": 360,
+    "card": {
+      "left": 25,
+      "right": 335
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 319.6
+    },
+    "controls": 10,
+    "textRects": 23,
+    "failures": [
+      {
+        "kind": "control",
+        "tag": "SELECT",
+        "id": "offline-media-mode",
+        "left": 148.859375,
+        "right": 328.859375
+      },
+      {
+        "kind": "text",
+        "text": "Original asset refs (comma or newline separated)",
+        "left": 40.390625,
+        "right": 419.4375
+      },
+      {
+        "kind": "control",
+        "tag": "TEXTAREA",
+        "id": "offline-selected-originals",
+        "left": 419.4375,
+        "right": 580.4375
+      },
+      {
+        "kind": "text",
+        "text": "Preload runs only while this app is open; interrupted downloads resume",
+        "left": 40.390625,
+        "right": 550.5
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-download",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "更新离线资料库",
+        "left": 627.140625,
+        "right": 739.140625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-sync-now",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "立即同步",
+        "left": 651.140625,
+        "right": 715.140625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-export-pending",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "导出待同步工作（含隐私的 JSON）",
+        "left": 554.84375,
+        "right": 811.421875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "native-transfer-resume",
+        "left": 40.390625,
+        "right": 423.40625
+      },
+      {
+        "kind": "text",
+        "text": "Resume supported queued edits and images",
+        "left": 52.578125,
+        "right": 411.21875
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 423.40625,
+        "right": 1318.40625
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 40.390625,
+        "right": 688.046875
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 40.390625,
+        "right": 1294.078125
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Restore an exported pending-work file on this same device and library.",
+        "left": 218.046875,
+        "right": 1006.171875
+      },
+      {
+        "kind": "text",
+        "text": "Pending-work file",
+        "left": 1006.171875,
+        "right": 1141.21875
+      },
+      {
+        "kind": "control",
+        "tag": "INPUT",
+        "id": "offline-restore-file",
+        "left": 40.390625,
+        "right": 360.390625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-clear",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "清除离线资料库",
+        "left": 627.140625,
+        "right": 739.140625
+      },
+      {
+        "kind": "text",
+        "text": "Entry Content 离线编辑未启用；连接新版桌面服务器后点击检查支持。",
+        "left": 40.390625,
+        "right": 428.625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-check-support",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "检查离线编辑支持",
+        "left": 619.140625,
+        "right": 747.140625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-request-persistence",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "请求持久存储",
+        "left": 635.140625,
+        "right": 731.140625
+      },
+      {
+        "kind": "text",
+        "text": "本地副本支持浏览和部分条目编辑；导入、合并、删除及进阶功能仍需连接桌面服务器。",
+        "left": 40.390625,
+        "right": 514.640625
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "zh",
+    "tab": "tags",
+    "width": 390,
+    "card": {
+      "left": 25,
+      "right": 365
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 349.6
+    },
+    "controls": 17,
+    "textRects": 52,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "别名是可选功能。保存后会合并现有匹配标签，并用于后续导入。",
+        "left": 40.390625,
+        "right": 352.390625
+      },
+      {
+        "kind": "control",
+        "tag": "INPUT",
+        "id": "taxonomy-dictionary-input",
+        "left": 40.390625,
+        "right": 360.390625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "taxonomy-group-pending",
+        "left": 40.390625,
+        "right": 360.390625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "taxonomy-group-mapped",
+        "left": 40.390625,
+        "right": 360.390625
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "zh",
+    "tab": "sources",
+    "width": 390,
+    "card": {
+      "left": 25,
+      "right": 365
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 349.6
+    },
+    "controls": 11,
+    "textRects": 29,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "选择失效的 Source,在支持的目标站搜索,逐项复核后一次性提交新的 Source URL。旧 URL 永不删除或替换;invalid 只",
+        "left": 40.390625,
+        "right": 967.859375
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 69.390625,
+        "right": 1859.515625
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1867.515625,
+        "right": 5367.796875
+      },
+      {
+        "kind": "text",
+        "text": "这只会添加徽标。旧 URL 仍然可见、可以点击。",
+        "left": 40.390625,
+        "right": 384.46875
+      },
+      {
+        "kind": "text",
+        "text": "已支持的目标站:LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 40.390625,
+        "right": 1847.6875
+      },
+      {
+        "kind": "text",
+        "text": "状态:review 已处理 1/1 · 匹配 1 · 歧义 0 · 无结果 0 · 出错 0",
+        "left": 40.390625,
+        "right": 462.390625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 40.390625,
+        "right": 1830.515625
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1830.515625,
+        "right": 5330.796875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 98.953125,
+        "right": 1889.078125
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1895.46875,
+        "right": 5395.75
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 64.390625,
+        "right": 1383.71875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 341.71875,
+        "right": 389.71875
+      },
+      {
+        "kind": "text",
+        "text": "跳过",
+        "left": 349.71875,
+        "right": 381.71875
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "zh",
+    "tab": "offline",
+    "width": 390,
+    "card": {
+      "left": 25,
+      "right": 365
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 349.6
+    },
+    "controls": 10,
+    "textRects": 23,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "Original asset refs (comma or newline separated)",
+        "left": 40.390625,
+        "right": 419.4375
+      },
+      {
+        "kind": "control",
+        "tag": "TEXTAREA",
+        "id": "offline-selected-originals",
+        "left": 419.4375,
+        "right": 580.4375
+      },
+      {
+        "kind": "text",
+        "text": "Preload runs only while this app is open; interrupted downloads resume",
+        "left": 40.390625,
+        "right": 550.5
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-download",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "更新离线资料库",
+        "left": 627.140625,
+        "right": 739.140625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-sync-now",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "立即同步",
+        "left": 651.140625,
+        "right": 715.140625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-export-pending",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "导出待同步工作（含隐私的 JSON）",
+        "left": 554.84375,
+        "right": 811.421875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "native-transfer-resume",
+        "left": 40.390625,
+        "right": 423.40625
+      },
+      {
+        "kind": "text",
+        "text": "Resume supported queued edits and images",
+        "left": 52.578125,
+        "right": 411.21875
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 423.40625,
+        "right": 1318.40625
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 40.390625,
+        "right": 688.046875
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 40.390625,
+        "right": 1294.078125
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Restore an exported pending-work file on this same device and library.",
+        "left": 218.046875,
+        "right": 1006.171875
+      },
+      {
+        "kind": "text",
+        "text": "Pending-work file",
+        "left": 1006.171875,
+        "right": 1141.21875
+      },
+      {
+        "kind": "control",
+        "tag": "INPUT",
+        "id": "offline-restore-file",
+        "left": 40.390625,
+        "right": 360.390625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-clear",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "清除离线资料库",
+        "left": 627.140625,
+        "right": 739.140625
+      },
+      {
+        "kind": "text",
+        "text": "Entry Content 离线编辑未启用；连接新版桌面服务器后点击检查支持。",
+        "left": 40.390625,
+        "right": 428.625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-check-support",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "检查离线编辑支持",
+        "left": 619.140625,
+        "right": 747.140625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-request-persistence",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "请求持久存储",
+        "left": 635.140625,
+        "right": 731.140625
+      },
+      {
+        "kind": "text",
+        "text": "本地副本支持浏览和部分条目编辑；导入、合并、删除及进阶功能仍需连接桌面服务器。",
+        "left": 40.390625,
+        "right": 514.640625
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "zh",
+    "tab": "tags",
+    "width": 430,
+    "card": {
+      "left": 25,
+      "right": 405
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 389.6
+    },
+    "controls": 17,
+    "textRects": 51,
+    "failures": [],
+    "errors": []
+  },
+  {
+    "locale": "zh",
+    "tab": "sources",
+    "width": 430,
+    "card": {
+      "left": 25,
+      "right": 405
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 389.6
+    },
+    "controls": 11,
+    "textRects": 29,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "选择失效的 Source,在支持的目标站搜索,逐项复核后一次性提交新的 Source URL。旧 URL 永不删除或替换;invalid 只",
+        "left": 40.390625,
+        "right": 967.859375
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 69.390625,
+        "right": 1859.515625
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1867.515625,
+        "right": 5367.796875
+      },
+      {
+        "kind": "text",
+        "text": "已支持的目标站:LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 40.390625,
+        "right": 1847.6875
+      },
+      {
+        "kind": "text",
+        "text": "状态:review 已处理 1/1 · 匹配 1 · 歧义 0 · 无结果 0 · 出错 0",
+        "left": 40.390625,
+        "right": 462.390625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 40.390625,
+        "right": 1830.515625
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1830.515625,
+        "right": 5330.796875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 98.953125,
+        "right": 1889.078125
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 1895.46875,
+        "right": 5395.75
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 64.390625,
+        "right": 1383.71875
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "zh",
+    "tab": "offline",
+    "width": 430,
+    "card": {
+      "left": 25,
+      "right": 405
+    },
+    "bounds": {
+      "left": 40.4,
+      "right": 389.6
+    },
+    "controls": 10,
+    "textRects": 23,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "Original asset refs (comma or newline separated)",
+        "left": 40.390625,
+        "right": 419.4375
+      },
+      {
+        "kind": "control",
+        "tag": "TEXTAREA",
+        "id": "offline-selected-originals",
+        "left": 419.4375,
+        "right": 580.4375
+      },
+      {
+        "kind": "text",
+        "text": "Preload runs only while this app is open; interrupted downloads resume",
+        "left": 40.390625,
+        "right": 550.5
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-download",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "更新离线资料库",
+        "left": 627.140625,
+        "right": 739.140625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-sync-now",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "立即同步",
+        "left": 651.140625,
+        "right": 715.140625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-export-pending",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "导出待同步工作（含隐私的 JSON）",
+        "left": 554.84375,
+        "right": 811.421875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "native-transfer-resume",
+        "left": 40.390625,
+        "right": 423.40625
+      },
+      {
+        "kind": "text",
+        "text": "Resume supported queued edits and images",
+        "left": 52.578125,
+        "right": 411.21875
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 423.40625,
+        "right": 1318.40625
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 40.390625,
+        "right": 688.046875
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 40.390625,
+        "right": 1294.078125
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "Restore an exported pending-work file on this same device and library.",
+        "left": 218.046875,
+        "right": 1006.171875
+      },
+      {
+        "kind": "text",
+        "text": "Pending-work file",
+        "left": 1006.171875,
+        "right": 1141.21875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-clear",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "清除离线资料库",
+        "left": 627.140625,
+        "right": 739.140625
+      },
+      {
+        "kind": "text",
+        "text": "Entry Content 离线编辑未启用；连接新版桌面服务器后点击检查支持。",
+        "left": 40.390625,
+        "right": 428.625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-check-support",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "检查离线编辑支持",
+        "left": 619.140625,
+        "right": 747.140625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-request-persistence",
+        "left": 40.390625,
+        "right": 1325.890625
+      },
+      {
+        "kind": "text",
+        "text": "请求持久存储",
+        "left": 635.140625,
+        "right": 731.140625
+      },
+      {
+        "kind": "text",
+        "text": "本地副本支持浏览和部分条目编辑；导入、合并、删除及进阶功能仍需连接桌面服务器。",
+        "left": 40.390625,
+        "right": 514.640625
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "zh",
+    "tab": "tags",
+    "width": 768,
+    "card": {
+      "left": 351.0625,
+      "right": 720.9375
+    },
+    "bounds": {
+      "left": 372.0625,
+      "right": 699.9375
+    },
+    "controls": 17,
+    "textRects": 41,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "别名是可选功能。保存后会合并现有匹配标签，并用于后续导入。",
+        "left": 372.0625,
+        "right": 733.984375
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 677.625,
+        "right": 721.21875
+      },
+      {
+        "kind": "text",
+        "text": "保存",
+        "left": 691.421875,
+        "right": 707.421875
+      },
+      {
+        "kind": "text",
+        "text": "保存",
+        "left": 691.421875,
+        "right": 707.421875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "taxonomy-group-pending",
+        "left": 372.0625,
+        "right": 759.59375
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 380.859375,
+        "right": 2072.296875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "taxonomy-keep-1",
+        "left": 656.453125,
+        "right": 722.140625
+      },
+      {
+        "kind": "text",
+        "text": "无需映射",
+        "left": 666.25,
+        "right": 712.34375
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 729.328125,
+        "right": 741.203125
+      },
+      {
+        "kind": "text",
+        "text": "×",
+        "left": 729.328125,
+        "right": 741.203125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "taxonomy-group-mapped",
+        "left": 372.0625,
+        "right": 759.59375
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 380.859375,
+        "right": 2072.296875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 380.859375,
+        "right": 2072.296875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 729.328125,
+        "right": 741.203125
+      },
+      {
+        "kind": "text",
+        "text": "×",
+        "left": 729.328125,
+        "right": 741.203125
+      },
+      {
+        "kind": "text",
+        "text": "选择要保留的标签,再选择并入它的标签。条目归属移到保留标签,被合并的标签彻底删除——旧名完全被保留项替代。",
+        "left": 388.0625,
+        "right": 743.515625
+      },
+      {
+        "kind": "text",
+        "text": "删除该标签，并从所有使用过它的作品上移除。与合并不同，名字不会被保留。",
+        "left": 388.0625,
+        "right": 737.515625
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "zh",
+    "tab": "sources",
+    "width": 768,
+    "card": {
+      "left": 351.0625,
+      "right": 720.9375
+    },
+    "bounds": {
+      "left": 372.0625,
+      "right": 699.9375
+    },
+    "controls": 11,
+    "textRects": 29,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "选择失效的 Source,在支持的目标站搜索,逐项复核后一次性提交新的 Source URL。旧 URL 永不删除或替换;invalid 只",
+        "left": 372.0625,
+        "right": 1299.53125
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 401.0625,
+        "right": 2191.1875
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 2199.1875,
+        "right": 5699.46875
+      },
+      {
+        "kind": "text",
+        "text": "这只会添加徽标。旧 URL 仍然可见、可以点击。",
+        "left": 372.0625,
+        "right": 716.140625
+      },
+      {
+        "kind": "text",
+        "text": "已支持的目标站:LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 372.0625,
+        "right": 2179.359375
+      },
+      {
+        "kind": "text",
+        "text": "状态:review 已处理 1/1 · 匹配 1 · 歧义 0 · 无结果 0 · 出错 0",
+        "left": 372.0625,
+        "right": 794.0625
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 372.0625,
+        "right": 2162.1875
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 2162.1875,
+        "right": 5662.46875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 430.625,
+        "right": 2220.75
+      },
+      {
+        "kind": "text",
+        "text": "https://LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixt",
+        "left": 2227.140625,
+        "right": 5727.421875
+      },
+      {
+        "kind": "text",
+        "text": "LongUnbrokenFixtureNameLongUnbrokenFixtureNameLongUnbrokenFixtureNameL",
+        "left": 396.0625,
+        "right": 1715.390625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": null,
+        "left": 673.390625,
+        "right": 721.390625
+      },
+      {
+        "kind": "text",
+        "text": "跳过",
+        "left": 681.390625,
+        "right": 713.390625
+      }
+    ],
+    "errors": []
+  },
+  {
+    "locale": "zh",
+    "tab": "offline",
+    "width": 768,
+    "card": {
+      "left": 351.0625,
+      "right": 720.9375
+    },
+    "bounds": {
+      "left": 372.0625,
+      "right": 699.9375
+    },
+    "controls": 10,
+    "textRects": 23,
+    "failures": [
+      {
+        "kind": "text",
+        "text": "Original asset refs (comma or newline separated)",
+        "left": 372.0625,
+        "right": 751.109375
+      },
+      {
+        "kind": "control",
+        "tag": "TEXTAREA",
+        "id": "offline-selected-originals",
+        "left": 751.109375,
+        "right": 912.109375
+      },
+      {
+        "kind": "text",
+        "text": "Preload runs only while this app is open; interrupted downloads resume",
+        "left": 372.0625,
+        "right": 882.171875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-download",
+        "left": 372.0625,
+        "right": 1657.5625
+      },
+      {
+        "kind": "text",
+        "text": "更新离线资料库",
+        "left": 958.8125,
+        "right": 1070.8125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-sync-now",
+        "left": 372.0625,
+        "right": 1657.5625
+      },
+      {
+        "kind": "text",
+        "text": "立即同步",
+        "left": 982.8125,
+        "right": 1046.8125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-export-pending",
+        "left": 372.0625,
+        "right": 1657.5625
+      },
+      {
+        "kind": "text",
+        "text": "导出待同步工作（含隐私的 JSON）",
+        "left": 886.515625,
+        "right": 1143.09375
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "native-transfer-resume",
+        "left": 372.0625,
+        "right": 755.078125
+      },
+      {
+        "kind": "text",
+        "text": "Resume supported queued edits and images",
+        "left": 384.25,
+        "right": 742.890625
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 755.078125,
+        "right": 1650.078125
+      },
+      {
+        "kind": "text",
+        "text": "Android schedules network-constrained work. Dependency-held edits wait",
+        "left": 372.0625,
+        "right": 1019.71875
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 372.0625,
+        "right": 1625.75
+      },
+      {
+        "kind": "text",
+        "text": "1 scheduled, 2 uploaded awaiting foreground verification, 3 held, 0 wa",
+        "left": 372.0625,
+        "right": 1657.5625
+      },
+      {
+        "kind": "text",
+        "text": "Restore an exported pending-work file on this same device and library.",
+        "left": 549.71875,
+        "right": 1337.84375
+      },
+      {
+        "kind": "text",
+        "text": "Pending-work file",
+        "left": 1337.84375,
+        "right": 1472.890625
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-clear",
+        "left": 372.0625,
+        "right": 1657.5625
+      },
+      {
+        "kind": "text",
+        "text": "清除离线资料库",
+        "left": 958.8125,
+        "right": 1070.8125
+      },
+      {
+        "kind": "text",
+        "text": "Entry Content 离线编辑未启用；连接新版桌面服务器后点击检查支持。",
+        "left": 372.0625,
+        "right": 760.296875
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-check-support",
+        "left": 372.0625,
+        "right": 1657.5625
+      },
+      {
+        "kind": "text",
+        "text": "检查离线编辑支持",
+        "left": 950.8125,
+        "right": 1078.8125
+      },
+      {
+        "kind": "control",
+        "tag": "BUTTON",
+        "id": "offline-request-persistence",
+        "left": 372.0625,
+        "right": 1657.5625
+      },
+      {
+        "kind": "text",
+        "text": "请求持久存储",
+        "left": 966.8125,
+        "right": 1062.8125
+      },
+      {
+        "kind": "text",
+        "text": "本地副本支持浏览和部分条目编辑；导入、合并、删除及进阶功能仍需连接桌面服务器。",
+        "left": 372.0625,
+        "right": 846.3125
+      }
+    ],
+    "errors": []
+  }
+]

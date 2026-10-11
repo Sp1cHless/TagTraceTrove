@@ -1,0 +1,26 @@
+--- apps/server/src/repositories/entry-repository.ts.parent-start
++++ apps/server/src/repositories/entry-repository.ts.current
+@@ -375,7 +375,7 @@
+   };
+ }
+ 
+-export function deleteEntry(database: T3Database, entryId: number): void {
++export function deleteEntry(database: T3Database, entryId: number, options: { retainRelatedRecords?: boolean } = {}): void {
+   database.transaction(() => {
+     // Read the Authors before the cascade takes the links away: deleting a work
+     // never deletes its Author directly, but an Author that only existed for
+@@ -392,7 +392,12 @@
+     if (result.changes === 0) {
+       throw new Error('entry not found');
+     }
+-    pruneWorklessProducers(database, heldProducerIds);
+-    pruneUnusedTags(database, heldTagIds);
++    // Ordinary HTTP deletion matches durable replay: cascading Entry links is
++    // not permission to destroy the retained Author profiles or vocabulary.
++    // Existing explicit maintenance callers keep their previous pruning policy.
++    if (!options.retainRelatedRecords) {
++      pruneWorklessProducers(database, heldProducerIds);
++      pruneUnusedTags(database, heldTagIds);
++    }
+   })();
+ }

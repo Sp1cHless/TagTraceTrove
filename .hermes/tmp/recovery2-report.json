@@ -1,0 +1,30 @@
+{
+  "prefix": {
+    "lines": 1929,
+    "sha256": "86ec0e7ad16ed4b56cfa03fb44cbdccdb342b5fd27285fa46f58f607adaef4d4",
+    "anchor": "    }\n    const active = await readActiveSnapshot(store);\n    const original = active?.snapshot.payload.producers.find((producer) => producer.id === authorId);\n    if (active === null || original?.syncUid === undefined || original.syncVersion === undefined) {\n      throw transportError ?? new Error('Author is unavailable in the offline copy or is missing stable identity/version');\n    }\n    const operations = await store.list();\n    const parsed = parsedEntryOperations(operations);\n    const projected = snapshotWithOverlays(active.snapshot, operations);\n    const baseTags = producerTagValuesFromSnapshot(projected, authorId);\n    const desiredTags = mutate(baseTags, projected).map((tag) => {\n      const name = tag.name.normalize('NFKC').trim().replace(/\\s+/gu, ' ');\n      if (name === '' || normalizeTag(name) === '') throw new Error('Author tag name cannot be empty');\n      return { syncUid: tag.syncUid, name };\n    }).sort((left, right) => left.syncUid < right.syncUid ? -1 : 1);"
+  },
+  "facade_snapshot": {
+    "messages": [
+      130128,
+      130130
+    ],
+    "original_range": [
+      4077,
+      4213
+    ]
+  },
+  "projection_mutations": {
+    "applied": [
+      "        return entry as EntryRecordDto;",
+      "      if (hasMediaOutbox(store) && (await store.listMedia()).length) {"
+    ],
+    "unmatched": []
+  },
+  "candidate": {
+    "lines": 5335,
+    "sha256": "79c077649b8a69b0a8b214b8fccf5de5989d927322525bcc85ad1df5149c8f46",
+    "path": "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\recovery2-candidate.ts",
+    "failures": []
+  }
+}

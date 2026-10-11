@@ -1,0 +1,98 @@
+{
+  "packages/shared/src/schemas/sync.ts": {
+    "startSha256": "b613ab78b1522c682b0f3bc3ab2c3a4d2e2ccddcc7cb4b660f0795695bcba811",
+    "currentSha256": "b613ab78b1522c682b0f3bc3ab2c3a4d2e2ccddcc7cb4b660f0795695bcba811",
+    "size": 57059,
+    "new": false
+  },
+  "packages/shared/src/schemas/native-mutation-contract.ts": {
+    "startSha256": "427eaa466d4dde2a6078aa7ec0f0c77f6c4494b61dfc5f3cb568a257278ac302",
+    "currentSha256": "427eaa466d4dde2a6078aa7ec0f0c77f6c4494b61dfc5f3cb568a257278ac302",
+    "size": 3568,
+    "new": false
+  },
+  "apps/server/src/sync/sync-service.ts": {
+    "startSha256": "5df706f97a18ed68a5d6a3ff210af894c2387a5ac1d9ab64cbd6e244f0b58879",
+    "currentSha256": "5df706f97a18ed68a5d6a3ff210af894c2387a5ac1d9ab64cbd6e244f0b58879",
+    "size": 19063,
+    "new": false
+  },
+  "apps/server/src/sync/replay-service.ts": {
+    "startSha256": "fed9871e46d397fae75d306f6f662e6c3e70491a6b70fb7e473ac2da0af81a9f",
+    "currentSha256": "fed9871e46d397fae75d306f6f662e6c3e70491a6b70fb7e473ac2da0af81a9f",
+    "size": 114302,
+    "new": false
+  },
+  "apps/server/src/http/app.ts": {
+    "startSha256": "556748352c5616f8d609630395308667f89643bd9df0859433d0604816ab46f2",
+    "currentSha256": "556748352c5616f8d609630395308667f89643bd9df0859433d0604816ab46f2",
+    "size": 101284,
+    "new": false
+  },
+  "apps/web/src/offline/offline-api.ts": {
+    "startSha256": "c98683ecd979f8c1ddf98bb37511ac07e23b8a76f9badb4afd8d7e3d0f233788",
+    "currentSha256": "c98683ecd979f8c1ddf98bb37511ac07e23b8a76f9badb4afd8d7e3d0f233788",
+    "size": 338079,
+    "new": false
+  },
+  "apps/web/tests/offline-entry-delete.integration.test.ts": {
+    "startSha256": "35f73c97e2c31ec03c7130a7a7406a9f454d8a1078b745d39a9443016a4648bd",
+    "currentSha256": "96b4347a3fc7d75c118c5f9fe6ded715558836934fd22471a69d22c1ef1aa6ca",
+    "size": 16474,
+    "new": true
+  },
+  "apps/web/tests/fixtures/native-valid-kind-fixture.ts": {
+    "startSha256": "898ab8676edba8f2dd5922fdc1d92c823c02b3b32d20ece8bff52513527690d4",
+    "currentSha256": "898ab8676edba8f2dd5922fdc1d92c823c02b3b32d20ece8bff52513527690d4",
+    "size": 4708,
+    "new": false
+  },
+  "apps/web/src/offline/native-background-transfer.ts": {
+    "startSha256": "b140f9f20e38dd9aa47d400c1e66bd0727d8b86831241b1b4ccf8a91d8505685",
+    "currentSha256": "b140f9f20e38dd9aa47d400c1e66bd0727d8b86831241b1b4ccf8a91d8505685",
+    "size": 17058,
+    "new": false
+  },
+  "apps/web/src/offline/sync-mutation-plan.ts": {
+    "startSha256": "4d2e1cb140ec09dedcb796652c1276b138d7deb324bb5a4bcdf3573f7e7cfa11",
+    "currentSha256": "4d2e1cb140ec09dedcb796652c1276b138d7deb324bb5a4bcdf3573f7e7cfa11",
+    "size": 7609,
+    "new": false
+  },
+  "apps/web/tests/offline-entry-delete-native.test.ts": {
+    "startSha256": "e0b4a2585e436c52379ea325bce638c5f2489e48b026ffc95c88dd16f59e8c15",
+    "currentSha256": "e0b4a2585e436c52379ea325bce638c5f2489e48b026ffc95c88dd16f59e8c15",
+    "size": 2781,
+    "new": true
+  },
+  "apps/web/src/offline/pending-work-restore.ts": {
+    "startSha256": "5a7c0d314d8f04c03283fbec5832289fad81346cdfef04eb3de8dc406d579f7f",
+    "currentSha256": "5a7c0d314d8f04c03283fbec5832289fad81346cdfef04eb3de8dc406d579f7f",
+    "size": 23866,
+    "new": false
+  },
+  "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeWorkerAuthorityAcceptanceJvmTest.java": {
+    "startSha256": "0241f6034747a4f598bdf2312b1ea97547c9a0357ca38d8d805ea074cc997a40",
+    "currentSha256": "0241f6034747a4f598bdf2312b1ea97547c9a0357ca38d8d805ea074cc997a40",
+    "size": 14214,
+    "new": false
+  },
+  "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java": {
+    "startSha256": "ba469f3e29733740962324a9aa7a3c3bb26d98b5750d3ab0edc20e0c326813cb",
+    "currentSha256": "ba469f3e29733740962324a9aa7a3c3bb26d98b5750d3ab0edc20e0c326813cb",
+    "size": 17366,
+    "new": false
+  },
+  "apps/web/tests/offline-api.test.ts": {
+    "startSha256": "9bb982e2b2fab1af6387cf1b4aed3aead7e4d85af17a048e00721bf175a271ab",
+    "currentSha256": "9bb982e2b2fab1af6387cf1b4aed3aead7e4d85af17a048e00721bf175a271ab",
+    "size": 184487,
+    "new": false
+  },
+  ".hermes/artifacts/offline-parity-first-tranche-implementation.md": {
+    "startSha256": "30afce884e7674ab3db262fe4b872c0b56479f48bcc5ca177f6efc0e0c8f6f41",
+    "currentSha256": "30afce884e7674ab3db262fe4b872c0b56479f48bcc5ca177f6efc0e0c8f6f41",
+    "size": 3451,
+    "new": false
+  }
+}

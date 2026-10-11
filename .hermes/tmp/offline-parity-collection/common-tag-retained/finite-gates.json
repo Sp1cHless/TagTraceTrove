@@ -1,0 +1,44 @@
+[
+  {
+    "name": "final-finite-closed",
+    "exitCode": 1,
+    "passed": 39,
+    "failed": 1,
+    "failures": [
+      [
+        "SqliteError: entry tag must target a facet of the entry type\n    at D:\\Project\\TagTraceTrove\\apps\\server\\src\\repositories\\entry-tag-repository.ts:194:8\n    at sqliteTransaction (D:\\Project\\TagTraceTrove\\node_modules\\.pnpm\\better-sqlite3@12.11.1\\node_modules\\better-sqlite3\\lib\\methods\\transaction.js:65:24)\n    at assignEntryTag (D:\\Project\\TagTraceTrove\\apps\\server\\src\\repositories\\entry-tag-repository.ts:202:4)\n    at seed (D:\\Project\\TagTraceTrove\\apps\\web\\tests\\offline-collection-common-tag.integration.test.ts:220:30)\n    at D:\\Project\\TagTraceTrove\\apps\\web\\tests\\offline-collection-common-tag.integration.test.ts:225:17\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file:///D:/Project/TagTraceTrove/node_modules/.pnpm/@vitest+runner@3.2.7/node_modules/@vitest/runner/dist/chunk-hooks.js:752:20"
+      ]
+    ],
+    "log": "JSON report written to D:/Project/TagTraceTrove/.hermes/tmp/offline-parity-collection/common-tag-retained/final-finite-closed.json\n"
+  },
+  {
+    "name": "nearest-sql",
+    "exitCode": 0,
+    "passed": 74,
+    "failed": 0,
+    "failures": []
+  },
+  {
+    "name": "nearest-default",
+    "exitCode": 0,
+    "passed": 170,
+    "failed": 0,
+    "failures": []
+  },
+  {
+    "name": "server-types",
+    "exitCode": 0
+  },
+  {
+    "name": "web-types",
+    "exitCode": 0
+  },
+  {
+    "name": "shared-types",
+    "exitCode": 0
+  },
+  {
+    "name": "owned-lint",
+    "exitCode": 0
+  }
+]

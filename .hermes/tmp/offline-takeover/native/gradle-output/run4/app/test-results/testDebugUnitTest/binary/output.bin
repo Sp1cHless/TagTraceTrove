@@ -1,0 +1,33 @@
+ŒDEBUG_JOBS [{"opId":"3e9756e9-bf2b-4abd-b3e5-9f2947c2aadf","uploadId":null,"metadata":null,"flags":["offlineMutations","offlineEntryMultiAuthorConversion"],"phase":"completed","replay":"{\"opId\":\"3e9756e9-bf2b-4abd-b3e5-9f2947c2aadf\",\"status\":\"applied\",\"resourceVersion\":6,\"serverSeq\":22,\"entityId\":1,\"conversion\":{\"entryId\":1,\"multiAuthorId\":3,\"multiAuthorName\":\"multiple author\",\"convertedAuthors\":[{\"id\":1,\"name\":\"Preserved Author\"},{\"id\":2,\"name\":\"Solo Contributor\"}]},\"conversionAuthorIdentities\":[{\"producerUid\":\"9cb05b41-e383-4614-b5b0-494d1582f6f6\",\"id\":1},{\"producerUid\":\"91fc66a5-c09c-4e05-8634-07e9c22d4a2b\",\"id\":2}],\"conversionTargetVersion\":1,\"conversionJournal\":[{\"seq\":14,\"entityKind\":\"author_directory_set\",\"entityUid\":\"83e6dd0f-4194-4887-9a0e-75929ca4aaf2\",\"changeKind\":\"create\",\"resourceVersion\":1,\"record\":{\"id\":3,\"producerId\":3,\"syncUid\":\"83e6dd0f-4194-4887-9a0e-75929ca4aaf2\",\"syncVersion\":1}},{\"seq\":15,\"entityKind\":\"producer\",\"entityUid\":\"d17075f6-2096-4f96-a2f4-fc94480b2140\",\"changeKind\":\"create\",\"resourceVersion\":1,\"record\":{\"id\":3,\"syncUid\":\"d17075f6-2096-4f96-a2f4-fc94480b2140\",\"syncVersion\":1,\"name\":\"multiple author\",\"occupation\":null,\"artworkRef\":null,\"content\":null}},{\"seq\":16,\"entityKind\":\"entry\",\"entityUid\":\"07e69d75-087c-49d6-ae50-2669920484dd\",\"changeKind\":\"update\",\"resourceVersion\":4,\"record\":{\"id\":1,\"syncUid\":\"07e69d75-087c-49d6-ae50-2669920484dd\",\"syncVersion\":4,\"title\":\"Converted work\",\"type\":\"Comic\",\"coverRef\":null,\"previewRef\":null,\"previewRefsJson\":\"[]\",\"pageCount\":null,\"uploadDate\":null,\"createdAt\":\"2026-10-10 16:07:38\",\"updatedAt\":\"2026-10-10 16:07:38\"}},{\"seq\":17,\"entityKind\":\"entry\",\"entityUid\":\"07e69d75-087c-49d6-ae50-2669920484dd\",\"changeKind\":\"update\",\"resourceVersion\":5,\"record\":{\"id\":1,\"syncUid\":\"07e69d75-087c-49d6-ae50-2669920484dd\",\"syncVersion\":5,\"title\":\"Converted work\",\"type\":\"Comic\",\"coverRef\":null,\"previewRef\":null,\"previewRefsJson\":\"[]\",\"pageCount\":null,\"uploadDate\":null,\"createdAt\":\"2026-10-10 16:07:38\",\"updatedAt\":\"2026-10-10 16:07:38\"}},{\"seq\":18,\"entityKind\":\"author_directory_set\",\"entityUid\":\"be81c484-2ab9-4c61-af10-f6175d11386b\",\"changeKind\":\"update\",\"resourceVersion\":4,\"record\":{\"id\":2,\"producerId\":2,\"syncUid\":\"be81c484-2ab9-4c61-af10-f6175d11386b\",\"syncVersion\":4}},{\"seq\":19,\"entityKind\":\"entry\",\"entityUid\":\"07e69d75-087c-49d6-ae50-2669920484dd\",\"changeKind\":\"update\",\"resourceVersion\":6,\"record\":{\"id\":1,\"syncUid\":\"07e69d75-087c-49d6-ae50-2669920484dd\",\"syncVersion\":6,\"title\":\"Converted work\",\"type\":\"Comic\",\"coverRef\":null,\"previewRef\":null,\"previewRefsJson\":\"[]\",\"pageCount\":null,\"uploadDate\":null,\"createdAt\":\"2026-10-10 16:07:38\",\"updatedAt\":\"2026-10-10 16:07:38\"}},{\"seq\":20,\"entityKind\":\"author_directory_set\",\"entityUid\":\"be81c484-2ab9-4c61-af10-f6175d11386b\",\"changeKind\":\"delete\",\"resourceVersion\":5,\"record\":null},{\"seq\":21,\"entityKind\":\"collection\",\"entityUid\":\"528460b0-76d8-469a-b44c-64dfd2e244a7\",\"changeKind\":\"update\",\"resourceVersion\":3,\"record\":{\"id\":1,\"syncUid\":\"528460b0-76d8-469a-b44c-64dfd2e244a7\",\"syncVersion\":3,\"kind\":\"producer\",\"title\":\"Contributor shelf\",\"description\":\"\",\"sortOrder\":0}},{\"seq\":22,\"entityKind\":\"producer\",\"entityUid\":\"91fc66a5-c09c-4e05-8634-07e9c22d4a2b\",\"changeKind\":\"delete\",\"resourceVersion\":2,\"record\":null}]}","mediaResult":null,"error":null},{"opId":"b0205a84-1765-4af6-9fe5-b6fc6d8cf359","uploadId":null,"metadata":null,"flags":["offlineMutations","offlineEntryUpdate"],"phase":"completed","replay":"{\"opId\":\"b0205a84-1765-4af6-9fe5-b6fc6d8cf359\",\"status\":\"applied\",\"resourceVersion\":3,\"serverSeq\":23}","mediaResult":null,"error":null}]
+QDEBUG_HOLD db477def-6195-469b-8ddc-bca9d9bf6d9f Required capability unavailable
+QDEBUG_HOLD 206ca84a-92c5-4173-9984-5cbdcaa8b7b3 Required capability unavailable
+QDEBUG_HOLD a80b696e-4094-49c5-8db3-c35b6c78234c Required capability unavailable
+QDEBUG_HOLD ef6564e6-5f55-4e1c-b285-ca4799659ab3 Required capability unavailable
+lCAP_CELLS 4 absent/false zeroPOST original retained recovery actualSQL; legacy owners-absence NOT enriched
+kDEBUG_RETRY 8a4fbad9-09d8-4f3a-98b4-b38e184ee292 org.json.JSONException: End of input at character 1 of {
+<	at org.json.JSONTokener.syntaxError(JSONTokener.java:449)
+9	at org.json.JSONTokener.nextValue(JSONTokener.java:97)
+;	at org.json.JSONTokener.readObject(JSONTokener.java:361)
+:	at org.json.JSONTokener.nextValue(JSONTokener.java:100)
+5	at org.json.JSONObject.<init>(JSONObject.java:159)
+5	at org.json.JSONObject.<init>(JSONObject.java:176)
+`	at com.speechless666.t3.spike.BackgroundTransferWorker.json(BackgroundTransferWorker.java:74)
+d	at com.speechless666.t3.spike.BackgroundTransferWorker.execute(BackgroundTransferWorker.java:115)
+c	at com.speechless666.t3.spike.BackgroundTransferWorker.execute(BackgroundTransferWorker.java:86)
+}	at com.speechless666.t3.spike.NativeEntryMultiAuthorConversionJvmTest.g3(NativeEntryMultiAuthorConversionJvmTest.java:102)
+k	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:104)
+@	at java.base/java.lang.reflect.Method.invoke(Method.java:565)
+Z	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+Y	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+X	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+W	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+F	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+g	at org.robolectric.RobolectricTestRunner$HelperTestRunner$1.evaluate(RobolectricTestRunner.java:502)
+`	at org.robolectric.internal.SandboxTestRunner$2.lambda$evaluate$2(SandboxTestRunner.java:285)
+Z	at org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:104)
+H	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+_	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+_	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+6	at java.base/java.lang.Thread.run(Thread.java:1474)
+
+ŒREAL_SQL commit then unusable-response MOCK loss; cold exact UUID/body/hash/client/libepoch/plan; receipt dedup1 NOT socket/OS termination

@@ -1,0 +1,9 @@
+{
+  "parentMatching": 76,
+  "parentChanges": [
+    "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/AppliedReceipt.java",
+    "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java",
+    "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java"
+  ],
+  "ownedChangesOnly": true
+}

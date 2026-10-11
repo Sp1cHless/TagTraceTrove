@@ -1,0 +1,34 @@
+# 04 Gallery partition foreground vertical — WORKING / scoped handoff
+
+## Outcome and boundary
+Saved-type known-offline ordinary GalleryApp SFW/NSFW button has a working foreground vertical: dedicated trustworthy per-type overlay UID/revision → one existing durable Outbox → canonical replay SQL transaction/journal/immutable receipt → cold Gallery/Author NSFW facts → exact original retry, atomic pending-work restore and durable ACK cleanup. **This is not all04 DONE and not complete connected-mode parity.** Source/test writing stopped at this checkpoint.
+
+Gallery remains derived from exact Entry.type. No Gallery entity ID/table, no Entry UID impersonation, no global epoch substitute. `gallery_partition_scopes` is only an independent revision owner for the existing `gallery_settings` overlay. Missing settings rows still mean default SFW; scope rows do not make empty Galleries visible. New immutable `043_gallery_partition_sync.sql` seeds owners from existing exact types/settings and creates owners when Entries acquire new types. It preserves existing triggers/journal/tombstone/high-water semantics on disposable migration fixtures. No old migration was modified or formal migration applied.
+
+## Actual evidence
+- Mounted ordinary button RED: business HTTP attempted while known offline; first GREEN followed production adapter/schema/replay/snapshot extension.
+- Six finite foreground cases currently PASS: actual mounted saved-type toggle/cold facts/SQL receipt; response loss + cold atomic restore + ACK loss + identical retry; same desired state and false/truly absent required flags; attempted downgrade preserves originals/zero POST; pending new type explicitly fail closed; valid covering snapshot missing its dedicated owner retains queue.
+- Initial missing-owner defense passed only because the tampered checksum was invalid: **harness limitation, not owner proof**. Corrected valid checksum yielded genuine RED, then own owner/value/revision/cursor/journal/ACK verification fixed cleanup.
+- Lost-ACK retry initially failed with `Cursor precedes acknowledged progress`: fixed by persisting verified exact-original receipt/journal fingerprint before ACK; subsequent fresh owner/value/cursor checks remain mandatory. No replay body changes/default injection.
+- New replay kind `gallery.partition.set`, entity kind `gallery_partition`, required flags `offlineMutations` AND `offlineGalleryPartition`; server advertises only at applied schema43 and successful probes persist conjunction even without optional UI state. Foreground global absence is fail closed for this kind.
+- Cleanup requires receipt revision base+1, positive own journal sequence, same library/epoch, current dedicated UID/type/value/revision, covering cursor, matching canonical own update journal, then durable ACK. Counters of Entry/Author/order/partition owners are not compared.
+- Final explicit integration group **121 PASS / 0 FAIL / 0 pending**: prior type6 + protected03 foreground48 + nearest canonical42, plus new partition6 and selected partition/order/migration19 (25 added in total). Initial nearest98/23 failures retained: migration43 adds a legitimate partition journal in the shared seed; tests were maintained for schema43/new fixed cursors rather than removing that journal.
+- Final bounded default group **140 PASS / 0 FAIL / 0 pending**: offline-api/restore/library/order/native-mutation-plan/partition-visibility. Previous bounded127 PASS retained.
+- Shared/server/web typechecks and final owned ESLint PASS. Isolated `runDatabaseProbe()` PASS; doctor scope requirement is gated by applied schema43 and both v42/latest disposable fixtures were exercised. Complete-byte owned guards/scoped diff retained.
+- Old Collection expectation genuine RED retained (`collection-old-red.json/log`). Only test name/message plus zero online.deleteCollection assertion changed; queue remains empty. Temporary membership import still expects `Failed to fetch`, unchanged production.
+
+## Deliberately unresolved / unverified
+1. Connected no-copy and old-copy ordinary partition still use the existing Online PUT; bounded dedicated identity preflight and original-UUID canonical command for uncertain connected writes are **NOT implemented**. Do not claim exact-original online uncertainty parity from the saved-copy tests.
+2. Pending new type → partition is explicitly refused locally with `missing saved type owner`; no guessed overlay UID/known-null or partial dependency chain is queued. Trustworthy creation-origin causal scope is a remaining lane.
+3. Dedicated held/conflict + independent partition-owner advancement was not exercised. The downgrade test proves zero mutation HTTP under missing operation capability, not independent-owner advancement under global-off. Concurrent same-owner button/API staging serialization was not exercised.
+4. Cold test confirms whole Gallery and Author NSFW facts; the existing finite partition-visibility tests exercise hidden surfaces with page adapters. Complete real-SQL/facade partition-change Collection/member/rating/filter/random/saved-read no-leak/in-flight matrix is **NOT fully exercised here**.
+5. Shared native contract metadata recognizes the new kind, but no hand-written Native production, generated Java artifact, JVM/Worker/device validation was performed. Kind-aware settlement/required-flag acceptance remains a Native lane; this is not Native GREEN.
+6. No production Web build/Vite/Gradle/APK/05/deploy/full-root claim. app.request + memory SQLite + fake-IDB cold reopen are not TCP/Android/process-survival proof.
+
+## Files
+Production changes: shared schemas/sync.ts, schemas/native-mutation-contract.ts; web offline-api.ts, sync-mutation-plan.ts, pending-work-restore.ts; server sync/replay-service.ts, sync-service.ts, database/doctor.ts, database/probe.ts; new immutable043.
+Tests: new offline-gallery-partition.integration.test.ts (6); new gallery-partition-migration.integration.test.ts (1); narrow offline-api test maintenance; migration-runner latest-version inventory; sync integration seed/cursor/schema expectations.
+partition-repository.ts was backed up but remains unchanged; Online and replay use its same overlay writer/trigger owner. GalleryApp.vue/AddEntryPage.vue/api/gallery.ts/http/app.ts and all03 production/Native/v45/v46 external regions remain unchanged against the inherited source boundary except registered owner dependencies explicitly listed above.
+
+## Artifacts
+`.hermes/tmp/offline-parity-gallery/partition-vertical/` contains beforefullbytes and SHA manifests, live inventory (plus first Windows loader error), migration candidate, mounted/corrected owner/doctor REDs, retry diagnostic, current GREEN/default/SQL JSON, type/lint/probe logs, gate-summary.json and scoped-owned.diff. checkpoint/manifest.json records saved/live path,size,SHA verification. Report and manifest describe a scoped WORKING artifact, not fulfilled remaining cells.

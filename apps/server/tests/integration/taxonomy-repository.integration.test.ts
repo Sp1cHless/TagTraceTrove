@@ -14,6 +14,104 @@ import {
 } from '../../src/repositories/taxonomy-repository.js';
 
 describe('taxonomy repository', () => {
+  it('brings a Traditional spelling in as Simplified, without any dictionary', () => {
+    // The three scripts a tag arrives in: English, Traditional Chinese, Simplified Chinese. Only
+    // Traditional → Simplified can be done without asking anybody — the same language written two
+    // ways — so it is built in and needs no dictionary at all. English is a translation and is left
+    // for the alias dictionary. Measured on jable.tv (2026-10-05), whose 45 pending tags include 24
+    // Traditional spellings that used to enter the library exactly as the site spelled them.
+    const database = createMigratedMemoryDatabase();
+    try {
+      const section = createSection(database, { entryType: 'manga', name: 'Tags' });
+      const work = createEntry(database, { title: 'A work', type: 'manga' });
+      assignEntryTag(database, { entryId: work.id, facetId: section.defaultFacetId, name: '乳膠衣' });
+
+      expect(listEntryTags(database, work.id)).toMatchObject([{ name: '乳胶衣' }]);
+      expect(resolveTaxonomyName(database, 'entry', '三田真鈴')).toBe('三田真铃');
+      // And a name that is not Chinese is left exactly as it is — the dictionary's job, not this one.
+      expect(resolveTaxonomyName(database, 'entry', 'Ahegao')).toBe('Ahegao');
+    } finally {
+      database.close();
+    }
+  });
+
+  it('treats a Traditional and a Simplified spelling of one name as one dictionary row', () => {
+    // The dictionary is written simplified on both sides, so the two spellings collapse to one
+    // identity instead of becoming two rows that answer differently.
+    const database = createMigratedMemoryDatabase();
+    try {
+      const first = upsertTaxonomyAlias(database, {
+        vocabulary: 'entry', alias: '乳膠衣', canonicalName: '内衣',
+      });
+      expect(first.alias).toBe('乳胶衣');
+
+      // Written the other way round, it is the same row rather than a second one.
+      const second = upsertTaxonomyAlias(database, {
+        vocabulary: 'entry', alias: '乳胶衣', canonicalName: '内衣',
+      });
+      expect(second.id).toBe(first.id);
+      expect(listTaxonomyAliases(database, 'entry')).toHaveLength(1);
+
+      // And either spelling resolves through it.
+      expect(resolveTaxonomyName(database, 'entry', '乳膠衣')).toBe('内衣');
+      expect(resolveTaxonomyName(database, 'entry', '乳胶衣')).toBe('内衣');
+
+      // A mapping that says nothing — Traditional to its own Simplified form — does not become a
+      // row of its own: the canonical is resolved through the dictionary too, so the request lands
+      // back on the mapping that is already there instead of fighting it.
+      const third = upsertTaxonomyAlias(database, {
+        vocabulary: 'entry', alias: '乳膠衣', canonicalName: '乳胶衣',
+      });
+      expect(third.id).toBe(first.id);
+      expect(third.canonicalName).toBe('内衣');
+      expect(listTaxonomyAliases(database, 'entry')).toHaveLength(1);
+    } finally {
+      database.close();
+    }
+  });
+
+  it('imports a work even when the dictionary holds a row that points a name at itself', () => {
+    // The failure this exists for, measured on a real library: a migration simplified a row's alias so
+    // that `黃泉 → 黄泉` became a name mapped to itself, and `resolveTaxonomyName` threw on it. Because
+    // committing a work resolves every tag it carries, **every import of that site** answered 500 —
+    // the browser said "Internal server error" and the work could not be imported at all. A broken
+    // dictionary row must not be able to stop a work from being imported.
+    const database = createMigratedMemoryDatabase();
+    try {
+      const section = createSection(database, { entryType: 'comic', name: 'Tags' });
+      database.prepare(`INSERT INTO taxonomy_aliases
+        (vocabulary, partition, alias_name, normalized_alias, canonical_name, normalized_canonical)
+        VALUES ('entry', 'tags', '黄泉', '黄泉', '黄泉', '黄泉')`).run();
+
+      // The walk stops at the loop instead of failing: the name it had reached is what those rows say.
+      expect(resolveTaxonomyName(database, 'entry', '黄泉')).toBe('黄泉');
+
+      // And a commit carrying that tag goes through.
+      const result = commitImportBatch(database, {
+        source: 'example.test',
+        warnings: [],
+        entries: [{
+          externalKey: 'example.test:42',
+          title: 'A work',
+          tags: [{ name: '黄泉', sourceField: 'tags' }],
+          sources: [{ label: 'example', url: 'https://example.test/w/42' }],
+        }],
+      }, {
+        entryType: 'comic',
+        canonicalTagFacetId: section.defaultFacetId,
+        sourceContentType: 'Source URL',
+        externalKeyContentType: 'External Key',
+        fieldMappings: {},
+        ignoredFields: [],
+        authorRatings: [],
+      } as never);
+      expect(result.entries).toHaveLength(1);
+      expect(listEntryTags(database, result.entries[0]!.entryId)).toMatchObject([{ name: '黄泉' }]);
+    } finally {
+      database.close();
+    }
+  });
+
   it('merges an existing Entry Tag alias and resolves it for later imports', () => {
     const database = createMigratedMemoryDatabase();
     try {

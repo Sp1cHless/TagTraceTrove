@@ -1,9 +1,10 @@
-import { dirname, resolve } from 'node:path';
+import { dirname } from 'node:path';
+import { resolveCliDatabasePath } from './cli-path.js';
 import { restoreLibraryBackup } from './backup-restore.js';
 
 // Usage: tsx src/database/restore-cli.ts <backupDir> [databasePath]
 //   <backupDir>   a backup directory produced by db:backup (contains library.db)
-//   [databasePath] defaults to .data/library.db (server package cwd)
+//   [databasePath] defaults to the server package's .data/library.db regardless of caller cwd
 //
 // The current library is snapshotted first (backups/restore-prestore-<ts>/).
 // Stop the T3 server (tray Exit / close T3.bat) before restoring.
@@ -12,10 +13,7 @@ if (!backupDir) {
   console.error('Usage: pnpm db:restore <backupDir> [databasePath]');
   process.exitCode = 1;
 } else {
-  const databasePath = resolve(
-    process.env.INIT_CWD ?? process.cwd(),
-    process.argv[3] ?? '.data/library.db',
-  );
+  const databasePath = resolveCliDatabasePath(process.argv[3], process.env.INIT_CWD ?? process.cwd());
   try {
     const result = await restoreLibraryBackup({
       backupDir,

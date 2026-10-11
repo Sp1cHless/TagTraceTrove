@@ -11,6 +11,7 @@ import {
   listAuthorAliasGroups,
   writeAuthorAliasGroup,
 } from '../../src/repositories/author-alias-repository.js';
+import { resolveTaxonomyName } from '../../src/repositories/taxonomy-repository.js';
 
 type Database = ReturnType<typeof createMigratedMemoryDatabase>;
 
@@ -36,8 +37,12 @@ describe('author alias groups', () => {
     const groups = listAuthorAliasGroups(database);
     expect(groups).toHaveLength(1);
     expect(groups[0]!.canonicalName).toBe('海盗猫');
+    // `海盜貓` is the Traditional spelling of the display name, so it is *the same name* and needs no
+    // row: the built-in conversion already turns it into `海盗猫` on the way in. `海賊猫` is a
+    // different name (`賊`), and it is stored in its Simplified form like every other name here.
     expect(groups[0]!.aliases.map((alias) => alias.name).sort())
-      .toEqual(['pirate cat', '海盜貓', '海賊猫']);
+      .toEqual(['pirate cat', '海贼猫']);
+    expect(resolveTaxonomyName(database, 'producer', '海盜貓')).toBe('海盗猫');
     // No producer row yet — the display name appears after the next import.
     expect(groups[0]!.producerId).toBeNull();
     expect(groups[0]!.producerName).toBeNull();
@@ -69,7 +74,10 @@ describe('author alias groups', () => {
     const chineseWork = createWork(database, 'Chinese work');
     const japaneseWork = createWork(database, 'Japanese work');
     const english = createProducer(database, { name: 'pirate cat' });
+    // Created from a Traditional spelling, stored simplified: this producer *is* the display name
+    // before the group is written, which is the conversion doing its job rather than a duplicate.
     const chinese = createProducer(database, { name: '海盜貓' });
+    expect(chinese.name).toBe('海盗猫');
     const japanese = createProducer(database, { name: '海賊猫' });
     linkEntryProducer(database, englishWork.id, english.id);
     linkEntryProducer(database, chineseWork.id, chinese.id);
@@ -80,10 +88,10 @@ describe('author alias groups', () => {
       tagNames: ['pirate cat', '海盜貓', '海賊猫'],
     });
 
-    // No producer named 海盗猫 exists yet; the display name appears when the
-    // dictionary merge renames the surviving row.
+    // The display name already exists as a producer — the Traditional spelling became it on the way
+    // in — so the group points at that row from the start rather than waiting for a merge to create it.
     const before = listAuthorAliasGroups(database);
-    expect(before[0]!.producerId).toBeNull();
+    expect(before[0]!.producerId).toBe(chinese.id);
 
     database.pragma('foreign_keys = OFF');
     try {

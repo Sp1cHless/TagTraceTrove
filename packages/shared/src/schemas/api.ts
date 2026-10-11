@@ -15,6 +15,13 @@ export const entryRecordSchema = z.strictObject({
   previewRefs: z.array(requiredTextSchema),
   uploadDate: nullableTextSchema,
   pageCount: z.number().int().nullable(),
+  /**
+   * A video's runtime in whole seconds, the peer of `pageCount` for a work that has no pages.
+   * Optional rather than nullable-only: the offline copy and any client built before this field
+   * existed simply have no such key, and "absent" is their honest description. `formatDuration`
+   * is what turns it into the `h:mm:ss` the Entry shows.
+   */
+  durationSeconds: z.number().int().nonnegative().nullable().optional(),
 });
 
 export const createEntryRequestSchema = z.strictObject({
@@ -24,9 +31,18 @@ export const createEntryRequestSchema = z.strictObject({
   previewRef: nullableTextSchema.optional(),
   uploadDate: nullableTextSchema.optional(),
   pageCount: z.number().int().optional(),
+  /**
+   * Nullable, unlike `pageCount`, and that difference is the point: a runtime is frequently
+   * unknown or wrong, so an empty box on the Entry has to be able to clear it. A page count is
+   * optional-not-nullable, which is why its editor can only ever leave it alone.
+   */
+  durationSeconds: z.number().int().nonnegative().nullable().optional(),
+  /** Client-generated identity also reused by an offline fallback after an uncertain POST. */
+  syncUid: z.string().uuid().optional(),
 });
 
 export const updateEntryRequestSchema = createEntryRequestSchema
+  .omit({ syncUid: true })
   .partial()
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one entry field is required',
@@ -77,12 +93,17 @@ export const entryDetailContentSchema = z.strictObject({
   sortOrder: sortOrderSchema,
 });
 
-export const ratingSubjectKindSchema = z.enum(['entry', 'producer']);
+export const ratingSubjectKindSchema = z.enum(['entry', 'producer', 'author_self']);
 
 export const ratingSlotSchema = z.strictObject({
   id: apiIdSchema,
   name: requiredTextSchema,
   sortOrder: sortOrderSchema,
+  /**
+   * Which class the slot belongs to. Absent in the entry-slots answer a Gallery's filter bar reads,
+   * because there it can only ever be the work's own.
+   */
+  subjectKind: ratingSubjectKindSchema.optional(),
 });
 
 /**
@@ -99,11 +120,32 @@ export const createRatingSlotRequestSchema = z.strictObject({
   name: requiredTextSchema,
 });
 
+/**
+ * The Author side's own slot creation, which has to say WHICH class of author dimension it means:
+ * the works summary, or the author themselves. Defaulting to the summary keeps every existing
+ * caller meaning what it always meant.
+ */
+export const createAuthorRatingSlotRequestSchema = z.strictObject({
+  name: requiredTextSchema,
+  subjectKind: z.enum(['producer', 'author_self']).default('producer'),
+});
+
+/** Anchoring an Author to a Gallery pins the partition both of their rating classes live in. */
+export const setProducerGalleryAnchorRequestSchema = z.strictObject({
+  galleryType: requiredTextSchema,
+});
+
 export const setRatingRequestSchema = z.strictObject({
   slotId: apiIdSchema,
   stars: z.number().min(0.5).max(5).multipleOf(0.5).nullable(),
 });
 
+
+/** The Entry's media list in display order; the first ref is the cover. */
+export const setEntryMediaOrderRequestSchema = z.strictObject({
+  refs: z.array(requiredTextSchema).max(33)
+    .refine((refs) => new Set(refs).size === refs.length, { message: 'A media reference may only appear once' }),
+});
 
 export const entryDetailResponseSchema = entryRecordSchema.extend({
   producers: z.array(entryDetailProducerSchema),
@@ -260,9 +302,13 @@ export const ratingSortSchema = z.strictObject({
   slotId: apiIdSchema,
   // Ratings sort from high to low; unrated entries sink to the bottom.
   direction: z.literal('desc'),
-  // When set, an Entry without its own value for this slot falls back to its
-  // Authors' value for the same-named dimension. Works of four or more Authors
-  // never inherit an Author rating. Filters stay entry-only.
+  /**
+   * The older way of asking for the works summary: an Entry without its own value falls back to its
+   * Authors' value for the same-named dimension. That fallback is now simply how a work dimension
+   * reads, for filtering and sorting alike, so this changes nothing on the server — it is still
+   * carried because the offline copy reads it, and dropping it would make the phone sort by
+   * something else than the desktop does.
+   */
   applyAuthorRating: z.boolean().default(false),
 });
 
@@ -539,6 +585,7 @@ export const entrySummarySchema = z.strictObject({
   previewRefs: z.array(requiredTextSchema),
   uploadDate: nullableTextSchema,
   pageCount: z.number().int().nullable(),
+  durationSeconds: z.number().int().nonnegative().nullable().optional(),
   viewCount: z.number().int().min(0),
   likeCount: z.number().int().min(0),
   lastViewedAt: nullableTextSchema,
@@ -549,6 +596,22 @@ export const entryPageResponseSchema = z.strictObject({
   total: z.number().int().min(0),
   page: z.number().int().positive(),
   pageSize: z.number().int().min(1).max(100),
+});
+
+/**
+ * The order the sidebar lists Galleries in, as the whole list.
+ *
+ * The whole list rather than a pair of neighbours: swapping two rows would leave every other Gallery
+ * in the alphabet, which is an order nobody can predict from looking at it. An empty list clears the
+ * order and puts the list back in alphabetical order.
+ */
+export const setGalleryOrderRequestSchema = z.strictObject({
+  types: z.array(requiredTextSchema).max(500),
+});
+export type SetGalleryOrderRequest = z.infer<typeof setGalleryOrderRequestSchema>;
+
+export const galleryOrderResponseSchema = z.strictObject({
+  types: z.array(requiredTextSchema),
 });
 
 export const gallerySummarySchema = z.strictObject({
@@ -753,7 +816,14 @@ export const authorDetailResponseSchema = producerRecordSchema.extend({
   looseEntryCount: z.number().int().nonnegative().optional(),
   workTypes: z.array(requiredTextSchema).optional(),
   workCoverRefs: z.array(requiredTextSchema).optional(),
+  /** The author's WORKS SUMMARY: the class an unrated work of theirs inherits. */
   ratings: z.array(ratingRowSchema),
+  /**
+   * The author's OWN dimensions — the person or the studio, unrelated to any work's dimensions.
+   * Optional rather than required: the offline copy and any client built before this class existed
+   * have no such key, and "absent" is their honest description.
+   */
+  authorSelfRatings: z.array(ratingRowSchema).optional(),
   usage: usageInfoSchema,
 });
 
@@ -775,9 +845,32 @@ export const findProducersQuerySchema = z.strictObject({
   relatedEntryTagIds: queryIdArraySchema.optional().default([]),
 });
 
+/**
+ * One dimension the Author list can be filtered by: the Author's OWN rating (never the works
+ * summary — an Author's summary is what their works inherit, which is a question about a work).
+ *
+ * The Gallery is part of the answer: an Author's own dimensions live in the partition of the Gallery
+ * they are anchored to, so a dimension of another Gallery simply has no row for them. The list labels
+ * the dimension with its Gallery when two Galleries use the same name.
+ */
+export const authorFilterRatingSlotSchema = z.strictObject({
+  id: apiIdSchema,
+  name: requiredTextSchema,
+  sortOrder: sortOrderSchema,
+  entryType: requiredTextSchema,
+});
+
 export const authorFilterOptionsResponseSchema = z.strictObject({
   authorTags: z.array(facetFilterOptionTagSchema),
   workTags: z.array(facetFilterOptionTagSchema),
+  /** Defaulted so a client built before this field still validates against an older server. */
+  ratingSlots: z.array(authorFilterRatingSlotSchema).optional().default([]),
+});
+
+/** The Author list's rating order: highest first, and nothing to fall back to. */
+export const authorRatingSortSchema = z.strictObject({
+  slotId: apiIdSchema,
+  direction: z.literal('desc'),
 });
 
 export const authorFilterOptionsQuerySchema = z.strictObject({
@@ -816,6 +909,18 @@ export const producerPageQueryRequestSchema = z.strictObject({
   entryType: requiredTextSchema.optional(),
   ownTagIds: uniqueIdArraySchema.optional().default([]),
   relatedEntryTagIds: uniqueIdArraySchema.optional().default([]),
+  /**
+   * The Author's own rating, filtered like an Entry's: eq / gt / lt / unrated. Optional rather than
+   * defaulted, unlike the tag filters: every other caller of this request has no ratings to say
+   * anything about, and the two fields they would have to write as empty are noise.
+   */
+  ratingConditions: z.array(ratingFilterConditionSchema).max(20).optional(),
+  /**
+   * Highest first, and it comes BEFORE the list's own sort control: the control then decides the
+   * order within one rating (including `random`, which is how works of the same stars get theirs).
+   * An Author with no value for the dimension sinks below every rated one.
+   */
+  ratingSort: authorRatingSortSchema.nullable().optional(),
   collectionId: apiIdSchema.optional(),
   includeNsfw: z.boolean().default(true),
   sort: producerListSortSchema.default('name-asc'),
@@ -871,6 +976,42 @@ export const taxonomyImportAliasSchema = z.strictObject({
   alias: requiredTextSchema,
   canonicalName: taxonomyCanonicalSchema,
 });
+/**
+ * What bringing the site dictionaries across did.
+ *
+ * `pending` is the part worth looking at: names a site used that nobody has decided about yet, which
+ * is the queue the dictionary page exists to work through.
+ */
+export const siteDictionaryImportResultSchema = z.strictObject({
+  sites: z.number().int().nonnegative(),
+  imported: z.number().int().nonnegative(),
+  pending: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  /** Rows already in the library whose own spelling was re-written simplified. */
+  rewritten: z.number().int().nonnegative(),
+  /** Rows that became the same name as another and were folded into it. */
+  merged: z.number().int().nonnegative(),
+  /** Names the library and a site's dictionary map opposite ways; the library keeps its own. */
+  conflicts: z.array(z.string()),
+});
+export type SiteDictionaryImportResult = z.infer<typeof siteDictionaryImportResultSchema>;
+
+/**
+ * What a bulk import wrote, and what it passed over.
+ *
+ * A dictionary holds thousands of pairs from several sites, so one pair the library contradicts is
+ * reported rather than thrown: measured on a real migration, where a single reversed pair answered
+ * 500 and named nothing, taking the other two thousand names with it.
+ */
+export const taxonomyAliasImportResultSchema = z.strictObject({
+  aliases: taxonomyAliasSchema.array(),
+  skipped: z.array(z.strictObject({
+    alias: requiredTextSchema,
+    reason: z.string(),
+  })),
+});
+export type TaxonomyAliasImportResult = z.infer<typeof taxonomyAliasImportResultSchema>;
+
 export const importTaxonomyAliasesRequestSchema = z.strictObject({
   aliases: taxonomyImportAliasSchema.array().min(1).max(10_000),
 });
@@ -1045,11 +1186,72 @@ export const templateSummarySchema = z.strictObject({
   tagLayoutPath: requiredTextSchema,
   templateExists: z.boolean(),
   tagLayoutExists: z.boolean(),
+  /**
+   * The Content kinds this Gallery's works carry, built-ins first — the scope a template's Content
+   * rows live in. Derived from the works themselves, so a kind the person added to one work is part
+   * of the Gallery from then on.
+   */
+  contentKinds: z.array(requiredTextSchema),
 });
+
+/** `GET /api/content-kinds/:entryType`: one Gallery's Content kinds, for the editor to offer. */
+export const contentKindsResponseSchema = z.strictObject({
+  entryType: requiredTextSchema,
+  kinds: z.array(requiredTextSchema),
+});
+/**
+ * The common template: the structure every Gallery can start from.
+ *
+ * It is repository content rather than a Gallery's own — the file lives next to the server code, so
+ * it is committed and it ships — and applying it *copies* the Sections and Facets into a Gallery,
+ * where they become that Gallery's own template, editable like any other. The name is "common"
+ * because nothing about it is a default anyone has to keep.
+ */
+export const commonTemplateSchema = z.object({
+  name: requiredTextSchema,
+  sections: z.array(z.strictObject({
+    name: z.string(),
+    facets: z.array(z.string()),
+  })),
+  /** Rating dimensions carried with the template, created as the Gallery's own entry slots. */
+  ratingSlots: z.array(requiredTextSchema),
+  // Extra keys the file carries for the person reading it (`note`, `generatedFrom`) are passed
+  // through rather than refused: the file is repository prose as well as an interface.
+});
+
+export const applyCommonTemplateRequestSchema = z.strictObject({
+  entryType: requiredTextSchema,
+});
+
+export const applyCommonTemplateResponseSchema = z.strictObject({
+  entryType: requiredTextSchema,
+  sectionCount: z.number().int().nonnegative(),
+  facetCount: z.number().int().nonnegative(),
+  ratingSlotCount: z.number().int().nonnegative(),
+  /** The files refreshed for that Gallery, so the person can see where its template now lives. */
+  templateFiles: z.object({
+    templatePath: requiredTextSchema,
+    tagLayoutPath: requiredTextSchema,
+  }).nullable(),
+});
+
+export type CommonTemplate = z.infer<typeof commonTemplateSchema>;
+export type ApplyCommonTemplateResponse = z.infer<typeof applyCommonTemplateResponseSchema>;
+
 export const tagGroupIdParamsSchema = z.strictObject({ groupId: pathIdSchema });
 export const facetIdParamsSchema = z.strictObject({ facetId: pathIdSchema });
 export const sectionIdParamsSchema = z.strictObject({ sectionId: pathIdSchema });
 export const tagIdParamsSchema = z.strictObject({ tagId: pathIdSchema });
+
+/** One rating dimension, named by the subject whose Gallery partition it belongs to. */
+export const entryRatingSlotIdParamsSchema = z.strictObject({
+  entryId: pathIdSchema,
+  slotId: pathIdSchema,
+});
+export const authorRatingSlotIdParamsSchema = z.strictObject({
+  producerId: pathIdSchema,
+  slotId: pathIdSchema,
+});
 export const contentIdParamsSchema = z.strictObject({ contentId: pathIdSchema });
 export const authorDirectoryIdParamsSchema = z.strictObject({ directoryId: pathIdSchema });
 export const taxonomyAliasIdParamsSchema = z.strictObject({ aliasId: pathIdSchema });
@@ -1100,6 +1302,7 @@ export type TemporaryCollectionResponse = z.infer<typeof temporaryCollectionResp
 export type CreateSectionRequest = z.infer<typeof createSectionRequestSchema>;
 export type CreateFacetRequest = z.infer<typeof createFacetRequestSchema>;
 export type AssignEntryTagRequest = z.infer<typeof assignEntryTagRequestSchema>;
+export type EntryTagAssignment = z.infer<typeof entryTagAssignmentSchema>;
 export type RenameEntryTagRequest = z.infer<typeof renameEntryTagRequestSchema>;
 export type FindEntriesQuery = z.infer<typeof findEntriesQuerySchema>;
 export type EntryTagUsage = z.infer<typeof entryTagUsageSchema>;

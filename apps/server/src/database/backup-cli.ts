@@ -1,12 +1,10 @@
-import { dirname, resolve } from 'node:path';
+import { dirname } from 'node:path';
+import { resolveCliDatabasePath } from './cli-path.js';
 import { createLibraryBackup } from './backup-restore.js';
 
 // Usage: tsx src/database/backup-cli.ts [databasePath]
 // Defaults to .data/library.db relative to the server package (like the dev server).
-const databasePath = resolve(
-  process.env.INIT_CWD ?? process.cwd(),
-  process.argv[2] ?? '.data/library.db',
-);
+const databasePath = resolveCliDatabasePath(process.argv[2], process.env.INIT_CWD ?? process.cwd());
 
 try {
   const result = await createLibraryBackup({

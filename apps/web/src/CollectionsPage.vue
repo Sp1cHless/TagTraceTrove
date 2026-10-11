@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { CollectionKind, CollectionRecordDto, GallerySummary } from '@t3/shared';
 import type { GalleryApi } from './api/gallery.js';
 import { showNsfw } from './stores/preferences.js';
@@ -10,6 +10,7 @@ import PagedCardGrid from './components/PagedCardGrid.vue';
 import { useArmableAction } from './armable.js';
 import { useI18n } from './i18n.js';
 import { useNavigationMemory } from './navigation-memory.js';
+import { subscribeCollectionReconciliation } from './offline/offline-api.js';
 
 const props = defineProps<{
   api: GalleryApi;
@@ -50,6 +51,9 @@ const kind = computed<CollectionKind>(() => activePage.value.kind);
 const activeGallery = computed<string | null | undefined>(() => activePage.value.gallery);
 const galleries = ref<GallerySummary[]>([]);
 const collections = ref<CollectionRecordDto[]>([]);
+// Reorder is a whole-kind operation even when SFW mode hides some siblings.
+// Keep the complete ID vector separate from the visible folder records.
+const topLevelOrderIds = ref<number[]>([]);
 /** Which kind `collections` currently holds; a switch never renders the other kind's rows. */
 const loadedKind = ref<CollectionKind | null>(null);
 const activeCollectionId = ref<number | null>(savedState?.activeCollectionId ?? null);
@@ -64,6 +68,11 @@ const memberTotal = ref(0);
 const memberPage = ref(savedState?.memberPage ?? 1);
 const memberPageSize = ref(savedState?.memberPageSize ?? 30);
 const memberRequestId = ref(0);
+const listRequestId = ref(0);
+const loadedNsfw = ref<boolean | null>(null);
+let childSummaryRequestId = 0;
+const reconciledIds = new Map<number, number>();
+let unsubscribeReconciliation: (() => void) | null = null;
 
 function rememberCollectionNavigationState(): void {
   navigationMemory.states.set('collections', {
@@ -159,26 +168,54 @@ async function loadMembers(resetPage = false): Promise<void> {
 
 async function load(): Promise<void> {
   const requestedKind = kind.value;
+  const requestedNsfw = showNsfw.value;
+  const requestId = ++listRequestId.value;
+  const summaryRequestId = ++childSummaryRequestId;
+  if (!requestedNsfw && loadedNsfw.value === true) {
+    // Do not leave inclusive folder/member previews on screen while the SFW list is pending.
+    collections.value = [];
+    memberEntries.value = [];
+    memberProducers.value = [];
+    memberTotal.value = 0;
+    loadedNsfw.value = null;
+  }
   loading.value = true;
   error.value = null;
   try {
-    const [records, gallerySummaries] = await Promise.all([
-      props.api.listCollections(requestedKind, showNsfw.value),
+    const [records, gallerySummaries, allRecords] = await Promise.all([
+      props.api.listCollections(requestedKind, requestedNsfw),
       props.api.listGalleries(),
+      requestedNsfw ? Promise.resolve(null) : props.api.listCollections(requestedKind, true),
     ]);
+    // A slower response from a previous Gallery kind or visibility mode must not
+    // replace the current tree (the compact child previews can contain NSFW works).
+    if (requestId !== listRequestId.value
+        || requestedKind !== kind.value
+        || requestedNsfw !== showNsfw.value) return;
     galleries.value = gallerySummaries;
-    // A response for a page the user already left must not land.
-    if (requestedKind !== kind.value) return;
     collections.value = records;
+    loadedNsfw.value = requestedNsfw;
+    topLevelOrderIds.value = (allRecords ?? records).map((record) => record.id);
     loadedKind.value = requestedKind;
     if (!findCollection(collections.value, activeCollectionId.value ?? 0)) {
       activeCollectionId.value = null;
     }
+    await loadMissingChildSummaries(
+      collections.value,
+      activeCollectionId.value,
+      requestedNsfw,
+      requestedKind,
+      summaryRequestId,
+    );
     await loadMembers(false);
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : t('error.loadEntry');
+    if (requestId === listRequestId.value
+        && requestedKind === kind.value
+        && requestedNsfw === showNsfw.value) {
+      error.value = cause instanceof Error ? cause.message : t('error.loadEntry');
+    }
   } finally {
-    loading.value = false;
+    if (requestId === listRequestId.value) loading.value = false;
   }
 }
 
@@ -244,7 +281,7 @@ watch(visibleGalleryTabs, (tabs) => {
   if (tabs.length === 0) {
     // Every Gallery page is hidden: Authors is the only page left. Wait for the
     // entry page list to actually arrive first, or this fires on an empty start.
-    if (loadedKind.value !== 'entry') return;
+    if (loadedKind.value !== 'entry' || loadedNsfw.value === null) return;
     activePage.value = { kind: 'producer', gallery: undefined };
     void load();
     return;
@@ -263,6 +300,62 @@ function findCollection(
     if (nested !== null) return nested;
   }
   return null;
+}
+
+async function loadMissingChildSummaries(
+  records: CollectionRecordDto[],
+  parentId: number | null,
+  includeNsfw: boolean,
+  requestedKind: CollectionKind,
+  requestId: number,
+): Promise<void> {
+  if (parentId === null || requestedKind !== 'entry') return;
+  const parent = findCollection(records, parentId);
+  if (parent?.kind !== 'entry') return;
+
+  // A folder preview can be stale/empty even though the canonical member query
+  // still finds works. Verify only unresolved child summaries on the open page.
+  const unresolved = parent.children.filter((child) => {
+    const count = child.entryCount ?? 0;
+    const expectedPreviewCount = Math.min(count, 3);
+    return child.kind === 'entry'
+      && (count === 0 || child.entryCount === undefined
+        || child.entries.length !== expectedPreviewCount);
+  });
+  if (unresolved.length === 0) return;
+
+  const summaries = await Promise.all(unresolved.map(async (child) => {
+    try {
+      const page = await props.api.queryEntryPage({
+        collectionId: child.id,
+        conditions: [],
+        authorIds: [],
+        ratingConditions: [],
+        ratingSort: null,
+        usageConditions: [],
+        usageSort: null,
+        includeNsfw,
+        sort: 'date-desc',
+        page: 1,
+        pageSize: 3,
+      });
+      return { child, page };
+    } catch {
+      // A summary refresh is best-effort; it must not block opening the parent.
+      return null;
+    }
+  }));
+
+  if (requestId !== childSummaryRequestId
+      || requestedKind !== kind.value
+      || activeCollectionId.value !== parentId
+      || showNsfw.value !== includeNsfw
+      || collections.value !== records) return;
+  for (const summary of summaries) {
+    if (summary === null) continue;
+    summary.child.entries = summary.page.items;
+    summary.child.entryCount = summary.page.total;
+  }
 }
 
 function parentOf(
@@ -302,7 +395,8 @@ defineExpose({ goBack });
 function coversOf(record: CollectionRecordDto): string[] {
   const covers: string[] = [];
   for (const entry of visibleEntriesOf(record)) {
-    if (entry.coverRef) covers.push(entry.coverRef);
+    const coverRef = entry.coverRef ?? entry.previewRefs[0] ?? null;
+    if (coverRef) covers.push(coverRef);
     if (covers.length >= 3) return covers;
   }
   for (const producer of visibleProducersOf(record)) {
@@ -310,6 +404,12 @@ function coversOf(record: CollectionRecordDto): string[] {
     if (covers.length >= 3) return covers;
   }
   return covers;
+}
+
+function entryCountOf(record: CollectionRecordDto): number {
+  // Compact server summaries can lag the member preview rows; never claim an
+  // empty folder when its own response already contains works.
+  return Math.max(record.entryCount ?? 0, record.entries.length);
 }
 
 const visibleCollections = computed(() => (
@@ -330,6 +430,7 @@ const visibleCollectionIds = computed(() => {
 });
 
 watch([showNsfw, collections], () => {
+  if (loadedNsfw.value === null && loading.value) return;
   if (activeCollectionId.value !== null && !visibleCollectionIds.value.has(activeCollectionId.value)) {
     activeCollectionId.value = null;
     editing.value = false;
@@ -363,7 +464,7 @@ async function createCollection(): Promise<void> {
     });
     newTitle.value = '';
     await load();
-    activeCollectionId.value = created.id;
+    activeCollectionId.value = reconciledIds.get(created.id) ?? created.id;
     syncEditFields();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.createEntry');
@@ -451,8 +552,10 @@ async function moveEntryToCollection(targetId: number): Promise<void> {
   if (entryId === null || active === null || targetId === active.id) return;
   error.value = null;
   try {
-    await props.api.removeCollectionEntry(active.id, entryId);
+    // Queue/commit the destination membership first. If replay conflicts, the
+    // source membership remains; losing a duplicate is safer than losing the Entry.
     await props.api.addCollectionEntry(targetId, entryId);
+    await props.api.removeCollectionEntry(active.id, entryId);
     await load();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.createEntry');
@@ -515,7 +618,7 @@ async function submitCommonTag(): Promise<void> {
 
 /** A folder with anything in it needs the second, confirming tap. */
 function collectionHasContent(record: CollectionRecordDto): boolean {
-  return (record.entryCount ?? record.entries.length) > 0
+  return entryCountOf(record) > 0
     || (record.producerCount ?? record.producers.length) > 0
     || record.children.length > 0;
 }
@@ -551,7 +654,7 @@ async function onDrop(record: CollectionRecordDto): Promise<void> {
   draggedId.value = null;
   dropTargetId.value = null;
   if (!dragged || dragged === record.id) return;
-  const current = collections.value.map((item) => item.id);
+  const current = [...topLevelOrderIds.value];
   const from = current.indexOf(dragged);
   const to = current.indexOf(record.id);
   if (from < 0 || to < 0) return;
@@ -574,7 +677,7 @@ async function moveCollection(recordId: number, direction: -1 | 1): Promise<void
   const target = visibleCollections.value[visibleIndex + direction];
   if (visibleIndex < 0 || !target) return;
 
-  const orderedIds = collections.value.map((record) => record.id);
+  const orderedIds = [...topLevelOrderIds.value];
   const from = orderedIds.indexOf(recordId);
   const to = orderedIds.indexOf(target.id);
   if (from < 0 || to < 0) return;
@@ -594,6 +697,14 @@ async function openRecord(record: CollectionRecordDto): Promise<void> {
   rememberCollectionNavigationState();
   clearDrag();
   syncEditFields();
+  const summaryRequestId = ++childSummaryRequestId;
+  await loadMissingChildSummaries(
+    collections.value,
+    record.id,
+    showNsfw.value,
+    kind.value,
+    summaryRequestId,
+  );
   await loadMembers(false);
   await scrollCurrentViewToTop();
 }
@@ -659,7 +770,18 @@ function usageTotals(record: CollectionRecordDto): string {
   return t('usage.viewCount', { count: views });
 }
 
-onMounted(load);
+onMounted(() => {
+  unsubscribeReconciliation = subscribeCollectionReconciliation(props.api, (ids) => {
+    for (const [localId, authoritativeId] of ids) reconciledIds.set(localId, authoritativeId);
+    if (activeCollectionId.value !== null) {
+      activeCollectionId.value = reconciledIds.get(activeCollectionId.value) ?? activeCollectionId.value;
+    }
+    // Replay finishes in the background; the old local rows must not stay open.
+    void load();
+  });
+  void load();
+});
+onUnmounted(() => { unsubscribeReconciliation?.(); });
 </script>
 
 <template>
@@ -790,8 +912,8 @@ onMounted(load);
           </button>
         </template>
         <template v-else>
-          <h3>{{ activeCollection.title }}</h3>
-          <p v-if="activeCollection.description" class="collection-description">
+          <h3 class="t3-library-text">{{ activeCollection.title }}</h3>
+          <p v-if="activeCollection.description" class="collection-description t3-library-text">
             {{ activeCollection.description }}
           </p>
         </template>
@@ -855,9 +977,9 @@ onMounted(load);
                 :asset-url="api.assetUrl"
               />
               <span class="entry-meta">
-                <strong>{{ child.title }}<span v-if="child.nsfw" class="collection-nsfw-mark"> 🔞</span></strong>
+                <strong class="t3-library-text">{{ child.title }}<span v-if="child.nsfw" class="collection-nsfw-mark"> 🔞</span></strong>
                 <small class="entry-usage-note">
-                  {{ t('collections.entryCount', { count: child.entryCount ?? child.entries.length }) }}
+                  {{ t('collections.entryCount', { count: entryCountOf(child) }) }}
                 </small>
               </span>
             </button>
@@ -948,8 +1070,8 @@ onMounted(load);
               :alt="producer.name"
               :asset-url="api.assetUrl"
             />
-            <span v-else class="author-list-badge">{{ producer.name.slice(0, 1).toUpperCase() }}</span>
-            <strong>{{ producer.name }}</strong>
+            <span v-else class="author-list-badge t3-library-text">{{ producer.name.slice(0, 1).toUpperCase() }}</span>
+            <strong class="t3-library-text">{{ producer.name }}</strong>
           </button>
         </PagedCardGrid>
       </div>
@@ -989,10 +1111,10 @@ onMounted(load);
               :asset-url="api.assetUrl"
             />
             <span class="entry-meta">
-              <strong>{{ record.title }}<span v-if="record.nsfw" class="collection-nsfw-mark"> 🔞</span></strong>
+              <strong class="t3-library-text">{{ record.title }}<span v-if="record.nsfw" class="collection-nsfw-mark"> 🔞</span></strong>
               <small class="entry-usage-note">
                 {{ record.kind === 'entry'
-                  ? t('collections.entryCount', { count: record.entryCount ?? record.entries.length })
+                  ? t('collections.entryCount', { count: entryCountOf(record) })
                   : t('collections.authorCount', { count: record.producerCount ?? record.producers.length }) }}
               </small>
             </span>

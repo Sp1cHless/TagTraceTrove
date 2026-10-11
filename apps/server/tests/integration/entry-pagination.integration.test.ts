@@ -129,6 +129,35 @@ describe('paged Entry query', () => {
     });
   });
 
+  it('uses usage sort over an Author-adjusted rating sort without binding unused rating parameters', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    const app = createApiApp(database);
+    const first = createEntry(database, { title: 'More likes', type: 'comic' });
+    const second = createEntry(database, { title: 'Fewer likes', type: 'comic' });
+    const slot = createRatingSlot(database, { kind: 'entry', entryType: 'comic', name: 'Quality' });
+    likeEntry(database, first.id);
+    likeEntry(database, first.id);
+    likeEntry(database, second.id);
+
+    const response = await app.request('/api/entries/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        entryType: 'comic',
+        ratingSort: { slotId: slot.id, direction: 'desc', applyAuthorRating: true },
+        usageSort: { field: 'likes', direction: 'desc' },
+        page: 1,
+        pageSize: 10,
+      }),
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      total: 2,
+      items: [{ id: first.id }, { id: second.id }],
+    });
+  });
+
   it('combines facet, author, rating, and likes filters before paging', async () => {
     const database = createMigratedMemoryDatabase();
     databases.push(database);

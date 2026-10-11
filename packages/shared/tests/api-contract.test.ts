@@ -34,7 +34,19 @@ import {
   sourceStatusPatchSchema,
   sourceLibraryRecordSchema,
   syncReplayOperationSchema,
+  syncChangesQuerySchema,
+  syncAckRequestSchema,
 } from '../src/index.js';
+
+describe('change feed API contracts', () => {
+  const identity = { libraryId: 'library', syncEpoch: 'epoch', protocolVersion: 1, clientId: 'phone' };
+  it('rejects unbounded pages, negative cursors and unknown fields', () => {
+    expect(syncChangesQuerySchema.safeParse({ ...identity, afterSeq: 0, limit: 201 }).success).toBe(false);
+    expect(syncChangesQuerySchema.safeParse({ ...identity, afterSeq: -1, limit: 1 }).success).toBe(false);
+    expect(syncChangesQuerySchema.safeParse({ ...identity, afterSeq: 0, limit: 1, extra: true }).success).toBe(false);
+    expect(syncAckRequestSchema.safeParse({ ...identity, cursorSeq: -1 }).success).toBe(false);
+  });
+});
 
 describe('entry API contracts', () => {
   it('accepts numeric likes filters and rejects date values for count fields', () => {
@@ -66,6 +78,14 @@ describe('entry API contracts', () => {
 
     expect(updateEntryRequestSchema.safeParse({ title: '   ' }).success).toBe(false);
     expect(updateEntryRequestSchema.safeParse({}).success).toBe(false);
+
+    // A video's runtime, the peer of the page count. It is the one Entry fact that may be cleared:
+    // the page count is optional-not-nullable, so its editor can only ever change it, while a
+    // runtime typed by mistake has to be removable — hence `null` here and nowhere for pageCount.
+    expect(updateEntryRequestSchema.parse({ durationSeconds: 805 }).durationSeconds).toBe(805);
+    expect(updateEntryRequestSchema.parse({ durationSeconds: null }).durationSeconds).toBeNull();
+    expect(updateEntryRequestSchema.safeParse({ durationSeconds: -1 }).success).toBe(false);
+    expect(updateEntryRequestSchema.safeParse({ durationSeconds: 1.5 }).success).toBe(false);
 
     const detail = entryDetailResponseSchema.parse({
       id: 1,
@@ -548,5 +568,149 @@ describe('offline Entry rating desired-state contract', () => {
     expect(syncReplayOperationSchema.safeParse({
       ...base, payload: { slotUid, delta: 0.5 },
     }).success).toBe(false);
+  });
+});
+
+describe('offline Producer rating desired-state contract', () => {
+  const slotUid = '71717171-7171-4171-8171-717171717171';
+  const base = {
+    opId: '61616161-6161-4161-8161-616161616161',
+    clientId: 'android-client',
+    libraryId: '22222222-2222-4222-8222-222222222222',
+    syncEpoch: 'epoch-1',
+    entityKind: 'producer' as const,
+    entityUid: '33333333-3333-4333-8333-333333333333',
+    operationKind: 'producer.rating.set' as const,
+    baseVersion: 4,
+    baseValues: { slotUid, stars: null },
+    payload: { slotUid, stars: 4.5 },
+    clientCreatedAt: '2026-09-21T12:00:00.000Z',
+  };
+
+  it('accepts rating value changes and clear-to-unrated transitions', () => {
+    expect(syncReplayOperationSchema.parse(base)).toMatchObject({
+      operationKind: 'producer.rating.set', entityKind: 'producer',
+      baseValues: { slotUid, stars: null }, payload: { slotUid, stars: 4.5 },
+    });
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, baseValues: { slotUid, stars: 4.5 }, payload: { slotUid, stars: null },
+    }).success).toBe(true);
+  });
+
+  it('rejects no-op, slot changes, invalid stars, and entry-owned envelopes', () => {
+    expect(syncReplayOperationSchema.safeParse({ ...base, payload: { slotUid, stars: null } }).success).toBe(false);
+    expect(syncReplayOperationSchema.safeParse({ ...base, payload: { slotUid: '72727272-7272-4272-8272-727272727272', stars: 4.5 } }).success).toBe(false);
+    expect(syncReplayOperationSchema.safeParse({ ...base, payload: { slotUid, stars: 4.3 } }).success).toBe(false);
+    expect(syncReplayOperationSchema.safeParse({ ...base, entityKind: 'entry' }).success).toBe(false);
+  });
+});
+
+describe('offline Producer profile patch contract', () => {
+  const base = {
+    opId: '71717171-7171-4171-8171-717171717171',
+    clientId: 'android-client',
+    libraryId: '22222222-2222-4222-8222-222222222222',
+    syncEpoch: 'epoch-1',
+    entityKind: 'producer' as const,
+    entityUid: '33333333-3333-4333-8333-333333333333',
+    operationKind: 'producer.update' as const,
+    baseVersion: 4,
+    baseValues: { occupation: 'Artist', content: null },
+    payload: { occupation: null, content: 'Notes' },
+    clientCreatedAt: '2026-09-21T12:00:00.000Z',
+  };
+
+  it('accepts a sparse patch with exact captured base fields', () => {
+    expect(syncReplayOperationSchema.parse(base)).toMatchObject({
+      operationKind: 'producer.update',
+      baseValues: { occupation: 'Artist', content: null },
+      payload: { occupation: null, content: 'Notes' },
+    });
+  });
+
+  it('rejects empty patches, mismatched base keys, and invalid names', () => {
+    expect(syncReplayOperationSchema.safeParse({ ...base, baseValues: {}, payload: {} }).success).toBe(false);
+    expect(syncReplayOperationSchema.safeParse({ ...base, baseValues: { name: 'Old' } }).success).toBe(false);
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, baseValues: { name: 'Old' }, payload: { name: '  ' },
+    }).success).toBe(false);
+  });
+});
+
+describe('offline Producer tag-list desired-state contract', () => {
+  const tagA = { syncUid: '71717171-7171-4171-8171-717171717171', name: 'Studio A' };
+  const tagB = { syncUid: '72727272-7272-4272-8272-727272727272', name: 'Studio B' };
+  const base = {
+    opId: '73737373-7373-4373-8373-737373737373',
+    clientId: 'android-client',
+    libraryId: '22222222-2222-4222-8222-222222222222',
+    syncEpoch: 'epoch-1',
+    entityKind: 'producer' as const,
+    entityUid: '33333333-3333-4333-8333-333333333333',
+    operationKind: 'producer.tags.set' as const,
+    baseVersion: 4,
+    baseValues: { tags: [tagA] },
+    payload: { tags: [tagB] },
+    clientCreatedAt: '2026-09-21T12:00:00.000Z',
+  };
+
+  it('accepts stable-UID assignment replacement and clearing', () => {
+    expect(syncReplayOperationSchema.parse(base)).toMatchObject({
+      operationKind: 'producer.tags.set',
+      baseValues: { tags: [tagA] },
+      payload: { tags: [tagB] },
+    });
+    expect(syncReplayOperationSchema.safeParse({ ...base, payload: { tags: [] } }).success).toBe(true);
+  });
+
+  it('rejects no-op and duplicate identities', () => {
+    expect(syncReplayOperationSchema.safeParse({ ...base, payload: base.baseValues }).success).toBe(false);
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, payload: { tags: [tagA, { ...tagA, name: 'Renamed' }] },
+    }).success).toBe(false);
+  });
+});
+
+describe('offline Entry Content desired-state contract', () => {
+  const contentUid = '83838383-8383-4383-8383-838383838383';
+  const content = { syncUid: contentUid, contentType: 'Source URL', content: 'https://old.test', sortOrder: 0 };
+  const base = {
+    opId: '84848484-8484-4484-8484-848484848484',
+    clientId: 'android-client',
+    libraryId: '22222222-2222-4222-8222-222222222222',
+    syncEpoch: 'epoch-1',
+    entityKind: 'entry' as const,
+    entityUid: '33333333-3333-4333-8333-333333333333',
+    operationKind: 'entry.contents.set' as const,
+    baseVersion: 4,
+    baseValues: { contents: [content] },
+    payload: { contents: [{ ...content, content: 'https://new.test' }] },
+    clientCreatedAt: '2026-09-21T12:00:00.000Z',
+  };
+
+  it('accepts an atomic ordered Content-list desired state', () => {
+    expect(syncReplayOperationSchema.parse(base)).toMatchObject({
+      operationKind: 'entry.contents.set',
+      baseVersion: 4,
+      baseValues: { contents: [content] },
+      payload: { contents: [{ ...content, content: 'https://new.test' }] },
+    });
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, baseValues: { contents: [content] }, payload: { contents: [] },
+    }).success).toBe(true);
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, baseValues: { contents: [] }, payload: { contents: [content] },
+    }).success).toBe(true);
+  });
+
+  it('rejects no-op lists, duplicate identities, malformed slots, and unrelated entities', () => {
+    expect(syncReplayOperationSchema.safeParse({ ...base, payload: base.baseValues }).success).toBe(false);
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, payload: { contents: [content, { ...content, sortOrder: 1 }] },
+    }).success).toBe(false);
+    expect(syncReplayOperationSchema.safeParse({
+      ...base, payload: { contents: [{ ...content, sortOrder: -1 }] },
+    }).success).toBe(false);
+    expect(syncReplayOperationSchema.safeParse({ ...base, entityUid: 'not-a-uuid' }).success).toBe(false);
   });
 });

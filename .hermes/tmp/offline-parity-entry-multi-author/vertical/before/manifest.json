@@ -1,0 +1,52 @@
+[
+  {
+    "path": "apps/web/src/GalleryApp.vue",
+    "size": 257762,
+    "sha256": "27c4fe146e8128e0eb7b1c36320418f5848d053c4d3890b97de786e913b53311"
+  },
+  {
+    "path": "apps/web/src/api/gallery.ts",
+    "size": 68238,
+    "sha256": "08ef0d5111da07cde412ff98943d29728893142efd6e34e897e87204b59e5dc2"
+  },
+  {
+    "path": "apps/web/src/offline/offline-api.ts",
+    "size": 399517,
+    "sha256": "dff30848505a9bfd71dd7d3e3bf71e92dfeea49f53dd27452b05dc40585f2dfd"
+  },
+  {
+    "path": "apps/server/src/http/app.ts",
+    "size": 106447,
+    "sha256": "2ba745ff16d838857f846b9a80380cce7c5a9cb44934778084ca2f4dbdee58ab"
+  },
+  {
+    "path": "apps/server/src/repositories/entry-multi-author-repository.ts",
+    "size": 3689,
+    "sha256": "38222f18accce5d2895e89a15e25167fc9086a6883b78a5665f6fd4fdc8bd13f"
+  },
+  {
+    "path": "apps/server/src/repositories/producer-repository.ts",
+    "size": 14286,
+    "sha256": "60696db372b2c376eda491e98bec85903051d9a703cebd7a0b03e549d64cd6b9"
+  },
+  {
+    "path": "apps/server/src/sync/replay-service.ts",
+    "size": 125416,
+    "sha256": "385465b4cee1fe0ac282f1a1d42f78ee8ed0dc43b9b33ae836382eda257ffd23"
+  },
+  {
+    "path": "apps/server/tests/integration/entry-multi-author.integration.test.ts",
+    "size": 9073,
+    "sha256": "edf039b0db2aac1cdbc6a92a7ddef3a6e84889f6381082d673bd00ddbe82dee5"
+  },
+  {
+    "path": "packages/shared/src/schemas/api.ts",
+    "size": 55986,
+    "sha256": "3e5402cd5f08f0b36ecf038e2c31cb662431ca96866e381c41a475b66156ef4e"
+  },
+  {
+    "path": "packages/shared/src/schemas/sync.ts",
+    "size": 65478,
+    "sha256": "16d43806ee8f48291a50254c629bbec491d25784d7fd9fd365d4fb039c6b7d05"
+  }
+]

@@ -1,0 +1,26 @@
+{
+  "gradleExit": 0,
+  "argv": [
+    "cmd.exe",
+    "/c",
+    "gradlew.bat",
+    "--no-daemon",
+    "--init-script",
+    "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-gallery\\native-repair\\isolated.gradle",
+    ":app:testDebugUnitTest",
+    "--tests",
+    "com.speechless666.t3.spike.NativeGalleryRepairJvmTest.g3"
+  ],
+  "xml": [
+    {
+      "name": "com.speechless666.t3.spike.NativeGalleryRepairJvmTest",
+      "tests": "1",
+      "skipped": "0",
+      "failures": "0",
+      "errors": "0",
+      "timestamp": "2026-10-10T08:34:41.473Z",
+      "hostname": "LAPTOP-70QV4MNN",
+      "time": "131.819"
+    }
+  ]
+}

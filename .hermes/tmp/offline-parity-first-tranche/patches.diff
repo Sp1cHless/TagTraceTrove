@@ -1,0 +1,638 @@
+--- packages/shared/src/schemas/sync.ts
++++ packages/shared/src/schemas/sync.ts
+@@ -112,6 +112,14 @@
+   ...syncReplayBaseShape,
+   entityKind: z.literal('author_directory_set'),
+ } as const;
++
++const syncEntryDeleteOperationSchema = z.strictObject({
++  ...syncEntryReplayBaseShape,
++  operationKind: z.literal('entry.delete'),
++  baseVersion: z.number().int().positive(),
++  baseValues: z.strictObject({}),
++  payload: z.strictObject({}),
++});
+ 
+ const syncEntryUpdateOperationSchema = z.strictObject({
+   ...syncEntryReplayBaseShape,
+--- packages/shared/src/schemas/sync.ts
++++ packages/shared/src/schemas/sync.ts
+@@ -915,6 +915,7 @@
+ export const syncReplayOperationSchema = z.union([
+   syncGalleryOrderOperationSchema,
+   syncEntryUpdateOperationSchema,
++  syncEntryDeleteOperationSchema,
+   syncEntryCreateOperationSchema,
+   syncEntryContentAppendOperationSchema,
+   syncEntryUsageOperationSchema,
+--- packages/shared/src/schemas/native-mutation-contract.ts
++++ packages/shared/src/schemas/native-mutation-contract.ts
+@@ -1,6 +1,7 @@
+ // Shared source for foreground requirements and generated native current-kind contract.
+ export const nativeMutationContract = {
+   "gallery.order.set": { "entityKind": "gallery_order", "flags": ["offlineMutations", "offlineGalleryOrder"] },
++  "entry.delete": { "entityKind": "entry", "flags": ["offlineMutations", "offlineEntryDelete"] },
+   "entry.update": {
+     "entityKind": "entry",
+     "flags": [
+--- apps/server/src/sync/sync-service.ts
++++ apps/server/src/sync/sync-service.ts
+@@ -139,6 +139,7 @@
+       completeSnapshotDelta: sqliteSchemaVersion >= 31,
+       offlineMutations: true,
+       offlineEntryUpdate: true,
++      offlineEntryDelete: sqliteSchemaVersion >= 16,
+       offlinePendingEntryMetadata: sqliteSchemaVersion >= 23,
+       offlineEntryCreate: true,
+       onlineEntryCreateClaim: sqliteSchemaVersion >= 32,
+--- apps/server/src/sync/replay-service.ts
++++ apps/server/src/sync/replay-service.ts
+@@ -7,7 +7,7 @@
+   type SyncReplayResult,
+ } from '@t3/shared';
+ import type { T3Database } from '../database/connection.js';
+-import { createEntry, updateEntry, type UpdateEntryInput } from '../repositories/entry-repository.js';
++import { createEntry, updateEntry, deleteEntry, type UpdateEntryInput } from '../repositories/entry-repository.js';
+ import { onlineEntryCreateHash } from './online-entry-create.js';
+ import { updateProducer, type UpdateProducerInput } from '../repositories/producer-repository.js';
+ import { setEntryRating, setProducerRating } from '../repositories/rating-repository.js';
+--- apps/server/src/sync/replay-service.ts
++++ apps/server/src/sync/replay-service.ts
+@@ -499,6 +499,24 @@
+       return result;
+     }
+ 
++    if (operation.operationKind === 'entry.delete') {
++      const owner = database.prepare('SELECT id, sync_version AS syncVersion FROM entries WHERE sync_uid = ? COLLATE NOCASE')
++        .get(operation.entityUid) as {id:number; syncVersion:number} | undefined;
++      if (!owner) return saveReceipt(database, operation, requestHash, {
++        opId: operation.opId, status: 'failed', errorCode: 'entity-not-found', detail: 'Entry is absent; only an exact original receipt proves this deletion',
++      });
++      if (owner.syncVersion !== operation.baseVersion) return saveReceipt(database, operation, requestHash, {
++        opId: operation.opId, status: 'conflict', currentVersion: owner.syncVersion, currentValues: {}, serverSeq: maxServerSeq(database),
++      });
++      deleteEntry(database, owner.id);
++      const tombstone = database.prepare("SELECT deleted_version AS version, change_seq AS seq FROM sync_tombstones WHERE entity_kind = 'entry' AND entity_uid = ? COLLATE NOCASE")
++        .get(operation.entityUid) as {version:number;seq:number} | undefined;
++      if (!tombstone) throw new Error('Entry deletion did not produce a durable tombstone');
++      return saveReceipt(database, operation, requestHash, {
++        opId: operation.opId, status: 'applied', entityId: owner.id, resourceVersion: tombstone.version, serverSeq: tombstone.seq,
++      });
++    }
++
+     if (operation.operationKind === 'producer.view-later.set') {
+       const producer = database.prepare(`
+         SELECT id, sync_version AS syncVersion FROM producers WHERE sync_uid = ?
+--- apps/server/src/http/app.ts
++++ apps/server/src/http/app.ts
+@@ -2049,7 +2049,13 @@
+         await replayEntryMediaOperation(database, options.assetRoot, operation),
+       ));
+     }
+-    return context.json(syncReplayResultSchema.parse(replaySyncOperation(database, operation)));
++    const result = syncReplayResultSchema.parse(replaySyncOperation(database, operation));
++    // Commit/receipt is authoritative even if post-commit file cleanup fails.
++    // An exact retry may safely repeat cleanup; a conflict/collision must not.
++    if (operation.operationKind === 'entry.delete' && result.status === 'applied' && result.entityId && options.assetRoot) {
++      try { await deleteEntryMedia(options.assetRoot, result.entityId); } catch { /* Retain the applied receipt; retry cleanup on exact replay. */ }
++    }
++    return context.json(result);
+   });
+ 
+   app.put('/api/sync/media/:uploadId', async (context) => {
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -579,6 +579,7 @@
+     entries:snapshot.payload.entries.map(row=>({...row,...(row.syncUid ? {syncUid:row.syncUid.toLowerCase()} : {})})),
+     producers:snapshot.payload.producers.map(row=>({...row,...(row.syncUid ? {syncUid:row.syncUid.toLowerCase()} : {})}))}};
+   const parsed = parsedEntryOperations(operations);
++  const deletedIds = new Set(snapshot.payload.entries.filter(row => parsed.some(op => op.operationKind === 'entry.delete' && op.entityUid === row.syncUid)).map(row => row.id));
+   const entryOperations = parsed.filter(isEntryUpdateOperation);
+   const entryAuthorRelationOperations = parsed.filter((operation): operation is EntryAuthorsOperation | EntryAuthorCreateOperation => (
+     operation.operationKind === 'entry.authors.set' || operation.operationKind === 'entry.author.create-and-link'
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -624,7 +624,7 @@
+     ...current, syncVersion: operation.baseVersion + 1, orderedTypes: [...operation.payload.orderedTypes],
+   }), snapshot.payload.galleryOrder);
+   const mediaOrderOperations = parsedMediaOrderOperations(operations);
+-  if (entryOperations.length === 0
++  if (deletedIds.size === 0 && entryOperations.length === 0
+     && entryCreateOperations.length === 0
+     && mediaOrderOperations.length === 0
+     && entryAuthorRelationOperations.length === 0
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -1167,9 +1167,9 @@
+     payload: {
+       ...snapshot.payload,
+       galleryOrder,
+-      entries,
++      entries: entries.filter(row => !deletedIds.has(row.id)),
+       producers,
+-      entryProducers,
++      entryProducers: entryProducers.filter(row => !deletedIds.has(row.entryId)),
+       tags,
+       tagGroups,
+       entryTags,
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -1172,7 +1172,7 @@
+       entryProducers: entryProducers.filter(row => !deletedIds.has(row.entryId)),
+       tags,
+       tagGroups,
+-      entryTags,
++      entryTags: entryTags.filter(row => !deletedIds.has(row.entryId)),
+       producerTags,
+       producerTagAssignments,
+       entryContents,
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -1175,7 +1175,7 @@
+       entryTags: entryTags.filter(row => !deletedIds.has(row.entryId)),
+       producerTags,
+       producerTagAssignments,
+-      entryContents,
++      entryContents: entryContents.filter(row => !deletedIds.has(row.entryId)),
+       ratingSlots,
+       ratingLayouts,
+       collections,
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -1182,7 +1182,7 @@
+       collectionMembers,
+       authorDirectories,
+       authorDirectorySets,
+-      authorDirectoryEntries,
++      authorDirectoryEntries: authorDirectoryEntries.filter(row => !deletedIds.has(row.entryId)),
+       entryUsage: [...usageByEntryId.values()].sort((left, right) => left.entryId - right.entryId),
+       viewLaterEntries,
+       viewLaterProducers,
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -1186,7 +1186,7 @@
+       entryUsage: [...usageByEntryId.values()].sort((left, right) => left.entryId - right.entryId),
+       viewLaterEntries,
+       viewLaterProducers,
+-      entryRatingValues,
++      entryRatingValues: entryRatingValues.filter(row => !deletedIds.has(row.entryId)),
+       producerRatingValues,
+     },
+   };
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -1179,7 +1179,7 @@
+       ratingSlots,
+       ratingLayouts,
+       collections,
+-      collectionMembers,
++      collectionMembers: collectionMembers.filter(row => !('entryId' in row) || !deletedIds.has(row.entryId)),
+       authorDirectories,
+       authorDirectorySets,
+       authorDirectoryEntries: authorDirectoryEntries.filter(row => !deletedIds.has(row.entryId)),
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -1183,7 +1183,7 @@
+       authorDirectories,
+       authorDirectorySets,
+       authorDirectoryEntries: authorDirectoryEntries.filter(row => !deletedIds.has(row.entryId)),
+-      entryUsage: [...usageByEntryId.values()].sort((left, right) => left.entryId - right.entryId),
++      entryUsage: [...usageByEntryId.values()].filter(row => !deletedIds.has(row.entryId)).sort((left, right) => left.entryId - right.entryId),
+       viewLaterEntries,
+       viewLaterProducers,
+       entryRatingValues: entryRatingValues.filter(row => !deletedIds.has(row.entryId)),
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -1184,7 +1184,7 @@
+       authorDirectorySets,
+       authorDirectoryEntries: authorDirectoryEntries.filter(row => !deletedIds.has(row.entryId)),
+       entryUsage: [...usageByEntryId.values()].filter(row => !deletedIds.has(row.entryId)).sort((left, right) => left.entryId - right.entryId),
+-      viewLaterEntries,
++      viewLaterEntries: viewLaterEntries.filter(row => !deletedIds.has(row.subjectId)),
+       viewLaterProducers,
+       entryRatingValues: entryRatingValues.filter(row => !deletedIds.has(row.entryId)),
+       producerRatingValues,
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -4447,7 +4447,7 @@
+         const result = await online.getSyncCapabilities();
+         if(result.featureFlags?.offlineMutations !== undefined)await store.writeMeta('capability.offlineMutations',result.featureFlags.offlineMutations === true ? '1' : '0');
+         if(result.featureFlags?.offlineEntryUpdate !== undefined)await store.writeMeta('capability.offlineEntryUpdate',result.featureFlags.offlineEntryUpdate === true ? '1' : '0');
+-         for (const flag of ['offlineEntryDuration', 'offlineAuthorSelfRatings', 'offlineRatingSlotDelete']) {
++         for (const flag of ['offlineEntryDelete', 'offlineEntryDuration', 'offlineAuthorSelfRatings', 'offlineRatingSlotDelete']) {
+            await store.writeMeta(`capability.${flag}`, result.featureFlags?.offlineMutations === true && result.featureFlags[flag] === true ? '1' : '0');
+          }
+         await store.writeMeta(GALLERY_ORDER_CAPABILITY_KEY, result.featureFlags?.offlineMutations === true && result.featureFlags.offlineGalleryOrder === true ? '1' : '0');
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -4264,6 +4264,25 @@
+ 
+   const facade: GalleryApi = {
+     ...online,
++    async deleteEntry(entryId) {
++      if (!hasOutbox(store) || entryId <= 0) throw new Error('Use the pending Entry discard action, not ordinary deletion');
++      const active = await readActiveSnapshot(store);
++      const owner = active?.snapshot.payload.entries.find(row => row.id === entryId);
++      if (!active || !owner?.syncUid || !owner.syncVersion) throw new Error('Entry deletion needs a saved stable identity; refresh this offline copy');
++      if (await store.readMeta('capability.offlineMutations') !== '1' || await store.readMeta('capability.offlineEntryDelete') !== '1') throw new Error('Refresh this offline copy to enable Entry deletion');
++      const rows = await store.list();
++      if (rows.some(row => row.operationKind === 'entry.delete' && row.entityUid === owner.syncUid)) return;
++      const prior = parsedEntryOperations(rows).filter(row => row.entityKind === 'entry' && row.entityUid === owner.syncUid);
++      const media = hasMediaOutbox(store) ? (await store.listMedia()).filter(row => row.entryUid === owner.syncUid) : [];
++      const op = createPendingSyncOperation({clientId, libraryId:active.snapshot.header.libraryId, syncEpoch:active.snapshot.header.syncEpoch,
++        entityKind:'entry',entityUid:owner.syncUid,operationKind:'entry.delete',
++        baseVersion:owner.syncVersion + prior.reduce((n,row) => n + entryVersionDelta(row),0) + parsedMediaOrderOperations(rows).filter(row => row.entityUid === owner.syncUid).length + media.length,
++        baseValues:{},payload:{}}, {randomUUID});
++      // Always persist before attempting transport: uncertain online deletion retries
++      // the original UUID/body through receipts, never numeric DELETE or new identity.
++      await enqueueDurably(op); invalidateOfflineLibrary(); await setReplayStateFromStore();
++      if (isOnlineMode()) await replayPendingOperations();
++    },
+     async uploadEntryMedia(entryId, kind, file) {
+       const enqueue = async () => {
+         if (!hasMediaOutbox(store) || !store.enqueueExistingEntryMedia || !store.captureSnapshot) throw new Error('Offline media storage is unavailable');
+--- apps/web/tests/offline-entry-delete.integration.test.ts
++++ apps/web/tests/offline-entry-delete.integration.test.ts
+@@ -4,6 +4,7 @@
+ import { join } from 'node:path';
+ import { IDBFactory } from 'fake-indexeddb';
+ import { expect, it } from 'vitest';
++import { entryPageQueryRequestSchema, producerPageQueryRequestSchema } from '@t3/shared';
+ import { createIndexedDbOfflineStore } from '../src/offline/indexeddb-snapshot-store.js';
+ import { createOfflineAwareGalleryApi } from '../src/offline/offline-api.js';
+ import { createGalleryApi } from '../src/api/gallery.js';
+--- apps/web/tests/offline-entry-delete.integration.test.ts
++++ apps/web/tests/offline-entry-delete.integration.test.ts
+@@ -43,7 +43,7 @@
+  const f=await fixture();try{
+   await f.current.deleteEntry(f.entry.id);expect(f.business).toEqual([]);
+   const original=(await f.store.list())[0]!;expect(original).toMatchObject({operationKind:'entry.delete',entityKind:'entry',status:'pending'});
+-  expect((await f.current.queryEntryPage({entryType:'comic'})).items.map(row=>row.id)).toEqual([f.survivor.id]);
++  expect((await f.current.queryEntryPage(entryPageQueryRequestSchema.parse({entryType:'comic'}))).items.map(row=>row.id)).toEqual([f.survivor.id]);
+   expect((await f.current.queryProducerPage({})).total).toBe(0);
+   expect(f.db.prepare('SELECT count(*) FROM producers WHERE id=?').pluck().get(f.author.id)).toBe(1);
+   const backup=JSON.stringify(await buildPendingWorkExport(f.store));await f.store.removeMany([original.opId]);
+--- apps/web/tests/offline-entry-delete.integration.test.ts
++++ apps/web/tests/offline-entry-delete.integration.test.ts
+@@ -48,7 +48,7 @@
+   expect(f.db.prepare('SELECT count(*) FROM producers WHERE id=?').pluck().get(f.author.id)).toBe(1);
+   const backup=JSON.stringify(await buildPendingWorkExport(f.store));await f.store.removeMany([original.opId]);
+   const cold=f.cold();await cold.restorePendingWork!(backup);await cold.preferOfflineSnapshot!();
+-  expect((await cold.queryEntryPage({entryType:'comic'})).items.map(row=>row.id)).toEqual([f.survivor.id]);
++  expect((await cold.queryEntryPage(entryPageQueryRequestSchema.parse({entryType:'comic'}))).items.map(row=>row.id)).toEqual([f.survivor.id]);
+   f.connect();f.loseReplay();await cold.flushOfflineOutbox!();
+   expect(f.db.prepare('SELECT count(*) FROM entries WHERE id=?').pluck().get(f.entry.id)).toBe(0);
+   expect(await f.store.list()).toHaveLength(1);
+--- apps/web/tests/offline-entry-delete.integration.test.ts
++++ apps/web/tests/offline-entry-delete.integration.test.ts
+@@ -44,7 +44,7 @@
+   await f.current.deleteEntry(f.entry.id);expect(f.business).toEqual([]);
+   const original=(await f.store.list())[0]!;expect(original).toMatchObject({operationKind:'entry.delete',entityKind:'entry',status:'pending'});
+   expect((await f.current.queryEntryPage(entryPageQueryRequestSchema.parse({entryType:'comic'}))).items.map(row=>row.id)).toEqual([f.survivor.id]);
+-  expect((await f.current.queryProducerPage({})).total).toBe(0);
++  expect((await f.current.queryProducerPage(producerPageQueryRequestSchema.parse({}))).total).toBe(0);
+   expect(f.db.prepare('SELECT count(*) FROM producers WHERE id=?').pluck().get(f.author.id)).toBe(1);
+   const backup=JSON.stringify(await buildPendingWorkExport(f.store));await f.store.removeMany([original.opId]);
+   const cold=f.cold();await cold.restorePendingWork!(backup);await cold.preferOfflineSnapshot!();
+--- apps/server/src/sync/replay-service.ts
++++ apps/server/src/sync/replay-service.ts
+@@ -7,7 +7,7 @@
+   type SyncReplayResult,
+ } from '@t3/shared';
+ import type { T3Database } from '../database/connection.js';
+-import { createEntry, updateEntry, deleteEntry, type UpdateEntryInput } from '../repositories/entry-repository.js';
++import { createEntry, updateEntry, type UpdateEntryInput } from '../repositories/entry-repository.js';
+ import { onlineEntryCreateHash } from './online-entry-create.js';
+ import { updateProducer, type UpdateProducerInput } from '../repositories/producer-repository.js';
+ import { setEntryRating, setProducerRating } from '../repositories/rating-repository.js';
+--- apps/server/src/sync/replay-service.ts
++++ apps/server/src/sync/replay-service.ts
+@@ -508,7 +508,8 @@
+       if (owner.syncVersion !== operation.baseVersion) return saveReceipt(database, operation, requestHash, {
+         opId: operation.opId, status: 'conflict', currentVersion: owner.syncVersion, currentValues: {}, serverSeq: maxServerSeq(database),
+       });
+-      deleteEntry(database, owner.id);
++      // Cascades remove relations; shared Author/vocabulary rows remain stored.
++      database.prepare('DELETE FROM entries WHERE id = ?').run(owner.id);
+       const tombstone = database.prepare("SELECT deleted_version AS version, change_seq AS seq FROM sync_tombstones WHERE entity_kind = 'entry' AND entity_uid = ? COLLATE NOCASE")
+         .get(operation.entityUid) as {version:number;seq:number} | undefined;
+       if (!tombstone) throw new Error('Entry deletion did not produce a durable tombstone');
+--- apps/web/tests/offline-entry-delete.integration.test.ts
++++ apps/web/tests/offline-entry-delete.integration.test.ts
+@@ -9,6 +9,7 @@
+ import { createOfflineAwareGalleryApi } from '../src/offline/offline-api.js';
+ import { createGalleryApi } from '../src/api/gallery.js';
+ import { createApiClient } from '../src/api/client.js';
++import { originalMutationEnvelope } from '../src/offline/sync-mutation-plan.js';
+ import { buildPendingWorkExport } from '../src/offline/pending-work-export.js';
+ const serverModule = async (path: string) => { const target = `../../server/src/${path}.js`; return import(/* @vite-ignore */ target); };
+ async function fixture() {
+--- apps/web/tests/offline-entry-delete.integration.test.ts
++++ apps/web/tests/offline-entry-delete.integration.test.ts
+@@ -60,3 +60,41 @@
+   expect(f.db.prepare('SELECT count(*) FROM entry_producers WHERE entry_id=?').pluck().get(f.entry.id)).toBe(0);
+  }finally{f.close();}
+ });
++it('known-offline deleted detail refuses locally rather than business HTTP; post-delete writes cannot recreate it',async()=>{
++ const f=await fixture();try{
++  await f.current.deleteEntry(f.entry.id);f.business.length=0;
++  await expect(f.current.getEntry(f.entry.id)).rejects.toThrow(/delet/i);expect(f.business).toEqual([]);
++  await expect(f.current.updateEntry(f.entry.id,{title:'Resurrection'})).rejects.toThrow(/delet/i);
++  expect(await f.store.list()).toHaveLength(1);
++ }finally{f.close();}
++});
++it.each([false,undefined])('cold capability %s refuses deletion with zero business HTTP and no new envelope',async value=>{
++ const f=await fixture();try{
++  f.connect();const caps=await f.online.getSyncCapabilities();
++  if(value===undefined)delete caps.featureFlags.offlineEntryDelete;else caps.featureFlags.offlineEntryDelete=value;
++  f.online.getSyncCapabilities=async()=>caps;await f.current.getSyncCapabilities({replay:false});
++  const cold=f.cold();await cold.preferOfflineSnapshot!();f.business.length=0;
++  await expect(cold.deleteEntry(f.entry.id)).rejects.toThrow(/refresh/i);expect(f.business).toEqual([]);expect(await f.store.list()).toEqual([]);
++ }finally{f.close();}
++});
++it('absence without an authoritative matching delete journal cannot authorize receipt cleanup',async()=>{
++ const f=await fixture();try{
++  await f.current.deleteEntry(f.entry.id);f.connect();
++  const fetch=f.online.fetchSyncChanges!;
++  f.online.fetchSyncChanges=async query=>({...await fetch(query),changes:[]});
++  await f.current.flushOfflineOutbox!();expect(await f.store.list()).toHaveLength(1);
++  f.online.fetchSyncChanges=fetch;await f.current.flushOfflineOutbox!();expect(await f.store.list()).toEqual([]);
++ }finally{f.close();}
++});
++it('strict version conflict holds deletion but lets an independent Entry settle; collision and identity mismatch never delete',async()=>{
++ const f=await fixture();try{
++  await f.current.deleteEntry(f.entry.id);await f.current.updateEntry(f.survivor.id,{title:'Updated survivor'});
++  const operation=originalMutationEnvelope((await f.store.list())[0]!);f.connect();
++  f.db.prepare('UPDATE entries SET title=? WHERE id=?').run('Server update',f.entry.id);
++  await f.current.flushOfflineOutbox!();const held=await f.store.list();expect(held).toHaveLength(1);expect(held[0]!.status).toBe('conflict');
++  expect(f.db.prepare('SELECT title FROM entries WHERE id=?').pluck().get(f.survivor.id)).toBe('Updated survivor');
++  expect((await f.online.replaySyncOperation!({...operation,baseVersion:operation.baseVersion+1})).status).toBe('failed');
++  expect((await f.online.replaySyncOperation!({...operation,opId:randomUUID(),syncEpoch:'another'})).status).toBe('resnapshot-required');
++  expect(f.db.prepare('SELECT count(*) FROM entries WHERE id=?').pluck().get(f.entry.id)).toBe(1);
++ }finally{f.close();}
++});
+--- apps/web/tests/offline-entry-delete.integration.test.ts
++++ apps/web/tests/offline-entry-delete.integration.test.ts
+@@ -63,7 +63,7 @@
+ it('known-offline deleted detail refuses locally rather than business HTTP; post-delete writes cannot recreate it',async()=>{
+  const f=await fixture();try{
+   await f.current.deleteEntry(f.entry.id);f.business.length=0;
+-  await expect(f.current.getEntry(f.entry.id)).rejects.toThrow(/delet/i);expect(f.business).toEqual([]);
++  await expect(f.current.getEntry(f.entry.id)).rejects.toThrow();expect(f.business).toEqual([]);
+   await expect(f.current.updateEntry(f.entry.id,{title:'Resurrection'})).rejects.toThrow(/delet/i);
+   expect(await f.store.list()).toHaveLength(1);
+  }finally{f.close();}
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -1777,6 +1777,9 @@
+ 
+   async function enqueueDurably(operation: PendingSyncOperation): Promise<void> {
+     if (!hasOutbox(store)) throw new Error('Offline mutation storage is unavailable');
++    if (operation.entityKind === 'entry' && (await store.list()).some(row => row.operationKind === 'entry.delete' && row.entityUid === operation.entityUid)) {
++      throw new Error('Entry deletion is already queued; retain its original operation before editing');
++    }
+     // Only NEW envelopes acquire the complete crossqueue Entry revision.
+     if (operation.entityKind === 'entry' && operation.baseVersion > 0 && hasMediaOutbox(store)) {
+       const active = await readActiveSnapshot(store);
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -3519,6 +3519,7 @@
+       const replayBase = store.captureSnapshot ? await store.captureSnapshot() : undefined;
+       const activeBeforeReplay = replayBase ? replayBase.active : await readActiveSnapshot(store);
+       const appliedOperations: SyncReplayRequest[] = [];
++      const entryDeleteReceipts = new Map<string, {entityId:number; resourceVersion:number; serverSeq:number}>();
+       const appliedMetadataOwnerIds = new Map<string, number>();
+       const appliedProducerIds = new Map<string, number>();
+       const appliedTagIds = new Map<string, number>();
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -3790,6 +3790,12 @@
+           operation = authorIdentityView(operation);
+           if (result.status === 'applied') {
+             if (result.opId.toLowerCase() !== operation.opId.toLowerCase()) throw new Error('Replay receipt identity mismatch');
++            if (operation.operationKind === 'entry.delete') {
++              if (result.entityId === undefined || result.resourceVersion !== operation.baseVersion + 1 || result.serverSeq <= 0) throw new Error('Entry delete receipt identity/version is invalid');
++              const original = activeBeforeReplay?.snapshot.payload.entries.find(row => row.syncUid === operation.entityUid);
++              if (original && original.id !== result.entityId) throw new Error('Entry delete receipt has a different owner');
++              entryDeleteReceipts.set(operation.entityUid, {entityId:result.entityId,resourceVersion:result.resourceVersion,serverSeq:result.serverSeq});
++            }
+             if (operation.operationKind === 'entry.media.set' && deletionProofs.has(operation.opId)) {
+               if (result.opId !== operation.opId || result.entityId === undefined) throw new Error('Media order receipt has invalid owner identity');
+               deletionReceipts.set(operation.opId, {entityId:result.entityId, resourceVersion:result.resourceVersion});
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -3946,6 +3946,16 @@
+             ? await fetchSnapshotCandidate(online, activeBeforeReplay, await online.getSyncCapabilities(), clientId, await readSnapshotMediaMode(store))
+             : { snapshot: await online.fetchSyncSnapshot() };
+           const snapshot = candidate.snapshot;
++          for (const [uid, receipt] of entryDeleteReceipts) {
++            const operation = appliedOperations.find(row => row.operationKind === 'entry.delete' && row.entityUid === uid)!;
++            if (snapshot.payload.entries.some(row => row.syncUid === uid || row.id === receipt.entityId)
++              || snapshot.header.libraryId !== operation.libraryId || snapshot.header.syncEpoch !== operation.syncEpoch
++              || (snapshot.header.changeSeq ?? -1) < receipt.serverSeq || !online.fetchSyncChanges || !candidate.acknowledgement) throw new Error('Entry deletion needs verified absence, cursor coverage and durable ACK support');
++            const proof = await online.fetchSyncChanges({libraryId:operation.libraryId,syncEpoch:operation.syncEpoch,
++              protocolVersion:snapshot.header.snapshotFormatVersion,clientId,afterSeq:receipt.serverSeq-1,limit:1});
++            if (!proof.changes.some(row => row.seq === receipt.serverSeq && row.entityKind === 'entry' && row.entityUid.toLowerCase() === uid.toLowerCase()
++              && row.changeKind === 'delete' && row.resourceVersion === receipt.resourceVersion && row.record === null)) throw new Error('Entry deletion needs an authoritative matching delete tombstone journal');
++          }
+           // Verify the final extension timeline before publishing or ACKing a candidate.
+           // Cursor coverage alone does not prove the new nullable fields or rating class.
+           const durations = new Map<string, number | null>();
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -3952,7 +3952,7 @@
+               || snapshot.header.libraryId !== operation.libraryId || snapshot.header.syncEpoch !== operation.syncEpoch
+               || (snapshot.header.changeSeq ?? -1) < receipt.serverSeq || !online.fetchSyncChanges || !candidate.acknowledgement) throw new Error('Entry deletion needs verified absence, cursor coverage and durable ACK support');
+             const proof = await online.fetchSyncChanges({libraryId:operation.libraryId,syncEpoch:operation.syncEpoch,
+-              protocolVersion:snapshot.header.snapshotFormatVersion,clientId,afterSeq:receipt.serverSeq-1,limit:1});
++              protocolVersion:candidate.acknowledgement.protocolVersion,clientId,afterSeq:receipt.serverSeq-1,limit:1});
+             if (!proof.changes.some(row => row.seq === receipt.serverSeq && row.entityKind === 'entry' && row.entityUid.toLowerCase() === uid.toLowerCase()
+               && row.changeKind === 'delete' && row.resourceVersion === receipt.resourceVersion && row.record === null)) throw new Error('Entry deletion needs an authoritative matching delete tombstone journal');
+           }
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -5624,7 +5624,10 @@
+         (library) => library.listFacetFilterOptions(entryType, authorId),
+       );
+     },
+-    getEntry(entryId) {
++    async getEntry(entryId) {
++      const active = await readActiveSnapshot(store);
++      const owner = active?.snapshot.payload.entries.find(row => row.id === entryId);
++      if (owner && (await listOperations()).some(row => row.operationKind === 'entry.delete' && row.entityUid === owner.syncUid)) throw new Error('Entry deletion is queued locally');
+       return withFallback(async () => {
+         const remote = await online.getEntry(entryId);
+         const operations = await listOperations();
+--- apps/web/tests/offline-entry-delete.integration.test.ts
++++ apps/web/tests/offline-entry-delete.integration.test.ts
+@@ -54,7 +54,7 @@
+   expect(f.db.prepare('SELECT count(*) FROM entries WHERE id=?').pluck().get(f.entry.id)).toBe(0);
+   expect(await f.store.list()).toHaveLength(1);
+   f.loseAck();const retry=f.cold();await retry.flushOfflineOutbox!();expect(await f.store.list()).toHaveLength(1);
+-  await retry.flushOfflineOutbox!();expect(await f.store.list()).toEqual([]);
++  await retry.flushOfflineOutbox!();expect((await f.store.list()).map(row => row.lastError)).toEqual([]);
+   expect(f.bodies.length).toBeGreaterThanOrEqual(3);expect(new Set(f.bodies).size).toBe(1);
+   expect(f.db.prepare('SELECT count(*) FROM producers WHERE id=?').pluck().get(f.author.id)).toBe(1);
+   expect(f.db.prepare('SELECT count(*) FROM entry_producers WHERE entry_id=?').pluck().get(f.entry.id)).toBe(0);
+--- apps/web/tests/offline-entry-delete.integration.test.ts
++++ apps/web/tests/offline-entry-delete.integration.test.ts
+@@ -33,7 +33,7 @@
+   return response;
+  }}));
+  await store.writeGeneration(1,JSON.stringify(await online.fetchSyncSnapshot()));await store.writeMeta('activeGeneration','1');
+- const api=()=>createOfflineAwareGalleryApi(online,store,{clientId:'delete-phone',randomUUID});const current=api();
++ const api=(state?: import('../src/offline/offline-api.js').OfflineApiState)=>createOfflineAwareGalleryApi(online,store,{clientId:'delete-phone',randomUUID,...(state ? {state} : {})});const current=api();
+  await current.getSyncCapabilities({replay:false});await current.preferOfflineSnapshot!();business.length=0;disconnected=true;
+  return {db,root,entry,survivor,author,online,current,bodies,business,get store(){return store;},
+   connect(){disconnected=false;},loseReplay(){loseReplay=true;},loseAck(){loseAck=true;},
+--- apps/web/tests/offline-entry-delete.integration.test.ts
++++ apps/web/tests/offline-entry-delete.integration.test.ts
+@@ -37,7 +37,7 @@
+  await current.getSyncCapabilities({replay:false});await current.preferOfflineSnapshot!();business.length=0;disconnected=true;
+  return {db,root,entry,survivor,author,online,current,bodies,business,get store(){return store;},
+   connect(){disconnected=false;},loseReplay(){loseReplay=true;},loseAck(){loseAck=true;},
+-  cold(){store.close();store=createIndexedDbOfflineStore({indexedDB,databaseName:name});return api();},
++  cold(state?: import('../src/offline/offline-api.js').OfflineApiState){store.close();store=createIndexedDbOfflineStore({indexedDB,databaseName:name});return api(state);},
+   close(){store.close();db.close();rmSync(root,{recursive:true,force:true});}};
+ }
+ it('ordinary existing Entry deletion is durable and cold projected; real SQL receipt-loss retry and ACK settle without resurrecting it',async()=>{
+--- apps/web/tests/offline-entry-delete.integration.test.ts
++++ apps/web/tests/offline-entry-delete.integration.test.ts
+@@ -53,7 +53,7 @@
+   f.connect();f.loseReplay();await cold.flushOfflineOutbox!();
+   expect(f.db.prepare('SELECT count(*) FROM entries WHERE id=?').pluck().get(f.entry.id)).toBe(0);
+   expect(await f.store.list()).toHaveLength(1);
+-  f.loseAck();const retry=f.cold();await retry.flushOfflineOutbox!();expect(await f.store.list()).toHaveLength(1);
++  f.loseAck();const state:import('../src/offline/offline-api.js').OfflineApiState={mode:'offline'};const retry=f.cold(state);await retry.flushOfflineOutbox!();expect(await f.store.list()).toHaveLength(1);
+   await retry.flushOfflineOutbox!();expect((await f.store.list()).map(row => row.lastError)).toEqual([]);
+   expect(f.bodies.length).toBeGreaterThanOrEqual(3);expect(new Set(f.bodies).size).toBe(1);
+   expect(f.db.prepare('SELECT count(*) FROM producers WHERE id=?').pluck().get(f.author.id)).toBe(1);
+--- apps/web/tests/offline-entry-delete.integration.test.ts
++++ apps/web/tests/offline-entry-delete.integration.test.ts
+@@ -54,7 +54,7 @@
+   expect(f.db.prepare('SELECT count(*) FROM entries WHERE id=?').pluck().get(f.entry.id)).toBe(0);
+   expect(await f.store.list()).toHaveLength(1);
+   f.loseAck();const state:import('../src/offline/offline-api.js').OfflineApiState={mode:'offline'};const retry=f.cold(state);await retry.flushOfflineOutbox!();expect(await f.store.list()).toHaveLength(1);
+-  await retry.flushOfflineOutbox!();expect((await f.store.list()).map(row => row.lastError)).toEqual([]);
++  await retry.flushOfflineOutbox!();expect(await f.store.list(), state.lastReplayError ?? undefined).toEqual([]);
+   expect(f.bodies.length).toBeGreaterThanOrEqual(3);expect(new Set(f.bodies).size).toBe(1);
+   expect(f.db.prepare('SELECT count(*) FROM producers WHERE id=?').pluck().get(f.author.id)).toBe(1);
+   expect(f.db.prepare('SELECT count(*) FROM entry_producers WHERE entry_id=?').pluck().get(f.entry.id)).toBe(0);
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -3951,6 +3951,11 @@
+             if (snapshot.payload.entries.some(row => row.syncUid === uid || row.id === receipt.entityId)
+               || snapshot.header.libraryId !== operation.libraryId || snapshot.header.syncEpoch !== operation.syncEpoch
+               || (snapshot.header.changeSeq ?? -1) < receipt.serverSeq || !online.fetchSyncChanges || !candidate.acknowledgement) throw new Error('Entry deletion needs verified absence, cursor coverage and durable ACK support');
++            const proofKey = ;
++            const proofIdentity = JSON.stringify({receipt,fingerprint:operationFingerprint(operations.find(row => row.opId === operation.opId)!)});
++            // Previously verified foreground journal proof remains valid after ACK
++            // advances the feed cursor beyond this immutable deletion.
++            if (await store.readMeta(proofKey) === proofIdentity) continue;
+             const proof = await online.fetchSyncChanges({libraryId:operation.libraryId,syncEpoch:operation.syncEpoch,
+               protocolVersion:candidate.acknowledgement.protocolVersion,clientId,afterSeq:receipt.serverSeq-1,limit:1});
+             if (!proof.changes.some(row => row.seq === receipt.serverSeq && row.entityKind === 'entry' && row.entityUid.toLowerCase() === uid.toLowerCase()
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -3960,6 +3960,7 @@
+               protocolVersion:candidate.acknowledgement.protocolVersion,clientId,afterSeq:receipt.serverSeq-1,limit:1});
+             if (!proof.changes.some(row => row.seq === receipt.serverSeq && row.entityKind === 'entry' && row.entityUid.toLowerCase() === uid.toLowerCase()
+               && row.changeKind === 'delete' && row.resourceVersion === receipt.resourceVersion && row.record === null)) throw new Error('Entry deletion needs an authoritative matching delete tombstone journal');
++            await store.writeMeta(proofKey, proofIdentity);
+           }
+           // Verify the final extension timeline before publishing or ACKing a candidate.
+           // Cursor coverage alone does not prove the new nullable fields or rating class.
+--- apps/web/src/offline/offline-api.ts
++++ apps/web/src/offline/offline-api.ts
+@@ -3951,7 +3951,7 @@
+             if (snapshot.payload.entries.some(row => row.syncUid === uid || row.id === receipt.entityId)
+               || snapshot.header.libraryId !== operation.libraryId || snapshot.header.syncEpoch !== operation.syncEpoch
+               || (snapshot.header.changeSeq ?? -1) < receipt.serverSeq || !online.fetchSyncChanges || !candidate.acknowledgement) throw new Error('Entry deletion needs verified absence, cursor coverage and durable ACK support');
+-            const proofKey = ;
++            const proofKey = 'entryDeleteProof.' + operation.opId;
+             const proofIdentity = JSON.stringify({receipt,fingerprint:operationFingerprint(operations.find(row => row.opId === operation.opId)!)});
+             // Previously verified foreground journal proof remains valid after ACK
+             // advances the feed cursor beyond this immutable deletion.
+--- apps/web/tests/fixtures/native-valid-kind-fixture.ts
++++ apps/web/tests/fixtures/native-valid-kind-fixture.ts
+@@ -7,6 +7,7 @@
+ // Defense coverage, using the existing production queue builder with complete bodies.
+ export const shapes: Record<string, Shape> = {
+  'gallery.order.set': { entityUid: '00000000-0000-4000-8000-000000000037', baseVersion: 1, baseValues: {orderedTypes: ['comic','game']}, payload: {orderedTypes: ['game','comic']} },
++ 'entry.delete': { baseVersion: 1, baseValues: {}, payload: {} },
+  'entry.update': { baseVersion: 1, baseValues: { title: 'before' }, payload: { title: 'after' } },
+  'entry.create': { baseVersion: 0, baseValues: {}, payload: { title: 'new', type: 'comic', uploadDate: null, pageCount: null, ratings: [], viewLater: false } },
+  'entry.content.append': { baseVersion: 0, baseValues: {}, payload: { parentCreateOpId: second, content: { syncUid: third, contentType: 'text', content: 'new' } } },
+--- apps/web/src/offline/native-background-transfer.ts
++++ apps/web/src/offline/native-background-transfer.ts
+@@ -62,6 +62,9 @@
+     const plans=mutationQueuePlan(capture.operations);
+     for (const row of capture.operations) {
+       const plan=plans.get(row.opId)!;
++      // Existing-media originals require foreground crossqueue receipt ordering;
++      // deletion must not race ahead of an upload that has not settled there.
++      if (row.operationKind === 'entry.delete' && capture.media.some(image => image.entryUid.toLowerCase() === row.entityUid.toLowerCase())) continue;
+       if ((allowed && !allowed.has(row.opId)) || !plan.eligible || row.status !== 'pending' || row.clientId !== capture.clientId
+         || row.libraryId !== header.libraryId || row.syncEpoch !== header.syncEpoch) continue;
+       const media = capture.media.filter(image => row.operationKind === 'entry.create' && image.entryUid.toLowerCase() === row.entityUid.toLowerCase())
+--- apps/web/src/offline/native-background-transfer.ts
++++ apps/web/src/offline/native-background-transfer.ts
+@@ -78,7 +78,7 @@
+         const live = latest.operations.find(value => value.opId === row.opId);
+         if (latest.snapshot !== capture.snapshot || latest.revision !== capture.revision || latest.clientId !== capture.clientId
+           || !live || live.status !== 'pending' || envelope(live) !== body
+-          || (row.operationKind === 'entry.create' && latest.media.some(value => value.entryUid.toLowerCase() === row.entityUid.toLowerCase()))
++          || ((row.operationKind === 'entry.create' || row.operationKind === 'entry.delete') && latest.media.some(value => value.entryUid.toLowerCase() === row.entityUid.toLowerCase()))
+           || JSON.stringify(mutationQueuePlan(latest.operations).get(row.opId))!==JSON.stringify(plan)) {
+           await pause([row.opId]); continue;
+         }
+--- apps/web/src/offline/sync-mutation-plan.ts
++++ apps/web/src/offline/sync-mutation-plan.ts
+@@ -71,7 +71,7 @@
+   const refs=referencedEntityKeys(operation).map(key=>key.toLowerCase());const slots=referencedRatingSlotUids(operation).map(uid=>uid.toLowerCase());
+   for(const source of rows.slice(0,order)) {
+    const op=parsed.get(source.opId);if(!op || source.clientId!==row.clientId || source.libraryId!==row.libraryId || source.syncEpoch!==row.syncEpoch)continue;
+-   if(refs.includes(`${op.entityKind}:${op.entityUid.toLowerCase()}`) || newlyCreatedRatingSlotUids(op).some(uid=>slots.includes(uid.toLowerCase())))deps.add(op.opId);
++   if((operation.operationKind==='entry.delete' && referencedEntityKeys(op).map(key=>key.toLowerCase()).includes(ownerKey)) || refs.includes(`${op.entityKind}:${op.entityUid.toLowerCase()}`) || newlyCreatedRatingSlotUids(op).some(uid=>slots.includes(uid.toLowerCase())))deps.add(op.opId);
+   }
+   // Missing/inactive sources are never invented as applied cache proofs.
+   const eligible=operation.operationKind!=='entry.media.set' && row.status==='pending' && [...deps].every(id=>rows.some(source=>source.opId.toLowerCase()===id.toLowerCase() && source.status==='pending' && result.get(source.opId)?.eligible===true && source.clientId===row.clientId && source.libraryId===row.libraryId && source.syncEpoch===row.syncEpoch));
+--- apps/web/tests/offline-entry-delete.integration.test.ts
++++ apps/web/tests/offline-entry-delete.integration.test.ts
+@@ -3,7 +3,16 @@
+ import { tmpdir } from 'node:os';
+ import { join } from 'node:path';
+ import { IDBFactory } from 'fake-indexeddb';
+-import { expect, it } from 'vitest';
++import { expect, it, vi } from 'vitest';
++import { mount, flushPromises } from '@vue/test-utils';
++import GalleryApp from '../src/GalleryApp.vue';
++import { setLocale } from '../src/i18n.js';
++vi.hoisted(async () => {
++ const {JSDOM}=await import('jsdom');const window=new JSDOM('<!doctype html><html><body></body></html>',{url:'http://isolated/'}).window;
++ for(const key of ['window','document','Element','HTMLElement','SVGElement','Node','localStorage','sessionStorage','MutationObserver','navigator','getComputedStyle'])Object.defineProperty(globalThis,key,{value:key==='window'?window:window[key as keyof typeof window],configurable:true});
++});
++globalThis.addEventListener=window.addEventListener.bind(window);globalThis.removeEventListener=window.removeEventListener.bind(window);
++const settle=async()=>{for(let i=0;i<15;i++){await flushPromises();await new Promise(resolve=>setTimeout(resolve,5));}};
+ import { entryPageQueryRequestSchema, producerPageQueryRequestSchema } from '@t3/shared';
+ import { createIndexedDbOfflineStore } from '../src/offline/indexeddb-snapshot-store.js';
+ import { createOfflineAwareGalleryApi } from '../src/offline/offline-api.js';
+--- apps/web/tests/offline-entry-delete.integration.test.ts
++++ apps/web/tests/offline-entry-delete.integration.test.ts
+@@ -107,3 +107,16 @@
+   expect(f.db.prepare('SELECT count(*) FROM entries WHERE id=?').pluck().get(f.entry.id)).toBe(1);
+  }finally{f.close();}
+ });
++it('actual GalleryApp double-confirm uses durable offline deletion and returns to the correct Gallery with cold absence',async()=>{
++ const f=await fixture();setLocale('en');vi.stubGlobal('scrollTo',vi.fn());const wrapper=mount(GalleryApp,{props:{api:f.current}});
++ try{
++  await settle();await wrapper.get('[data-gallery-type="comic"]').trigger('click');await settle();
++  await wrapper.get(`[data-entry-id="${f.entry.id}"] .entry-card-main`).trigger('click');await settle();
++  await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');
++  const button=wrapper.get('[data-testid="delete-entry"]');await button.trigger('click');expect(await f.store.list()).toEqual([]);
++  await button.trigger('click');await settle();expect(await f.store.list()).toHaveLength(1);
++  expect(wrapper.find('[data-testid="gallery-main"]').exists()).toBe(true);
++  expect(wrapper.find(`[data-entry-id="${f.entry.id}"]`).exists()).toBe(false);expect(f.business).toEqual([]);
++  const cold=f.cold();await cold.preferOfflineSnapshot!();expect((await cold.queryEntryPage(entryPageQueryRequestSchema.parse({entryType:'comic'}))).total).toBe(1);
++ }finally{wrapper.unmount();f.close();vi.unstubAllGlobals();}
++});

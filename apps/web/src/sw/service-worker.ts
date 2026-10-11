@@ -1,4 +1,4 @@
-import { OFFLINE_MEDIA_CACHE } from '../offline/cache-names.js';
+import { offlineMediaCacheNames } from '../offline/cache-names.js';
 
 /**
  * T³ service worker (plan §23.6). The worker owns the versioned app shell
@@ -32,8 +32,8 @@ declare const self: {
 };
 declare const __T3_PRECACHE_URLS__: readonly string[] | undefined;
 
-export const SW_VERSION = 't3-shell-v5';
-export { OFFLINE_MEDIA_CACHE };
+export const SW_VERSION = 't3-shell-v7';
+export { offlineMediaCacheNames };
 
 export type CacheStrategy =
   | { kind: 'shell'; url: string }
@@ -82,7 +82,7 @@ export function strategyFor(method: string, rawUrl: string, mode = 'cors'): Cach
   const url = new URL(rawUrl);
   const { pathname } = url;
   if (method !== 'GET') return { kind: 'network-only', url: rawUrl };
-  if (isCapabilities(url)) return { kind: 'network-first', url: rawUrl };
+  if (isCapabilities(url)) return { kind: 'network-only', url: rawUrl };
   if (isThumbnail(url)) return { kind: 'thumbnail-resolver', url: rawUrl };
   if (isImmutableThumbnail(url)) return { kind: 'immutable-thumbnail', url: rawUrl };
   if (isHashedBuildAsset(pathname)) return { kind: 'immutable-asset', url: rawUrl };
@@ -96,37 +96,45 @@ export function strategyFor(method: string, rawUrl: string, mode = 'cors'): Cach
 
 const SHELL_CACHE = SW_VERSION;
 
-async function cacheFirst(request: Request, cacheName: string): Promise<Response> {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
+/** Reads try every name in order (an address's bucket, then the pre-shard one);
+ *  writes go to the first, so a new entry is never written into the old bucket. */
+async function readFirst(request: Request, cacheNames: readonly string[]): Promise<Response | undefined> {
+  for (const name of cacheNames) {
+    const cached = await (await caches.open(name)).match(request);
+    if (cached !== undefined) return cached;
+  }
+  return undefined;
+}
+
+async function cacheFirst(request: Request, cacheNames: readonly string[]): Promise<Response> {
+  const cached = await readFirst(request, cacheNames);
   if (cached !== undefined) return cached;
   const response = await fetch(request);
-  if (response.ok) await cache.put(request, response.clone());
+  if (response.ok) await (await caches.open(cacheNames[0]!)).put(request, response.clone());
   return response;
 }
 
 export async function networkFirst(
   request: Request,
-  cacheName: string,
+  cacheNames: readonly string[],
   options: {
     persistOnlineResponse?: boolean;
     fallbackOnUnavailableResponse?: boolean;
   } = {},
 ): Promise<Response> {
-  const cache = await caches.open(cacheName);
   try {
     const response = await fetch(request);
     if (options.fallbackOnUnavailableResponse === true
       && [502, 503, 504].includes(response.status)) {
-      const cached = await cache.match(request);
+      const cached = await readFirst(request, cacheNames);
       if (cached !== undefined) return cached;
     }
     if (response.ok && options.persistOnlineResponse !== false) {
-      await cache.put(request, response.clone());
+      await (await caches.open(cacheNames[0]!)).put(request, response.clone());
     }
     return response;
   } catch {
-    const cached = await cache.match(request);
+    const cached = await readFirst(request, cacheNames);
     return cached ?? new Response('Offline', { status: 503 });
   }
 }
@@ -151,26 +159,26 @@ export function handleFetch(event: FetchEvent): void {
     case 'network-only':
       return;
     case 'immutable-asset':
-      event.respondWith(cacheFirst(event.request, SHELL_CACHE));
+      event.respondWith(cacheFirst(event.request, [SHELL_CACHE]));
       return;
     case 'immutable-thumbnail':
-      event.respondWith(cacheFirst(event.request, OFFLINE_MEDIA_CACHE));
+      event.respondWith(cacheFirst(event.request, offlineMediaCacheNames(event.request.url)));
       return;
     case 'thumbnail-resolver':
       // Resolver URLs are mutable. Explicit downloads may install a cached
       // redirect as the offline fallback, but online requests always recheck.
-      event.respondWith(networkFirst(event.request, OFFLINE_MEDIA_CACHE, {
+      event.respondWith(networkFirst(event.request, offlineMediaCacheNames(event.request.url), {
         persistOnlineResponse: false,
         fallbackOnUnavailableResponse: true,
       }));
       return;
     case 'library-media':
-      event.respondWith(networkFirst(event.request, OFFLINE_MEDIA_CACHE, {
+      event.respondWith(networkFirst(event.request, offlineMediaCacheNames(event.request.url), {
         fallbackOnUnavailableResponse: true,
       }));
       return;
     case 'network-first':
-      event.respondWith(networkFirst(event.request, SHELL_CACHE));
+      event.respondWith(networkFirst(event.request, [SHELL_CACHE]));
       return;
     case 'shell':
       event.respondWith(shellNetworkFirst(event.request, strategy.url));

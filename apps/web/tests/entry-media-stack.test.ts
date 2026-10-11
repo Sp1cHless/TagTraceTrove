@@ -31,6 +31,17 @@ describe('Entry media stack', () => {
     });
   });
 
+  it('leads with the first preview when the importing site had no cover', () => {
+    // A site's adapter may learn only a previews rule, so the Entry arrives with previews and
+    // no cover. The stack still has an order — the first picture in front, the rest behind it.
+    const layers = entryStackLayers({
+      coverRef: null,
+      previewRefs: ['/preview.webp', '/preview-2.webp'],
+    });
+
+    expect(layers).toEqual(['/preview.webp', '/preview-2.webp']);
+  });
+
   it('keeps natural-aspect pages narrow and fans previews in 3D', () => {
     const layers = entryStackLayers({
       coverRef: '/cover.webp',

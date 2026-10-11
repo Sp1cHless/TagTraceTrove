@@ -1,0 +1,9 @@
+{
+  "focused": 0,
+  "default": 0,
+  "integration": 1,
+  "types": 1,
+  "lint": 0,
+  "diff": 0,
+  "build": 0
+}

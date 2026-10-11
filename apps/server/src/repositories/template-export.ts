@@ -1,5 +1,6 @@
 import { mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DEFAULT_CONTENT_KINDS, normalizeTag } from '@t3/shared';
 import type { T3Database } from '../database/connection.js';
 import { listLayout } from './layout-repository.js';
 
@@ -21,12 +22,68 @@ export interface TemplateFileContents {
   entryType: string;
   generatedAt: string;
   sections: Array<{ name: string; facets: string[] }>;
+  /**
+   * The Content kinds a work of this Gallery carries, built-ins first. A template's scope was only
+   * ever its Sections and Facets; a work's Content rows are the other half of "what does a work here
+   * look like", and they were the one part the person could not see in the template at all.
+   */
+  contentKinds: string[];
 }
 
 export interface TagLayoutFileContents {
   entryType: string;
   generatedAt: string;
   mappings: TagLayoutMapping[];
+}
+
+/**
+ * The Content kinds one Gallery's works carry: its built-ins first, then every kind actually used,
+ * the most-used spelling and order first.
+ *
+ * Derived from the rows rather than declared in a list somewhere, which is what lets a kind the person
+ * added to one work (a `comment`) be part of the Gallery from then on — carried by the next template
+ * write, with no empty row ever written for a work that has nothing to say. Spelling is the person's:
+ * two rows may say `Source URL` and `source url`, and the one more works use is the one kept.
+ */
+export function contentKindsForType(database: T3Database, entryType: string): string[] {
+  const rows = database.prepare(`
+    SELECT content.content_type AS kind, COUNT(DISTINCT content.entry_id) AS works
+    FROM entry_contents AS content
+    JOIN entries AS entry ON entry.id = content.entry_id
+    WHERE entry.type = ?
+    GROUP BY content.content_type
+  `).all(entryType) as Array<{ kind: string; works: number }>;
+
+  const spellings = new Map<string, { kind: string; works: number }>();
+  for (const row of rows) {
+    const key = normalizeTag(row.kind);
+    if (key === '') continue;
+    const seen = spellings.get(key);
+    if (!seen || row.works > seen.works) spellings.set(key, row);
+  }
+
+  const kinds: string[] = [];
+  const taken = new Set<string>();
+  for (const builtIn of DEFAULT_CONTENT_KINDS) {
+    const key = normalizeTag(builtIn);
+    if (taken.has(key)) continue;
+    taken.add(key);
+    kinds.push(spellings.get(key)?.kind ?? builtIn);
+  }
+  const rest = [...spellings.entries()]
+    .filter(([key]) => !taken.has(key))
+    .sort((left, right) => right[1].works - left[1].works
+      || left[1].kind.localeCompare(right[1].kind))
+    .map(([, row]) => row.kind);
+  kinds.push(...rest);
+  return kinds;
+}
+
+function templateFileName(entryType: string, suffix: string): string {
+  if (!entryType || /[\\/\\\\:*?"<>|]/u.test(entryType) || entryType === '.' || entryType === '..') {
+    throw new Error('Invalid Gallery entryType for template filename');
+  }
+  return `${entryType}.${suffix}.json`;
 }
 
 export function templatesDirFor(databasePath: string): string {
@@ -121,6 +178,7 @@ export function writeTemplateFiles(
       name: section.name,
       facets: section.facets.map((facet) => facet.name),
     })),
+    contentKinds: contentKindsForType(database, entryType),
   };
 
   const mappings = tagLayoutMappings(database, entryType);
@@ -130,8 +188,8 @@ export function writeTemplateFiles(
     mappings,
   };
 
-  const templatePath = join(templatesDir, `${entryType}.template.json`);
-  const tagLayoutPath = join(templatesDir, `${entryType}.tag-layout.json`);
+  const templatePath = join(templatesDir, templateFileName(entryType, 'template'));
+  const tagLayoutPath = join(templatesDir, templateFileName(entryType, 'tag-layout'));
   writeFileSync(templatePath, `${JSON.stringify(templateContents, null, 2)}\n`, 'utf8');
   writeFileSync(tagLayoutPath, `${JSON.stringify(tagLayoutContents, null, 2)}\n`, 'utf8');
   return { templatePath, tagLayoutPath, mappingCount: mappings.length };
@@ -145,6 +203,8 @@ export interface TemplateSummary {
   tagLayoutPath: string;
   templateExists: boolean;
   tagLayoutExists: boolean;
+  /** Same list `writeTemplateFiles` writes, from the same helper, so file and view cannot disagree. */
+  contentKinds: string[];
 }
 
 /** Advanced-editing listing: one summary per Gallery with a template. */
@@ -160,8 +220,8 @@ export function listTemplateSummaries(
   for (const entryType of exists) {
     const layout = listLayout(database, entryType);
     if (layout.length === 0) continue;
-    const templatePath = join(templatesDir, `${entryType}.template.json`);
-    const tagLayoutPath = join(templatesDir, `${entryType}.tag-layout.json`);
+    const templatePath = join(templatesDir, templateFileName(entryType, 'template'));
+    const tagLayoutPath = join(templatesDir, templateFileName(entryType, 'tag-layout'));
     summaries.push({
       entryType,
       sections: layout.map((section) => ({
@@ -173,6 +233,7 @@ export function listTemplateSummaries(
       tagLayoutPath,
       templateExists: summaryExists(templatePath),
       tagLayoutExists: summaryExists(tagLayoutPath),
+      contentKinds: contentKindsForType(database, entryType),
     });
   }
   return summaries;

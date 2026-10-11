@@ -1,3 +1,4 @@
+import { rateLimitFromResponse } from '../catalog-provider.js';
 import type { AdapterCandidate, AdapterSearchInput, SourceSearchAdapter } from '../source-search-adapter.js';
 
 /**
@@ -135,10 +136,10 @@ async function fetchSearchHtml(
   }
   if (signal.aborted) throw signal.reason ?? new Error(`${template.key}: aborted`);
   if (response.status === 429 || response.status === 503 || response.status === 509) {
-    throw new TemplateStructureError(`${template.key}: rate limited (HTTP ${response.status})`);
+    throw rateLimitFromResponse(response);
   }
   if (response.status === 403) {
-    throw new TemplateStructureError(`${template.key}: access denied (HTTP 403; IP may be banned)`);
+    throw rateLimitFromResponse(response);
   }
   if (!response.ok) {
     throw new TemplateStructureError(`${template.key}: HTTP ${response.status}`);

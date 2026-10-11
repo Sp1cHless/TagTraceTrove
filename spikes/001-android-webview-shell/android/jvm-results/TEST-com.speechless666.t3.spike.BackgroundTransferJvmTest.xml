@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.speechless666.t3.spike.BackgroundTransferJvmTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-06T06:26:10.735Z" hostname="LAPTOP-70QV4MNN" time="118.703">
+  <properties/>
+  <testcase name="activeNativeLeaseBlocksDiscardAndExpiredOrStaleCompletionCannotAuthorizeMediaCleanup" classname="com.speechless666.t3.spike.BackgroundTransferJvmTest" time="4.482"/>
+  <testcase name="actualFacadePinnedReplayOriginalMultipartColdLedgerThenTypedForegroundAck" classname="com.speechless666.t3.spike.BackgroundTransferJvmTest" time="16.532"/>
+  <testcase name="productionWorkerIsRealOsScheduledWorkNotWebViewHelper" classname="com.speechless666.t3.spike.BackgroundTransferJvmTest" time="0.03"/>
+  <testcase name="actualFacadeNoMediaPinnedReplayColdLedgerThenTypedForegroundAck" classname="com.speechless666.t3.spike.BackgroundTransferJvmTest" time="16.161"/>
+  <testcase name="uniqueProductionJobWaitsForNetworkConstraint" classname="com.speechless666.t3.spike.BackgroundTransferJvmTest" time="0.348"/>
+  <testcase name="standaloneMissingCoverPredecessorIsHeldBeforeAnyUpload" classname="com.speechless666.t3.spike.BackgroundTransferJvmTest" time="15.969"/>
+  <testcase name="missingAdditionalMediaCapabilityHoldsWholeCreateBeforeAnyWrite" classname="com.speechless666.t3.spike.BackgroundTransferJvmTest" time="16.184"/>
+  <testcase name="standaloneActualFacadePinnedTlsColdRetryNoSyntheticCreateThenForegroundAck" classname="com.speechless666.t3.spike.BackgroundTransferJvmTest" time="16.184"/>
+  <testcase name="currentMultiKindFacadePinnedTlsSqlColdRetryThenOriginalForegroundTypedAck" classname="com.speechless666.t3.spike.BackgroundTransferJvmTest" time="16.457"/>
+  <testcase name="actualFacadeMultipleMediaMiddleCommitColdRetryThenTypedForegroundAck" classname="com.speechless666.t3.spike.BackgroundTransferJvmTest" time="16.355"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

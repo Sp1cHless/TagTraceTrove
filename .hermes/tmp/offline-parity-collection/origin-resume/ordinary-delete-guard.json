@@ -1,0 +1,62 @@
+{
+  "command": [
+    "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "--config",
+    "vitest.integration.config.ts",
+    "apps/web/tests/offline-collection-parity.integration.test.ts",
+    "-t",
+    "delete",
+    "--maxWorkers=2",
+    "--testTimeout=30000",
+    "--reporter=json",
+    "--outputFile=D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-collection\\origin-resume\\ordinary-delete.json"
+  ],
+  "cwd": "D:\\Project\\TagTraceTrove",
+  "before": {
+    "owned": {
+      "apps/web/src/offline/collection-delete.ts": "18a63ecf7335c5f2c337122ab118b0cafce597dc201d0a8014a354c39f37c2a7",
+      "apps/web/src/offline/pending-work-restore.ts": "da36da11d389989e429916e3303dd643a74f2fd826cb011023defa24d5fef3fd",
+      "apps/web/tests/offline-collection-delete.integration.test.ts": "0f087f6d4eb8a0f6adb67ace3b1d0c067527ccc0c94cd4a89e6630acc0fe5c64",
+      "apps/web/src/offline/offline-api.ts": "b4e3295e2973ad1e6915a799443f2bbf68a520fc2cbef20a849ec3c5e0d551b8"
+    },
+    "dependencies": {
+      "apps/web/src/api/gallery.ts": "6e5d9475a19ac1544cd89d0a3d0581326f3c97a9ab60546725bf9db1a12e3dac",
+      "apps/server/src/http/app.ts": "d4ae18b1fde4f3525f8ccebc6d0c3ed6f0222cca1e8aa607d17af3a773e89f63",
+      "packages/shared/src/schemas/sync.ts": "41a33d667586e825f0761593f93e1f9fd6bd8a12fc00a26dd928d0200726341d",
+      "apps/web/src/offline/sync-mutation-plan.ts": "265c1ecac2a456c55e02028f8fb1fe121d8891c6306588fd1970ab96c0dcb745",
+      "apps/server/src/repositories/collection-repository.ts": "f7011273420eddb731d101f0a110513174c80b92c07992642c6acde1f7cdfb97",
+      "apps\\server\\src\\database\\migrations\\028_author_resource_sync.sql": "a9b86901b93087165ae9d1c4f574e15f3697266100d44091eee5f44a1a3f85fe",
+      "apps\\server\\src\\database\\migrations\\037_gallery_order_sync.sql": "39904508f711bf9c1ac7bcc8bcb6a6eb72b8c968a5065e275bc62c2368649c68",
+      "apps\\server\\src\\database\\migrations\\042_standalone_author_directory_seed.sql": "ee9dccd44efe6cf383633d7e44ebab39368a58a9e8c1da0f6d971c362cdbb008"
+    }
+  },
+  "after": {
+    "owned": {
+      "apps/web/src/offline/collection-delete.ts": "18a63ecf7335c5f2c337122ab118b0cafce597dc201d0a8014a354c39f37c2a7",
+      "apps/web/src/offline/pending-work-restore.ts": "da36da11d389989e429916e3303dd643a74f2fd826cb011023defa24d5fef3fd",
+      "apps/web/tests/offline-collection-delete.integration.test.ts": "0f087f6d4eb8a0f6adb67ace3b1d0c067527ccc0c94cd4a89e6630acc0fe5c64",
+      "apps/web/src/offline/offline-api.ts": "b4e3295e2973ad1e6915a799443f2bbf68a520fc2cbef20a849ec3c5e0d551b8"
+    },
+    "dependencies": {
+      "apps/web/src/api/gallery.ts": "6e5d9475a19ac1544cd89d0a3d0581326f3c97a9ab60546725bf9db1a12e3dac",
+      "apps/server/src/http/app.ts": "d4ae18b1fde4f3525f8ccebc6d0c3ed6f0222cca1e8aa607d17af3a773e89f63",
+      "packages/shared/src/schemas/sync.ts": "41a33d667586e825f0761593f93e1f9fd6bd8a12fc00a26dd928d0200726341d",
+      "apps/web/src/offline/sync-mutation-plan.ts": "265c1ecac2a456c55e02028f8fb1fe121d8891c6306588fd1970ab96c0dcb745",
+      "apps/server/src/repositories/collection-repository.ts": "f7011273420eddb731d101f0a110513174c80b92c07992642c6acde1f7cdfb97",
+      "apps\\server\\src\\database\\migrations\\028_author_resource_sync.sql": "a9b86901b93087165ae9d1c4f574e15f3697266100d44091eee5f44a1a3f85fe",
+      "apps\\server\\src\\database\\migrations\\037_gallery_order_sync.sql": "39904508f711bf9c1ac7bcc8bcb6a6eb72b8c968a5065e275bc62c2368649c68",
+      "apps\\server\\src\\database\\migrations\\042_standalone_author_directory_seed.sql": "ee9dccd44efe6cf383633d7e44ebab39368a58a9e8c1da0f6d971c362cdbb008"
+    }
+  },
+  "ownedStable": true,
+  "dependenciesStable": true,
+  "result": {
+    "exit": 0,
+    "numPassedTests": 1,
+    "numFailedTests": 0,
+    "numPendingTests": 2,
+    "failed": []
+  }
+}

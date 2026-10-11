@@ -1,0 +1,12 @@
+{
+  "kindCount": 31,
+  "newKind": {
+    "entityKind": "entry",
+    "flags": [
+      "offlineMutations",
+      "offlineEntryMultiAuthorConversion"
+    ]
+  },
+  "generator": "mechanical equivalent of actual app/build.gradle task; no Gradle invocation or production build output",
+  "equality": true
+}

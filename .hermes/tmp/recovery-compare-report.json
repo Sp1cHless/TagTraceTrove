@@ -1,0 +1,1021 @@
+objects 84 83 676585
+[
+  {
+    "name": "uploadEntryMedia",
+    "line": 4003,
+    "bundleOffset": 676591,
+    "params": [
+      3,
+      3
+    ],
+    "onlySource": [
+      "mimeType"
+    ],
+    "onlyBundle": [],
+    "length": [
+      3736,
+      2219
+    ]
+  },
+  {
+    "name": "setEntryMediaOrder",
+    "line": 4057,
+    "bundleOffset": 678811,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      3764,
+      1567
+    ]
+  },
+  {
+    "name": "getClientId",
+    "line": 4130,
+    "bundleOffset": 680430,
+    "params": [
+      0,
+      0
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      89,
+      39
+    ]
+  },
+  {
+    "name": "getSyncCapabilities",
+    "line": 4134,
+    "bundleOffset": 680470,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      12459,
+      6816
+    ]
+  },
+  {
+    "name": "fetchSyncSnapshot",
+    "line": 4360,
+    "bundleOffset": 687287,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      166,
+      83
+    ]
+  },
+  {
+    "name": "enqueueOfflinePendingEntryFacetCreate",
+    "line": 4401,
+    "bundleOffset": 688387,
+    "params": [
+      3,
+      3
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      452,
+      274
+    ]
+  },
+  {
+    "name": "createFacet",
+    "line": 4407,
+    "bundleOffset": 688662,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      275,
+      130
+    ]
+  },
+  {
+    "name": "updateEntry",
+    "line": 4414,
+    "bundleOffset": 688862,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      459,
+      191
+    ]
+  },
+  {
+    "name": "recordEntryView",
+    "line": 4427,
+    "bundleOffset": 689054,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      443,
+      183
+    ]
+  },
+  {
+    "name": "likeEntry",
+    "line": 4439,
+    "bundleOffset": 689238,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      431,
+      171
+    ]
+  },
+  {
+    "name": "addViewLaterEntry",
+    "line": 4451,
+    "bundleOffset": 689410,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      465,
+      187
+    ]
+  },
+  {
+    "name": "removeViewLaterEntry",
+    "line": 4463,
+    "bundleOffset": 689598,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "1"
+    ],
+    "length": [
+      476,
+      196
+    ]
+  },
+  {
+    "name": "addViewLaterAuthor",
+    "line": 4475,
+    "bundleOffset": 689795,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      497,
+      198
+    ]
+  },
+  {
+    "name": "removeViewLaterAuthor",
+    "line": 4487,
+    "bundleOffset": 689994,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "1"
+    ],
+    "length": [
+      508,
+      207
+    ]
+  },
+  {
+    "name": "assignEntryTag",
+    "line": 4499,
+    "bundleOffset": 690202,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      1229,
+      550
+    ]
+  },
+  {
+    "name": "moveEntryTag",
+    "line": 4521,
+    "bundleOffset": 690753,
+    "params": [
+      3,
+      3
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      1021,
+      447
+    ]
+  },
+  {
+    "name": "removeEntryTag",
+    "line": 4540,
+    "bundleOffset": 691201,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      921,
+      426
+    ]
+  },
+  {
+    "name": "linkEntryAuthorByName",
+    "line": 4558,
+    "bundleOffset": 691628,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "1"
+    ],
+    "length": [
+      1692,
+      788
+    ]
+  },
+  {
+    "name": "linkEntryAuthor",
+    "line": 4586,
+    "bundleOffset": 692417,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      472,
+      186
+    ]
+  },
+  {
+    "name": "unlinkEntryAuthor",
+    "line": 4597,
+    "bundleOffset": 692604,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "1"
+    ],
+    "length": [
+      478,
+      190
+    ]
+  },
+  {
+    "name": "setEntryRating",
+    "line": 4608,
+    "bundleOffset": 692795,
+    "params": [
+      3,
+      3
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      493,
+      189
+    ]
+  },
+  {
+    "name": "updateAuthor",
+    "line": 4620,
+    "bundleOffset": 692985,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      498,
+      190
+    ]
+  },
+  {
+    "name": "assignAuthorTag",
+    "line": 4632,
+    "bundleOffset": 693176,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      1179,
+      550
+    ]
+  },
+  {
+    "name": "renameAuthorTag",
+    "line": 4653,
+    "bundleOffset": 693727,
+    "params": [
+      3,
+      3
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      1707,
+      815
+    ]
+  },
+  {
+    "name": "removeAuthorTag",
+    "line": 4683,
+    "bundleOffset": 694543,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      878,
+      423
+    ]
+  },
+  {
+    "name": "setAuthorRating",
+    "line": 4701,
+    "bundleOffset": 694967,
+    "params": [
+      3,
+      3
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      517,
+      198
+    ]
+  },
+  {
+    "name": "createEntryRatingSlot",
+    "line": 4713,
+    "bundleOffset": 695166,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      1623,
+      760
+    ]
+  },
+  {
+    "name": "reorderEntryRatingSlots",
+    "line": 4741,
+    "bundleOffset": 695927,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      1695,
+      858
+    ]
+  },
+  {
+    "name": "createAuthorRatingSlot",
+    "line": 4771,
+    "bundleOffset": 696786,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      1632,
+      757
+    ]
+  },
+  {
+    "name": "reorderAuthorRatingSlots",
+    "line": 4799,
+    "bundleOffset": 697544,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      1715,
+      867
+    ]
+  },
+  {
+    "name": "setGalleryOrder",
+    "only": "source"
+  },
+  {
+    "name": "createCollection",
+    "line": 4834,
+    "bundleOffset": 698412,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      703,
+      289
+    ]
+  },
+  {
+    "name": "updateCollection",
+    "line": 4848,
+    "bundleOffset": 698702,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      608,
+      244
+    ]
+  },
+  {
+    "name": "setCollectionNsfw",
+    "line": 4861,
+    "bundleOffset": 698947,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      603,
+      245
+    ]
+  },
+  {
+    "name": "reorderCollections",
+    "line": 4874,
+    "bundleOffset": 699193,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      648,
+      261
+    ]
+  },
+  {
+    "name": "addCollectionEntry",
+    "line": 4887,
+    "bundleOffset": 699455,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      593,
+      231
+    ]
+  },
+  {
+    "name": "removeCollectionEntry",
+    "line": 4899,
+    "bundleOffset": 699687,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "1"
+    ],
+    "length": [
+      601,
+      237
+    ]
+  },
+  {
+    "name": "addCollectionProducer",
+    "line": 4911,
+    "bundleOffset": 699925,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      624,
+      235
+    ]
+  },
+  {
+    "name": "removeCollectionProducer",
+    "line": 4923,
+    "bundleOffset": 700161,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "1"
+    ],
+    "length": [
+      632,
+      241
+    ]
+  },
+  {
+    "name": "createAuthorDirectory",
+    "line": 4935,
+    "bundleOffset": 700403,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      2871,
+      1245
+    ]
+  },
+  {
+    "name": "updateAuthorDirectory",
+    "line": 4986,
+    "bundleOffset": 701649,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      2212,
+      1079
+    ]
+  },
+  {
+    "name": "moveEntryToAuthorDirectory",
+    "line": 5022,
+    "bundleOffset": 702729,
+    "params": [
+      3,
+      3
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      2675,
+      1175
+    ]
+  },
+  {
+    "name": "removeEntryFromAuthorDirectory",
+    "line": 5065,
+    "bundleOffset": 703905,
+    "params": [
+      3,
+      3
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      1854,
+      817
+    ]
+  },
+  {
+    "name": "createEntryContent",
+    "line": 5096,
+    "bundleOffset": 704723,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      1357,
+      546
+    ]
+  },
+  {
+    "name": "updateEntryContent",
+    "line": 5126,
+    "bundleOffset": 705270,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      1550,
+      626
+    ]
+  },
+  {
+    "name": "deleteEntryContent",
+    "line": 5159,
+    "bundleOffset": 705897,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      937,
+      369
+    ]
+  },
+  {
+    "name": "reorderEntryContents",
+    "line": 5180,
+    "bundleOffset": 706267,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      1252,
+      528
+    ]
+  },
+  {
+    "name": "mergeViewLaterEntries",
+    "line": 5207,
+    "bundleOffset": 706796,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [
+      "0"
+    ],
+    "length": [
+      751,
+      340
+    ]
+  },
+  {
+    "name": "getViewLaterState",
+    "line": 5228,
+    "bundleOffset": 707137,
+    "params": [
+      0,
+      0
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      132,
+      82
+    ]
+  },
+  {
+    "name": "listGalleries",
+    "line": 5231,
+    "bundleOffset": 707220,
+    "params": [
+      0,
+      0
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      120,
+      70
+    ]
+  },
+  {
+    "name": "queryEntryPage",
+    "line": 5234,
+    "bundleOffset": 707291,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      138,
+      76
+    ]
+  },
+  {
+    "name": "listFacetFilterOptions",
+    "line": 5237,
+    "bundleOffset": 707368,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      232,
+      106
+    ]
+  },
+  {
+    "name": "getEntry",
+    "line": 5243,
+    "bundleOffset": 707475,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      1168,
+      508
+    ]
+  },
+  {
+    "name": "listCollections",
+    "line": 5263,
+    "bundleOffset": 707984,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      205,
+      85
+    ]
+  },
+  {
+    "name": "listCollectionsForEntry",
+    "line": 5269,
+    "bundleOffset": 708070,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      199,
+      103
+    ]
+  },
+  {
+    "name": "listAuthors",
+    "line": 5275,
+    "bundleOffset": 708174,
+    "params": [
+      0,
+      0
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      114,
+      64
+    ]
+  },
+  {
+    "name": "suggestProducers",
+    "line": 5278,
+    "bundleOffset": 708239,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      770,
+      332
+    ]
+  },
+  {
+    "name": "suggestTags",
+    "line": 5289,
+    "bundleOffset": 708572,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      197,
+      81
+    ]
+  },
+  {
+    "name": "queryProducerPage",
+    "line": 5294,
+    "bundleOffset": 708654,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      147,
+      85
+    ]
+  },
+  {
+    "name": "getAuthor",
+    "line": 5297,
+    "bundleOffset": 708740,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      132,
+      61
+    ]
+  },
+  {
+    "name": "listAuthorFilterOptions",
+    "line": 5300,
+    "bundleOffset": 708802,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      244,
+      109
+    ]
+  },
+  {
+    "name": "searchTags",
+    "line": 5306,
+    "bundleOffset": 708912,
+    "params": [
+      2,
+      2
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      165,
+      70
+    ]
+  },
+  {
+    "name": "listGalleryTags",
+    "line": 5309,
+    "bundleOffset": 708983,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      153,
+      79
+    ]
+  },
+  {
+    "name": "listCollectionsForProducer",
+    "line": 5312,
+    "bundleOffset": 709063,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      217,
+      112
+    ]
+  },
+  {
+    "name": "listTaxonomyAliases",
+    "line": 5318,
+    "bundleOffset": 709176,
+    "params": [
+      1,
+      1
+    ],
+    "onlySource": [],
+    "onlyBundle": [],
+    "length": [
+      196,
+      91
+    ]
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "apps/web/src/offline/offline-api.ts": {
+    "sha256": "eaf0d456cfc153cb1d171b33a2466934280c8ddfab67050652371b16e2d30064",
+    "lines": 5406
+  },
+  "apps/server/src/sync/replay-service.ts": {
+    "sha256": "ecbfd3d2c31ec1c77e68f95da4970943ccd83c2404c5e5d7459a02e12690d0fd",
+    "lines": 2176
+  },
+  "apps/web/tests/existing-entry-media-vertical.test.ts": {
+    "sha256": "33a741b1fbfb18c7d1dd7aa66cf3a365c88243b1ec0e77b35844add56820e2fc",
+    "lines": 223
+  },
+  "apps/web/tests/existing-entry-media.test.ts": {
+    "sha256": "4dce49d0448d60f33e0595d8226cbf86d88fb1ed19307a83557ede73ea8458f6",
+    "lines": 95
+  }
+}

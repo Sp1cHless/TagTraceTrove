@@ -50,12 +50,12 @@ interface GalleryApiLike {
           loading="lazy"
           decoding="async"
         />
-        <span v-if="entryStackLayers(entry).length === 0" class="entry-placeholder" aria-hidden="true">
+        <span v-if="entryStackLayers(entry).length === 0" class="entry-placeholder t3-library-text" aria-hidden="true">
           {{ entry.title.slice(0, 1).toUpperCase() }}
         </span>
       </div>
       <span class="entry-meta">
-        <strong>{{ entry.title }}</strong>
+        <strong class="t3-library-text">{{ entry.title }}</strong>
         <small>{{ entry.type }}</small>
         <small v-if="note" class="entry-usage-note" data-testid="shared-card-note">{{ note }}</small>
       </span>

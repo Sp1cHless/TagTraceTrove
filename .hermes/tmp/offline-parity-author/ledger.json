@@ -1,0 +1,77 @@
+{
+  "apps/web/tests/offline-author-parity.integration.test.ts": {
+    "original": null,
+    "current": "613d72d142bf526652f71c465ed39e8d654e8147591730c08b8382ae8cfef2f3",
+    "new": true
+  },
+  "packages/shared/src/schemas/sync.ts": {
+    "original": "472c0a11e5c691f4e5f79c8ccced1f7f8c07b12b174b4f5227545951cc182a98",
+    "current": "a6ce69afb082926188e191da2dba2e995a225ef77a38abba51f13cbbf799de03",
+    "new": false
+  },
+  "packages/shared/src/schemas/native-mutation-contract.ts": {
+    "original": "427eaa466d4dde2a6078aa7ec0f0c77f6c4494b61dfc5f3cb568a257278ac302",
+    "current": "7d7ac661718a0656b653f7390d2eb53a7ee781951f58195212e5859670a3895e",
+    "new": false
+  },
+  "apps/server/src/sync/sync-service.ts": {
+    "original": "5df706f97a18ed68a5d6a3ff210af894c2387a5ac1d9ab64cbd6e244f0b58879",
+    "current": "b8ea0c4b76f75399aebc625b0adeabc335adab50c88d8d0b34f97bcbfe7dd1f3",
+    "new": false
+  },
+  "apps/server/src/sync/replay-service.ts": {
+    "original": "fed9871e46d397fae75d306f6f662e6c3e70491a6b70fb7e473ac2da0af81a9f",
+    "current": "23872b62d8bd00e9a71d24fbcb13207d2312952cd1c10ecc94f3f85f689bde7d",
+    "new": false
+  },
+  "apps/web/src/offline/offline-api.ts": {
+    "original": "e4cd1fb920e2267d54cad5b0ad7a001ea7507aed015254062b6b0424181358ff",
+    "current": "afe921a3c57b5ecf9548e93d6b07ae408f42c54fc231807ffb0373eaccddf010",
+    "new": false
+  },
+  "apps/web/src/offline/pending-work-restore.ts": {
+    "original": "5a7c0d314d8f04c03283fbec5832289fad81346cdfef04eb3de8dc406d579f7f",
+    "current": "ec70e60effafdd3f562f11eeab2f650ac76c3bd25f4c3eecf2e79f0576be1d66",
+    "new": false
+  },
+  "apps/web/src/offline/outbox-store.ts": {
+    "original": "d4c300eef3319034312a4145a82a102ce71605c598ce0dcbe7b9f217d13ee721",
+    "current": "ba11716ebf20040e182a2d3f8cedf06d851cc5d15c0840fa3198a6e1d7bf470b",
+    "new": false
+  },
+  "apps/web/src/api/gallery.ts": {
+    "original": "a8a85c330fb83323aa365fc874113105963587bb981565fad666c74e62b34819",
+    "current": "1709c2c7bbfcbf26d33680ad612aaabadbf487d1a39988454c8505a76a56129a",
+    "new": false
+  },
+  "apps/server/src/http/app.ts": {
+    "original": "ab4d7845b7a9e32e95ea2da8e2e77f82182d39312777853416987a7c2764fb87",
+    "current": "db20df0bab45324962737e7c42324dab056e4ccb1613f568c45dfd561b167fb8",
+    "new": false
+  },
+  "apps/web/tests/fixtures/native-valid-kind-fixture.ts": {
+    "original": "898ab8676edba8f2dd5922fdc1d92c823c02b3b32d20ece8bff52513527690d4",
+    "current": "20f620d5dae5af2214a38445830020ac773b521e409f5ce0977548687863b875",
+    "new": false
+  },
+  "apps/web/src/offline/sync-mutation-plan.ts": {
+    "original": "e2d27780ba89ced0c7fd3f7a7a19c1f7e02314114801f4b7ba04070269c0c62d",
+    "current": "884a57dc0e22755d8e85d186866cd6d9797b9d70abbaaeddaac321b1a09d6057",
+    "new": false
+  },
+  ".hermes/artifacts/offline-parity-author-implementation.md": {
+    "original": "5712568a3a860f26ddf5a941eb18e9757d8c80c7af679c12f9a7dd51047aaf0d",
+    "current": "ddbee8bb85149d5b55f52fc447bc82d5948a2b4f7f12bba257e559ee1fa12b56",
+    "new": false
+  },
+  "apps/web/src/GalleryApp.vue": {
+    "original": "e8e55ab40a9f4a79a7b143d34558a3b74d83105162f07a2b496620813a083a91",
+    "current": "8e9103c58f49800c745a6068655d5cf5f1c2da04a10ae1c6fec0d0ac6f873fb4",
+    "new": false
+  },
+  "apps/web/src/stores/preferences.ts": {
+    "original": "6fe0d8b6579f22a8e3c3e0f2cce2f75fb94a5d8e4fdae3fedd64c19a3bb1f5e9",
+    "current": "b162c7b8ef9d8fed9677f57eda9d095c2a891b1d58a5446a563e72eaac112b42",
+    "new": false
+  }
+}

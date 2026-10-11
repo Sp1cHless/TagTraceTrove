@@ -1,0 +1,13 @@
+--- apps/web/src/offline/collection-common-tag.ts before
++++ apps/web/src/offline/collection-common-tag.ts after
+@@ -15,7 +15,9 @@
+   const entry=p.entries.find(entry=>entry.syncUid?.toLowerCase()===row.syncUid.toLowerCase());const type=op.baseValues.types.find(type=>type.entryType===row.entryType)!;
+   const facet=p.tagGroups.find(facet=>facet.syncUid?.toLowerCase()===type.facetUid?.toLowerCase());
+   if(!entry || !tag || !facet)throw new Error('Unknown projected common-tag identity');
+-  if(!entryTags.some(value=>value.entryId===entry.id && value.tagId===tag!.id))entryTags.push({entryId:entry.id,tagId:tag.id,facetId:facet.id});
++  const index=entryTags.findIndex(value=>value.entryId===entry.id && value.tagId===tag!.id);
++  const assignment={entryId:entry.id,tagId:tag.id,facetId:facet.id};
++  if(index<0)entryTags.push(assignment);else entryTags[index]=assignment;
+  }
+  return {...snapshot,payload:{...p,tags,entryTags,entries:p.entries.map(row=>({...row,...(targets.some(member=>member.syncUid===row.syncUid)?{syncVersion:op.baseValues.members.find(member=>member.syncUid===row.syncUid)!.syncVersion+1}:{})})),collections:p.collections.map(row=>({...row,...(row.syncUid===op.entityUid?{syncVersion:op.baseVersion+1}:{})}))}};
+ }

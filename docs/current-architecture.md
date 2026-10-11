@@ -92,7 +92,7 @@ Tests use in-memory or temporary SQLite databases and never `.data/library.db`.
 - `rating-repository.ts` creates/reuses shared rating slots per subject kind and Gallery, lists the composed rating rows (slot name + stars, unrated = null), upserts values, and reorders slots. Producer slots resolve through the dominant Gallery derivation, so a value always belongs to the partition its author currently sits in.
 - `usage-repository.ts` lazily creates each Entry's `entry_usage` row, records views and likes, and returns the updated record; Producer aggregates are composed at read time.
 - `partition-repository.ts` reads and flips the per-Gallery SFW/NSFW flags and annotates Gallery/Author summaries with them.
-- `collection-repository.ts` manages Collections and their membership (two kinds, one-level nesting for entry folders, folder-level NSFW, per-kind ordering, member composition with preview refs and covers).
+- `collection-repository.ts` manages Collections and their membership (two kinds, one-level nesting for entry folders, folder-level NSFW, per-kind ordering, member composition with preview refs and covers). Collection cards prefer each work's primary cover, fall back to its first preview, and use the canonical paged Entry query to repair empty/stale nested-folder summaries when a parent folder is opened; count/preview fallbacks prevent a stale zero from hiding known members. Collection list requests are generation- and visibility-guarded; switching from NSFW-visible to SFW clears inclusive folder/member previews immediately, then rejects late requests, so an in-flight response cannot repopulate hidden content.
 - `template-export.ts` turns each applied layout/tag layout into the Gallery's canonical template files under `<dataDir>/templates/` and provides the per-Gallery summaries (`GET /api/templates`) plus the majority-facet lookup that import uses to place tags on arrival.
 
 Rating conditions join the same filter family: `eq`/`gt`/`lt` compare the stars of one shared slot and `unrated` matches slots with no value, all ANDed with the tag and author rows; a rating sort orders high-to-low server-side with unrated entries sinking last (the UI never re-sorts over it). The sort's optional `applyAuthorRating` mode lets a work without its own value borrow its Authors' rating for the same-named dimension; the sort control carries that mode as a second option per dimension instead of adding a filter-bar slot, which keeps the bar usable on phones. Tag filters use AND across included Tag IDs and exclude any Entry carrying an excluded Tag ID.
@@ -147,13 +147,11 @@ prefetches the deterministic media manifest into a durable media cache. The
 online Gallery API remains authoritative; when supported core reads fail, a
 small offline repository derives Gallery, Entry, Author, facet, Collection,
 usage and View-later DTOs from the active snapshot. A visible banner marks
-that fallback. Entry title/date/page-count edits, View/Like events, Entry View
-later desired-state changes, and the bounded manual Entry composer create flow
-are the offline mutation allowlist; every other mutation still fails closed
-online. The `sync/`
+that fallback. Entry title/date/page-count edits, View/Like events, Entry and Producer View later desired-state changes, edits to existing Entry and Author rating values, shared Entry/Author rating-slot creation and ordering, Author Collection membership, Author Directory metadata/membership, and the bounded manual Entry composer create flow are the offline mutation allowlist; every other mutation still fails closed online. The `sync/`
 server module captures `snapshot_seq` and read-model rows inside one immediate
-transaction. Restore migrates old backups before preserving `libraryId` and
-rotating `syncEpoch`.
+transaction. Restore migrates and rotates the restored database in an isolated
+staging file, verifies it and stages assets before moving the live set aside;
+a promotion failure rolls the original database, WAL sidecars and assets back.
 
 The first C2 infrastructure slice upgraded `t3-offline` from schema version 1
 to 2 and added an independent `outbox` object store. C3 upgrades it to version 3
@@ -178,12 +176,28 @@ backfilled before triggers are installed, preserving business data without
 inventing historical changes. Database Doctor checks the new identities and
 unique indexes when the v16 columns are present.
 
-Snapshot format v2 includes Entry/Content `syncUid` and `syncVersion`, plus an
-atomic `changeSeq` high-water mark. The shared parser keeps these additions
-optional so persisted format-v1 generations remain readable after an app
+Snapshot format v2 includes Entry/Content/Producer and Producer Tag sync identities,
+shared rating-layout UUID/version rows, Collection UUID/version rows and stable
+Author Directory UUIDs, plus an atomic `changeSeq` high-water mark. The shared parser keeps
+these additions optional so persisted format-v1/v2 generations remain readable after an app
 upgrade. `POST /api/sync/replay` accepts strict `entry.update`, `entry.create`,
-`entry.usage`, and `entry.view-later.set` operations.
-Receipt lookup/hash validation, base-value conflict checks, the Entry mutation,
+`entry.usage`, `entry.view-later.set`, `entry.rating.set`, `entry.contents.set`,
+`producer.view-later.set`, `producer.rating.set`, `producer.update`, `producer.tags.set`,
+`rating-layout.slots.set`, `collection.producer.set`, `collection.create`,
+`collection.update`, `collection.entry.set`, `collection.order.set`, and
+`author.directories.set` operations. Collection management requires both the
+global `offlineMutations` flag and its own `offlineCollectionManagement` flag.
+An offline-created top-level Entry Collection retains the Gallery type supplied
+by its page; a nested folder inherits its parent's Gallery type. SFW display
+filters do not narrow the full top-level Collection order vector sent to the
+server, so hidden NSFW siblings keep their place when visible siblings move.
+Offline-created Collections retain deterministic, presentation-only negative IDs
+across app restarts and partial Outbox replay. While their create operation
+remains queued, related edits stay in the Outbox even after a capability probe
+switches reads online; after an authoritative snapshot covers the replay receipt,
+the facade resolves their stable UUID to the server ID and notifies an open
+Collections page to refresh its active selection.
+Receipt lookup/hash validation, base-value conflict checks, the owning mutation,
 trigger-maintained journal write and receipt insert share one SQLite transaction.
 An exact retry returns the stored result; an `opId` collision or stale edited
 field fails closed. The browser projects queued edits over the immutable snapshot,
@@ -199,16 +213,127 @@ and every later queued operation for that same Entry in one IndexedDB transactio
 because those intents carry base values and predicted revisions derived from the
 blocker. Earlier receipt retries and unrelated Entries remain queued.
 For `entry.create`, the client-generated Entry UUID is permanent, `baseVersion`
-is zero, and SQLite creates the numeric ID. Metadata, the selected ratings and
-initial View Later membership commit with the operation receipt in one
-transaction. The server never deduplicates by title. The offline composer only
+is zero, and SQLite creates the numeric ID. Metadata, optional initial Content
+rows with stable UUIDs, selected ratings and initial View Later membership
+commit with the operation receipt in one transaction. Content-bearing creates
+require the refreshed server's `offlineEntryInitialContents` capability at
+queue and replay time; old create envelopes without Content remain valid. The
+server never deduplicates by title. The offline composer only
 accepts a Gallery already present in the installed snapshot and does not invent
 a numeric route for the temporary `local:<uuid>` identity. Pending creates are
 exposed to global title search through a separate local projection and render as
 non-clickable “Pending sync” cards; they never receive a fake numeric ID.
+A pending create can additionally accept later Content through a distinct, immutable
+`entry.content.append` operation keyed to the original create op ID and permanent
+Entry UUID (`baseVersion: 0`, one new Content UUID/type/text); it does not rewrite
+the original create or perform a pre-authoritative whole-list replace. The server
+requires a successful parent create receipt on the same Entry identity and inserts
+the row, journal update and receipt in one SQLite transaction. The client persists
+the append, projects it with the initial rows across restarts, holds it behind a
+blocked create or earlier append, and checks both `offlineMutations` and the
+specific `offlineEntryContentAppend` capability at enqueue and replay. The
+Search pending card offers an append-only form only while that persisted gate and
+parent state permit it. After replay, the Outbox append is retained until the
+verified authoritative snapshot includes its exact Content UID and Entry owner;
+missing identity keeps it for an exact retry. This v26 slice has automated tests
+but no real-device acceptance. The v35 follow-up implements pending Entry Tag
+add/move/remove through a separate `entry.tags.set` desired-set operation with
+`baseVersion: 0` and `parentCreateOpId`; positive-version operations retain their
+existing semantics. It permits only existing canonical Tags and same-Gallery
+Facets from the installed snapshot, and requires `offlineMutations`,
+`offlineEntryTags`, and `offlinePendingEntryTags` at enqueue and replay. The
+immutable parent create is not rewritten. Search exposes cached suggestions,
+Facet placement, removal, and each child's persisted status/reason; blocked Tag
+or Content siblings prevent further edits. Replay validates the applied parent
+receipt and stable Entry identity in one isolated SQL transaction. Cleanup
+requires a newer checksum-verified snapshot covering the receipt sequence and
+the last applied desired Tag set, not every intermediate edit. v35 automated release
+verification passed; this is not a device-acceptance claim. Atomic Outbox cleanup
+retains creates with uncovered children using the current rows, while dependent
+enqueue validates its parent in the same write transaction.
+The v36 follow-up adds pending Entry existing-Author link/remove with
+`entry.authors.set`, `baseVersion: 0` and `parentCreateOpId`. Enqueue/replay require
+global mutations, Entry Author support and `offlinePendingEntryAuthors`. Cache
+canonical UID selection, immutable complete base/desired sets, verified parent
+receipt, whole-set refusal of unknown/deleted Authors, receipt-idempotent replay,
+last-applied desired-set snapshot coverage and atomic parent retention follow the
+same causal invariants. Search exposes projected Author names and independent
+child status/reasons. A blocked Author, Tag or Content child locks all related
+editing. Standard/isolated SQL/build/APK verification and independent read-only narrow
+review passed; actual-device acceptance remains a separate outstanding gate.
+Pending Entry new-Author creation/linking is now implemented via zero-version
+`entry.author.create-and-link` with an explicit immutable create parent. The
+separate child retains its Producer UUID, while later `entry.authors.set` can
+unlink/relink it on that same pending Entry. Capability support requires schema
+29 and the client persists the global/Author-create/Entry-Author/pending-Author/
+pending-new-Author conjunction. Cleanup checks Producer UID against the creation
+receipt's Producer numeric ID and the final applied relationship timeline, so an
+intentional later unlink does not strand historical create-link work. Actual
+Search UI callbacks, IndexedDB cold reopen and a disposable SQL facade lost-response
+retry chain are verified. Integrated gates passed: 845 standard/483 SQL plus
+typecheck/lint/build/diff-check; independent narrow source review passed (not exhaustive certification/device acceptance). Cross-Entry
+links to a still-pending Author are now implemented for pending and server-synced
+targets using optional `producerCreates` dependencies on `entry.authors.set`.
+Immutable migration033 stores Producer creation identity, so validation checks
+origin operation/client/library/epoch, canonical UID/numeric Producer identity and
+applied receipt opId rather than numeric coincidence. Client latest-queue atomic
+cleanup retains source creation and its Entry ancestor while dependent targets
+remain. Final APPLIED Author timelines allow source/target unlink and relink for
+both pending and positive-version source creation; genuine mounted online recovery
+keeps staged suggestions and routes negative presentation IDs into durable UUID
+operations, never online numeric writes. Parent gates after recovered-online unlink repair passed 867 standard/524 SQL
+and typecheck/lint/build/diff-check. Bounded source review found one staged unlink
+routing issue; mounted UI RED→GREEN repair and parent exact-path recheck resolved
+it without expanded audit. Original source-review uncertainties are not exhaustive
+certification. New Tag
+vocabulary/Facet creation remains unfinished. The pending Content board implements replacement/removal
+via `entry.contents.set`, zero base version and an explicit immutable create
+parent. Complete captured lists preserve unseen concurrent Content by conflicting,
+not deleting it; an empty desired list is valid. Final snapshot verification folds
+applied create/append/set operations in order so intentionally removed historical
+appends do not strand the queue, and later appends are still checked. Search has
+an actual edit/remove form with removal confirmation, retry-preserved drafts,
+committed-save refresh warnings and page-level write locks. Real IndexedDB cold
+reopen and disposable SQL lost-response/restart flows pass. 824 standard/475 SQL
+and typecheck/lint/build/diff checks passed; independent review, packaging and
+real-device acceptance are separate outstanding gates.
+Pending scalar metadata editing (title/uploadDate/pageCount) also uses immutable
+zero-version `entry.update` children; captured key comparison excludes the parent
+identity, and cleanup verifies the last applied desired value per field. Its
+implementation/UI and narrow review passed, but the v37 APK verification operation
+was blocked by authorization timeout, so no verified v37 package is claimed.
 Detailed template editing remains online-only, so the template-ready action keeps
 the composer open with a connection requirement instead of enqueuing and falling
-to Home when the server is unavailable.
+to Home when the server is unavailable. The online composer still creates the
+Entry before separately uploading media and Content; if a later call fails,
+it closes the already-committed create form and reports the created Entry ID
+instead of inviting a duplicate submit. This does not make those online
+follow-up calls atomic. The v27 APK (not v26) assigns each online POST a
+client Entry UUID and carries it into its transport-failure offline fallback.
+On schema 32, the online create atomically
+stores the Entry and its request fingerprint/version claim; an identical POST
+retry returns the existing ID, but changed metadata returns 409. A matching,
+unconsumed claim lets offline `entry.create` adopt the existing Entry and add
+its initial Content, ratings and View Later with the create receipt/mapping in
+one SQLite transaction; unrelated UID collisions or edited Entries fail closed.
+The client retains an applied create until a newer authoritative snapshot
+contains its Entry UID and initial Content UIDs. This does not make media or
+other online follow-up calls atomic. A kill before durable enqueue still lacks
+a persistent shared intent; v29 retains the same Entry UID across retries while
+the original composer remains open even if Outbox persistence failed, and blocks
+a no-UID retry if that server downgraded. Reopening the composer starts a new
+intent and cannot reconcile an earlier ambiguous POST. v30 treats completion
+of the IndexedDB Outbox+media transaction as the offline create's commit
+boundary: a later failed pending-state refresh leaves the draft reported as
+saved with a visible warning. Competing local `entry.create` writes for the
+same library/epoch/UID are rejected atomically in that IndexedDB transaction;
+neither mechanism records the online POST intent before it is sent. Schema 32 was
+verified only in isolated databases; it has not been applied to the formal
+library and requires the matching desktop server for v27–v30 APK use. The v28+
+client probes the server's `onlineEntryCreateClaim` flag before each online
+manual create: a legacy server receives a no-UID POST, and an uncertain
+legacy response keeps the draft visible without an offline fallback. If the
+probe itself fails before any POST, the ordinary offline enqueue may proceed.
 
 Offline View and Like are unique events: the stable operation ID is the event
 identity, so a lost response can never increment an aggregate twice. A pending
@@ -245,26 +370,98 @@ advances the same revision. The `offlineEntryRating` capability prevents a new
 client from queuing this operation against an older server. Automated acceptance
 is complete; Android real-device acceptance starts with the v8 candidate.
 
+v33 exposes the persisted create-operation reason in the local pending Entry DTO
+and distinguishes failed/conflict cards from ordinary Pending sync in Search.
+Absent reasons remain optional for older callers; normal pending cards preserve
+their prior shape. Blocked cards remain non-editable. This is read-model/UI status
+reporting only, not new retry, conflict-resolution, or media-state semantics.
+
+v34 extends the pending-card read model to later Content append operations:
+use the stored child op ID to project its own status and nonempty reason, retaining
+the existing Entry UID + parent-create-op filtering. Initial Content rows keep
+their original shape, parent status stays independent, and Outbox payloads are
+never rewritten. Vue renders status/reasons as ordinary escaped text. Existing
+blocked-sibling append gating remains unchanged; this is not media-state display
+or automatic retry/discard/conflict resolution.
+
 Cover and preview bytes remain outside SQLite but use a separate idempotent C3
 transport. Migration 022 stores durable media receipts; migration 023 records
 which Entry UUIDs came from successful offline create replay.
 `PUT /api/sync/media/:uploadId`
 rejects existing online Entries, then validates the actual SHA-256, MIME and
-image dimensions, promotes one deterministic file plus thumbnail, and updates
-the Entry reference together with the upload receipt.
+image dimensions, promotes one deterministic file plus thumbnail, and updates the
+Entry reference together with the upload receipt.
 An exact upload retry returns the stored result; another request body under the
-same ID, or an attempt to replace an occupied media slot, fails closed. C3 is
-deliberately limited to one cover and one preview (`ordinal = 0`). Metadata replay
+same ID, or an attempt to replace an occupied media slot, fails closed. v31 adds
+`offlineMediaMultiplePreviews`: the composer stages its complete ordered Preview
+selection in the same Outbox+Blob transaction. Cover remains ordinal zero;
+Previews append only at the next ordinal, with independent filenames and thumbnails.
+Replay explicitly sorts media by Entry, kind and ordinal rather than relying on
+IndexedDB's upload-ID key order. Missing/downgraded capability retains the whole
+multi-Preview create and its Blobs without sending a partial group. Metadata replay
 runs before dependent media; neither operation IDs nor upload IDs change after a
 lost response. Applied rows and Blobs are removed locally only after a newer
 authoritative snapshot covers the largest acknowledged server sequence. A hard
-media validation failure leaves a discardable failed media row while the created
-Entry itself can still reconcile from SQLite.
+Preview failure leaves later ordinals pending; explicit discard removes that failed
+Preview and its dependent later ordinals, not earlier Previews or an independent
+cover. v32 also carries the manual composer's Source URL as the first initial
+`Source URL` Content, followed by explicitly entered initial rows, matching the
+online creation order. Existing `offlineEntryInitialContents` capability, stable
+Content UUIDs, transactional replay and covering-snapshot checks apply; an older
+server refuses the entire Content-bearing draft instead of dropping its address.
+The Source remains ordinary Content with the same derived Source classification,
+not a new registry field or a network import. No new migration or capability is
+needed. Device acceptance is recorded as pending; no formal-library deployment
+was performed for v32.
 
-Entry Content mutations, Author View later, Collections, delete, merge, Import
-and all other high-risk mutations remain online-only.
-Initial ratings/View Later embedded in `entry.create` remain part of C3. No
-change-feed endpoint is exposed yet.
+Entry Content now uses `entry.contents.set`, a capability-gated full ordered-list
+desired state keyed by the owning Entry UID. Snapshot Content UUIDs preserve row
+identity, while newly added rows receive client UUIDs and temporary IDs that remain
+client-local until a refreshed snapshot supplies their server IDs. One atomic
+replay can add, edit, delete, or reorder the list; it compares the complete base
+list even when the Entry revision
+is unchanged, so concurrent online Content edits conflict rather than being
+silently overwritten. A convergent list consumes one predicted Entry revision so
+later queued operations remain causally ordered. Content rows, Entry revision,
+change journal and receipt commit in one SQLite transaction. The
+`offlineEntryContents` capability gates both queueing and diagnostics. There is no
+schema migration for this slice: migration 016 already assigns immutable Content
+sync UIDs. Automated acceptance is complete; Android real-device acceptance starts
+with v9.
+
+Author-owned Producer data now shares one offline edit block alongside Producer
+View Later, rating values, profile fields, and tag assignments. Migrations 025-027
+supply stable Producer identity/revisions and triggers for those child resources.
+`producer.update` carries a field-level patch; `producer.tags.set` carries the
+full stable-UID assignment set. Migration 028 adds separate stable identity/version
+boundaries for shared rating-slot layouts and Collections, plus a stable
+Author Directory-set UUID/version independent from the Producer profile/version.
+Directory rows also receive stable UIDs; the Directory-set revision covers all
+Directory metadata and Entry membership rows as one aggregate so moves can commit
+atomically without coupling to Producer profile/tag/rating edits. The strict
+`rating-layout.slots.set` replays create/order edits for both Entry and Author
+layouts; `collection.producer.set` replays only Author membership in an Author
+Collection; `author.directories.set` atomically reconciles the Author's Directory
+set and its Entry memberships. Producer, Directory-set, Collection, and
+rating-layout operations each have their own owner chains. Capabilities gate
+enqueue and replay, local projections use stable identities, and receipts remain
+until a refreshed snapshot's `changeSeq` covers every applied `serverSeq`. Entry-create ratings use stable slot
+UIDs whenever a locally-created layout is a prerequisite, so dependent operations
+remain blocked if that layout conflicts. The grouped v17 C2 slice adds `collection.create`,
+`collection.update`, `collection.entry.set`, and `collection.order.set`: offline
+Entry/Author Collection creation (including one nested Entry-folder level), metadata
+and NSFW edits, Entry membership add/remove, and complete top-level sibling reorders.
+The reorder operation carries every sibling UID, sort order, and Collection revision;
+replay compare-and-swaps the whole vector and writes the reorder transactionally.
+A Collection move queues the destination add before the source remove, and Entry
+membership dependencies block the removal if the add conflicts. Deleting Collections,
+temporary import Collections/bulk membership, Directory deletion, Author/Producer
+deletion, Entry deletion, and Entry merge remain online-only. Migration 028 is reused;
+Collection management itself does not require a new migration.
+
+Offline Entry-Author linking uses `entry.authors.set`, a full desired set of stable Producer UIDs owned by the Entry UID/version chain. Migration 029 journals every `entry_producers` insert/delete as an Entry revision, so existing online routes, imports, cascades, and offline replay share one conflict boundary. Replay validates all target Authors before mutation, applies the relation-set diff transactionally, verifies the revision delta equals the symmetric difference, and commits the receipt atomically. New Author creation from the Entry editor uses `entry.author.create-and-link`: a single Entry-owned operation with a client-generated stable Producer UID, optimistic Entry base values, alias/name collision checks, atomic Producer/link/receipt insertion and an offline negative-ID projection. The creation and its Entry link cannot partially replay; after a covering snapshot, the temporary Author ID is reconciled. Both paths require independent capability flags and only support server-synced Entries.
+
+Offline Relation suggestions for Authors, Entry Tags and Author Tags read canonical names, scoped aliases and usage from the installed snapshot, applying the shared ranking/exclusion rules without a network request. Author Tag assignment continues to use `producer.tags.set`; Entry Tag add/move/remove uses the full desired `entry.tags.set` with name-based canonical identity and valid cached Facet IDs. Migration 030 journals every `entry_tags` insert/update/delete on the owning Entry version chain; it gates `offlineEntryTags`. Taxonomy rename and Entry/Facet creation remain online-only. Read-only inspection on 2026-09-25 found schema 030 in the formal library; migration provenance must be checked before any further formal database action. No device acceptance is implied by these contracts.
 
 The first localhost manual acceptance pass on 2026-09-13 proved the shell,
 IndexedDB snapshot, Gallery/Entry/Collection fallback, Entry detail Content and
@@ -308,8 +505,32 @@ invalidate the registry so changed or deleted media cannot remain visible. This
 covers Gallery, Search, Author, View Later, Collection compositions and Entry
 detail without depending on the current page being controlled by the Service
 Worker. The initial complete media download can still take time in a large
-library; durable background transfer and restore rollback hardening remain
-separate follow-up work.
+library; durable background transfer remains separate follow-up work. Settings
+now offers explicit Sync now (probe/replay/full snapshot), storage estimates and
+persistence request, and a private forensic JSON export of queued edits/media
+(capped at 64 MiB, no automatic import). Clearing is blocked while edits or
+media are queued, and a server epoch change cannot replace the active snapshot
+with work pending. Restore now stages and validates database plus assets and
+rolls back a failed promotion; crash/power-loss atomicity still requires
+platform-specific validation. Foreground media preload saves the chosen mode
+(metadata only, thumbnails, or explicit originals) and retries missing bytes on
+next launch or after a verified foreground reconnect; a killed process does not
+keep transferring in the OS background. A changed saved choice queues its new
+foreground task after an obsolete in-flight task settles. A thumbnail alias is
+not proof of a verified original; stale-generation tasks
+stop before publishing subsequent cache aliases, but cross-tab writes have no
+atomic Clear fence. Android's private WebView library is excluded from automatic
+OS backup/device transfer in the v24 shell build, trading device-replacement
+recovery of unsynced phone-only work for reduced silent backup exposure.
+
+Migration 031 adds a paged, identity/epoch/protocol-bound server change-feed,
+tombstones and a persisted bounded served/ack cursor. The Web API layer can
+request and validate a page but deliberately does not apply it or send an ack:
+not all snapshot entities have complete journal records (some are null/partial),
+so an empty feed does not establish that a full snapshot is unchanged. Offline
+Update still verifies and installs an authoritative full snapshot. Incremental
+client materialization needs complete snapshot/journal parity plus atomic local
+cursor activation before the durable ack can safely advance.
 
 `packages/shared/src/schemas/api.ts` and `packages/shared/src/schemas/suggestions.ts` define the strict Zod request, path, query, response, and error contracts used by both server and web code. The pure `search/suggestions.ts` policy keeps Relation eligibility separate from ranking. These boundaries mirror repository DTOs without exposing SQLite names. Empty update bodies, blank required labels, non-positive IDs, duplicate reorder IDs, duplicate filter IDs, blank suggestion queries, and suggestion limits above 20 are rejected before repository calls.
 

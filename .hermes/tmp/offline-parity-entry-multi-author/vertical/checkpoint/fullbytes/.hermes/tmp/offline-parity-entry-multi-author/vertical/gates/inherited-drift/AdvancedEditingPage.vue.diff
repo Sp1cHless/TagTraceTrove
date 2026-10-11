@@ -1,0 +1,11 @@
+--- 654/apps/web/src/AdvancedEditingPage.vue
++++ live/apps/web/src/AdvancedEditingPage.vue
+@@ -1209,7 +1209,7 @@
+             <li v-if="commonTemplate.ratingSlots.length > 0" class="t3-library-text">
+               {{ t('templates.commonRatings') }}: {{ commonTemplate.ratingSlots.join(' / ') }}
+             </li>
+-            <li>
++            <li class="t3-library-text">
+               {{ t('templates.commonContentKinds') }}: {{ DEFAULT_CONTENT_KINDS.join(' / ') }}
+             </li>
+           </ul>

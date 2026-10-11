@@ -1,0 +1,22 @@
+--- before/apps/server/src/repositories/collection-repository.ts
++++ working/apps/server/src/repositories/collection-repository.ts
+@@ -426,7 +426,7 @@
+ 
+   return database.transaction(() => {
+     const members = database.prepare(`
+-      SELECT entry.id AS id, entry.type AS type
++      SELECT DISTINCT entry.id AS id, entry.type AS type
+       FROM collection_entries AS link
+       JOIN entries AS entry ON entry.id = link.entry_id
+       WHERE link.collection_id IN (
+--- before/apps/web/tests/offline-collection-parity.integration.test.ts
++++ working/apps/web/tests/offline-collection-parity.integration.test.ts
+@@ -118,7 +118,7 @@
+ 
+ // Explicit expected REDs: blocked protocol/identity lane, NOT implemented parity.
+ // Keep assertions on the real facade/HTTP boundary rather than inventing receipts.
+-it.fails.each(['delete', 'common-tag'] as const)('BLOCKED known-offline %s must make zero business HTTP and preserve the outbox', async kind => {
++it.each(['delete', 'common-tag'] as const)('BLOCKED known-offline %s must make zero business HTTP and preserve the outbox', async kind => {
+   const f = await fixture();
+   try {
+     await f.offline();

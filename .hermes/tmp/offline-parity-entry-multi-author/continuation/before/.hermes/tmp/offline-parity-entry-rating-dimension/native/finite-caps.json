@@ -1,0 +1,40 @@
+{
+  "argv": [
+    "cmd.exe",
+    "/c",
+    "gradlew.bat",
+    "--no-daemon",
+    "--console=plain",
+    "-I",
+    "D:\\Project\\TagTraceTrove\\.hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\isolated.gradle",
+    "testDebugUnitTest",
+    "--tests",
+    "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest.g2"
+  ],
+  "exit": 1,
+  "seconds": 30.42273783683777,
+  "xml": [
+    {
+      "path": ".hermes\\tmp\\offline-parity-entry-rating-dimension\\native\\gradle-output\\finite-caps\\app\\test-results\\testDebugUnitTest\\TEST-com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest.xml",
+      "name": "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest",
+      "tests": "1",
+      "skipped": "0",
+      "failures": "1",
+      "errors": "0",
+      "timestamp": "2026-10-10T09:26:41.294Z",
+      "hostname": "LAPTOP-70QV4MNN",
+      "time": "3.073",
+      "failuresDetails": [
+        [
+          {
+            "name": "g2",
+            "classname": "com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest",
+            "time": "3.073"
+          },
+          "java.lang.AssertionError: Fixture terminated for {\"action\":\"packets\",\"kind\":\"legacy\"}\n\tat org.junit.Assert.fail(Assert.java:89)\n\tat org.junit.Assert.assertTrue(Assert.java:42)\n\tat org.junit.Assert.assertNotNull(Assert.java:713)\n\tat com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest$Fixture.command(NativeEntryRatingDimensionJvmTest.java:26)\n\tat com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest.g2(NativeEntryRatingDimensionJvmTest.java:64)\n\tat java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)\n\tat java.base/java.lang.reflect.Method.invoke(Method.java:580)\n\tat org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)\n\tat org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)\n\tat org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)\n\tat org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)\n\tat org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)\n\tat org.robolectric.RobolectricTestRunner$HelperTestRunner$1.evaluate(RobolectricTestRunner.java:502)\n\tat org.robolectric.internal.SandboxTestRunner$2.lambda$evaluate$2(SandboxTestRunner.java:285)\n\tat org.robolectric.internal.bytecode.Sandbox.lambda$runOnMainThread$0(Sandbox.java:104)\n\tat java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)\n\tat java.base/java.lang.Thread.run(Thread.java:1583)\n"
+        ]
+      ],
+      "systemout": ""
+    }
+  ]
+}

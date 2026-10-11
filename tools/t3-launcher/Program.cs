@@ -106,6 +106,20 @@ internal static class Program
         Application.Run();
     }
 
+    /// <summary>The icon compiled into this executable, which is T3's own artwork.</summary>
+    private static Icon? LauncherIcon()
+    {
+        try
+        {
+            string? path = Environment.ProcessPath;
+            return path is null ? null : Icon.ExtractAssociatedIcon(path);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static NotifyIcon BuildTray()
     {
         var openItem = new ToolStripMenuItem("Open T3");
@@ -142,7 +156,9 @@ internal static class Program
 
         var icon = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            // The launcher's own artwork (the same one the exe carries), so the tray and the
+            // taskbar cannot drift apart. Falls back to the system icon if it cannot be read.
+            Icon = LauncherIcon() ?? SystemIcons.Application,
             Text = "T3 - starting",
             ContextMenuStrip = menu,
             Visible = true,
@@ -354,7 +370,13 @@ internal static class Program
             RedirectStandardError = true,
         };
         LauncherPolicy.PrependExecutableDirectory(start, _nodeExecutable!);
-        LauncherPolicy.ApplyServerEnvironment(start, _lanEnabled);
+        bool allowMobile = LauncherPolicy.AutoAllowMobileConnection(
+            LauncherPolicy.SystemSettingsPath(ServerDir, Environment.GetEnvironmentVariable("T3_DATA_DIR")));
+        if (!allowMobile)
+        {
+            File.AppendAllText(ServerLog, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] phone access is off in the desktop's System settings; not advertising a pairing address{Environment.NewLine}");
+        }
+        LauncherPolicy.ApplyServerEnvironment(start, _lanEnabled, allowMobile);
         try
         {
             _server = Process.Start(start);

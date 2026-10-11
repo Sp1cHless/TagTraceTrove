@@ -1,0 +1,917 @@
+{
+  "status": "FINITE_NATIVE_RECEIPT_GREEN_WRITER_STOPPED",
+  "productionChanges": [
+    "AppliedReceipt.java",
+    "BackgroundTransferWorker.java",
+    "TransferLedger.java"
+  ],
+  "collection": {
+    "tests": 4,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "gradleExit": 0
+  },
+  "entries": [
+    {
+      "live": ".hermes/artifacts/offline-parity-collection-native-receipt-repair.md",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/artifacts/offline-parity-collection-native-receipt-repair.md",
+      "size": 6626,
+      "sha256": "861fa67c2e138db8686b0f9c8a35839ffe126b04d79e60f1faafe06a9a78567b"
+    },
+    {
+      "live": ".hermes/artifacts/offline-parity-collection-native-retained.md",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/artifacts/offline-parity-collection-native-retained.md",
+      "size": 7016,
+      "sha256": "97364f9eb336bf894c3e18ab8c17ac34412b8ef17a07edff9b065f0066a8fb59"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/apps/server/tests/fixtures/native-collection-timeline.mts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/apps/server/tests/fixtures/native-collection-timeline.mts",
+      "size": 8489,
+      "sha256": "edbc7fa5bbe521c8ecf29dbc08e7f9d4fab146577f0ffdecae8830b055a72e10"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/packages/shared/src/schemas/sync.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/packages/shared/src/schemas/sync.ts",
+      "size": 62922,
+      "sha256": "a78e74ffcf2138c274e10bf2bc1b910c36e576dba36ec253895d434b79f38f83"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/androidTest/java/com/getcapacitor/myapp/ExampleInstrumentedTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/androidTest/java/com/getcapacitor/myapp/ExampleInstrumentedTest.java",
+      "size": 774,
+      "sha256": "ff50b4c110a7434312f9af54171f9e8523b015836f707c9b387b76d4c38a97f8"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/androidTest/java/com/speechless666/t3/spike/SecurePairingInstrumentationTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/androidTest/java/com/speechless666/t3/spike/SecurePairingInstrumentationTest.java",
+      "size": 5135,
+      "sha256": "7a683873016dbfaf799993ecb08c55e492f9b17e4cc64db5a1aa54ab73bddc4c"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/androidTest/java/com/speechless666/t3/spike/TransferLedgerTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/androidTest/java/com/speechless666/t3/spike/TransferLedgerTest.java",
+      "size": 1858,
+      "sha256": "8055d544ab82aba7db586bc93c9cb385f279edb087f109ec4a74ad4458067c9e"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/AppliedReceipt.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/AppliedReceipt.java",
+      "size": 1325,
+      "sha256": "3d4596f706cb1b9b678362884af1341f5f15c92e1715154e803eb49f577a18f6"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferPlugin.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferPlugin.java",
+      "size": 17567,
+      "sha256": "c14a201e9c1e3bcb0c410ea3253fdac29e5d29a58acc48ebd9592e8f04cee5e0"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java",
+      "size": 17366,
+      "sha256": "ba469f3e29733740962324a9aa7a3c3bb26d98b5750d3ab0edc20e0c326813cb"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/MainActivity.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/MainActivity.java",
+      "size": 9139,
+      "sha256": "72ceb47effc06edcbe0b3752f2a1d0065d6c2dc11d0bb9b8c428104335c0167f"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/NativeMutationPlan.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/NativeMutationPlan.java",
+      "size": 3996,
+      "sha256": "5d4419066a78183b39c7e0e25afbddd9ee385d56f3865b8320c14b7e0dc3e92a"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairedTransportPlugin.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairedTransportPlugin.java",
+      "size": 4526,
+      "sha256": "2ae0fa9d87d1d002d53de039f329bd4d10bba3a2996def29cd1487139bcafc5a"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingState.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingState.java",
+      "size": 5867,
+      "sha256": "1be655f3a005503b4b7ccbd76b6bc13c703c98f01f09cb0c4daaac426b697a33"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingVault.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingVault.java",
+      "size": 4237,
+      "sha256": "68cb1818a5c3f4fedea41d2e142cf6d9b005a5270301b4135e536150d221b5b8"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PinnedLanTransport.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PinnedLanTransport.java",
+      "size": 10772,
+      "sha256": "5bd3771a3efbcda3ddfdd31f839ec9dd34620655ffa31ebf905d57714e3c50da"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java",
+      "size": 39518,
+      "sha256": "494f132632e59a782c6e4965a4e35ba088bbb947c8278d6d2cf6683075bb8579"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TrustedLanPairing.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TrustedLanPairing.java",
+      "size": 2164,
+      "sha256": "249fdd78891c0628b1220c52c375c319260feae37ca1f448d3b9c8d2f4291648"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/getcapacitor/myapp/ExampleUnitTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/getcapacitor/myapp/ExampleUnitTest.java",
+      "size": 402,
+      "sha256": "d4045ae8fac1f0807e6b24eb34e68409a9a235df9d1a3f896fb8c9a49424363d"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/AppliedReceiptJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/AppliedReceiptJvmTest.java",
+      "size": 1425,
+      "sha256": "0fa653094d1008fc37c7e32c6a14ebbd38594eb6078f6b9b0788b3f69d2b79de"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/AuthorDirectorySeedJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/AuthorDirectorySeedJvmTest.java",
+      "size": 2884,
+      "sha256": "f86e02e05841135ecaf64753241aca9aa1d9add07f6ca6914779f660e5ddbfa8"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/BackgroundSchedulerJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/BackgroundSchedulerJvmTest.java",
+      "size": 7979,
+      "sha256": "f8ee4c34b0bf8ad7dcbf4be26bcaa5f1060547956ce464569ed119a6ebf93e38"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/BackgroundTransferJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/BackgroundTransferJvmTest.java",
+      "size": 29724,
+      "sha256": "d3b54475734ff7d90845434e3fb5018cbc941458a169467bc4e1fe4334b80413"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/DurationAuthorPlanJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/DurationAuthorPlanJvmTest.java",
+      "size": 4087,
+      "sha256": "a1aa0d2d4e1dc0baf71b054278e32a5c9dca91da7da81fa4c844ff8c440b694a"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/FiniteBudgetJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/FiniteBudgetJvmTest.java",
+      "size": 13028,
+      "sha256": "b3963cf7c25aca8872be1d7f20923732f37b5fcb7a455f9b54025e9b53dca9b8"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeAuthorDeleteTimelineJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeAuthorDeleteTimelineJvmTest.java",
+      "size": 9092,
+      "sha256": "136bf2614899015e833e26d80d01ccc27a7ae5e82e6a592face314e44d141f9c"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeCollectionTimelineJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeCollectionTimelineJvmTest.java",
+      "size": 9819,
+      "sha256": "b5c0dc3edd030f45a2dd86589ffcf224ea7833147740dfd0be8e83e5c14a1e46"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeMutationSafetyJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeMutationSafetyJvmTest.java",
+      "size": 8720,
+      "sha256": "5f1f17b7d6b88c5c572a64a3e24b412e00bdd37e58d3e20c36a050d2d8d75fad"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeStagingInterleavingsJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeStagingInterleavingsJvmTest.java",
+      "size": 6747,
+      "sha256": "1bc92617c3a199c33de1e69ae45056d944e03e1301b2b20d7a31220df9a1df9e"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeWorkerAuthorityAcceptanceJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeWorkerAuthorityAcceptanceJvmTest.java",
+      "size": 14214,
+      "sha256": "0241f6034747a4f598bdf2312b1ea97547c9a0357ca38d8d805ea074cc997a40"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/PairedBootstrapBytesTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/PairedBootstrapBytesTest.java",
+      "size": 3690,
+      "sha256": "01c2de68de89d851d4c106ba50c6c393bfda4d4175acbd0f092cc62099ded185"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/SecurePairingTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/SecurePairingTest.java",
+      "size": 11202,
+      "sha256": "c3d775464b89e826c164c39186093e65b1583273ac71d429424f2bc60e229b67"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/TransferLedgerJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/TransferLedgerJvmTest.java",
+      "size": 18016,
+      "sha256": "60236a2d38268f60c8c3b71384529d941b27db6d7dd4aa2daaf233431ba7ad0b"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/TrustedLanPairingTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/TrustedLanPairingTest.java",
+      "size": 1487,
+      "sha256": "acc5caf7fa95be11ac00cba34646964b3bb0fae9d8c55ada24d637e11c9fdc3e"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/before-manifest.json",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/before-manifest.json",
+      "size": 7635,
+      "sha256": "cc4eebfd2c8c5f773f604d25d693e8fb5e04ba0555b9e8ceff50b7f77a04df7b"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/collection-green-1-archive/collection-green-1.stdout",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/collection-green-1-archive/collection-green-1.stdout",
+      "size": 8655,
+      "sha256": "d003e7f1fe44e8d493108f5769198133a0f7bf527d34e1e086ea22a13ee5bdbb"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/collection-green-1-archive/gate.json",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/collection-green-1-archive/gate.json",
+      "size": 1638,
+      "sha256": "6b0a207d9068e757f691500030d51aede5c27fc256c26dc9b18153f5260f7f02"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/collection-green-1-archive/generated/NativeMutationContract.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/collection-green-1-archive/generated/NativeMutationContract.java",
+      "size": 3547,
+      "sha256": "28533c9bc93d5a92c7d98bdc3bc0c40c2811102f4905a80d9e75589f139e6f6f"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/collection-green-1-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.xml",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/collection-green-1-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.xml",
+      "size": 6380,
+      "sha256": "f36e5befb22cf9aa779c5276cec9fed06ef63f87ecf8d8b3a0f1deb6b584fc8c"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/collection-green-1.stdout",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/collection-green-1.stdout",
+      "size": 8655,
+      "sha256": "d003e7f1fe44e8d493108f5769198133a0f7bf527d34e1e086ea22a13ee5bdbb"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/diff-check.txt",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/diff-check.txt",
+      "size": 476,
+      "sha256": "1111ac9c452b3bd54f399c73cef9f4df0d66cbcb2af01f503e7850ae99c1eb75"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/fixture-process-check.txt",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/fixture-process-check.txt",
+      "size": 39,
+      "sha256": "91ec3436dfb4505e90874e2dad931685f6b6aff5fa6652fe3cf69efc205c9752"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/isolated.init.gradle",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/isolated.init.gradle",
+      "size": 1659,
+      "sha256": "61f4ee974c798ad80b8fd6eb985d4fd906bcdca0b06925c10d32ff83af8f84a3"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/nearest-legacy-1-archive/gate.json",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/nearest-legacy-1-archive/gate.json",
+      "size": 4106,
+      "sha256": "dd211ba5207b6264232526dbb89cc15999f318821f4f255c75380db65958de1a"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/nearest-legacy-1-archive/generated/NativeMutationContract.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/nearest-legacy-1-archive/generated/NativeMutationContract.java",
+      "size": 3547,
+      "sha256": "28533c9bc93d5a92c7d98bdc3bc0c40c2811102f4905a80d9e75589f139e6f6f"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/nearest-legacy-1-archive/nearest-legacy-1.stdout",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/nearest-legacy-1-archive/nearest-legacy-1.stdout",
+      "size": 8645,
+      "sha256": "106922b1fccd7561633bd09cecddcb8ca1c538524773cc59768bf72cced45adf"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/nearest-legacy-1-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.AppliedReceiptJvmTest.xml",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/nearest-legacy-1-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.AppliedReceiptJvmTest.xml",
+      "size": 639,
+      "sha256": "7d93f5f2b1536c8d55db670e73d00c77e2d7c1c94587d14ae76a75f02fe7e9f7"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/nearest-legacy-1-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest.xml",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/nearest-legacy-1-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest.xml",
+      "size": 799,
+      "sha256": "3ddbb8121aacd1025f4745392f910801023d981f5c4d8790a21a66943fb45322"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/nearest-legacy-1-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.TransferLedgerJvmTest.xml",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/nearest-legacy-1-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.TransferLedgerJvmTest.xml",
+      "size": 1256,
+      "sha256": "0964fb987cc07ebe58d02dd3eeadfd22a267e013a02c1fb2362afda15b5a9023"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/nearest-legacy-1.stdout",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/nearest-legacy-1.stdout",
+      "size": 8645,
+      "sha256": "106922b1fccd7561633bd09cecddcb8ca1c538524773cc59768bf72cced45adf"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/owned.diff",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/owned.diff",
+      "size": 9378,
+      "sha256": "948d131cad47538e59020f8b74c52097ce05da3544976f7ac639f77c069a70b6"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/prior-red.xml",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/prior-red.xml",
+      "size": 21502,
+      "sha256": "78b23fe891f69bb258af79c9f23519f4d2af9cf22b23b3bc09107748be1a2c13"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/protected-check.json",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/protected-check.json",
+      "size": 436,
+      "sha256": "4cced5b16209fc17c5e96208debd08b4ab31d8c1da3530ecceea77bdb073c835"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/run.py",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/run.py",
+      "size": 2498,
+      "sha256": "36ad3eeeb46006757a141a7b7db511ecbb7aced4818289bdc9353a2116480740"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-receipt-repair/typed-methods.txt",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-receipt-repair/typed-methods.txt",
+      "size": 5564,
+      "sha256": "f0d75a90577276cfe256cc4efcb926b6fa77cec0bb9f92f68d841cb873eaf9c3"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/server/src/sync/collection-common-tag.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/server/src/sync/collection-common-tag.ts",
+      "size": 5734,
+      "sha256": "cba3f56da00795910947edbd638d132088f4fefd880a5dab634c0e47acdea2f4"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/server/src/sync/collection-delete.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/server/src/sync/collection-delete.ts",
+      "size": 1177,
+      "sha256": "8f93f9a62f6e4aef557042060f00072a8e3918764cb159eec5e810619f274548"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/server/tests/fixtures/native-author-delete-timeline.mts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/server/tests/fixtures/native-author-delete-timeline.mts",
+      "size": 6033,
+      "sha256": "54bd00fe20f77f0ff68c91a015c51931c8cd44733375642133f3603ddf600302"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/server/tests/fixtures/native-worker-authority-acceptance.mts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/server/tests/fixtures/native-worker-authority-acceptance.mts",
+      "size": 4067,
+      "sha256": "2f31bf5347cec1fae4deae3977a9d73bfae9cb6552a2e297517e0bb96da0a0dc"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/web/src/offline/offline-api.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/web/src/offline/offline-api.ts",
+      "size": 376145,
+      "sha256": "c50dd8d26aea2bee49a43d2a307686e2c6ef1580cab961a7c54c3333e34afa3a"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/web/src/offline/outbox-store.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/web/src/offline/outbox-store.ts",
+      "size": 9547,
+      "sha256": "ba11716ebf20040e182a2d3f8cedf06d851cc5d15c0840fa3198a6e1d7bf470b"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/web/src/offline/sync-mutation-plan.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/web/src/offline/sync-mutation-plan.ts",
+      "size": 10090,
+      "sha256": "dae671b832f3756bc4ba4b213ed707c01a8e72f479dfce578dc6f2c32306285b"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/web/tests/fixtures/native-valid-kind-fixture.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/apps/web/tests/fixtures/native-valid-kind-fixture.ts",
+      "size": 5055,
+      "sha256": "696b1933a481cf9bc8bc051a1df4b90f6a15905bc3de5443844528cbd1314104"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/api.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/api.ts",
+      "size": 55986,
+      "sha256": "3e5402cd5f08f0b36ecf038e2c31cb662431ca96866e381c41a475b66156ef4e"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/import.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/import.ts",
+      "size": 9190,
+      "sha256": "4e1c718ce5f9941c93c7f1b604c3b5e5da8ab77800a0cc46a9168992e3ddd792"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/native-mutation-contract.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/native-mutation-contract.ts",
+      "size": 4147,
+      "sha256": "6e4eebe411131cedb9b7ffe5bce3fc5f72d1f1c120fa9eaabf70eac4141ac2cf"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/pending-work.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/pending-work.ts",
+      "size": 1531,
+      "sha256": "7ad377c617b69a5d6a894a4c77bbb4d19d1f2c6c5169721156218b46895ef87e"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/siteprobe.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/siteprobe.ts",
+      "size": 16699,
+      "sha256": "0746189db49df4e3020d95e2bdba605cb9292ba29060cd61bd88f76e221977e7"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/source-maintenance.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/source-maintenance.ts",
+      "size": 6711,
+      "sha256": "058f96b6d9c60fcbe34a2fdf7a8c16c97010bd369db4f6992a6bcb45724506fa"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/suggestions.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/suggestions.ts",
+      "size": 2723,
+      "sha256": "050e23edb1af17f1747843add0c6ac363fc133d7ee15531f1cf8993025efb707"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/sync-delta.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/sync-delta.ts",
+      "size": 1263,
+      "sha256": "3a508c21dec8990d675be33c8457ab85bdfc17d0378e67e07bc7c28aa527fe83"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/sync.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/packages/shared/src/schemas/sync.ts",
+      "size": 62922,
+      "sha256": "a78e74ffcf2138c274e10bf2bc1b910c36e576dba36ec253895d434b79f38f83"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/AppliedReceipt.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/AppliedReceipt.java",
+      "size": 1325,
+      "sha256": "3d4596f706cb1b9b678362884af1341f5f15c92e1715154e803eb49f577a18f6"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferPlugin.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferPlugin.java",
+      "size": 17567,
+      "sha256": "c14a201e9c1e3bcb0c410ea3253fdac29e5d29a58acc48ebd9592e8f04cee5e0"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java",
+      "size": 17366,
+      "sha256": "ba469f3e29733740962324a9aa7a3c3bb26d98b5750d3ab0edc20e0c326813cb"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/MainActivity.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/MainActivity.java",
+      "size": 9139,
+      "sha256": "72ceb47effc06edcbe0b3752f2a1d0065d6c2dc11d0bb9b8c428104335c0167f"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/NativeMutationPlan.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/NativeMutationPlan.java",
+      "size": 3996,
+      "sha256": "5d4419066a78183b39c7e0e25afbddd9ee385d56f3865b8320c14b7e0dc3e92a"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairedTransportPlugin.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairedTransportPlugin.java",
+      "size": 4526,
+      "sha256": "2ae0fa9d87d1d002d53de039f329bd4d10bba3a2996def29cd1487139bcafc5a"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingState.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingState.java",
+      "size": 5867,
+      "sha256": "1be655f3a005503b4b7ccbd76b6bc13c703c98f01f09cb0c4daaac426b697a33"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingVault.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingVault.java",
+      "size": 4237,
+      "sha256": "68cb1818a5c3f4fedea41d2e142cf6d9b005a5270301b4135e536150d221b5b8"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PinnedLanTransport.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PinnedLanTransport.java",
+      "size": 10772,
+      "sha256": "5bd3771a3efbcda3ddfdd31f839ec9dd34620655ffa31ebf905d57714e3c50da"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java",
+      "size": 39518,
+      "sha256": "494f132632e59a782c6e4965a4e35ba088bbb947c8278d6d2cf6683075bb8579"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TrustedLanPairing.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TrustedLanPairing.java",
+      "size": 2164,
+      "sha256": "249fdd78891c0628b1220c52c375c319260feae37ca1f448d3b9c8d2f4291648"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeAuthorDeleteTimelineJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeAuthorDeleteTimelineJvmTest.java",
+      "size": 9092,
+      "sha256": "136bf2614899015e833e26d80d01ccc27a7ae5e82e6a592face314e44d141f9c"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/before-manifest.json",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/before-manifest.json",
+      "size": 6418,
+      "sha256": "c2cc0883d01821bf4a5c4ab482189b91b1cb80144b61a05dd27950ffa55c91e5"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/finite4-final-red-archive/finite4-final-red.stdout",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/finite4-final-red-archive/finite4-final-red.stdout",
+      "size": 9573,
+      "sha256": "c6e186a2171ae7a77f3b797e46c2b6100d4ee3ef1eaa98bf660ee3bd1647b6ea"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/finite4-final-red-archive/gate.json",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/finite4-final-red-archive/gate.json",
+      "size": 11595,
+      "sha256": "d11ef554685e3e0a2805a12213d2aba69306f6386608a64ffa1fc1c3ef3b07a4"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/finite4-final-red-archive/generated/NativeMutationContract.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/finite4-final-red-archive/generated/NativeMutationContract.java",
+      "size": 3547,
+      "sha256": "28533c9bc93d5a92c7d98bdc3bc0c40c2811102f4905a80d9e75589f139e6f6f"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/finite4-final-red-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.xml",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/finite4-final-red-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.xml",
+      "size": 21502,
+      "sha256": "78b23fe891f69bb258af79c9f23519f4d2af9cf22b23b3bc09107748be1a2c13"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/finite4-final-red-archive/worker-trace.txt",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/finite4-final-red-archive/worker-trace.txt",
+      "size": 4034,
+      "sha256": "f1e1049b22de4ae2d1b58a25a9a428367ef7bc99764d3ef7cee179f8e3f94986"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/finite4-final-red.stdout",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/finite4-final-red.stdout",
+      "size": 9573,
+      "sha256": "c6e186a2171ae7a77f3b797e46c2b6100d4ee3ef1eaa98bf660ee3bd1647b6ea"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/finite4-first-archive/finite4-first.stdout",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/finite4-first-archive/finite4-first.stdout",
+      "size": 9540,
+      "sha256": "db7bdc4287e032151383be0e4f637153ebcc7f5513b0de4d3278e6b0ca6c0643"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/finite4-first-archive/first-test-source-reconstructed.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/finite4-first-archive/first-test-source-reconstructed.java",
+      "size": 9671,
+      "sha256": "9cbdf9b7cbd9d76fa7d3c058105e6259a0d51120371410587096c5a2a4cb1001"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/finite4-first-archive/gate.json",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/finite4-first-archive/gate.json",
+      "size": 8936,
+      "sha256": "af9d714f15abd33b8f0081dbed1da87bec9831521efa36b18348bef7ed0fba8d"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/finite4-first-archive/generated/NativeMutationContract.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/finite4-first-archive/generated/NativeMutationContract.java",
+      "size": 3547,
+      "sha256": "28533c9bc93d5a92c7d98bdc3bc0c40c2811102f4905a80d9e75589f139e6f6f"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/finite4-first-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.xml",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/finite4-first-archive/project-app/test-results/testDebugUnitTest/TEST-com.speechless666.t3.spike.NativeCollectionTimelineJvmTest.xml",
+      "size": 11051,
+      "sha256": "fc56f14c6aeed743fb0c8801b97e591d6d691d9e87e7035d6e102a9f0054f69a"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/finite4-first.stdout",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/finite4-first.stdout",
+      "size": 9540,
+      "sha256": "db7bdc4287e032151383be0e4f637153ebcc7f5513b0de4d3278e6b0ca6c0643"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/fixture-smoke.stdout",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/fixture-smoke.stdout",
+      "size": 1463,
+      "sha256": "156b81ea76c9835af8fa6a7b7f4b6ef9e756941a59b501709b3897ce967bb8ac"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/isolated.init.gradle",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/isolated.init.gradle",
+      "size": 1626,
+      "sha256": "dc3a16c552c4390ff0ae730c37ea6418b94814dc57bd54903a7fc855c97605b5"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/run.py",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/run.py",
+      "size": 2377,
+      "sha256": "7faff268b26338a9635cbff5aaaae81ab41ca2fe056a6a69de161c57f600aed0"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/smoke-cleanup.json",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/smoke-cleanup.json",
+      "size": 352,
+      "sha256": "5aba3bad2a72052cb498e903e77180398735dcdb98cd1cd15d651755734324eb"
+    },
+    {
+      "live": ".hermes/tmp/offline-parity-collection/native-retained/source-guard-final.json",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/.hermes/tmp/offline-parity-collection/native-retained/source-guard-final.json",
+      "size": 37,
+      "sha256": "b6d3617a2c604ae1f0449c83117906fdbc7f9a6736615a417bf5eaa5d0901b56"
+    },
+    {
+      "live": "apps/server/src/sync/collection-common-tag.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/apps/server/src/sync/collection-common-tag.ts",
+      "size": 5734,
+      "sha256": "cba3f56da00795910947edbd638d132088f4fefd880a5dab634c0e47acdea2f4"
+    },
+    {
+      "live": "apps/server/src/sync/collection-delete.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/apps/server/src/sync/collection-delete.ts",
+      "size": 1177,
+      "sha256": "8f93f9a62f6e4aef557042060f00072a8e3918764cb159eec5e810619f274548"
+    },
+    {
+      "live": "apps/server/tests/fixtures/native-author-delete-timeline.mts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/apps/server/tests/fixtures/native-author-delete-timeline.mts",
+      "size": 6033,
+      "sha256": "54bd00fe20f77f0ff68c91a015c51931c8cd44733375642133f3603ddf600302"
+    },
+    {
+      "live": "apps/server/tests/fixtures/native-collection-timeline.mts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/apps/server/tests/fixtures/native-collection-timeline.mts",
+      "size": 8489,
+      "sha256": "edbc7fa5bbe521c8ecf29dbc08e7f9d4fab146577f0ffdecae8830b055a72e10"
+    },
+    {
+      "live": "apps/server/tests/fixtures/native-worker-authority-acceptance.mts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/apps/server/tests/fixtures/native-worker-authority-acceptance.mts",
+      "size": 4067,
+      "sha256": "2f31bf5347cec1fae4deae3977a9d73bfae9cb6552a2e297517e0bb96da0a0dc"
+    },
+    {
+      "live": "apps/web/src/offline/offline-api.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/apps/web/src/offline/offline-api.ts",
+      "size": 376145,
+      "sha256": "c50dd8d26aea2bee49a43d2a307686e2c6ef1580cab961a7c54c3333e34afa3a"
+    },
+    {
+      "live": "apps/web/src/offline/outbox-store.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/apps/web/src/offline/outbox-store.ts",
+      "size": 9547,
+      "sha256": "ba11716ebf20040e182a2d3f8cedf06d851cc5d15c0840fa3198a6e1d7bf470b"
+    },
+    {
+      "live": "apps/web/src/offline/sync-mutation-plan.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/apps/web/src/offline/sync-mutation-plan.ts",
+      "size": 10090,
+      "sha256": "dae671b832f3756bc4ba4b213ed707c01a8e72f479dfce578dc6f2c32306285b"
+    },
+    {
+      "live": "apps/web/tests/fixtures/native-valid-kind-fixture.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/apps/web/tests/fixtures/native-valid-kind-fixture.ts",
+      "size": 5055,
+      "sha256": "696b1933a481cf9bc8bc051a1df4b90f6a15905bc3de5443844528cbd1314104"
+    },
+    {
+      "live": "packages/shared/src/schemas/api.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/packages/shared/src/schemas/api.ts",
+      "size": 55986,
+      "sha256": "3e5402cd5f08f0b36ecf038e2c31cb662431ca96866e381c41a475b66156ef4e"
+    },
+    {
+      "live": "packages/shared/src/schemas/import.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/packages/shared/src/schemas/import.ts",
+      "size": 9190,
+      "sha256": "4e1c718ce5f9941c93c7f1b604c3b5e5da8ab77800a0cc46a9168992e3ddd792"
+    },
+    {
+      "live": "packages/shared/src/schemas/native-mutation-contract.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/packages/shared/src/schemas/native-mutation-contract.ts",
+      "size": 4147,
+      "sha256": "6e4eebe411131cedb9b7ffe5bce3fc5f72d1f1c120fa9eaabf70eac4141ac2cf"
+    },
+    {
+      "live": "packages/shared/src/schemas/pending-work.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/packages/shared/src/schemas/pending-work.ts",
+      "size": 1531,
+      "sha256": "7ad377c617b69a5d6a894a4c77bbb4d19d1f2c6c5169721156218b46895ef87e"
+    },
+    {
+      "live": "packages/shared/src/schemas/siteprobe.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/packages/shared/src/schemas/siteprobe.ts",
+      "size": 16699,
+      "sha256": "0746189db49df4e3020d95e2bdba605cb9292ba29060cd61bd88f76e221977e7"
+    },
+    {
+      "live": "packages/shared/src/schemas/source-maintenance.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/packages/shared/src/schemas/source-maintenance.ts",
+      "size": 6711,
+      "sha256": "058f96b6d9c60fcbe34a2fdf7a8c16c97010bd369db4f6992a6bcb45724506fa"
+    },
+    {
+      "live": "packages/shared/src/schemas/suggestions.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/packages/shared/src/schemas/suggestions.ts",
+      "size": 2723,
+      "sha256": "050e23edb1af17f1747843add0c6ac363fc133d7ee15531f1cf8993025efb707"
+    },
+    {
+      "live": "packages/shared/src/schemas/sync-delta.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/packages/shared/src/schemas/sync-delta.ts",
+      "size": 1263,
+      "sha256": "3a508c21dec8990d675be33c8457ab85bdfc17d0378e67e07bc7c28aa527fe83"
+    },
+    {
+      "live": "packages/shared/src/schemas/sync.ts",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/packages/shared/src/schemas/sync.ts",
+      "size": 62922,
+      "sha256": "a78e74ffcf2138c274e10bf2bc1b910c36e576dba36ec253895d434b79f38f83"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/androidTest/java/com/getcapacitor/myapp/ExampleInstrumentedTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/androidTest/java/com/getcapacitor/myapp/ExampleInstrumentedTest.java",
+      "size": 774,
+      "sha256": "ff50b4c110a7434312f9af54171f9e8523b015836f707c9b387b76d4c38a97f8"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/androidTest/java/com/speechless666/t3/spike/SecurePairingInstrumentationTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/androidTest/java/com/speechless666/t3/spike/SecurePairingInstrumentationTest.java",
+      "size": 5135,
+      "sha256": "7a683873016dbfaf799993ecb08c55e492f9b17e4cc64db5a1aa54ab73bddc4c"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/androidTest/java/com/speechless666/t3/spike/TransferLedgerTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/androidTest/java/com/speechless666/t3/spike/TransferLedgerTest.java",
+      "size": 1858,
+      "sha256": "8055d544ab82aba7db586bc93c9cb385f279edb087f109ec4a74ad4458067c9e"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/AppliedReceipt.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/AppliedReceipt.java",
+      "size": 6889,
+      "sha256": "5efa170b08b85ff632501e93efe621b56b48b214f74592f4e9cd97440da95371"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferPlugin.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferPlugin.java",
+      "size": 17567,
+      "sha256": "c14a201e9c1e3bcb0c410ea3253fdac29e5d29a58acc48ebd9592e8f04cee5e0"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferWorker.java",
+      "size": 17366,
+      "sha256": "c2aede390a2936303b97f7ef8e182903f5ef08b4f9e7e3bc5698133a7913f71f"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/MainActivity.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/MainActivity.java",
+      "size": 9139,
+      "sha256": "72ceb47effc06edcbe0b3752f2a1d0065d6c2dc11d0bb9b8c428104335c0167f"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/NativeMutationPlan.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/NativeMutationPlan.java",
+      "size": 3996,
+      "sha256": "5d4419066a78183b39c7e0e25afbddd9ee385d56f3865b8320c14b7e0dc3e92a"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairedTransportPlugin.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairedTransportPlugin.java",
+      "size": 4526,
+      "sha256": "2ae0fa9d87d1d002d53de039f329bd4d10bba3a2996def29cd1487139bcafc5a"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingState.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingState.java",
+      "size": 5867,
+      "sha256": "1be655f3a005503b4b7ccbd76b6bc13c703c98f01f09cb0c4daaac426b697a33"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingVault.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PairingVault.java",
+      "size": 4237,
+      "sha256": "68cb1818a5c3f4fedea41d2e142cf6d9b005a5270301b4135e536150d221b5b8"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PinnedLanTransport.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/PinnedLanTransport.java",
+      "size": 10772,
+      "sha256": "5bd3771a3efbcda3ddfdd31f839ec9dd34620655ffa31ebf905d57714e3c50da"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TransferLedger.java",
+      "size": 40363,
+      "sha256": "b7c9b45f0dff30145f42d6648b1303688417581881bb8d9620c3413b878935a3"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TrustedLanPairing.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/TrustedLanPairing.java",
+      "size": 2164,
+      "sha256": "249fdd78891c0628b1220c52c375c319260feae37ca1f448d3b9c8d2f4291648"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/getcapacitor/myapp/ExampleUnitTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/getcapacitor/myapp/ExampleUnitTest.java",
+      "size": 402,
+      "sha256": "d4045ae8fac1f0807e6b24eb34e68409a9a235df9d1a3f896fb8c9a49424363d"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/AppliedReceiptJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/AppliedReceiptJvmTest.java",
+      "size": 1425,
+      "sha256": "0fa653094d1008fc37c7e32c6a14ebbd38594eb6078f6b9b0788b3f69d2b79de"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/AuthorDirectorySeedJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/AuthorDirectorySeedJvmTest.java",
+      "size": 2884,
+      "sha256": "f86e02e05841135ecaf64753241aca9aa1d9add07f6ca6914779f660e5ddbfa8"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/BackgroundSchedulerJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/BackgroundSchedulerJvmTest.java",
+      "size": 7979,
+      "sha256": "f8ee4c34b0bf8ad7dcbf4be26bcaa5f1060547956ce464569ed119a6ebf93e38"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/BackgroundTransferJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/BackgroundTransferJvmTest.java",
+      "size": 29724,
+      "sha256": "d3b54475734ff7d90845434e3fb5018cbc941458a169467bc4e1fe4334b80413"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/DurationAuthorPlanJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/DurationAuthorPlanJvmTest.java",
+      "size": 4087,
+      "sha256": "a1aa0d2d4e1dc0baf71b054278e32a5c9dca91da7da81fa4c844ff8c440b694a"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/FiniteBudgetJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/FiniteBudgetJvmTest.java",
+      "size": 13028,
+      "sha256": "b3963cf7c25aca8872be1d7f20923732f37b5fcb7a455f9b54025e9b53dca9b8"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeAuthorDeleteTimelineJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeAuthorDeleteTimelineJvmTest.java",
+      "size": 9092,
+      "sha256": "136bf2614899015e833e26d80d01ccc27a7ae5e82e6a592face314e44d141f9c"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeCollectionTimelineJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeCollectionTimelineJvmTest.java",
+      "size": 9819,
+      "sha256": "b5c0dc3edd030f45a2dd86589ffcf224ea7833147740dfd0be8e83e5c14a1e46"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeMutationSafetyJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeMutationSafetyJvmTest.java",
+      "size": 8720,
+      "sha256": "5f1f17b7d6b88c5c572a64a3e24b412e00bdd37e58d3e20c36a050d2d8d75fad"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeStagingInterleavingsJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeStagingInterleavingsJvmTest.java",
+      "size": 6747,
+      "sha256": "1bc92617c3a199c33de1e69ae45056d944e03e1301b2b20d7a31220df9a1df9e"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeWorkerAuthorityAcceptanceJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeWorkerAuthorityAcceptanceJvmTest.java",
+      "size": 14214,
+      "sha256": "0241f6034747a4f598bdf2312b1ea97547c9a0357ca38d8d805ea074cc997a40"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/PairedBootstrapBytesTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/PairedBootstrapBytesTest.java",
+      "size": 3690,
+      "sha256": "01c2de68de89d851d4c106ba50c6c393bfda4d4175acbd0f092cc62099ded185"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/SecurePairingTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/SecurePairingTest.java",
+      "size": 11202,
+      "sha256": "c3d775464b89e826c164c39186093e65b1583273ac71d429424f2bc60e229b67"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/TransferLedgerJvmTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/TransferLedgerJvmTest.java",
+      "size": 18016,
+      "sha256": "60236a2d38268f60c8c3b71384529d941b27db6d7dd4aa2daaf233431ba7ad0b"
+    },
+    {
+      "live": "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/TrustedLanPairingTest.java",
+      "saved": ".hermes/tmp/offline-parity-collection/native-receipt-repair/checkpoint/fullbytes/spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/TrustedLanPairingTest.java",
+      "size": 1487,
+      "sha256": "acc5caf7fa95be11ac00cba34646964b3bb0fae9d8c55ada24d637e11c9fdc3e"
+    }
+  ]
+}

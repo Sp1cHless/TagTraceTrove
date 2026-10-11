@@ -1,0 +1,10 @@
+[
+  {
+    "source": "apps/web/src/CollectionsPage.vue",
+    "region": "complete script setup (contains ordinary Tag caller)",
+    "freshBeforeSha256": "999bc0415a8ed5c62e6bf5953032aed305fb20ee19eb9f3e72cbf5d817248c1a",
+    "liveSha256": "999bc0415a8ed5c62e6bf5953032aed305fb20ee19eb9f3e72cbf5d817248c1a",
+    "equal": true,
+    "externalChange": "display-only t3-library-text classes outside script; preserved, not actual Tag-business overlap"
+  }
+]

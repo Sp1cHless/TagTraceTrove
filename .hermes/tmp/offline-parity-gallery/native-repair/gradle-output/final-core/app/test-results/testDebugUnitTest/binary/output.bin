@@ -1,0 +1,6 @@
+;REAL_SQL_EXISTING_ABSENCE completed exact body receipts=1
+ORIGIN_SHARED_PLAN {"version":1,"opId":"24903089-5127-4139-858c-db26646203b0","ownerKey":"entry:8c860f6b-8127-4121-8533-d9ff50b3b82f","order":0,"requiredFlags":["offlineMutations","offlineEntryCreate","offlineGalleryPartitionOrigins"],"dependencies":[],"eligible":true}
+`ORIGIN_NATIVE_FLAGS ["offlineMutations","offlineEntryCreate","offlineGalleryPartitionOrigins"]
+[REAL_SQL creator->partitiontrue->partitionfalse + independent partition/Entry; receipts=5
+xREAL_SQL committed response-loss cold exact-original retry dedupe receipts=1; attempted conditional downgrade retained
+ƒMOCK_INVALID_RESPONSE cells=3 after valid canonicalSQL; strict parent rejection + child refused + independent partition completed

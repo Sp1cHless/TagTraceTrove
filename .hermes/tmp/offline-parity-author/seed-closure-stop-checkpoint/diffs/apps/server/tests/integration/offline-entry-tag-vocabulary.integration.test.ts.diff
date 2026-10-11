@@ -1,0 +1,11 @@
+--- apps/server/tests/integration/offline-entry-tag-vocabulary.integration.test.ts continuation-before
++++ apps/server/tests/integration/offline-entry-tag-vocabulary.integration.test.ts stop-observed
+@@ -72,7 +72,7 @@
+ it('advertises and snapshots the complete schema-34 Tag vocabulary capability', () => {
+   const database = createNodeSqliteMemoryDatabase();
+   try {
+-    expect(applyAllMigrations(database).currentVersion).toBe(41);
++    expect(applyAllMigrations(database).currentVersion).toBe(42);
+     createEntry(database, { title: 'Seed', type: 'comic' });
+     const section = createSection(database, { entryType: 'comic', name: 'Details' });
+     const facet = createFacet(database, { sectionId: section.id, name: 'Theme' });

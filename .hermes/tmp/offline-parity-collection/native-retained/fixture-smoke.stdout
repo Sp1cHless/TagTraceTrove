@@ -1,0 +1,46 @@
+
+STDERR
+node:internal/child_process:1120
+    result.error = new ErrnoException(result.error, 'spawnSync ' + options.file);
+                   ^
+
+<ref *1> Error: spawnSync openssl ENOENT
+    at Object.spawnSync (node:internal/child_process:1120:20)
+    at spawnSync (node:child_process:902:24)
+    at execFileSync (node:child_process:945:15)
+    at startOwnedSecurePairingListener (D:\Project\TagTraceTrove\apps\server\src\http\secure-pairing.ts:170:5)
+    at startSecurePairingListener (D:\Project\TagTraceTrove\apps\server\src\http\secure-pairing.ts:153:27)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async <anonymous> (D:\Project\TagTraceTrove\apps\server\tests\fixtures\native-collection-timeline.mts:55:15) {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'spawnSync openssl',
+  path: 'openssl',
+  spawnargs: [
+    'req',
+    '-x509',
+    '-newkey',
+    'rsa:2048',
+    '-sha256',
+    '-nodes',
+    '-days',
+    '365',
+    '-subj',
+    '/CN=T3 private library',
+    '-addext',
+    'subjectAltName=IP:192.168.50.155,IP:127.0.0.1',
+    '-keyout',
+    'C:\\Users\\hzy\\AppData\\Local\\Temp\\t3-c03-TBzUmH\\auth\\tls-key.pem',
+    '-out',
+    'C:\\Users\\hzy\\AppData\\Local\\Temp\\t3-c03-TBzUmH\\auth\\tls-certificate.pem'
+  ],
+  error: [Circular *1],
+  status: null,
+  signal: null,
+  output: null,
+  pid: 0,
+  stdout: undefined,
+  stderr: undefined
+}
+
+Node.js v22.23.2

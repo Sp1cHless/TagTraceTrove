@@ -1,3 +1,4 @@
+import { normalizeTag, rankRelationSuggestions } from '@t3/shared';
 import type {
   AuthorDetailResponse,
   AuthorFilterOptions,
@@ -12,6 +13,9 @@ import type {
   ProducerPageQueryRequest,
   ProducerPageResponse,
   SyncSnapshot,
+  TagSuggestionQuery,
+  ProducerSuggestionQuery,
+  RelationSuggestionDto,
   TagSearchHit,
   TaxonomyAliasDto,
   TaxonomyVocabulary,
@@ -20,10 +24,23 @@ import type {
 import type { GalleryAuthorSummary } from '../api/gallery.js';
 
 const EMPTY_USAGE = { viewCount: 0, likeCount: 0, lastViewedAt: null } as const;
+type SnapshotContentRow = SyncSnapshot['payload']['entryContents'][number];
+
+function compareContentRows(left: SnapshotContentRow, right: SnapshotContentRow): number {
+  const bySortOrder = left.sortOrder - right.sortOrder;
+  if (bySortOrder !== 0) return bySortOrder;
+  const leftLocal = left.id < 0;
+  const rightLocal = right.id < 0;
+  if (leftLocal !== rightLocal) return leftLocal ? 1 : -1;
+  return leftLocal ? Math.abs(left.id) - Math.abs(right.id) : left.id - right.id;
+}
 
 export interface OfflineLibrary {
   listGalleries(): GallerySummary[];
+  listLayout(entryType: string): Array<{ id: number; name: string; sortOrder: number; facets: Array<{ id: number; name: string; sortOrder: number }> }>;
   listAuthors(): GalleryAuthorSummary[];
+  suggestProducers(input: ProducerSuggestionQuery): RelationSuggestionDto[];
+  suggestTags(input: TagSuggestionQuery): RelationSuggestionDto[];
   queryProducerPage(input: ProducerPageQueryRequest): ProducerPageResponse;
   getAuthor(authorId: number): AuthorDetailResponse;
   listAuthorFilterOptions(entryType?: string, includeNsfw?: boolean): AuthorFilterOptions;
@@ -41,6 +58,15 @@ export interface OfflineLibrary {
 
 export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
   const { payload } = snapshot;
+  function listLayout(entryType: string) {
+    const rows = payload.tagGroups.filter(row => row.entryType === entryType.trim());
+    const ordered = (left: typeof rows[number], right: typeof rows[number]) => left.sortOrder - right.sortOrder || left.id - right.id;
+    return rows.filter(row => row.groupKind === 'section').sort(ordered).map(section => ({
+      id: section.id, name: section.name, sortOrder: section.sortOrder,
+      facets: rows.filter(row => row.groupKind === 'facet' && row.parentId === section.id).sort(ordered)
+        .map(facet => ({ id: facet.id, name: facet.name, sortOrder: facet.sortOrder })),
+    })).filter(section => section.facets.length > 0);
+  }
   const entriesById = new Map(payload.entries.map((entry) => [entry.id, entry]));
   const producersById = new Map(payload.producers.map((producer) => [producer.id, producer]));
   const tagsById = new Map(payload.tags.map((tag) => [tag.id, tag]));
@@ -79,6 +105,7 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
       previewRefs: entry.previewRefs,
       uploadDate: entry.uploadDate,
       pageCount: entry.pageCount,
+      ...(entry.durationSeconds !== undefined ? { durationSeconds: entry.durationSeconds } : {}),
       ...usageOf(entry.id),
     };
   }
@@ -87,7 +114,11 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
     const counts = new Map<string, number>();
     for (const entry of payload.entries) counts.set(entry.type, (counts.get(entry.type) ?? 0) + 1);
     return [...counts.entries()]
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => {
+        const order = payload.galleryOrder?.orderedTypes ?? [];
+        const rank = (type: string) => { const index = order.indexOf(type); return index < 0 ? order.length : index; };
+        return rank(left) - rank(right) || left.localeCompare(right);
+      })
       .map(([type, entryCount]) => ({ type, entryCount, nsfw: galleryNsfw.get(type) ?? false }));
   }
 
@@ -114,7 +145,7 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
         lastViewedAt = usage.lastViewedAt;
       }
     }
-    const galleryType = [...typeCounts.entries()]
+    const galleryType = producer.galleryAnchor ?? [...typeCounts.entries()]
       .sort(([leftType, leftCount], [rightType, rightCount]) => (
         rightCount - leftCount || leftType.localeCompare(rightType)
       ))[0]?.[0] ?? null;
@@ -138,6 +169,18 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
   }
 
   function queryProducerPage(input: ProducerPageQueryRequest): ProducerPageResponse {
+    const requireAuthorRatingSlot = (slotId: number) => {
+      const slot = payload.ratingSlots.find(row => row.id === slotId && row.subjectKind === 'author_self');
+      if (!slot) throw new Error(`cannot filter: rating slot ${slotId} is not an Author's own rating dimension`);
+      return slot;
+    };
+    for (const condition of input.ratingConditions ?? []) requireAuthorRatingSlot(condition.slotId);
+    if (input.ratingSort) requireAuthorRatingSlot(input.ratingSort.slotId);
+    const authorStars = (producerId: number, galleryType: string | null, slotId: number) => {
+      const slot = requireAuthorRatingSlot(slotId);
+      if (slot.entryType !== galleryType) return null;
+      return payload.producerRatingValues.find(row => row.producerId === producerId && row.slotId === slotId)?.stars ?? null;
+    };
     const requestedIds = input.producerIds === undefined ? null : new Set(input.producerIds);
     const ownTagIds = new Set(input.ownTagIds);
     const workTagIds = new Set(input.relatedEntryTagIds);
@@ -148,14 +191,14 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
       )).map((row) => 'producerId' in row ? row.producerId : -1),
     );
     let authors = payload.producers.flatMap((producer) => {
-      const summary = summaryForProducer(producer, input.includeNsfw);
-      if (summary === null) return [];
+      const summary = summaryForProducer(producer);
+      if (summary === null || (!input.includeNsfw && summary.nsfw)) return [];
       if (requestedIds !== null && !requestedIds.has(producer.id)) return [];
       if (collectionProducerIds !== null && !collectionProducerIds.has(producer.id)) return [];
       const linkedEntries = (producerEntryIds.get(producer.id) ?? [])
         .map((entryId) => entriesById.get(entryId))
         .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined);
-      if (input.entryType !== undefined && !linkedEntries.some((entry) => entry.type === input.entryType)) return [];
+      if (input.entryType !== undefined && summary.galleryType !== input.entryType) return [];
       const assignedTagIds = new Set(payload.producerTagAssignments
         .filter((row) => row.producerId === producer.id).map((row) => row.tagId));
       if ([...ownTagIds].some((tagId) => !assignedTagIds.has(tagId))) return [];
@@ -171,10 +214,23 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
         if (!producer.name.toLocaleLowerCase().includes(query)
           && !aliases.some((row) => row.aliasName.toLocaleLowerCase().includes(query))) return [];
       }
+      if (!(input.ratingConditions ?? []).every(condition => {
+        const stars = authorStars(producer.id, summary.galleryType, condition.slotId);
+        if (condition.operator === 'unrated') return stars === null;
+        if (stars === null || condition.stars === null) return false;
+        return condition.operator === 'eq' ? stars === condition.stars : condition.operator === 'gt' ? stars > condition.stars : stars < condition.stars;
+      })) return [];
       return [summary];
     });
     const sourceOrder = new Map((input.producerIds ?? []).map((id, index) => [id, index]));
     authors = authors.sort((left, right) => {
+      if (input.ratingSort) {
+        const a = authorStars(left.id, left.galleryType, input.ratingSort.slotId);
+        const b = authorStars(right.id, right.galleryType, input.ratingSort.slotId);
+        if (a === null && b !== null) return 1;
+        if (b === null && a !== null) return -1;
+        if (a !== null && b !== null && a !== b) return b - a;
+      }
       if (input.sort === 'source-order') return (sourceOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER)
         - (sourceOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER) || left.id - right.id;
       if (input.sort === 'last-viewed-desc') {
@@ -224,7 +280,7 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
       .filter((row) => row.producerId === authorId).map((row) => row.entryId));
     const looseEntries = entryIds.filter((entryId) => !directoryEntryIds.has(entryId))
       .map(workSummary).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
-    const galleryType = summary?.galleryType ?? null;
+    const galleryType = producer.galleryAnchor ?? summary?.galleryType ?? null;
     return {
       ...producer,
       galleryType,
@@ -245,6 +301,11 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
       workTypes: [...new Set(entryIds.map((entryId) => entriesById.get(entryId)?.type).filter((type): type is string => type !== undefined))],
       workCoverRefs: entryIds.map((entryId) => entriesById.get(entryId)?.coverRef)
         .filter((ref): ref is string => ref !== null && ref !== undefined).slice(0, 4),
+      authorSelfRatings: galleryType === null ? [] : payload.ratingSlots
+        .filter((slot) => slot.subjectKind === 'author_self' && slot.entryType === galleryType)
+        .sort((left, right) => left.sortOrder - right.sortOrder || left.id - right.id)
+        .map((slot) => ({ slotId: slot.id, name: slot.name,
+          stars: payload.producerRatingValues.find((row) => row.slotId === slot.id && row.producerId === authorId)?.stars ?? null })),
       ratings: galleryType === null ? [] : payload.ratingSlots
         .filter((slot) => slot.subjectKind === 'producer' && slot.entryType === galleryType)
         .sort((left, right) => left.sortOrder - right.sortOrder || left.id - right.id)
@@ -262,12 +323,14 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
   }
 
   function listAuthorFilterOptions(entryType?: string, includeNsfw = true): AuthorFilterOptions {
-    const visibleEntryIds = new Set(payload.entries.filter((entry) => (
-      (entryType === undefined || entry.type === entryType)
-      && (includeNsfw || !(galleryNsfw.get(entry.type) ?? false))
-    )).map((entry) => entry.id));
-    const visibleProducerIds = new Set(payload.entryProducers
-      .filter((row) => visibleEntryIds.has(row.entryId)).map((row) => row.producerId));
+    const eligibleAuthors = listAuthors().filter((author) => (
+      (includeNsfw || !author.nsfw)
+      && (entryType === undefined || author.galleryType === entryType)
+    ));
+    const visibleProducerIds = new Set(eligibleAuthors.map((author) => author.id));
+    const galleryTypes = new Set(eligibleAuthors.map((author) => author.galleryType));
+    const visibleEntryIds = new Set(payload.entryProducers
+      .filter((row) => visibleProducerIds.has(row.producerId)).map((row) => row.entryId));
     const ownTagIds = new Set(payload.producerTagAssignments
       .filter((row) => visibleProducerIds.has(row.producerId)).map((row) => row.tagId));
     const workTagIds = new Set(payload.entryTags
@@ -279,6 +342,11 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
       workTags: payload.tags.filter((tag) => workTagIds.has(tag.id))
         .sort((left, right) => left.name.localeCompare(right.name))
         .map((tag) => ({ tagId: tag.id, name: tag.name })),
+      // New unscored dimensions are useful too: `unrated` finds their Authors.
+      ratingSlots: payload.ratingSlots.filter(slot => slot.subjectKind === 'author_self'
+        && galleryTypes.has(slot.entryType))
+        .sort((a,b) => a.entryType.localeCompare(b.entryType) || a.sortOrder-b.sortOrder || a.id-b.id)
+        .map(slot => ({id:slot.id,name:slot.name,sortOrder:slot.sortOrder,entryType:slot.entryType})),
     };
   }
 
@@ -308,6 +376,23 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
     return (payload.taxonomyAliases ?? []).filter((row) => (
       vocabulary === undefined || row.vocabulary === vocabulary
     )).map(({ aliasName, ...row }) => ({ ...row, alias: aliasName }));
+  }
+
+  function effectiveRating(entryId: number, slotId: number): number | null {
+    const slot = payload.ratingSlots.find(row => row.id === slotId);
+    const entry = entriesById.get(entryId);
+    if (!slot || !entry || slot.entryType !== entry.type) return null;
+    if (slot.subjectKind !== 'author_self') {
+      const ownSlot = slot.subjectKind === 'entry' ? slot : payload.ratingSlots.find(row => row.subjectKind === 'entry' && row.entryType === slot.entryType && row.name === slot.name);
+      const direct = payload.entryRatingValues.find(row => row.entryId === entryId && row.slotId === ownSlot?.id)?.stars ?? null;
+      if (direct !== null) return direct;
+    }
+    const authorIds = entryProducerIds.get(entryId) ?? [];
+    if (authorIds.length >= 4) return null;
+    const kind = slot.subjectKind === 'author_self' ? 'author_self' : 'producer';
+    const authorSlot = payload.ratingSlots.find(row => row.subjectKind === kind && row.entryType === slot.entryType && row.name === slot.name);
+    const values = payload.producerRatingValues.filter(row => row.slotId === authorSlot?.id && authorIds.includes(row.producerId)).flatMap(row => row.stars === null ? [] : [row.stars]);
+    return values.length === 0 ? null : Math.max(...values);
   }
 
   function queryEntryPage(input: EntryPageQueryRequest): EntryPageResponse {
@@ -343,9 +428,7 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
         ))) return false;
       }
       if (!input.ratingConditions.every((condition) => {
-        const stars = payload.entryRatingValues.find((row) => (
-          row.entryId === entry.id && row.slotId === condition.slotId
-        ))?.stars ?? null;
+        const stars = effectiveRating(entry.id, condition.slotId);
         if (condition.operator === 'unrated') return stars === null;
         if (stars === null || condition.stars === null) return false;
         if (condition.operator === 'eq') return stars === condition.stars;
@@ -368,27 +451,6 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
     });
 
     const sourceOrder = new Map((input.entryIds ?? []).map((id, index) => [id, index]));
-    const effectiveRating = (entryId: number): number | null => {
-      if (input.ratingSort === null) return null;
-      const direct = payload.entryRatingValues.find((row) => (
-        row.entryId === entryId && row.slotId === input.ratingSort?.slotId
-      ))?.stars ?? null;
-      if (direct !== null || !input.ratingSort.applyAuthorRating) return direct;
-      const producerIds = entryProducerIds.get(entryId) ?? [];
-      if (producerIds.length >= 4) return null;
-      const entrySlot = payload.ratingSlots.find((slot) => slot.id === input.ratingSort?.slotId);
-      const producerSlot = payload.ratingSlots.find((slot) => (
-        slot.subjectKind === 'producer'
-        && slot.entryType === input.entryType
-        && slot.name === entrySlot?.name
-      ));
-      if (producerSlot === undefined) return null;
-      const values = payload.producerRatingValues
-        .filter((row) => producerIds.includes(row.producerId) && row.slotId === producerSlot.id)
-        .map((row) => row.stars)
-        .filter((stars): stars is number => stars !== null);
-      return values.length === 0 ? null : Math.max(...values);
-    };
     entries = [...entries].sort((left, right) => {
       if (input.usageSort !== null) {
         const value = (entryId: number) => {
@@ -401,8 +463,8 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
         return direction * (value(left.id) - value(right.id)) || left.id - right.id;
       }
       if (input.ratingSort !== null) {
-        const leftStars = effectiveRating(left.id);
-        const rightStars = effectiveRating(right.id);
+        const leftStars = effectiveRating(left.id, input.ratingSort.slotId);
+        const rightStars = effectiveRating(right.id, input.ratingSort.slotId);
         if (leftStars === null) return rightStars === null ? left.title.localeCompare(right.title) || left.id - right.id : 1;
         if (rightStars === null) return -1;
         return rightStars - leftStars || left.title.localeCompare(right.title) || left.id - right.id;
@@ -465,9 +527,9 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
       )).sort((left, right) => left.name.localeCompare(right.name))
         .map((producer) => ({ authorId: producer.id, name: producer.name })),
       ratingSlots: payload.ratingSlots
-        .filter((slot) => slot.subjectKind === 'entry' && slot.entryType === entryType)
-        .sort((left, right) => left.sortOrder - right.sortOrder || left.id - right.id)
-        .map((slot) => ({ id: slot.id, name: slot.name, sortOrder: slot.sortOrder })),
+        .filter((slot) => (slot.subjectKind === 'entry' || slot.subjectKind === 'author_self') && slot.entryType === entryType)
+        .sort((left, right) => (left.subjectKind === right.subjectKind ? 0 : left.subjectKind === 'entry' ? -1 : 1) || left.sortOrder - right.sortOrder || left.id - right.id)
+        .map((slot) => ({ id: slot.id, name: slot.name, sortOrder: slot.sortOrder, subjectKind: slot.subjectKind })),
     };
   }
 
@@ -503,12 +565,13 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
       previewRefs: entry.previewRefs,
       uploadDate: entry.uploadDate,
       pageCount: entry.pageCount,
+      ...(entry.durationSeconds !== undefined ? { durationSeconds: entry.durationSeconds } : {}),
       producers: (entryProducerIds.get(entryId) ?? []).map((producerId) => producersById.get(producerId))
         .filter((producer): producer is NonNullable<typeof producer> => producer !== undefined)
         .map((producer) => ({ ...producer, entryCount: producerEntryIds.get(producer.id)?.length ?? 0 })),
       sections,
       contents: payload.entryContents.filter((row) => row.entryId === entryId)
-        .sort((left, right) => left.sortOrder - right.sortOrder || left.id - right.id)
+        .sort(compareContentRows)
         .map((content) => ({
           id: content.id,
           contentType: content.contentType,
@@ -593,6 +656,80 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
       .map(build);
   }
 
+  function relationAliases(vocabulary: 'entry' | 'producer', authorIdentity: boolean) {
+    const byCanonical = new Map<string, string[]>();
+    for (const row of payload.taxonomyAliases ?? []) {
+      if (row.vocabulary !== vocabulary || row.normalizedCanonical === ''
+        || (vocabulary === 'producer' && (row.partition === 'authors') !== authorIdentity)) continue;
+      const aliases = byCanonical.get(row.normalizedCanonical) ?? [];
+      aliases.push(row.aliasName);
+      byCanonical.set(row.normalizedCanonical, aliases);
+    }
+    return byCanonical;
+  }
+
+  function suggestProducers(input: ProducerSuggestionQuery): RelationSuggestionDto[] {
+    const aliases = relationAliases('producer', true);
+    const excluded = new Set(input.excludeIds);
+    return rankRelationSuggestions(payload.producers
+      .filter((producer) => !excluded.has(producer.id))
+      .map((producer) => ({
+        id: producer.id,
+        name: producer.name,
+        aliases: aliases.get(normalizeTag(producer.name)) ?? [],
+        sameContextUsageCount: 0,
+        totalUsageCount: new Set(producerEntryIds.get(producer.id) ?? []).size,
+      })), input.q, input.limit);
+  }
+
+  function suggestTags(input: TagSuggestionQuery): RelationSuggestionDto[] {
+    const entryVocabulary = input.vocabulary === 'entry';
+    const aliases = relationAliases(input.vocabulary, false);
+    const excluded = new Set(input.excludeIds);
+    const tagRows = entryVocabulary ? payload.tags : payload.producerTags;
+    return rankRelationSuggestions(tagRows.flatMap((tag) => {
+      if (excluded.has(tag.id)) return [];
+      const assignments = entryVocabulary
+        ? payload.entryTags.filter((row) => row.tagId === tag.id)
+        : payload.producerTagAssignments.filter((row) => row.tagId === tag.id);
+      if (assignments.length === 0) return [];
+      const visible = assignments.filter((row) => {
+        if (input.includeNsfw !== 'false') return true;
+        if (entryVocabulary && 'entryId' in row) {
+          return !(galleryNsfw.get(entriesById.get(row.entryId)?.type ?? '') ?? false);
+        }
+        if (!entryVocabulary && 'producerId' in row) {
+          return !(producerEntryIds.get(row.producerId) ?? []).some((entryId) => (
+            galleryNsfw.get(entriesById.get(entryId)?.type ?? '') ?? false
+          ));
+        }
+        return false;
+      });
+      if (visible.length === 0 && input.includeNsfw === 'false') return [];
+      const sameContextUsageCount = entryVocabulary
+        ? new Set(payload.entryTags.filter((row) => row.tagId === tag.id
+          && (input.facetId === undefined || row.facetId === input.facetId)
+          && (input.entryType === undefined || entriesById.get(row.entryId)?.type === input.entryType))
+          .map((row) => row.entryId)).size
+        : input.entryType === undefined ? 0 : new Set(payload.producerTagAssignments
+          .filter((row) => row.tagId === tag.id
+            && (producerEntryIds.get(row.producerId) ?? []).some((entryId) => (
+              entriesById.get(entryId)?.type === input.entryType
+            )))
+          .map((row) => row.producerId)).size;
+      return [{
+        id: tag.id,
+        name: tag.name,
+        aliases: aliases.get(tag.normalizedName) ?? [],
+        sameContextUsageCount: entryVocabulary && input.facetId === undefined && input.entryType === undefined
+          ? 0 : sameContextUsageCount,
+        totalUsageCount: new Set(assignments.map((row) => (
+          'entryId' in row ? row.entryId : row.producerId
+        ))).size,
+      }];
+    }), input.q, input.limit);
+  }
+
   function listCollectionsForEntry(entryId: number): number[] {
     return payload.collectionMembers
       .filter((row) => 'entryId' in row && row.entryId === entryId)
@@ -607,10 +744,13 @@ export function createOfflineLibrary(snapshot: SyncSnapshot): OfflineLibrary {
 
   return {
     listGalleries,
+    listLayout,
     listAuthors,
     queryProducerPage,
     getAuthor,
     listAuthorFilterOptions,
+    suggestProducers,
+    suggestTags,
     searchTags,
     listGalleryTags,
     listTaxonomyAliases,

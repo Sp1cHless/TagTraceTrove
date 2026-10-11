@@ -1,5 +1,6 @@
 import { normalizeTag } from '@t3/shared';
 import type { T3Database } from '../database/connection.js';
+import { toSimplified } from '../taxonomy/simplify.js';
 import {
   listAuthorDirectories,
   type AuthorDirectoryRecord,
@@ -11,7 +12,7 @@ import {
   pruneUnusedProducerTags,
   type ProducerTagAssignment,
 } from './producer-tag-repository.js';
-import { listProducerRatings, type RatingRowRecord } from './rating-repository.js';
+import { listAuthorSelfRatings, listProducerRatings, type RatingRowRecord } from './rating-repository.js';
 import { getProducerUsage } from './usage-repository.js';
 import { resolveTaxonomyName } from './taxonomy-repository.js';
 
@@ -33,6 +34,8 @@ export interface AuthorDetail extends ProducerRecord {
   workTypes?: string[] | undefined;
   workCoverRefs?: string[] | undefined;
   ratings: RatingRowRecord[];
+  /** The author's own dimensions; never inherited by a work. */
+  authorSelfRatings: RatingRowRecord[];
   usage: { viewCount: number; lastViewedAt: string | null };
 }
 
@@ -44,6 +47,7 @@ export interface CreateProducerInput {
 }
 
 export interface UpdateProducerInput {
+  galleryAnchor?: string | null | undefined;
   name?: string | undefined;
   occupation?: string | null | undefined;
   artworkRef?: string | null | undefined;
@@ -166,6 +170,9 @@ export function getAuthorDetail(
       workCoverRefs,
     } : {}),
     ratings: listProducerRatings(database, producerId),
+    // The author's own dimensions, beside the works summary rather than mixed into it: they describe
+    // the person or the studio, and no work ever inherits them.
+    authorSelfRatings: listAuthorSelfRatings(database, producerId),
     usage: getProducerUsage(database, producerId),
   };
 }
@@ -174,7 +181,9 @@ export function createProducer(
   database: T3Database,
   input: CreateProducerInput,
 ): ProducerRecord {
-  const name = input.name.trim();
+  // Simplified, like every other name the library stores: a site that spells its authors in
+  // Traditional must not create a second author beside the one an import already made.
+  const name = toSimplified(input.name.trim());
   if (name === '') {
     throw new Error('producer name cannot be empty');
   }
@@ -203,7 +212,7 @@ export function updateProducer(
   const assignments: string[] = [];
   const values: Array<string | null> = [];
   if (input.name !== undefined) {
-    const name = input.name.trim();
+    const name = toSimplified(input.name.trim());
     if (name === '') {
       throw new Error('producer name cannot be empty');
     }
@@ -223,6 +232,11 @@ export function updateProducer(
     values.push(input.content ?? null);
   }
 
+  if (Object.hasOwn(input, 'galleryAnchor')) {
+    if (input.galleryAnchor !== null && input.galleryAnchor?.trim() === '') throw new Error('cannot anchor an author to an empty Gallery');
+    assignments.push('gallery_anchor = ?');
+    values.push(input.galleryAnchor?.trim() ?? null);
+  }
   if (assignments.length > 0) {
     database.prepare(`
       UPDATE producers
@@ -239,6 +253,11 @@ export function linkEntryProducer(
   entryId: number,
   producerId: number,
 ): void {
+  // Deliberately does NOT touch `producers.gallery_anchor`. Freezing the anchor here would make an
+  // Author's Gallery depend on which work happened to be linked first — two Authors with the same
+  // works could show different badges — and the derivation still answers for an Author that has no
+  // anchor. Anchoring is a stored fact `039` filled for every existing Author and a person can set
+  // explicitly; an Author created since then keeps deriving until they do.
   database.prepare(`
     INSERT INTO entry_producers (entry_id, producer_id)
     VALUES (?, ?)

@@ -1,4 +1,5 @@
 import type { T3Database } from '../database/connection.js';
+import { listGalleryOrder } from './gallery-order-repository.js';
 import { listEntryTags, pruneUnusedTags } from './entry-tag-repository.js';
 import { listLayout } from './layout-repository.js';
 import { listEntryRatings, type RatingRowRecord } from './rating-repository.js';
@@ -51,6 +52,7 @@ export interface EntryDetail {
   previewRefs: string[];
   uploadDate: string | null;
   pageCount: number | null;
+  durationSeconds: number | null;
   producers: EntryDetailProducer[];
   sections: EntryDetailSection[];
   contents: EntryDetailContent[];
@@ -67,6 +69,7 @@ export interface EntryRecord {
   previewRefs: string[];
   uploadDate: string | null;
   pageCount: number | null;
+  durationSeconds: number | null;
 }
 
 export interface GallerySummary {
@@ -84,6 +87,7 @@ export interface CreateEntryInput {
   previewRef?: string | null | undefined;
   uploadDate?: string | null | undefined;
   pageCount?: number | null | undefined;
+  durationSeconds?: number | null | undefined;
 }
 
 export interface UpdateEntryInput {
@@ -94,6 +98,7 @@ export interface UpdateEntryInput {
   previewRefs?: string[] | null | undefined;
   uploadDate?: string | null | undefined;
   pageCount?: number | null | undefined;
+  durationSeconds?: number | null | undefined;
 }
 
 interface EntryRow {
@@ -105,6 +110,7 @@ interface EntryRow {
   preview_refs: string | null;
   upload_date: string | null;
   page_count: number | null;
+  duration_seconds: number | null;
 }
 
 interface ProducerRow {
@@ -148,12 +154,13 @@ function toEntryRecord(entry: EntryRow): EntryRecord {
     previewRefs: parsePreviewRefs(entry.preview_refs, entry.preview_ref),
     uploadDate: entry.upload_date,
     pageCount: entry.page_count,
+    durationSeconds: entry.duration_seconds,
   };
 }
 
 function getEntryRecord(database: T3Database, entryId: number): EntryRecord | null {
   const entry = database.prepare(`
-    SELECT id, title, type, cover_ref, preview_ref, preview_refs, upload_date, page_count
+    SELECT id, title, type, cover_ref, preview_ref, preview_refs, upload_date, page_count, duration_seconds
     FROM entries
     WHERE id = ?
   `).get(entryId) as EntryRow | undefined;
@@ -178,15 +185,16 @@ export function createEntry(database: T3Database, input: CreateEntryInput): Entr
     '[]',
     input.uploadDate ?? null,
     input.pageCount ?? null,
+    input.durationSeconds ?? null,
   ] as const;
   const result = input.syncUid === undefined
     ? database.prepare(`
-        INSERT INTO entries (title, type, cover_ref, preview_ref, preview_refs, upload_date, page_count)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO entries (title, type, cover_ref, preview_ref, preview_refs, upload_date, page_count, duration_seconds)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).run(...values)
     : database.prepare(`
-        INSERT INTO entries (title, type, sync_uid, cover_ref, preview_ref, preview_refs, upload_date, page_count)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO entries (title, type, sync_uid, cover_ref, preview_ref, preview_refs, upload_date, page_count, duration_seconds)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(title, type, input.syncUid, ...values.slice(2));
   return getEntryRecord(database, Number(result.lastInsertRowid)) as EntryRecord;
 }
@@ -199,11 +207,21 @@ export function listGalleries(database: T3Database): GallerySummary[] {
     ORDER BY type COLLATE NOCASE, type
   `).all() as Array<{ type: string; entry_count: number }>;
   const nsfwTypes = listNsfwGalleryTypes(database);
-  return rows.map((row) => ({
+  const summaries = rows.map((row) => ({
     type: row.type,
     entryCount: row.entry_count,
     nsfw: nsfwTypes.has(row.type),
   }));
+  // The order the person put them in, when they have put them in one: the named ones first in that
+  // order, and everything else after them by name — which is where a Gallery created since the last
+  // move belongs. See `gallery-order-repository`.
+  const order = listGalleryOrder(database);
+  if (order.length === 0) return summaries;
+  const position = new Map(order.map((type, index) => [type, index]));
+  return [...summaries].sort((left, right) => (
+    (position.get(left.type) ?? Number.MAX_SAFE_INTEGER)
+    - (position.get(right.type) ?? Number.MAX_SAFE_INTEGER)
+  ));
 }
 
 export function updateEntry(
@@ -249,6 +267,10 @@ export function updateEntry(
     assignments.push('page_count = ?');
     values.push(input.pageCount ?? null);
   }
+  if (Object.hasOwn(input, 'durationSeconds')) {
+    assignments.push('duration_seconds = ?');
+    values.push(input.durationSeconds ?? null);
+  }
   if (Object.hasOwn(input, 'previewRefs')) {
     assignments.push('preview_refs = ?');
     values.push(JSON.stringify(input.previewRefs ?? []));
@@ -267,7 +289,7 @@ export function updateEntry(
 
 export function getEntryDetail(database: T3Database, entryId: number): EntryDetail | null {
   const entry = database.prepare(`
-    SELECT id, title, type, cover_ref, preview_ref, preview_refs, upload_date, page_count
+    SELECT id, title, type, cover_ref, preview_ref, preview_refs, upload_date, page_count, duration_seconds
     FROM entries
     WHERE id = ?
   `).get(entryId) as EntryRow | undefined;
@@ -332,6 +354,7 @@ export function getEntryDetail(database: T3Database, entryId: number): EntryDeta
     previewRefs: parsePreviewRefs(entry.preview_refs, entry.preview_ref),
     uploadDate: entry.upload_date,
     pageCount: entry.page_count,
+    durationSeconds: entry.duration_seconds,
     producers: producers.map((producer) => ({
       id: producer.id,
       name: producer.name,
@@ -352,7 +375,7 @@ export function getEntryDetail(database: T3Database, entryId: number): EntryDeta
   };
 }
 
-export function deleteEntry(database: T3Database, entryId: number): void {
+export function deleteEntry(database: T3Database, entryId: number, options: { retainRelatedRecords?: boolean } = {}): void {
   database.transaction(() => {
     // Read the Authors before the cascade takes the links away: deleting a work
     // never deletes its Author directly, but an Author that only existed for
@@ -369,7 +392,12 @@ export function deleteEntry(database: T3Database, entryId: number): void {
     if (result.changes === 0) {
       throw new Error('entry not found');
     }
-    pruneWorklessProducers(database, heldProducerIds);
-    pruneUnusedTags(database, heldTagIds);
+    // Ordinary HTTP deletion matches durable replay: cascading Entry links is
+    // not permission to destroy the retained Author profiles or vocabulary.
+    // Existing explicit maintenance callers keep their previous pruning policy.
+    if (!options.retainRelatedRecords) {
+      pruneWorklessProducers(database, heldProducerIds);
+      pruneUnusedTags(database, heldTagIds);
+    }
   })();
 }

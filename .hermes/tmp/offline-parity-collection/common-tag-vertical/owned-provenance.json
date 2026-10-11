@@ -1,0 +1,114 @@
+[
+  {
+    "path": "packages/shared/src/schemas/sync.ts",
+    "beforeSha": "41a33d667586e825f0761593f93e1f9fd6bd8a12fc00a26dd928d0200726341d",
+    "liveSha": "a78e74ffcf2138c274e10bf2bc1b910c36e576dba36ec253895d434b79f38f83",
+    "beforeCRLF": 1303,
+    "liveCRLF": 1303,
+    "unchanged": false
+  },
+  {
+    "path": "packages/shared/src/schemas/native-mutation-contract.ts",
+    "beforeSha": "26b02be372725e75239f89972cfe722a7b3b5294a8108d4c9cb2470a1a2e5822",
+    "liveSha": "6e4eebe411131cedb9b7ffe5bce3fc5f72d1f1c120fa9eaabf70eac4141ac2cf",
+    "beforeCRLF": 0,
+    "liveCRLF": 0,
+    "unchanged": false
+  },
+  {
+    "path": "packages/shared/src/index.ts",
+    "beforeSha": "ee4a381890af560a4b65bb21f4ddc24b11635e9b185a443d6e87dd5910074d42",
+    "liveSha": "ee34edcf6a33edb575c935e130e1231d93f572108b2f149ab2945f08d7859c08",
+    "beforeCRLF": 41,
+    "liveCRLF": 41,
+    "unchanged": false
+  },
+  {
+    "path": "apps/server/src/sync/replay-service.ts",
+    "beforeSha": "f0697ee412ef1e0a1bbac0ee74d43732718b36e684079518e10f6ffa97526c80",
+    "liveSha": "de1ef6f918f3b2ba3b2f6db517d67d70ab8a9dfac2fbdd06a5d54b17e947d743",
+    "beforeCRLF": 2217,
+    "liveCRLF": 2217,
+    "unchanged": false
+  },
+  {
+    "path": "apps/server/src/sync/sync-service.ts",
+    "beforeSha": "b3d052259fe3c7034fca8c259ef0d626d0e49f8c88b29a15d2a4f0e05e2ab88b",
+    "liveSha": "473811bb87418eed87331a78a01aaef6844163a76e7bedd2e8f21799dc160e3f",
+    "beforeCRLF": 417,
+    "liveCRLF": 417,
+    "unchanged": false
+  },
+  {
+    "path": "apps/server/src/http/app.ts",
+    "beforeSha": "d4ae18b1fde4f3525f8ccebc6d0c3ed6f0222cca1e8aa607d17af3a773e89f63",
+    "liveSha": "02c185cce8543d13cf151860eebad73aabdebc666c0b3f58bec1335adeb8f9c2",
+    "beforeCRLF": 0,
+    "liveCRLF": 0,
+    "unchanged": false
+  },
+  {
+    "path": "apps/web/src/api/gallery.ts",
+    "beforeSha": "6e5d9475a19ac1544cd89d0a3d0581326f3c97a9ab60546725bf9db1a12e3dac",
+    "liveSha": "7712a66050a41df2a41a3540e90ba772700dcba1d30a70424d3c1740fc82e4ff",
+    "beforeCRLF": 1531,
+    "liveCRLF": 1531,
+    "unchanged": false
+  },
+  {
+    "path": "apps/web/src/offline/offline-api.ts",
+    "beforeSha": "369c503b143997384da8f774e4c0a1cb572e1c5c15a3c64dc933d28609c4401a",
+    "liveSha": "c00e80494759a153a356cb5812b4ff12d29fdb8d4c9b364075e5c36d9def34b6",
+    "beforeCRLF": 5826,
+    "liveCRLF": 5826,
+    "unchanged": false
+  },
+  {
+    "path": "apps/web/src/offline/sync-mutation-plan.ts",
+    "beforeSha": "265c1ecac2a456c55e02028f8fb1fe121d8891c6306588fd1970ab96c0dcb745",
+    "liveSha": "dae671b832f3756bc4ba4b213ed707c01a8e72f479dfce578dc6f2c32306285b",
+    "beforeCRLF": 0,
+    "liveCRLF": 0,
+    "unchanged": false
+  },
+  {
+    "path": "apps/web/src/offline/pending-work-restore.ts",
+    "beforeSha": "0689cfd726b84371f87cf663bacfcdc6f673d1c4f00adac641bcc9e1e9373f09",
+    "liveSha": "f6614dad18f8f042b0d969e4b10b242b6d9bcfabf2e11466b70f6b522bdd79d2",
+    "beforeCRLF": 0,
+    "liveCRLF": 0,
+    "unchanged": false
+  },
+  {
+    "path": "apps/web/tests/offline-collection-common-tag.integration.test.ts",
+    "beforeSha": "cae3dc4914d7220b0b35868ed5a3418e8eeb5fb3d68281605173e41822d91d3b",
+    "liveSha": "f7526afc5e84f5a504829d2cf5bc60ee1ac05c06a662866df8147b2b637ac704",
+    "beforeCRLF": 52,
+    "liveCRLF": 52,
+    "unchanged": false
+  },
+  {
+    "path": "apps/web/tests/offline-collection-parity.integration.test.ts",
+    "beforeSha": "3beea510fc0528cafb29620866d370b69dacf8cfe29be16cac248fe4c5158345",
+    "liveSha": "4e6b8c6ad43f304742de06f9f5b5a055d5b502d9aa0bec83582707f36cd96d37",
+    "beforeCRLF": 0,
+    "liveCRLF": 0,
+    "unchanged": false
+  },
+  {
+    "path": "packages/shared/package.json",
+    "beforeSha": "2b887dc7f180d0ef45c3988f0c90d3cc4381fd161c44609b7d716b0e2811cbd6",
+    "liveSha": "2ef541414369ef148e414681953c6ea59b7162c00b35d974bd7fa6f36f24dfe3",
+    "beforeCRLF": 0,
+    "liveCRLF": 0,
+    "unchanged": false
+  },
+  {
+    "path": "pnpm-lock.yaml",
+    "beforeSha": "496a4de8a02079905b57f651cfe9b58736296285e88a7e43b3a76a9dfa73e302",
+    "liveSha": "b2147c5ca5a38be454faad5554b94e88c1426acedd2f12032d6d967ba09343a5",
+    "beforeCRLF": 0,
+    "liveCRLF": 0,
+    "unchanged": false
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "apps/web/src/offline/offline-api.ts": "982b69cb25178c4dddf6331007664e277c97ffbcee9bb452b6496b57a9598805",
+  "apps/web/src/offline/pending-work-restore.ts": "db9124b09d3e45730e1b4e6fab8e86f67a7ab25e694835b6fd471e79899298fd",
+  "apps/web/tests/offline-author-parity.integration.test.ts": "a364dbd34f18c487ae7f3746d3a1288c5975a09d12dcd1a0375bb2d9409260f4",
+  "apps/web/tests/offline-entry-delete.integration.test.ts": "f7f6ab702543c8005ec5ef9a7dec46694addea42e80df45986b2cd2263c7e389"
+}

@@ -1,0 +1,167 @@
+--- apps/web/src/offline/offline-api.ts before
+
++++ apps/web/src/offline/offline-api.ts live
+
+@@ -4570,16 +4570,18 @@
+
+ 
+   void setReplayStateFromStore().catch(() => undefined);
+ 
+-  async function sendPartition(row:PendingSyncOperation):Promise<void>{
++  async function sendPartition(row:PendingSyncOperation):Promise<{resourceVersion:number;serverSeq:number}|undefined>{
+     if(!hasOutbox(store) || !online.replaySyncOperation)throw new Error('Canonical partition replay unavailable');
+     const operation=transportOperation(row);
+     syncReplayRequestSchema.parse(operation);
+     await store.update(row.opId,{lastAttemptAt:new Date().toISOString(),lastError:null});
++    let applied:{resourceVersion:number;serverSeq:number}|undefined;
+     try{
+       const result=await online.replaySyncOperation(operation);
+       if(result.opId!==row.opId)throw new Error('Partition receipt identity mismatch');
+       if(result.status==='applied'){
+         if(result.resourceVersion!==row.baseVersion+1 || result.serverSeq<=0)throw new Error('Invalid partition receipt revision');
++        applied={resourceVersion:result.resourceVersion,serverSeq:result.serverSeq};
+         // A command success is not snapshot/ACK authority. Keep the original until
+         // explicit saved-copy reconciliation; no-copy never downloads a library here.
+       }else if(result.status==='conflict' || result.status==='failed')await store.update(row.opId,{status:result.status,lastError:JSON.stringify(result)});
+@@ -4589,6 +4591,7 @@
+
+       await store.update(row.opId,{lastError:String(cause)});
+     }
+     await setReplayStateFromStore();
++    return applied;
+   }
+   const partitionStaging = new Map<string,Promise<void>>();
+   let commonTagStaging:Promise<unknown>=Promise.resolve();
+@@ -5705,13 +5708,23 @@
+
+           throw new Error('Gallery partition is not available under offline; retain queued originals');
+         }
+         if(connected && prior.length){
+-          // Never regenerate an uncertain operation from a new server revision.
++          let previous:PendingSyncOperation|undefined;
++          let previousSeq=0;
+           for(const row of prior){
+             if(row.clientId!==clientId || row.libraryId!==capabilities!.libraryId || row.syncEpoch!==capabilities!.syncEpoch || row.status!=='pending')throw new Error('Retain queued partition identity');
+-            await sendPartition(row);
++            if(previous && (row.entityUid!==previous.entityUid || row.baseVersion!==previous.baseVersion+1 || row.baseValues.nsfw!==previous.payload.nsfw))throw new Error('Retain noncausal partition originals');
++            const receipt=await sendPartition(row);
++            if(!receipt)throw new Error('Partition predecessor is unsettled; retain original');
++            if(prior.at(-1)!.payload.nsfw!==nsfw){
++              if(!online.getGalleryPartitionContext)throw new Error('Missing bounded partition journal');
++              const context=await online.getGalleryPartitionContext(entryType,row.opId);
++              const change=context.predecessor;
++              if(context.libraryId!==row.libraryId || context.syncEpoch!==row.syncEpoch || context.entryType!==entryType || context.syncUid!==row.entityUid || context.syncVersion!==prior.at(-1)!.baseVersion+1 || context.nsfw!==prior.at(-1)!.payload.nsfw || receipt.serverSeq<=previousSeq || !change || change.opId!==row.opId || change.serverSeq!==receipt.serverSeq || change.entityUid!==row.entityUid || change.resourceVersion!==receipt.resourceVersion || change.entryType!==entryType || change.nsfw!==row.payload.nsfw)throw new Error('Partition predecessor needs its exact own journal');
++              previousSeq=receipt.serverSeq;
++            }
++            previous=row;
+           }
+           if(prior.at(-1)!.payload.nsfw===nsfw)return;
+-          throw new Error('Settle earlier partition before staging a different connected value');
+         }
+         const active=await readActiveSnapshot(store);
+         let owner:import('@t3/shared').SyncGalleryPartitionContext;
+@@ -5720,6 +5733,8 @@
+
+           if(!online.getGalleryPartitionContext)throw new Error('Missing bounded partition context');
+           owner=await online.getGalleryPartitionContext(entryType);
+           if(owner.entryType!==entryType || owner.libraryId!==capabilities!.libraryId || owner.syncEpoch!==capabilities!.syncEpoch || (active && (active.snapshot.header.libraryId!==owner.libraryId || active.snapshot.header.syncEpoch!==owner.syncEpoch)))throw new Error('Foreign partition identity');
++          const last=prior.at(-1);
++          if(last && (owner.syncUid!==last.entityUid || owner.syncVersion!==last.baseVersion+1 || owner.nsfw!==last.payload.nsfw))throw new Error('Partition current owner does not match proven predecessor');
+         }else{
+           if(!active)throw new Error('Gallery partition is not available under offline: no trusted copy');
+           const snapshot=snapshotWithOverlays(active.snapshot,rows);
+
+--- packages/shared/src/schemas/sync.ts before
+
++++ packages/shared/src/schemas/sync.ts live
+
+@@ -67,6 +67,7 @@
+
+   libraryId: z.string().min(1), syncEpoch: z.string().min(1),
+   entryType: z.string().min(1), syncUid: syncUidSchema,
+   syncVersion: z.number().int().positive(), nsfw: z.boolean(),
++  predecessor: z.strictObject({opId:z.string().uuid(),entityUid:syncUidSchema,resourceVersion:z.number().int().positive(),serverSeq:z.number().int().positive(),entryType:z.string().min(1),nsfw:z.boolean()}).optional(),
+ });
+ export type SyncGalleryPartitionContext = z.infer<typeof syncGalleryPartitionContextSchema>;
+ const collectionDeleteChildSchema = z.strictObject({syncUid:syncUidSchema,syncVersion:z.number().int().positive()});
+--- apps/web/src/api/gallery.ts before
+
++++ apps/web/src/api/gallery.ts live
+
+@@ -549,7 +549,7 @@
+
+   renameSection(sectionId: number, name: string): Promise<void>;
+   /** Delete a Section. The server refuses one that still has tags assigned, and says so. */
+   deleteSection(sectionId: number): Promise<void>;
+-  getGalleryPartitionContext?(entryType: string): Promise<import('@t3/shared').SyncGalleryPartitionContext>;
++  getGalleryPartitionContext?(entryType: string, predecessorOpId?: string): Promise<import('@t3/shared').SyncGalleryPartitionContext>;
+   setGalleryPartition(entryType: string, nsfw: boolean): Promise<void>;
+   listCollections(kind: CollectionKind, includeNsfw?: boolean): Promise<CollectionRecordDto[]>;
+   createCollection(input: { kind: CollectionKind; title: string; description?: string; parentId?: number; galleryType?: string | undefined }): Promise<CollectionRecordDto>;
+@@ -1383,8 +1383,8 @@
+
+     async listCollectionsForProducer(producerId) {
+       return numberIdListSchema.parse(await client.request(`collections/for-producer/${producerId}`));
+     },
+-    async getGalleryPartitionContext(entryType) {
+-      return syncGalleryPartitionContextSchema.parse(await client.request(`galleries/${encodeURIComponent(entryType)}/partition-context`));
++    async getGalleryPartitionContext(entryType, predecessorOpId) {
++      return syncGalleryPartitionContextSchema.parse(await client.request(`galleries/${encodeURIComponent(entryType)}/partition-context${predecessorOpId ? `?predecessorOpId=${encodeURIComponent(predecessorOpId)}` : ''}`));
+     },
+     async setGalleryPartition(entryType, nsfw) {
+       await client.request(`galleries/${encodeURIComponent(entryType)}/partition`, {
+--- apps/server/src/http/app.ts before
+
++++ apps/server/src/http/app.ts live
+
+@@ -1245,7 +1245,21 @@
+
+       WHERE scope.entry_type=? AND EXISTS(SELECT 1 FROM entries WHERE type=scope.entry_type)`)
+       .get(entryType) as {syncUid:string;syncVersion:number;nsfw:number}|undefined;
+     if (!owner) return context.json(errorPayload('NOT_FOUND','Gallery partition owner not found'),404);
+-    return context.json(syncGalleryPartitionContextSchema.parse({...getSyncIdentity(database),entryType,...owner,nsfw:owner.nsfw===1}));
++    const predecessorOpId=context.req.query('predecessorOpId');
++    let predecessor:import('@t3/shared').SyncGalleryPartitionContext['predecessor'];
++    if(predecessorOpId){
++      const proof=database.prepare(`SELECT receipt.result_json AS resultJson, change.seq AS serverSeq,
++        change.entity_kind AS entityKind, change.entity_uid AS entityUid, change.resource_version AS resourceVersion,
++        change.change_kind AS changeKind, change.record_json AS recordJson
++        FROM sync_operation_receipts AS receipt JOIN sync_changes AS change ON change.seq=receipt.server_seq
++        WHERE receipt.op_id=?`).get(predecessorOpId) as {resultJson:string;serverSeq:number;entityKind:string;entityUid:string;resourceVersion:number;changeKind:string;recordJson:string}|undefined;
++      if(proof){
++        const receipt=JSON.parse(proof.resultJson),record=JSON.parse(proof.recordJson);
++        if(receipt.status==='applied' && receipt.opId===predecessorOpId && receipt.resourceVersion===proof.resourceVersion && receipt.serverSeq===proof.serverSeq && proof.entityKind==='gallery_partition' && proof.entityUid===owner.syncUid && proof.changeKind==='update' && record.entryType===entryType && typeof record.nsfw==='boolean')predecessor={opId:predecessorOpId,entityUid:proof.entityUid,resourceVersion:proof.resourceVersion,serverSeq:proof.serverSeq,entryType,nsfw:record.nsfw};
++      }
++      if(!predecessor)return context.json(errorPayload('NOT_FOUND','Partition predecessor proof not found'),404);
++    }
++    return context.json(syncGalleryPartitionContextSchema.parse({...getSyncIdentity(database),entryType,...owner,nsfw:owner.nsfw===1,...(predecessor ? {predecessor} : {})}));
+   });
+ 
+   app.put('/api/galleries/:entryType/partition', async (context) => {
+--- apps/web/src/GalleryApp.vue before
+
++++ apps/web/src/GalleryApp.vue live
+
+@@ -973,6 +973,21 @@
+
+     error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
+   }
+ }
++
++watch([showNsfw, entryNsfwTypes], () => {
++  if (showNsfw.value) return;
++  if (activeType.value && entryNsfwTypes.value.has(activeType.value)) {
++    galleryEntriesRequestSeq += 1;
++    activeType.value = null;
++    entries.value = [];
++    galleryResultTotal.value = 0;
++    facetFilterOptions.value = null;
++  }
++  if (activeEntry.value && entryNsfwTypes.value.has(activeEntry.value.type)) {
++    activeEntry.value = null;
++    entryOrigin.value = null;
++  }
++});
+ 
+ watch(showNsfw, () => {
+   void refreshNavigationCounts();

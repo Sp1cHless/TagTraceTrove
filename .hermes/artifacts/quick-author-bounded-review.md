@@ -1,0 +1,9 @@
+# Quick import / Author list bounded review — PASS
+
+Two source writers stopped; parent verified 11 full-byte owned checkpoint entries, reviewed start/continuation deltas and executed actual-shell browser checks. Author navigation unmount save regression is fixed; cold UI facade/application HTTP/SQL tests cover tags+ratings, first-slot ordering and mutation/removal/reset, navigation restore, uncertain0/blank originals, replay/snapshot/ACK response loss settlement. No migrations/native payload expansion or official service/data operations.
+
+Parent caught real360-shell layout RED missed by standalone AuthorPage fixture; targeted mobile rating-only class/grid patch after full-byte backup. Actual GalleryApp Authors route after patch: full-width dimension plus operator/stars/delete, phone controls44px. Three viewport360/430/768 two-row rated+unrated checks all PASS: 7 controls inside card; remove right edges320/389.984375/705.9375. Bare-component measurements were not reused as shell proof. Source parent SHA ledger .hermes/tmp/quick-author-parent-safe/working.json.
+
+Parent final default/integration JSON pass; native 60 tests pass. Shared/server/web typechecks, full ESLint and diff pass. First root invocation accidentally omitted package script's `--exclude '**/*.integration.test.ts'`, resulting in integration Vue SSR harness errors; corrected to exact standard/integration separation, no source workaround. Browser previous session expiring/missing iframe produced diagnostic failures, then rerun asserted exactly3 frames and nonempty controls. Not silently treated as passes.
+
+Version identity now43; identity-dependent tests/build/package verification still to run. Source artifact packaging must be explicit and guard concurrent changes. Formal library/assets/services/migrations/commit/reset untouched. Physical touch/keyboard/WebView/Keystore/PluginCall/force-stop remain UNVERIFIED, no user test/download required now.
