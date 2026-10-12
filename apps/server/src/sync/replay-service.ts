@@ -640,11 +640,17 @@ export function replaySyncOperation(
       if (layout.version !== operation.baseVersion) return saveReceipt(database, operation, requestHash, {
         opId: operation.opId, status: 'conflict', currentVersion: layout.version, currentValues: {}, serverSeq: maxServerSeq(database),
       });
-      const canonicalize = (rows: Array<{ syncUid: string; name: string; groupKind: 'section' | 'facet'; parentUid: string | null; sortOrder: number }>) => rows
-        .map(row => ({ ...row, syncUid: row.syncUid.toLowerCase(), parentUid: row.parentUid === null ? null : row.parentUid.toLowerCase() }))
+      // The stored row id is needed to check occupancy below, but it is not part
+      // of the value identity the client froze: leaking it into the comparison
+      // made every layout original look stale.
+      const canonicalize = (rows: Array<{ id?: number; syncUid: string; name: string; groupKind: 'section' | 'facet'; parentUid: string | null; sortOrder: number }>) => rows
+        .map(row => ({ syncUid: row.syncUid.toLowerCase(), name: row.name, groupKind: row.groupKind,
+          parentUid: row.parentUid === null ? null : row.parentUid.toLowerCase(), sortOrder: row.sortOrder }))
         .sort((a, b) => a.syncUid.localeCompare(b.syncUid));
-      const current = canonicalize(database.prepare(`SELECT g.sync_uid AS syncUid, g.name, g.group_kind AS groupKind, p.sync_uid AS parentUid, g.sort_order AS sortOrder
-        FROM tag_groups g LEFT JOIN tag_groups p ON p.id = g.parent_id WHERE g.entry_type = ?`).all(layout.entryType) as Array<{ syncUid: string; name: string; groupKind: 'section' | 'facet'; parentUid: string | null; sortOrder: number }>);
+      const currentRows = database.prepare(`SELECT g.id AS id, g.sync_uid AS syncUid, g.name, g.group_kind AS groupKind, p.sync_uid AS parentUid, g.sort_order AS sortOrder
+        FROM tag_groups g LEFT JOIN tag_groups p ON p.id = g.parent_id WHERE g.entry_type = ?`).all(layout.entryType) as Array<{ id: number; syncUid: string; name: string; groupKind: 'section' | 'facet'; parentUid: string | null; sortOrder: number }>;
+      const currentIds = new Map(currentRows.map(row => [row.syncUid.toLowerCase(), row.id]));
+      const current = canonicalize(currentRows);
       if (!valuesMatch(canonicalize([...operation.baseValues.groups]), current)) {
         return saveReceipt(database, operation, requestHash, {
           opId: operation.opId, status: 'conflict', currentVersion: layout.version, currentValues: {}, serverSeq: maxServerSeq(database),
@@ -663,7 +669,18 @@ export function replaySyncOperation(
       // Explicit facet-then-section deletes: FK cascades do not fire the sync
       // triggers, and every row change must journal.
       for (const row of current) {
-        if (!desired.has(row.syncUid) && row.groupKind === 'facet') database.prepare('DELETE FROM tag_groups WHERE sync_uid = ?').run(row.syncUid);
+        if (desired.has(row.syncUid) || row.groupKind !== 'facet') continue;
+        // entry_tags.facet_id is ON DELETE RESTRICT, and the client's copy may not
+        // have seen a work that uses this Facet: a stale original is answered with
+        // a conflict (the original is retained and the rest of the queue
+        // proceeds), never with a raw constraint error.
+        const facetId = currentIds.get(row.syncUid);
+        if (facetId !== undefined && database.prepare('SELECT 1 FROM entry_tags WHERE facet_id = ? LIMIT 1').get(facetId) !== undefined) {
+          return saveReceipt(database, operation, requestHash, {
+            opId: operation.opId, status: 'conflict', currentVersion: layout.version, currentValues: {}, serverSeq: maxServerSeq(database),
+          });
+        }
+        database.prepare('DELETE FROM tag_groups WHERE sync_uid = ?').run(row.syncUid);
       }
       for (const row of current) {
         if (!desired.has(row.syncUid) && row.groupKind === 'section') database.prepare('DELETE FROM tag_groups WHERE sync_uid = ?').run(row.syncUid);

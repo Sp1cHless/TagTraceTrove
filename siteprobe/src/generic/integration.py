@@ -10,6 +10,7 @@ asks, and every answer is a JSON line:
     integration resolve <input> [--site K]  -> who claims this input, as what, with which ref
     integration run <input> [--review] …    -> acquire/scan, reporting progress as it goes
     integration selection <file.json> …     -> download the works a review selection names
+    integration probe <input> [--building]  -> one bounded runtime check, reported per stage
 
 Why a line per event rather than one document at the end: a scan of a few hundred works takes
 minutes, and a caller that can only read the final document cannot show anything until then, nor
@@ -37,6 +38,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from . import registry
+from .diagnostics import Finding, redact_url
 from .registry import RegistryError
 from .runner import PROJECT_ROOT, RunOptions
 from .runner import resolve as resolve_run
@@ -193,7 +195,8 @@ def resolve_event(raw: str, site_key: str | None = None,
 def _result_event(command: str, template: Any, kind: str, ref: str, listing: Path,
                   *, works: int | None, origin: dict[str, Any] | None,
                   media: dict[str, int] | None, warnings: Iterable[str],
-                  review_html: Path | None = None) -> dict[str, Any]:
+                  review_html: Path | None = None,
+                  findings: Iterable[Finding] = ()) -> dict[str, Any]:
     """The one event a caller waits for: where the export landed and what is in it.
 
     `export` is the path T³ hands to its own importer (`loadSiteProbeExport`), and it is `None`
@@ -201,6 +204,10 @@ def _result_event(command: str, template: Any, kind: str, ref: str, listing: Pat
     appears only after a selection is downloaded. `origin` is what the library's update cursor
     reads (migration 021), so it travels with the answer instead of having to be dug back out of
     the manifest.
+
+    `findings` is the plan's §4.1 payload: the structured reasons a stage produced nothing, carried
+    on the result just as `warnings` is. It is always present (an empty list when a run is clean), so
+    a caller that knows nothing about it reads the same event it always did.
     """
     return {
         "event": "result",
@@ -215,6 +222,7 @@ def _result_event(command: str, template: Any, kind: str, ref: str, listing: Pat
         "origin": origin,
         "media": media or {},
         "warnings": list(warnings),
+        "findings": [finding.to_json() for finding in findings],
     }
 
 
@@ -242,6 +250,9 @@ def run_events(raw: str, *, site_key: str | None = None, kind: str | None = None
             "review_html": str(result.review_html),
             "summary": result.review_summary,
             "warnings": result.warnings,
+            # The review's own findings travel with its page, so "0 cards" can never reach the UI
+            # without the reason it is 0 (plan §5-A).
+            "findings": [finding.to_json() for finding in result.findings],
         }
         # How many the page holds, under one name. A site's own review summarises in its own
         # vocabulary (hitomi says `total_items`), and a caller asking "did this find one work or
@@ -254,7 +265,7 @@ def run_events(raw: str, *, site_key: str | None = None, kind: str | None = None
         "run", result.template, result.target_kind, result.target_ref, result.listing_dir,
         works=None if result.review_html is not None else result.record_count,
         origin=result.origin, media=result.media_stats, warnings=result.warnings,
-        review_html=result.review_html,
+        review_html=result.review_html, findings=result.findings,
     ))
     return 0
 
@@ -301,8 +312,39 @@ def selection_events(paths: list[Path], *, project_root: Path = PROJECT_ROOT, wo
             "origin": origin if isinstance(origin, dict) else None,
             "media": {},
             "warnings": [],
+            "findings": [],
         })
     return failed
+
+
+def probe_events(raw: str, *, site_key: str | None = None, kind: str | None = None,
+                 building: str = "work", limit: int = 1, check_cover: bool = True,
+                 project_root: Path = PROJECT_ROOT, emit: Emit = emit_to_stdout) -> int:
+    """One bounded runtime check of a target, reported per stage (plan §5-A).
+
+    A separate command rather than a flag on `run`, because its product is a *report*: it writes into
+    a scratch root the probe owns, never the export tree a person imports, and it answers with an
+    `event: "probe"` document whose `findings` say which stage produced nothing. The exit code keeps
+    the contract's own meaning — 0 when nothing was contradicted, 1 when a stage failed.
+    """
+    from .probe import ProbeRequest, runtime_probe
+
+    if not raw.strip():
+        emit({"event": "error", "command": "probe", "code": "INVALID_INPUT",
+              "message": "no input given"})
+        return 2
+    request = ProbeRequest(url=raw.strip(), site_key=site_key, target_kind=kind,
+                           building=building, limit=limit, check_cover=check_cover,
+                           project_root=project_root)
+    report = runtime_probe(request,
+                           progress=lambda message: emit({"event": "progress", "message": message}))
+    payload = report.to_json()
+    payload["event"] = "probe"
+    # The report can be read on a screen and pasted into a report, so the input is redacted the same
+    # way a finding's URL is — never a session-bearing query value.
+    payload["input"] = redact_url(raw.strip())
+    emit(payload)
+    return 0 if report.ok else 1
 
 
 def _read_manifest(listing: Path) -> dict[str, Any]:
@@ -339,8 +381,16 @@ def _report_failure(error: BaseException, emit: Emit, *, command: str = "run") -
     code = _failure_code(error)
     if code == "INTERNAL":
         traceback.print_exc(file=sys.stderr)
-    emit({"event": "error", "command": command, "code": code,
-          "message": f"{type(error).__name__}: {error}" if code == "INTERNAL" else str(error)})
+    event: dict[str, Any] = {"event": "error", "command": command, "code": code,
+                             "message": f"{type(error).__name__}: {error}" if code == "INTERNAL"
+                                        else str(error)}
+    # A `DiagnosticError` carries the reasons the run failed; they ride the error event rather than
+    # replacing its `code`, which stays inside the caller's enum (plan §4.1: keep the exit-code
+    # semantics, add the findings).
+    findings = getattr(error, "findings", None)
+    if findings:
+        event["findings"] = [finding.to_json() for finding in findings]
+    emit(event)
     return 2 if code in INPUT_CODES else 1
 
 
@@ -378,6 +428,17 @@ def main(argv: list[str] | None = None) -> int:
     selection.add_argument("--workers", type=int, default=4)
     selection.add_argument("--project-root", type=Path, default=PROJECT_ROOT)
 
+    probe = commands.add_parser("probe", help="one bounded runtime check of a target")
+    probe.add_argument("input")
+    probe.add_argument("--site", dest="site_key")
+    probe.add_argument("--kind")
+    probe.add_argument("--building", choices=("work", "listing"), default="work",
+                       help="which half the adapter being checked belongs to")
+    probe.add_argument("--limit", type=int, default=1)
+    probe.add_argument("--no-cover", dest="check_cover", action="store_false",
+                       help="do not look for a cover address")
+    probe.add_argument("--project-root", type=Path, default=PROJECT_ROOT)
+
     args = parser.parse_args(argv)
 
     if args.command == "sites":
@@ -410,6 +471,11 @@ def main(argv: list[str] | None = None) -> int:
             args.input, site_key=args.site_key, kind=args.kind, review=args.review,
             limit=args.limit, refresh=args.refresh, name=args.name,
             with_media=not args.no_media, project_root=args.project_root,
+        )
+    if args.command == "probe":
+        return probe_events(
+            args.input, site_key=args.site_key, kind=args.kind, building=args.building,
+            limit=args.limit, check_cover=args.check_cover, project_root=args.project_root,
         )
     return selection_events(args.selection, project_root=args.project_root,
                             workers=args.workers)

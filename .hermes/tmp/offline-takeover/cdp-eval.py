@@ -33,7 +33,7 @@ def recv():
     if op==9: return recv()  # ping-> recurse (shouldn't happen unmasked)
     return json.loads(data.decode()) if op==1 else None
 expr=sys.argv[1]
-send({'id':1,'method':'Runtime.evaluate','params':{'expression':expr,'awaitPromise':True,'returnByValue':True}})
+send({'id':1,'method':'Runtime.evaluate','params':{'expression':expr,'awaitPromise':True,'returnByValue':True,'userGesture':True}})
 while True:
     m=recv()
     if m and m.get('id')==1:

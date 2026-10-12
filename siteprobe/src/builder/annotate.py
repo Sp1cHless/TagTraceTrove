@@ -246,6 +246,9 @@ def hypotheses(annotation: dict[str, str], harvest: Harvest,
         }
         if candidate is not None and field in (picks or {}):
             result[field]["candidate_id"] = candidate.candidate_id
+        date_kind = proposal.get("date_kind") or (candidate.context.get("date_kind") if candidate else None)
+        if date_kind and field in ("date", "date_added"):
+            result[field]["date_kind"] = date_kind
     return result
 
 
@@ -370,6 +373,7 @@ def page(harvest: Harvest, *, url: str, mode: str = "annotate",
                 "kind": candidate.kind,
                 "value": candidate.value,
                 "display": candidate.display,
+                "date_kind": candidate.context.get("date_kind"),
                 "count": candidate.context.get("count"),
                 "score": candidate.score,
                 "sources": [source.to_json() for source in candidate.sources],
@@ -689,7 +693,7 @@ function render() {
       code.textContent = c.value;
       value.appendChild(code);
     } else {
-      value.textContent = c.value;
+      value.textContent = c.date_kind ? c.display : c.value;
     }
     body.appendChild(value);
     // Where the value came from is how a rule is diagnosed, not something a person

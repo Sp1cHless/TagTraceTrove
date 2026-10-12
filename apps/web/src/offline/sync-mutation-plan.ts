@@ -28,6 +28,10 @@ export function requiredMutationCapabilities(operation: SyncReplayRequest): stri
  return flags;
 }
 export function referencedEntityKeys(operation: SyncReplayRequest): string[] {
+ // A merge owns both Entries: every queued command on the absorbed one must
+ // replay before the merge removes it.
+ if(operation.operationKind==='entry.merge')return [`entry:${operation.payload.absorbUid.toLowerCase()}`];
+ if(operation.operationKind==='entry.tag-layout.apply')return operation.baseValues.assignments.flatMap(row=>[`entry_tag:${row.tagUid.toLowerCase()}`,`entry_facet:${row.facetUid.toLowerCase()}`]);
  if(operation.operationKind==='entry.authors.convert-to-multi')return [...new Set([...operation.baseValues.authors.map(row=>`producer:${row.producerUid.toLowerCase()}`),`producer:${operation.payload.targetUid.toLowerCase()}`,...(operation.baseValues.cascadeOwners??[]).map(row=>`${row.entityKind}:${row.entityUid.toLowerCase()}`)])];
  if(operation.operationKind==='entry.authors.set')return [...new Set([...operation.baseValues.producerUids,...operation.payload.producerUids])].map(uid=>`producer:${uid.toLowerCase()}`);
  if(operation.operationKind==='entry.author.create-and-link')return [...new Set([...operation.baseValues.producerUids,operation.payload.producerUid])].map(uid=>`producer:${uid.toLowerCase()}`);
@@ -84,16 +88,24 @@ export function mutationQueuePlan(rows:PendingSyncOperation[], directoryOwners:R
    const op=parsed.get(source.opId);if(!op || source.clientId!==row.clientId || source.libraryId!==row.libraryId || source.syncEpoch!==row.syncEpoch)continue;
    if(operation.operationKind==='collection.common-tag.add' && (op.operationKind==='entry.tags.set' || op.operationKind==='entry.facet.create' || op.operationKind==='entry.tag.create'))deps.add(op.opId);
    if(op.operationKind==='collection.common-tag.add' && referencedEntityKeys(op).map(key=>key.toLowerCase()).includes(ownerKey))deps.add(op.opId);
+   // A queued Author's create-and-link owns the Producer identity, so anything
+   // writing that Author's own row replays after it.
+   if(row.entityKind==='producer' && op.operationKind==='entry.author.create-and-link' && op.payload.producerUid.toLowerCase()===row.entityUid.toLowerCase())deps.add(op.opId);
    if ((operation.operationKind==='collection.delete' && referencedEntityKeys(op).map(key=>key.toLowerCase()).some(key=>key===ownerKey || refs.includes(key)))) deps.add(op.opId);
    if(((operation.operationKind==='entry.delete' || operation.operationKind==='producer.delete') && (referencedEntityKeys(op).map(key=>key.toLowerCase()).includes(ownerKey) || (operation.operationKind==='producer.delete' && op.operationKind==='author.directories.set' && (!directoryOwners.has(op.opId) || directoryOwners.get(op.opId)!.toLowerCase()===ownerKey)))) || refs.includes(`${op.entityKind}:${op.entityUid.toLowerCase()}`) || newlyCreatedRatingSlotUids(op).some(uid=>slots.includes(uid.toLowerCase())))deps.add(op.opId);
-   // A queued layout original owns the stable identity of the Sections/Facets
-   // it creates: anything that names one of those uids must replay after it.
-   if(op.operationKind==='entry.tag-layout.set') {
-    const groupUids=new Set(((op.payload as {groups?:Array<{syncUid:string}>}).groups??[]).map(row=>row.syncUid.toLowerCase()));
+   // A queued layout original — or a layout template — owns the stable identity
+   // of the Sections/Facets it creates: anything that names one of those uids
+   // must replay after it.
+   const ownerGroups=op.operationKind==='entry.tag-layout.set' ? op.payload.groups
+     : op.operationKind==='entry.layout-template.apply' ? op.payload.groups
+     : undefined;
+   if(ownerGroups!==undefined) {
+    const groupUids=new Set(ownerGroups.map(row=>row.syncUid.toLowerCase()));
     const named=operation.operationKind==='entry.facet.create' && typeof (operation.payload as {sectionUid?:unknown}).sectionUid==='string'
       ? [(operation.payload as {sectionUid:string}).sectionUid]
       : operation.operationKind==='entry.tags.set'
         ? (operation.payload.tags as Array<{facetUid?:string}>).flatMap(tag=>tag.facetUid===undefined?[]:[tag.facetUid])
+        : operation.operationKind==='entry.tag-layout.apply' ? operation.baseValues.assignments.map(tag=>tag.facetUid)
         : [];
     if(named.some(uid=>groupUids.has(uid.toLowerCase())))deps.add(op.opId);
    }

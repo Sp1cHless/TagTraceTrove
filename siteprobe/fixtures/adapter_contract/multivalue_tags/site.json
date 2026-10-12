@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "key": "tags.test",
+  "display_name": "tags.test",
+  "tool": "tags_test",
+  "source_site": "tags.test",
+  "export_group": "tags_test",
+  "media_id_prefix": "tags",
+  "hosts": ["tags.test"],
+  "targets": {
+    "work": {
+      "label": "Work",
+      "single": true,
+      "url_pattern": "^https?://tags\\.test/w/(?P<id>[^/]+)"
+    }
+  },
+  "documents": {"work": {"page": {"format": "html"}}},
+  "work": {
+    "fields": {
+      "title": {"from": "html", "document": "page", "select": "h1", "text": true},
+      "tags": {"from": "html", "document": "page", "select": "div.tags", "text": true,
+               "transform": ["split"]}
+    }
+  }
+}

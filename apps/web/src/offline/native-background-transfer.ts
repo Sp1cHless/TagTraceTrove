@@ -8,7 +8,7 @@ function envelope(row: PendingSyncOperation) {
   return JSON.stringify(originalMutationEnvelope(row));
 }
 /** Bounded chunks; never encode a whole image in JS or log operation/media bytes. */
-export function createNativeTransfers(store: {captureNativeTransfers(): Promise<NativeTransferCapture>}, plugin: NativeTransferPlugin) {
+export function createNativeTransfers(store: {captureNativeTransfers(freeze?:boolean): Promise<NativeTransferCapture>}, plugin: NativeTransferPlugin,options:{isEditing?:()=>boolean}={}) {
   let running: Promise<void> | null = null;
   const foregroundReason = 'Native mutation protocol unavailable; use foreground Update';
   async function supported(): Promise<boolean> {
@@ -24,7 +24,7 @@ export function createNativeTransfers(store: {captureNativeTransfers(): Promise<
   };
   async function handoffNow(allowed?:Set<string>, allowedMedia?:Set<string>) {
     if (!await supported()) return;
-    const capture = await store.captureNativeTransfers();
+    const capture = await store.captureNativeTransfers(true);
     if (!capture.snapshot) return;
     const released = capture.media.some(image=>image.existingEntry) ? await plugin.call('foregroundOnlyUploads',{}).catch(()=>({})) as {uploadIds?:string[]} : {};
     const foregroundOnly=new Set(released?.uploadIds ?? []);
@@ -120,7 +120,7 @@ export function createNativeTransfers(store: {captureNativeTransfers(): Promise<
     const {blob,status,lastAttemptAt,lastError,uploadId,...metadata}=image;void blob;void status;void lastAttemptAt;void lastError;
     return {uploadId,metadata:JSON.stringify(metadata)};
   });
-  return { handoff() { return running ??= handoffNow().finally(()=>{running=null;}); }, pause,
+  return { handoff() { if(options.isEditing?.())return Promise.resolve();return running ??= handoffNow().finally(()=>{running=null;}); }, pause,
     async allocateUploadId() {
       const result=await plugin.call('allocateUploadId',{}) as {uploadId?:string};
       if(!result?.uploadId || !/^[a-f0-9-]{36}$/u.test(result.uploadId))throw new Error('Native fresh upload authority unavailable');

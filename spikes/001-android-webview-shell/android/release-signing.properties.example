@@ -1,0 +1,7 @@
+# Copy into a private directory outside the checkout. Set
+# T3_ANDROID_SIGNING_PROPERTIES to its absolute path on another build machine.
+# Never put real credentials in this example or commit a private keystore.
+storeFile=C:/private/t3/android-release.p12
+storePassword=REPLACE_LOCALLY
+keyAlias=t3-release
+keyPassword=REPLACE_LOCALLY

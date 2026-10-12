@@ -1,0 +1,11 @@
+{
+  "capability": "transforms",
+  "note": "A multi-value field written as one space-separated block, split by the field's own property (never per-value guessing). Distilled from the bilinovel tag row.",
+  "url": "https://tags.test/w/42",
+  "today": "2026-03-10",
+  "fields": {
+    "source_id": "42",
+    "title": "A work with tags",
+    "tags": ["转生", "奇幻", "冒险"]
+  }
+}

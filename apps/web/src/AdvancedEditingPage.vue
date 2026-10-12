@@ -41,7 +41,7 @@ import {
 } from './system-api.js';
 import { clientErrors, clearClientErrors } from './client-errors.js';
 
-const props = defineProps<{ api: GalleryApi; store: SnapshotStore; online: boolean }>();
+const props = defineProps<{ api: GalleryApi; store: SnapshotStore; online: boolean; offlineCopyRevision?: string | null }>();
 const emit = defineEmits<{
   back: [];
   'authors-changed': [];
@@ -925,8 +925,11 @@ watch(tab, (value) => {
         :api="api"
         :store="store"
         :online="online"
+        :copy-revision="offlineCopyRevision"
         @updated="emit('updated')"
-      />
+      >
+        <template #diagnostics><slot name="offline-diagnostics" /></template>
+      </OfflineLibrarySettings>
     </section>
 
     <section v-if="tab === 'tags'" data-testid="advanced-tags" class="advanced-card">

@@ -152,7 +152,8 @@ FIELD_LABELS: dict[str, dict[str, str]] = {
 FIELD_HINTS: dict[str, dict[str, str]] = {
     "title": {"zh": "点页面上的作品标题", "en": "Click the work's title on the page"},
     "creator": {"zh": "点作者 / 创作者的名字", "en": "Click the author's name"},
-    "date": {"zh": "点发布日期", "en": "Click the release date"},
+    "date": {"zh": "点发布日期；混合文本会提供独立日期候选，注意区分发布和更新",
+             "en": "Pick the release date; mixed text offers separate dates. Distinguish published from updated."},
     "description": {
         "zh": "点简介正文（会作为条目正文导入）",
         "en": "Click the synopsis text (it is imported as the Entry's Content)",
@@ -309,7 +310,21 @@ PROVENANCE: dict[str, dict[str, str]] = {
         "en": "{detail}, captured from the row labelled {label!r}",
     },
     "jsonKey": {"zh": "{key}", "en": "{key}"},
+    "dateField": {"zh": "{detail}，{meaning}（{label}）",
+                  "en": "{detail}, {meaning} ({label})"},
 }
+
+
+DATE_MEANINGS = {
+    "published": {"zh": "发布 / 上传日期", "en": "Published / uploaded date"},
+    "updated": {"zh": "更新日期", "en": "Updated date"},
+    "created": {"zh": "创建日期", "en": "Created date"},
+    "unknown": {"zh": "日期（类型未标明）", "en": "Date (unspecified meaning)"},
+}
+
+
+def date_meaning(kind: str, lang: str) -> str:
+    return DATE_MEANINGS.get(kind, DATE_MEANINGS["unknown"])[lang if lang in LANGS else DEFAULT_LANG]
 
 
 def provenance(kind: str, lang: str, **values: object) -> str:

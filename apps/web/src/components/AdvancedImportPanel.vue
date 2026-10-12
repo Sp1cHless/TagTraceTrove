@@ -21,7 +21,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import type { GalleryApi } from '../api/gallery.js';
-import type { ImportPreview, SiteprobeSite, SiteprobeTarget } from '@t3/shared';
+import { describeFindings, type ImportPreview, type SiteprobeSite, type SiteprobeTarget } from '@t3/shared';
 import { useI18n, type MessageKey } from '../i18n.js';
 import { siteForHost } from '../siteprobe/adapter-status.js';
 
@@ -102,6 +102,23 @@ const failure = computed(() => {
     return { kind: 'bug' as const, message: error.value };
   }
   return { kind: 'run' as const, message: error.value };
+});
+
+/**
+ * Why a stage produced nothing, in the tool's own words (plan §5-E).
+ *
+ * Read from the run's result or from the last `error` event, worst finding first, each with a next
+ * step — so a run that read 0 cards says *which* stage read nothing instead of just "0 items". The
+ * tool's sentences are already what this panel shows for a `run` failure, so a finding reads the same
+ * way; nothing here is a second vocabulary.
+ */
+const runFindings = computed(() => {
+  const fromResult = run.value?.result?.findings;
+  if (fromResult && fromResult.length > 0) return describeFindings(fromResult);
+  const lastError = [...(run.value?.events ?? [])].reverse()
+    .find((event) => event.event === 'error' || event.event === 'review');
+  return describeFindings(lastError?.event === 'error' || lastError?.event === 'review'
+    ? lastError.findings : []);
 });
 
 const address = ref('');
@@ -771,6 +788,8 @@ onBeforeUnmount(stopPolling);
 
       <div v-if="failure" data-testid="siteprobe-error" class="advanced-import__problem">
         <p>{{ failure.message }}</p>
+        <!-- The stage that read nothing, before the "report this" ask: a person who sees "the listing
+             produced no card" does not need to file a bug (plan §5-E). -->
         <p v-if="failure.kind === 'input'" class="muted">{{ t('siteprobe.inputHint') }}</p>
         <template v-else-if="failure.kind === 'bug'">
           <p class="muted">{{ t('siteprobe.bugHint') }}</p>
@@ -785,6 +804,13 @@ onBeforeUnmount(stopPolling);
         </template>
         <p v-else class="muted">{{ t('siteprobe.runFailedAgain') }}</p>
       </div>
+
+      <ul v-if="runFindings.length > 0" data-testid="siteprobe-findings" class="muted">
+        <li v-for="finding in runFindings" :key="finding.code + finding.stage">
+          [{{ finding.stage }}] {{ finding.message }}
+          <span v-if="finding.advice">— {{ finding.advice }}</span>
+        </li>
+      </ul>
 
       <details v-if="log.length > 0" class="advanced-import__log">
         <summary>{{ t('siteprobe.log') }}</summary>

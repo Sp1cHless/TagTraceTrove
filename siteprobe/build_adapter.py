@@ -28,9 +28,11 @@ from src.builder import paths
 from src.builder.capture import Capture, captured_nothing, capture_browser, capture_plain
 from src.generic import unknown_url
 from src.builder.harvest import Harvest, harvest, joined_value
-from src.builder.learn import apply_to, draft_site_json, learn, load_session
-from src.builder.roundtrip import compare, install, unnameable_targets
+from src.builder.learn import apply_to, draft_site_json, learn_for_runtime, load_session
+from src.builder.roundtrip import (compare, format_probe_report, install, probe_draft,
+                                   unnameable_targets)
 from src.builder.session_server import Session, serve
+from src.generic import diagnostics as diag
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 SESSIONS = paths.home() / "sessions"
@@ -181,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
         if status == 200 and body:
             sample.served = body.decode("utf-8", "replace")
-    learning = learn(samples)
+    learning = learn_for_runtime(samples, browser_capture=browser)
     draft = draft_site_json(samples, learning)
     draft_path = directories[0] / "draft_site.json"
     draft_path.write_text(json.dumps(draft, ensure_ascii=False, indent=2) + "\n",
@@ -237,6 +239,24 @@ def main(argv: list[str] | None = None) -> int:
             print("       nothing was installed: a target that cannot name its own address "
                   "would be invisible.")
             return 1
+        # The live half the round trip cannot see: it compares against the recorded page, and the
+        # runtime that will be used fetches. One bounded probe of the first address, against the
+        # draft installed into a scratch home, so the real tree is untouched (plan §5-A.3). A
+        # network failure is advisory; a data fault — a required field no page answered, a repeated
+        # id — refuses the install rather than letting it import nothing later.
+        if "--no-probe" not in arguments:
+            report = probe_draft(draft, targets[0], building="work")
+            print()
+            for line in format_probe_report(report):
+                print(line)
+            blocking = diag.blocking_findings(report.findings())
+            if blocking and "--force" not in arguments:
+                print()
+                print("[STOP] the runtime read nothing usable from this site:")
+                for finding in blocking:
+                    print(f"       {finding.code}: {finding.message}")
+                print("       nothing was installed; re-run with --force to install anyway.")
+                return 1
         target = install(draft, LEARNED_ROOT, source=str(directories[0]))
         print()
         print(f"=== installed {target}")

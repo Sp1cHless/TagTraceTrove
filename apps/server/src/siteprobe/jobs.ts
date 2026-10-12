@@ -102,6 +102,9 @@ export function createSiteprobeJobStore(options: SiteprobeJobStoreOptions): Site
 
   function push(state: JobState, event: SiteprobeEvent): void {
     state.snapshot.events.push(event);
+    if (event.event === 'error') {
+      state.snapshot.error = { code: event.code, message: event.message };
+    }
     while (state.snapshot.events.length > MAX_EVENTS) {
       state.snapshot.events.shift();
       state.snapshot.eventsDropped += 1;
@@ -150,7 +153,7 @@ export function createSiteprobeJobStore(options: SiteprobeJobStoreOptions): Site
     state.snapshot.finishedAt = new Date().toISOString();
     if (cancelled) {
       state.snapshot.status = 'cancelled';
-    } else if (code === 0) {
+    } else if (code === 0 && !state.snapshot.error) {
       state.snapshot.status = 'done';
     } else {
       state.snapshot.status = 'failed';
@@ -335,13 +338,11 @@ export function createSiteprobeJobStore(options: SiteprobeJobStoreOptions): Site
         args: runArguments(request),
         onEvent: (line) => {
           // A run's stream is the four run events; the one-shot answers (`sites`, `resolve`,
-          // `readme`) belong to their own questions and are ignored here rather than pushed into a
-          // run's log.
-          if (line.event === 'sites' || line.event === 'resolve' || line.event === 'readme') return;
+          // `readme`, `probe`) belong to their own questions and are ignored here rather than pushed
+          // into a run's log.
+          if (line.event === 'sites' || line.event === 'resolve' || line.event === 'readme'
+            || line.event === 'probe') return;
           const event = line;
-          if (event.event === 'error') {
-            state.snapshot.error = { code: event.code, message: event.message };
-          }
           push(state, event);
           if (event.event === 'review') {
             state.listing = event.listing;
@@ -356,7 +357,9 @@ export function createSiteprobeJobStore(options: SiteprobeJobStoreOptions): Site
           push(state, {
             event: 'error',
             code: 'INTERNAL',
-            message: `${outcome.malformed.length} line(s) on stdout were not part of the contract: `
+            message: 'SiteProbe output does not match the loaded protocol. '
+              + 'Restart T³ after updating SiteProbe. '
+              + `${outcome.malformed.length} line(s) on stdout were not part of the contract: `
               + outcome.malformed.slice(0, 3).join(' | '),
           });
         }
@@ -367,9 +370,13 @@ export function createSiteprobeJobStore(options: SiteprobeJobStoreOptions): Site
         if (!cancelled && outcome.code !== 0 && !state.snapshot.error) {
           await reportFault(state, outcome);
         }
+        if (!cancelled && outcome.code === 0 && !state.snapshot.error && !state.snapshot.result) {
+          push(state, { event: 'error', code: 'INTERNAL',
+            message: 'SiteProbe finished without a usable result. Restart T³ if SiteProbe was updated.' });
+        }
         // A review run keeps its watch alive after the process ends: the page is exactly what the
         // person is looking at while the tool has already exited.
-        if (!cancelled && state.snapshot.result?.review_html) {
+        if (!cancelled && !state.snapshot.error && state.snapshot.result?.review_html) {
           state.process = null;
           state.snapshot.status = 'done';
           state.snapshot.finishedAt = new Date().toISOString();

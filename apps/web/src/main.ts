@@ -5,6 +5,7 @@ import { createOfflineAwareGalleryApi, type OfflineApiState } from './offline/of
 import { createIndexedDbOfflineStore } from './offline/indexeddb-snapshot-store.js';
 import { startMediaPreload } from './offline/offline-media-task.js';
 import { startConnectionRecovery } from './offline/connection-recovery.js';
+import { createAutomaticOfflineSync } from './offline/automatic-sync.js';
 import { createShellLibraryIdSource } from './offline/native-shell-library-id.js';
 import { ServerProbeTimeout } from './offline/connection-recovery.js';
 import { isOfflineTransportError } from './api/transport-error.js';
@@ -37,7 +38,11 @@ const offlineState = reactive<OfflineApiState>({
   mutationDiagnostics: [],
 });
 const transferPlugin = nativeTransferPlugin();
-const nativeTransfers = transferPlugin ? createNativeTransfers(offlineStore, transferPlugin) : undefined;
+const nativeTransfers = transferPlugin ? createNativeTransfers(offlineStore, transferPlugin,{isEditing:()=>!document.hidden}) : undefined;
+// Local drafts stay editable in the foreground. Crossing into background is a
+// submission boundary: freeze the current bodies atomically before mirroring.
+document.addEventListener('visibilitychange',()=>{if(document.hidden)void nativeTransfers?.handoff().catch(()=>undefined);});
+globalThis.addEventListener('pagehide',()=>{void nativeTransfers?.handoff().catch(()=>undefined);});
 // The native shell knows which library the device is paired to. Before serving
 // an offline snapshot the facade asks: a copy downloaded from a different
 // library (an old pairing) must not render as if it were this library. The
@@ -81,24 +86,25 @@ const startupReady = api.preferOfflineSnapshot!().then((installed) => {
 createApp(GalleryApp, { api, offlineStore, offlineState, startupReady }).mount('#app');
 
 let stopConnectionRecovery: (() => void) | undefined;
+const synchronizeAutomatically = createAutomaticOfflineSync({ api, store: offlineStore, state: offlineState });
+// A successful foreground read can reconnect before the heartbeat does.
+// Observe that transition too; the coordinator joins overlapping requests.
+watch(() => offlineState.mode, (next, previous) => {
+  if (previous === 'offline' && next === 'online') void synchronizeAutomatically(true);
+});
+// Persistence is best-effort. Lack of a grant is reported, never an editing gate.
+void navigator.storage?.persist?.().catch(() => undefined);
 void startupReady.then(() => {
   stopConnectionRecovery = startConnectionRecovery({
     probe: async () => {
       await api.getSyncCapabilities({ replay: false });
-      void api.replayOfflineOperations?.().catch((cause: unknown) => {
-        console.warn('Offline replay failed', cause);
-      });
     },
     isOffline: () => offlineState.mode === 'offline',
     isVisible: () => !document.hidden,
     onlineIntervalMs: 4_000,
     probeTimeoutMs: 2_500,
     onProbeSuccess(wasOffline) {
-      // Resume the saved media choice only after a verified offline→online probe.
-      // This remains a foreground task, not an Android background transfer.
-      if (!wasOffline || typeof globalThis.caches === 'undefined') return;
-      void startMediaPreload({ store: offlineStore, assetUrl: api.assetUrl,
-        cacheStorage: globalThis.caches }).catch((cause: unknown) => console.warn('Foreground media preload paused', cause));
+      void synchronizeAutomatically(wasOffline);
     },
     onProbeFailure(error) {
       if (!isOfflineTransportError(error) && !(error instanceof ServerProbeTimeout)) return;

@@ -8,7 +8,7 @@
 
 本方案承接当前用户使用方式：通过 T3 的通用 Builder 为不同网站新建作品规则、作者列表规则等。优先完善通用能力；站点域名、API 地址、选择器只能进入用户生成的规则和案例数据，不得成为 Core 内按域名判断的业务分支。
 
-- 本次授权是产出方案文档；代码实施、旧规则升级与真实站点运行尚未开始。
+- 本次授权最初为产出方案文档；**第一批（阶段 A 最小版本）已于 2026-10-11 执行**，见文末记录；其余阶段、旧规则升级与真实站点运行尚未开始。
 - 保持 T3 的 Entry / Producer 模型和现有导入边界；预计无需数据库迁移。
 - 不扩展媒体播放、视频下载、全网抓取、自动选择 Provider 或自动安装站点包。
 - 仅沿用已有封面、预览图片处理能力；本文“媒体验证”指这些图片的现有导入链路。
@@ -320,8 +320,77 @@ T3 不可用时，独立 SiteProbe 仍可生成规则，import 阶段记 unavail
 剩余事项：
 ```
 
-## 10. 相关文档
+## 9.1 执行记录
 
+批次 / 日期：第一批（阶段 A 最小版本） / 2026-10-11
+
+授权范围：用户「开始执行」，按 §6 推荐的第一批 —— 诊断结构、核心空结果分类、单次 probe 报告与纯解析桥接；阶段 E 的完整视觉优化后置。
+
+实施阶段与修改文件：
+
+- 新增 `siteprobe/src/generic/diagnostics.py`：finding 契约（`code`/`stage`/`severity`/`field`/`target_kind`/`evidence`/`suggested_action`）、初始错误码集合、`redact_url`、`Budget`、`StageResult`、`ProbeReport`、`classify_cards`、`classify_records`、`blocking_findings`。
+- 新增 `siteprobe/src/generic/probe.py`：有界 `runtime_probe`，分 `acquisition` / `listing` / `work` / `media` / `import` 五阶段报告；预算 45s 单页、90s 合计；`home` 覆盖使草稿可在临时 home 内被探测。
+- 改 `siteprobe/src/generic/runner.py`：`RunResult` 增 `findings` / `cards`；review 与 download 两条路径产出结构化 findings；空 listing、被丢弃的必需字段、重复 id 不再以「成功」结束。
+- 改 `siteprobe/src/generic/integration.py`：`result` / `review` / `error` 事件携带 `findings`（`error` 的 `code` 保持原枚举）；新增 `probe` 命令与 `event: "probe"` 文档。
+- 改 `siteprobe/src/builder/roundtrip.py`：`probe_draft`（把草稿装进临时 home 再探测）、`format_probe_report`。
+- 改 `siteprobe/build_adapter.py`、`build_listing.py`、`verify_adapter.py`：安装前调用 probe，`--no-probe` 跳过、`--force` 覆盖阻断。
+- 改 `packages/shared/src/schemas/siteprobe.ts`：`siteprobeFindingSchema`、review/result/error 的可选 `findings`、`siteprobeProbeEventSchema` 并入 `siteprobeLineSchema`。
+- 改 `apps/server/src/siteprobe/jobs.ts`：`probe` 行按一次性答复忽略，不进 run 事件流。
+- 新增 `siteprobe/tests/test_diagnostics.py`。
+
+行为变化：
+
+- 「已安装成功、后续才发现必需字段为空」现在在安装点或运行点变成具名 finding（`WORK_FIELD_EMPTY` 等），`blocking_findings` 会据此拒绝安装；acquisition 类失败按 §7 只作提示，不阻断。
+- 一次 run 的 `result`/`review`/`error` 事件新增 `findings` 字段（始终为数组）；旧调用方忽略它行为不变。
+- 新增机器入口 `integration probe <url> [--building work|listing]`，输出 `event: "probe"`。
+
+唯一基础检查及结果：`siteprobe/.venv/Scripts/python.exe -m pytest tests/test_diagnostics.py -q` → **9 passed**（临时导出 + 模拟采集，覆盖空列表定位、有效结果落到导出契约、必需字段阻断、acquisition 不阻断、重复 id 阻断、预算耗尽不冒充通过、脱敏）。
+
+附带回归核对（非本批声明的检查，仅为避免回归）：改动相关 Python 子集 113 + 50 passed；`tsc` 通过 shared 与 server；siteprobe TS 单测 38 passed。
+
+未验证内容：真实站点与浏览器采集（本批测试用模拟采集，不代表真实 Chrome/网络已验证）；`integration probe` 对真实站点的运行；`probe_draft` 的临时-home 路径只由代码覆盖、未真机验证；T3 UI 对 findings 的展示（阶段 E）；probe 接入 T3 作业。
+
+用户手动反馈：待用户真机验收。
+
+剩余事项：阶段 B–F；probe 接入 T3 作业与界面；真实站点回放。
+
+## 9.2 执行记录：阶段 B–F
+
+批次 / 日期：第二批（阶段 B–F，一次性推进） / 2026-10-11
+
+授权范围：用户「继续推进……推进到完成为止」，即完成阶段 B、C、D、E、F 的全部实现，各阶段自带一个聚焦检查。
+
+实施阶段与修改文件：
+
+- **阶段 B（统一采集）**：新增 `src/generic/acquisition.py`（`AcquisitionPlan` / `plan_for` / `PageRead` / `HttpSession` / `BrowserSession` / `session()` / `read_page`）；`builder/capture.py` 的浏览器读取引擎移入 Core，`capture_browser` 改为薄适配器（签名与默认值不变），`mentions_the_work`/`launch_profile`/`profile_for`/`scroll_until_settled`/常量改由 Core 提供并 re-export；`generic/declarative.py` 改用 `acquisition.session`（运行时长列表**一次会话读完全部页**，不再每页新开 Chrome），`read_work` 尊重 `work.acquisition`；`template.py` 新增 `work_acquisition`。
+- **阶段 C（统一身份）**：新增 `src/generic/identity.py`（`extract` / `work_id` / `narrowing` / `candidates` / `ambiguous` / `absolute`）；`template.TargetRule.match` 与 `builder/listing.target_rule_for_id` 都改为调用它；支持 query id 与相对 href（`base`）解析。
+- **阶段 D（转换与图片）**：`select.py` 新增运行级冻结时钟（`freeze_clock` / `frozen_clock`），`_relative_date` 使用它；`runner.run` 在开头冻结一次；`runner` 对“封面地址读到但字节未落盘”产出 `COVER_FETCH_FAILED`（与 `WORK_FIELD_EMPTY`、`COVER_URL_EMPTY` 三者区分）。图片响应校验沿用 `media.detect_extension` 的魔数判定（200 的 HTML 挑战页不会写成 `.jpg`）。
+- **阶段 E（T3 收口）**：`packages/shared/src/siteprobe/findings.ts`（`describeFindings` / `primaryFinding` / `findingAdvice`）并由 shared 导出；`AdvancedImportPanel.vue` 在失败块展示按阶段排序的 findings 与建议。纯解析仍走既有 `loadSiteProbeExport`，未新增第二套导入器。
+- **阶段 F（兼容与 doctor）**：新增 `src/generic/doctor.py`（只读 `diagnose`：target 捕获组、文档可产性、transform 名、必需字段、元数据一致性；`upgrade`：预览 diff、字节一致备份、原子替换、保留未知字段）与 CLI `siteprobe/doctor.py`；新增 `siteprobe/fixtures/adapter_contract/`（`opaque_id_relative_date`、`multivalue_tags`）。
+- 新增测试：`tests/test_acquisition.py`、`tests/test_identity.py`、`tests/test_transforms_media.py`、`tests/test_doctor.py`、`apps/server/tests/unit/siteprobe-findings.test.ts`。
+
+行为变化：
+
+- 运行时不再 import Builder 的 capture 模块；浏览器型列表分页只开一次浏览器。
+- 同一 URL 经 work 目标与列表卡片得到同一 id（构造上一致）。
+- 相对日期按运行冻结的时钟换算；封面失败与字段缺失是不同 finding。
+- T3 失败面板显示“哪个阶段读到空”与建议；导入解析未变。
+- 新增只读 doctor 与显式 upgrade。
+
+唯一基础检查及结果（各阶段一个，全部通过）：`tests/test_acquisition.py` 4 passed；`tests/test_identity.py` 8 passed；`tests/test_transforms_media.py` 5 passed；`apps/server/tests/unit/siteprobe-findings.test.ts` 7 passed；`tests/test_doctor.py` 5 passed。
+
+回归核对（非本批声明，仅为避免回归）：siteprobe Python 全套 **433 passed**；`pnpm -r typecheck` 全绿；siteprobe TS 相关 45 passed；`verify_against_recordings.py` **327 项比对、0 不一致、PASS**；`integration.py sites` 列出 12 个站点全部带目标；对 5 个真实 URL 的 `resolve` 均命中。
+
+用户手动反馈：待用户真机验收（主要用尚未适配的网站）。
+
+剩余事项：
+
+- **真实站点运行与 UI 视觉效果**：本批测试用模拟/录制的输入，不代表真实 Chrome 或站点网络已验证；需用户真机确认。
+- **doctor 在真实适配器上发现的既有缺陷**（非本次改动引入）：`buondua.com` 的 `album` target 捕获不到 id（与 §2 一致），只报告、未自动修复。
+- 若干适配器缺 `adapter.json`（可修复提示）；`rule34video.com` 的 `date_added` 有一个指向 Builder-only 文档 `inline:0` 的 fallback（永不执行，主规则 `jsonld` 正常）。
+- probe 接入 T3 作业；阶段 E 的完整视觉优化。
+
+## 10. 相关文档
 - [文档索引](siteprobe-index.md)
 - [总体架构指导](t3-siteprobe-architecture-guidance.md)
 - [适配器分发架构](siteprobe-adapter-distribution-architecture.md)

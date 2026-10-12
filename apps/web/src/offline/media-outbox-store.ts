@@ -39,7 +39,7 @@ export interface MediaOutboxStore {
 export function mediaQueueIdentity(rows: StagedMediaUpload[]): string {
   return JSON.stringify([...rows].sort((a,b) => a.uploadId.localeCompare(b.uploadId)).map(row => [
     row.uploadId,row.libraryId,row.syncEpoch,row.entryUid,row.kind,row.ordinal,row.mimeType,row.byteLength,row.sha256,
-    row.existingEntry === undefined ? null : [row.existingEntry.expectedCoverRef,row.existingEntry.expectedPreviewRefs],
+    row.existingEntry === undefined ? null : [row.existingEntry.expectedCoverRef,row.existingEntry.expectedPreviewRefs],row.replace??false,
     row.status,row.lastAttemptAt,row.lastError,
   ]));
 }

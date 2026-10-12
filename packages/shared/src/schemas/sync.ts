@@ -574,10 +574,12 @@ const syncEntryTagsOperationSchema = z.strictObject({
     || tagDependencies.length !== referencedTagUids.size) {
     context.addIssue({ code: 'custom', path: ['payload', 'tagCreates'], message: 'Invalid Entry Tag creation dependencies' });
   }
+  // A referenced Facet need not declare a create: one queued inside a layout
+  // original is resolved from tag_groups.sync_uid and ordered by the planner, so
+  // it has no facet-create to name. Declared ones must still be referenced.
   if (new Set(facetDependencies.map((row) => row.facetUid.toLowerCase())).size !== facetDependencies.length
     || facetDependencies.some((row) => row.createOpId.toLowerCase() === operation.opId.toLowerCase())
-    || facetDependencies.some((row) => !referencedFacetUids.has(row.facetUid.toLowerCase()))
-    || facetDependencies.length !== referencedFacetUids.size) {
+    || facetDependencies.some((row) => !referencedFacetUids.has(row.facetUid.toLowerCase()))) {
     context.addIssue({ code: 'custom', path: ['payload', 'facetCreates'], message: 'Invalid Facet creation dependencies' });
   }
   if (JSON.stringify(operation.baseValues.tags) === JSON.stringify(operation.payload.tags)) {

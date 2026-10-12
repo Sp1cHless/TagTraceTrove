@@ -1,0 +1,86 @@
+{
+ "artifact": "spikes/001-android-webview-shell/T3-v49-offline-parity.apk",
+ "versionCode": 49,
+ "versionName": "0.0.49-c3-offline-parity",
+ "diagnosticBuild": "0.0.49-c3-offline-parity-r8",
+ "apkSha256": "223e39ac26dae06d268ebeb6dc208c7d0477d720f8b582992fc345abe896dfde",
+ "signerCertSha256": "1035333c6fa6a18e40398739adda5a2640e6c9cf38e94bea1bf58118eb5fdf41",
+ "packagedWebManifest": {
+  "files": {
+   "assets/lxgw-wenkai-lite-10LDjgOe.woff2": {
+    "sha256": "8eb0b6d4ea7e1eb8fc0b3c5f7744c6165ef3b3cfacb381b1663cc24b7b0d9b4c",
+    "size": 4076580
+   },
+   "assets/smiley-sans-oblique-K8hpreXB.woff2": {
+    "sha256": "731f22973349404b15a88a99ef3b5dd4104c0965c23b7e485c1f11e84fea99e2",
+    "size": 1150924
+   },
+   "cordova.js": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+   },
+   "cordova_plugins.js": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+   },
+   "favicon.ico": {
+    "sha256": "9cfc395bea072ff5a7824003d38459af0c05a3182e475174e402eabb5feb9983",
+    "size": 14183
+   },
+   "icons/apple-touch-icon.png": {
+    "sha256": "39c19d8e753ca14aea4a9e5ef5229c293d6db5e31237e8ef920116df520576ea",
+    "size": 25600
+   },
+   "icons/boot.png": {
+    "sha256": "f4d42b21e1dc7e9ee69d5414ea94c890685558f40e13a73c4f14888adaa5aee6",
+    "size": 65575
+   },
+   "icons/icon-192.png": {
+    "sha256": "52103bdb19d1be9554f89786ebb4ad1ccd5bef3db28166cfaf339d32bbcdf2b6",
+    "size": 29670
+   },
+   "icons/icon-512.png": {
+    "sha256": "401c096818a803a7e0043bb4ee805eae226ae6cf62556fdd9043fd1c7f893029",
+    "size": 176020
+   },
+   "icons/icon-maskable-512.png": {
+    "sha256": "c23bde23666e74282179973d2650797e5d5b0a9ad3ccddfee27c5294bd8e148b",
+    "size": 82838
+   },
+   "manifest.webmanifest": {
+    "sha256": "00aad35597da9296cf15916653fa4e5cf201319e2b4ecef446ade50a7af6c428",
+    "size": 649
+   },
+   "assets/index-B9--MDg2.css": {
+    "sha256": "1ce7317a541a8242bfd22e5f4865d6fb29c3077fe0ade9ccf676e6e381f37c33",
+    "size": 148035
+   },
+   "assets/index-C3VXet5o.js": {
+    "sha256": "ff76708ef232313947ae0feb59c1e1f5638a2df12867ae624c282fa9a42ad677",
+    "size": 2359614
+   },
+   "index.html": {
+    "sha256": "f9b75fb7ed17d67daa421504b2c5beac737a1fc3b0a9e87752eca314f8192008",
+    "size": 4901
+   },
+   "sw.js": {
+    "sha256": "d2a1aa84a71c58c07ae8010b6953a572fb2ad0eb584849f79161e503fc04543b",
+    "size": 4268
+   }
+  }
+ },
+ "supersedes": [
+  "manifest.json (r1)",
+  "manifest-r2.json",
+  "manifest-r3.json",
+  "manifest-r4.json",
+  "manifest-r7.json"
+ ],
+ "gates": {
+  "webIntegration": "885/885 (129 files)",
+  "default": "1279/1279 (110 files)",
+  "typecheck": "exit 0",
+  "lint": "0 errors"
+ },
+ "install": "installed via adb install -r; device-verified (Author edit mode: no submit button, Done saves, producer.update queued baseVersion 1)"
+}

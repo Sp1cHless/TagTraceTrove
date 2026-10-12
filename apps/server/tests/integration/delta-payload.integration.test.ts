@@ -34,7 +34,9 @@ it.each(['expiry','eviction','restart','utf8-budget','utf8-session'])('downloads
     expect(requests.some(url=>url.includes('/sync/ack'))).toBe(false);
     expect((await snapshots.readActiveSnapshot(store))?.snapshot.payload).toEqual(buildSyncSnapshot(db,{media:'thumbnails'}).payload);
   } finally {vi.restoreAllMocks();db.close();await rm(directory,{recursive:true,force:true});}
-});
+  // The utf8 cases build 6–17 MB payloads, so a saturated full-suite run can
+  // exceed the 5 s default; the standalone cost is ~2 s.
+}, 60000);
 import { createMigratedMemoryDatabase } from '../../src/database/testing.js';
 import { createEntry } from '../../src/repositories/entry-repository.js';
 import { buildSyncSnapshot } from '../../src/sync/sync-service.js';

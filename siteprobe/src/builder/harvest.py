@@ -47,8 +47,10 @@ from typing import Any, Iterable, Iterator
 from urllib.parse import urljoin, urlparse
 
 from ..generic.htmltree import Element, parse_html, select_all, select_one
+from ..generic.document import Document as RuntimeDocument, DocumentBag
+from ..generic.dates import date_kind, extract_date, labelled_dates, labelled_filter
 from . import text as l10n
-from ..generic.select import _element_values, split_members
+from ..generic.select import SelectorError, _element_values, resolve, split_members
 from ..generic.text_normalization import decode_entities
 from ..generic.unknown_url import (
     boilerplate_reason,
@@ -409,6 +411,7 @@ class _Registry:
     def __init__(self) -> None:
         self._by_key: dict[tuple[str, str], Candidate] = {}
         self.notes: list[str] = []
+        self.markup_roots: dict[str, Element] = {}
 
     def add(self, kind: str, raw: str, source: Source,
             context: dict[str, Any] | None = None,
@@ -638,6 +641,11 @@ def _add_text(registry: _Registry, raw: str, source: Source, *,
                                 f"{source.detail} (the whole group at "
                                 f"{group['select']})", group),
                          context)
+        for scoped in scoped_group_rules(element, source.document, root, counts):
+            registry.add("text", text,
+                         Source(source.channel, source.document,
+                                f"{source.detail} (scoped group at {scoped['select']})", scoped),
+                         context)
 
     rule = source.rule or {}
     selector = str(rule.get("select") or "")
@@ -794,6 +802,45 @@ def naming_for(element: Element, name: str, value: str) -> str:
     return f'{element.tag}[{name}="{value}"]'
 
 
+def scoped_group_rules(element: Element, document: str, root: Element,
+                       counts: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Offer nearby structural groups, without deciding which field a group represents.
+
+    A shared class is a styling hook and can name links in unrelated panels. Categorical
+    data attributes and named ancestors provide narrower alternatives. Read the member
+    element, not its wrapper containing buttons, icons and counters.
+    """
+    if element.tag not in ("a", "span", "li", "dd"):
+        return []
+    if element.tag != "a" and any(isinstance(child, Element) for child in element.children):
+        return []
+    classes = (element.attr("class") or "").split()
+    leaf = element.tag + "".join(f".{name}" for name in classes[:2])
+    leaves = list(dict.fromkeys([element.tag, leaf]))
+    found: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    ancestor = element.parent
+    depth = 0
+    while ancestor is not None and depth < 6 and len(found) < 6:
+        categorical = [naming_for(ancestor, name, value)
+                       for name, value in ancestor.attrs.items()
+                       if re.fullmatch(r"data-(?:[\w-]+-)?(?:type|kind|group|role)", name)
+                       and re.fullmatch(r"[A-Za-z_][\w-]{0,47}", value)]
+        for naming in [*categorical, *_self_selectors(ancestor)]:
+            for member_selector in leaves:
+                selector = f"{naming} {member_selector}"
+                if selector in seen:
+                    continue
+                seen.add(selector)
+                matches = selector_matches(root, selector, counts)
+                if matches > 0:
+                    found.append({"from": "html", "document": document, "select": selector,
+                                  "text": True, "list": True, "matches": matches})
+        ancestor = ancestor.parent
+        depth += 1
+    return found
+
+
 def _offer_the_row_rule(registry: _Registry, element: Element | None, text: str,
                         source: Source, context: dict[str, Any],
                         root: Element | None) -> None:
@@ -801,15 +848,12 @@ def _offer_the_row_rule(registry: _Registry, element: Element | None, text: str,
     rule = source.rule or {}
     if root is None or element is None or element.parent is None:
         return
-    if rule.get("list") or rule.get("matches", 1) <= 1:
+    if rule.get("list"):
         return
-    found = sibling_label(element)
+    found = labelled_value_row(element, text)
     if found is None:
         return
-    label, row_selector = found
-    pattern = label_pattern(label, text, element.parent.text())
-    if pattern is None:
-        return
+    label, row_selector, pattern = found
     rows = anchored_matches(root, row_selector, label)
     if rows == 0:
         return
@@ -825,6 +869,7 @@ def _offer_the_row_rule(registry: _Registry, element: Element | None, text: str,
 
 def harvest_markup(registry: _Registry, document: Document, base: str) -> None:
     root = parse_html(document.text)
+    registry.markup_roots[document.name] = root
     # One count per selector for this document: the answer is a property of the page,
     # and ten thousand links asked it ten thousand times.
     counts: dict[str, Any] = {}
@@ -1283,6 +1328,7 @@ def harvest_inline(registry: _Registry, document: Document, base: str) -> None:
 PEER_LIMIT = 3
 LABEL_SEPARATORS = (":", "：")
 MAX_ANCHOR = 24
+MAX_LABEL_DEPTH = 6
 
 
 def anchor_for(value: str) -> str | None:
@@ -1341,6 +1387,35 @@ def label_pattern(label: str, value: str, row_text: str) -> str | None:
     if match is None or match.group(1).strip() != value.strip():
         return None
     return pattern
+
+
+def labelled_value_row(element: Element, value: str) -> tuple[str, str, str] | None:
+    """Find a nearby labelled row even when its value has nested markup.
+
+    A link inside a wrapper inside a table cell has no label beside the link:
+    the label is beside its cell. Climb only within the local row, and accept
+    a rule only when it captures the complete selected value. Interactive peer
+    chips are not field labels, even in a short two-chip list.
+    """
+    node = element
+    boundaries = {"tr", "table", "tbody", "thead", "tfoot", "body", "html"}
+    for _ in range(MAX_LABEL_DEPTH):
+        if node.parent is None or node.tag in boundaries:
+            break
+        found = sibling_label(node)
+        if found is not None:
+            label, selector = found
+            siblings = [child for child in node.parent.children if isinstance(child, Element)]
+            previous = siblings[siblings.index(node) - 1]
+            peer_link = any(
+                child.tag in {"a", "button", "input", "select", "textarea"}
+                for child in previous.iter()
+            )
+            pattern = label_pattern(label, value, node.parent.text())
+            if pattern is not None and not peer_link:
+                return label, selector, pattern
+        node = node.parent
+    return None
 
 
 def anchored_matches(root: Element, selector: str, anchor: str) -> int:
@@ -1497,7 +1572,7 @@ def build_collections(registry: _Registry, minimum: int = MIN_COLLECTION) -> Non
     accepted as the work's tags, and the rule that read all twelve then disagreed with
     the annotation it came from and was pruned as if the rule were wrong.
     """
-    groups: dict[str, list[Candidate]] = {}
+    groups: dict[tuple[str, str], list[Candidate]] = {}
     for candidate in registry.all():
         if candidate.kind != "text":
             continue
@@ -1506,30 +1581,44 @@ def build_collections(registry: _Registry, minimum: int = MIN_COLLECTION) -> Non
         # them is the field is what the samples decide. One membership per group, however
         # many rules name it — the same value carrying the same selector twice is one
         # member, not two.
-        joined: set[str] = set()
+        joined: set[tuple[str, str]] = set()
         for source in candidate.sources:
             rule = source.rule or {}
             selector = str(rule.get("select") or "")
-            if source.channel != "markup" or not selector or not rule.get("text"):
+            if (source.channel != "markup" or not selector or not rule.get("text")
+                    or rule.get("filter")):
                 continue
-            if selector in joined:
+            key = (source.document, selector)
+            if key in joined:
                 continue
-            joined.add(selector)
-            groups.setdefault(selector, []).append(candidate)
-    for selector, members in sorted(groups.items()):
-        if len(members) < _minimum_for(selector, minimum):
+            joined.add(key)
+            groups.setdefault(key, []).append(candidate)
+    for (document, selector), members in sorted(groups.items()):
+        rule = {"from": "html", "document": document, "select": selector,
+                "text": True, "list": True}
+        root = registry.markup_roots.get(document)
+        if root is not None:
+            bag = DocumentBag()
+            bag.add(RuntimeDocument.from_element(document, root))
+            try:
+                values = resolve(rule, bag)
+            except (ValueError, KeyError):
+                continue
+        else:
+            # Registry-only callers can construct candidates without a capture. All real
+            # harvests above register their trees and use the runtime's actual result.
+            values = [member.value for member in members]
+        if not isinstance(values, list) or len(values) < _minimum_for(selector, minimum):
             continue
         registry.add(
-            "collection", COLLECTION_JOIN.join(member.value for member in members),
-            Source("markup", members[0].sources[0].document,
+            "collection", COLLECTION_JOIN.join(values),
+            Source("markup", document,
                    l10n.provenance("members", l10n.lang_from_env(),
-                                  selector=selector, count=len(members)),
-                   {"from": "html", "document": members[0].sources[0].document,
-                    "select": selector, "text": True, "list": True}),
+                                  selector=selector, count=len(values)), rule),
             context={"selector": selector,
-                     "members": [member.value for member in members[:MAX_COLLECTION_MEMBERS]],
-                     "count": len(members)},
-            identity=f"collection:{selector}",
+                     "members": values,
+                     "count": len(values)},
+            identity=f"collection:{document}:{selector}",
         )
 
 
@@ -1541,6 +1630,59 @@ def rule_identity(rule: dict[str, Any]) -> str:
     """
     return json.dumps({key: value for key, value in rule.items() if key != "matches"},
                       sort_keys=True, ensure_ascii=False)
+
+
+def build_date_candidates(registry: _Registry, capture: Capture) -> None:
+    """Offer dates from mixed text as measured, executable rules, separated by meaning."""
+    bag = DocumentBag()
+    for name, root in registry.markup_roots.items():
+        bag.add(RuntimeDocument.from_element(name, root))
+    if capture.markup is not None:
+        node = next(iter(jsonld_nodes(capture.markup.text)), None)
+        if node is not None:
+            bag.add(RuntimeDocument(name=JSONLD_DOCUMENT, text=json.dumps(node), format="json"))
+    for document in capture.documents:
+        if document.format in ("json", "script"):
+            payload = parse_loose(document.text)
+            if payload is not None:
+                bag.add(RuntimeDocument(name=document.name, text=json.dumps(payload), format="json"))
+
+    for candidate in list(registry.all()):
+        if candidate.kind != "text":
+            continue
+        labelled = list(labelled_dates(candidate.value))
+        single = extract_date(candidate.value)
+        for source in list(candidate.sources):
+            base_rule = source.rule or {}
+            if not base_rule or base_rule.get("list") or base_rule.get("filter"):
+                continue
+            offers = []
+            if labelled and base_rule.get("from") == "html" and base_rule.get("text"):
+                offers = [(kind, label, value,
+                           {**base_rule, "filter": [labelled_filter(label)], "group": 1})
+                          for kind, label, value in labelled]
+            elif single:
+                meaning = date_kind(str(base_rule.get("path") or base_rule.get("property")
+                                        or base_rule.get("name") or source.detail))
+                # Unlabelled mixed text is only offered when exactly one date occurs.
+                offers = [(meaning, "", single, dict(base_rule))]
+            for meaning, label, value, rule in offers:
+                rule.pop("conflict", None)
+                rule["transform"] = [*(rule.get("transform") or []), "extract_date"]
+                try:
+                    actual = resolve(rule, bag, context={"url": capture.final_url or capture.url})
+                except (ValueError, KeyError, SelectorError):
+                    continue
+                if actual != value:
+                    continue
+                display = l10n.date_meaning(meaning, l10n.lang_from_env())
+                added = registry.add("text", value, Source(source.channel, source.document,
+                    l10n.provenance("dateField", l10n.lang_from_env(), detail=source.detail,
+                                    meaning=display, label=label or "—"), rule),
+                    {"date_kind": meaning, "date_like": True},
+                    identity=f"date:{meaning}:{text_identity(value)}")
+                if added is not None:
+                    added.display = f"{display}: {value}"
 
 
 def build_image_collections(registry: _Registry, minimum: int = MIN_COLLECTION) -> None:
@@ -1630,7 +1772,8 @@ def _minimum_for(selector: str, minimum: int) -> int:
     same signal `element_selector` prefers those for, and the same reason: what the
     document identifies is a thing, however few members it happens to have.
     """
-    named = "#" in selector or any(f"[{name}=" in selector for name in DECLARING_ATTRS)
+    named = ("#" in selector or any(f"[{name}=" in selector for name in DECLARING_ATTRS)
+             or bool(re.search(r"\[data-(?:[\w-]+-)?(?:type|kind|group|role)=", selector)))
     return MIN_COLLECTION_WHEN_NAMED if named else minimum
 
 
@@ -1838,6 +1981,7 @@ def harvest(capture: Capture) -> Harvest:
     for document in capture.of_format("json"):
         harvest_network(registry, document, base)
 
+    build_date_candidates(registry, capture)
     build_collections(registry)
     merge_image_variants(registry)
     # After the variants are merged, so one picture is one member of its group.

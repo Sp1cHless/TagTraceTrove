@@ -1,0 +1,12 @@
+{
+  "capability": "identity",
+  "note": "An opaque work id that sits before a human slug, a relative date, and a protocol-relative cover. Distilled from the iwara/jable phenomena; the host and the id are invented.",
+  "url": "https://fix.test/video/H9fsLsKTpR1Vcx/lucilla",
+  "today": "2026-03-10",
+  "fields": {
+    "source_id": "H9fsLsKTpR1Vcx",
+    "title": "Lucilla",
+    "date_added": "2026-03-05",
+    "cover_url": "https://cdn.test/image/abc/cover.jpg"
+  }
+}

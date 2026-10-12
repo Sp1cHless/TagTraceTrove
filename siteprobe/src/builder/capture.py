@@ -15,9 +15,13 @@ without deciding anything:
     network:N         a JSON response body, which is where an API-driven site
                       keeps everything the markup never had
 
-The browser builder is Builder-only. The runtime never imports it, and this module
-imports Playwright lazily so that it stays absent from any path that does not ask
-for it.
+The browser builder is Builder-only. The runtime reads through the shared engine in
+`src/generic/acquisition.py` instead of importing this module — that was the plan's Phase B: the
+page-read engine (browser lifecycle, scroll, retry-when-not-rendered) lives in the generic layer,
+and both callers use it. What stays here is what is Builder-only: turning a page into a `Capture`
+with the inline scripts and the network log the Harvester reads. The reader itself, and the names a
+test or the login door imports (`mentions_the_work`, `launch_profile`, `profile_for`, the settle
+constants), are re-exported from the generic engine so nothing else has to know they moved.
 """
 
 from __future__ import annotations
@@ -27,27 +31,18 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
+from urllib.parse import urlparse
 
 from ..generic import unknown_url
+# The one page-read engine, shared with the runtime (plan §5-B). Imported rather than copied: a second
+# copy of the browser flags is how the Builder and the runtime drift into different browsers.
+from ..generic.acquisition import (  # noqa: F401 - re-exported for callers and tests
+    MAX_NETWORK_BODY, MAX_NETWORK_DOCUMENTS, NOISE, SETTLE_MS, SETTLE_RETRIES, BrowserSession,
+    launch_profile, mentions_the_work, plan_for, profile_for, scroll_until_settled,
+)
 
 TIMEOUT = 25
-SETTLE_MS = 3500
-#: How many times a page that has not rendered yet is read again, with a longer settle each time.
-SETTLE_RETRIES = 2
 MAX_SCRIPT_BYTES = 400_000
-# A page can fire hundreds of XHRs. The first few dozen carry everything a rule
-# would want, and reading a body is a round-trip to the browser.
-MAX_NETWORK_DOCUMENTS = 40
-MAX_NETWORK_BODY = 512_000
-
-# Telemetry, ads and fonts: nothing a rule would ever want, and most of what a raw
-# network log contains.
-NOISE = re.compile(
-    r"google-analytics|googletagmanager|doubleclick|cloudflareinsights|umami"
-    r"|sentry|facebook|hotjar|clarity|/beacon|/www/delivery/|exoclick|juicyads"
-    r"|clickaine|adservice|/ads?/|font|\.woff|\.css",
-    re.IGNORECASE,
-)
 
 _SCRIPT = re.compile(r"<script([^>]*)>(.*?)</script>", re.DOTALL | re.IGNORECASE)
 _SCRIPT_SRC = re.compile(r"""\bsrc\s*=\s*["']""", re.IGNORECASE)
@@ -180,95 +175,9 @@ def capture_plain(url: str) -> Capture:
     return capture
 
 
-def _scroll_until_settled(page, rounds: int = 12) -> None:
-    """Give a page that loads the rest of itself on scroll the chance to do so.
-
-    Measured on a real search page: its markup held 31 of the 43 results, and the page's own
-    scripts mentioned `scroll`, `ajax` and `infinite` — the rest arrive only once the viewport
-    moves. Waiting a fixed time does not help, so the tool learned rules from a fraction of the
-    set and reported that fraction as the whole.
-
-    The loop stops when the document stops growing: the same terminal condition the plan's §17
-    uses for pages ("no new ids"), applied to one document.
-    """
-    previous = -1
-    for _ in range(rounds):
-        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        page.wait_for_timeout(500)
-        height = page.evaluate("document.body ? document.body.scrollHeight : 0")
-        if height <= previous:
-            break
-        previous = height
-    page.evaluate("window.scrollTo(0, 0)")
-    page.wait_for_timeout(200)
-
-
-from urllib.parse import urlparse
-
-
-def profile_for(host: str) -> pathlib.Path:
-    """Where this host's browser profile lives, unless a person names another directory.
-
-    One directory per host, beside the sessions the Builder already writes, and git-ignored:
-    a profile holds cookies and tokens, so it is the person's to keep and never the repository's.
-    """
-    import pathlib as _pathlib
-
-    from . import paths
-
-    return paths.home() / "browser_profiles" / host
-
-
-def launch_profile(playwright: Any, profile: "pathlib.Path", *, headful: bool) -> Any:
-    """Open a persistent browser profile — the one place that does it.
-
-    Two callers need exactly this browser: the Builder (which captures a page a person is signed
-    into) and the login door (which establishes that session). A second copy of these flags is how
-    the two would drift into different browsers, different user agents or a profile that one of
-    them cannot read back.
-
-    Chrome through the channel, not Playwright's bundled Chromium: the bundled build is
-    version-mismatched in this workspace, the download is large, and the system Chrome is the
-    browser a person is already logged into. The one automation signal worth removing is removed
-    only when a person is in the loop — Chrome is then being driven as the browser they signed
-    into, and `navigator.webdriver` is what most protections look at first. Nothing else is
-    spoofed: no fingerprint tuning, no site-specific profile.
-    """
-    import pathlib as _pathlib
-
-    profile = _pathlib.Path(profile)
-    profile.mkdir(parents=True, exist_ok=True)
-    return playwright.chromium.launch_persistent_context(
-        user_data_dir=str(profile), headless=not headful, channel="chrome",
-        user_agent=unknown_url.UA, viewport={"width": 1440, "height": 900},
-        args=["--disable-blink-features=AutomationControlled"],
-    )
-
-
-def mentions_the_work(url: str, html: str, responses: list["Document"]) -> bool:
-    """Whether a captured page is the page that was asked for.
-
-    Measured on iwara (2026-10-11): the second page came back as the site's own loading screen —
-    `<title>Loading | Iwara</title>`, no work name, no images, and not one API response — because the
-    browser read it before the single-page app had rendered. Every rule then read nothing, and the
-    confirm page offered five empty fields, which looks exactly like five broken rules and is not.
-
-    The page says which work it is — but *not in its head*: measured on iwara (2026-10-11), the loading
-    screen carried `<meta property="og:url" content="…/sOAekITnnSb24p/fleurdelys">`, the address
-    echoed into the head before anything had rendered, while its body held nothing of the work and it
-    had made no request at all. So the body is what is searched, and the requests it made — on a site
-    whose content is entirely behind JavaScript, the requests are where a rendered page says so.
-    """
-    wanted = [part for part in urlparse(url).path.split("/") if part]
-    needles = [part.casefold() for part in wanted[-2:] if len(part) >= 4]
-    if not needles:
-        # Nothing in the address worth looking for (a bare origin, a short id): not a judgement this
-        # can make, and a guard that guesses would refuse good pages.
-        return True
-    body = html.split("</head>", 1)[-1].casefold()
-    requests = [(document.source_url or "").casefold() for document in responses]
-    return any(needle in haystack for needle in needles
-               for haystack in [body, *requests])
+# The page-read engine and its helpers (`scroll_until_settled`, `mentions_the_work`,
+# `profile_for`, `launch_profile`) now live in `src/generic/acquisition.py` and are imported
+# above (plan §5-B): one implementation, shared with the runtime.
 
 
 def captured_nothing(capture: "Capture") -> bool:
@@ -290,121 +199,30 @@ def capture_browser(url: str, *, settle_ms: int = SETTLE_MS,
                     login: bool = False) -> Capture:
     """The markup after the page has run, plus the JSON it fetched to build itself.
 
-    The network log is the channel that matters most for a page whose data is not
-    in its markup — and often the one that makes a browser unnecessary at runtime
-    afterwards, because a rule can call the API the log revealed.
+    The network log is the channel that matters most for a page whose data is not in its markup — and
+    often the one that makes a browser unnecessary at runtime afterwards, because a rule can call the
+    API the log revealed.
 
-    `profile` names a persistent browser profile, so that a session a person established once is
-    the session every later capture uses — the browser's own mechanism, which works for any site
-    and never asks this tool to hold a credential. `login` opens a *visible* window and waits for
-    the person to finish signing in before the page is read.
+    `profile` names a persistent browser profile, so a session a person established once is the
+    session every later capture uses — the browser's own mechanism, which works for any site and never
+    asks this tool to hold a credential. `login` opens a *visible* window and waits for the person to
+    finish signing in before the page is read.
+
+    The reading itself is the shared engine (`src/generic/acquisition.py`, plan §5-B); this only turns
+    what it returns into the `Capture` the Harvester reads, keeping the Builder-only parts — the
+    inline scripts and the network log — here.
     """
-    import pathlib
-    from playwright.sync_api import sync_playwright
-
-    capture = Capture(url=url)
-    with sync_playwright() as playwright:
-        if profile is not None:
-            # A persistent profile *is* the browser: there is no separate handle to launch, and
-            # the session inside it is the whole point — cookies and storage live in that
-            # directory, so a site that shows more to a signed-in visitor shows it here. A page
-            # that still challenges is one a person solves in the window (`login` waits for it).
-            browser = None
-            context = launch_profile(playwright, Path(profile), headful=login)
-        else:
-            browser = playwright.chromium.launch(headless=True, channel="chrome")
-            context = browser.new_context(
-                user_agent=unknown_url.UA, viewport={"width": 1440, "height": 900},
-            )
-        page = context.new_page()
-        responses: list[Document] = []
-
-        def on_response(response) -> None:
-            try:
-                if len(responses) >= MAX_NETWORK_DOCUMENTS:
-                    return
-                if response.request.resource_type not in ("xhr", "fetch"):
-                    return
-                if NOISE.search(response.url):
-                    return
-                if "json" not in (response.headers.get("content-type") or "").lower():
-                    return
-                # The declared length decides before the body is asked for: asking
-                # for a megabyte of analytics JSON only to discard it is a round-trip
-                # spent on nothing.
-                if int(response.headers.get("content-length") or 0) > MAX_NETWORK_BODY:
-                    return
-                body = response.body()
-                if not body or len(body) > MAX_NETWORK_BODY:
-                    return
-                responses.append(Document(name=f"network:{len(responses)}",
-                                          text=body.decode("utf-8", "replace"),
-                                          format="json",
-                                          source_url=response.url))
-            except Exception:  # noqa: BLE001 - a capture must not fail the run
-                return
-
-        page.on("response", on_response)
-        final = url
-        html = ""
-        try:
-            if login:
-                # A session is established where a site expects one to be: its own front page.
-                # Measured on a real gallery, whose protections challenge a deep, parameterised
-                # URL in a fresh profile while the front page is reachable — and a session built
-                # there is the session the deep page then sees.
-                root = f"{urlparse(url).scheme}://{urlparse(url).netloc}/"
-                try:
-                    page.goto(root, wait_until="load", timeout=45_000)
-                except Exception as error:  # noqa: BLE001 - the deep page is tried regardless
-                    capture.notes.append(f"front page did not load: {type(error).__name__}")
-                print(f"    先在 {root} 登录 / 过验证，完成后回到这个窗口按回车继续 ...")
-                try:
-                    input()
-                except EOFError:      # no console to answer: carry on with what is there
-                    pass
-            response = page.goto(url, wait_until="load", timeout=45_000)
-            capture.status = response.status if response else None
-            page.wait_for_timeout(settle_ms)
-            _scroll_until_settled(page)
-            html = page.content()
-            final = page.url
-            # A JavaScript-driven page can be read before it has rendered: measured on iwara
-            # (2026-10-11), whose second page came back as its own loading screen, so every rule read
-            # nothing and the confirm page offered five empty fields. One more go, with a longer
-            # settle, is what a person does when a page is not there yet.
-            for attempt in range(SETTLE_RETRIES):
-                if mentions_the_work(url, html, responses):
-                    break
-                capture.notes.append("the page did not mention the work yet; reading it again")
-                try:
-                    page.reload(wait_until="load", timeout=45_000)
-                except Exception as error:  # noqa: BLE001 - reported, not raised
-                    capture.notes.append(f"reload failed: {type(error).__name__}")
-                    break
-                page.wait_for_timeout(settle_ms * (attempt + 2))
-                _scroll_until_settled(page)
-                html = page.content()
-                final = page.url
-            if not mentions_the_work(url, html, responses):
-                capture.notes.append(
-                    "the page never mentioned the work it was asked for: what came back is not "
-                    "that page, so every field will read nothing")
-        except Exception as error:  # noqa: BLE001 - reported, not raised
-            capture.notes.append(f"browser capture failed: {type(error).__name__}: "
-                                 f"{str(error)[:80]}")
-        finally:
-            try:
-                context.close()
-            finally:
-                if browser is not None:
-                    browser.close()
-
-    capture.final_url = final
-    capture.content_type = "text/html"
-    capture.documents = plain_documents(html) + responses
-    if not responses:
-        capture.notes.append("the network log held no usable JSON response")
+    plan = plan_for("browser", profile=Path(profile) if profile is not None else None,
+                    login=login, settle_ms=settle_ms)
+    with BrowserSession(plan) as reader:
+        read = reader.read(url, mention=lambda html, resources: mentions_the_work(url, html, resources))
+    capture = Capture(url=url, final_url=read.final_url, status=read.status,
+                      content_type=read.content_type)
+    capture.notes = list(read.notes)
+    capture.documents = plain_documents(read.html) + [
+        Document(name=resource.name, text=resource.text, format="json", source_url=resource.url)
+        for resource in read.resources
+    ]
     return capture
 
 

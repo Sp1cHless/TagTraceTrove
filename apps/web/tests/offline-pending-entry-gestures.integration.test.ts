@@ -94,3 +94,33 @@ it('every ordinary Entry gesture is reachable on a queued (offline-created) Entr
     expect(f.db.prepare('SELECT like_count FROM entry_usage WHERE entry_id=?').pluck().get(entryId)).toBe(1);
   } finally { f.close(); }
 });
+
+it('links Authors by name on a queued Entry (a new name and an existing one)', async () => {
+  const f = await fixture(); try {
+    await f.offline();
+    const uid = randomUUID();
+    const localId = localCollectionId(uid);
+    await f.api.enqueueOfflineEntryCreate!({title:'Queued work',type:'Comic',uploadDate:null,pageCount:null,ratings:[],viewLater:false,coverFile:null,previewFile:null,previewFiles:[],syncUid:uid});
+    // A name that is not in the catalog yet creates the Author and links it in
+    // one parent-bound command; an existing name is a plain pending link.
+    const created = await f.api.linkEntryAuthorByName(localId, 'Brand new author');
+    expect(created.created).toBe(true);
+    const linked = await f.api.linkEntryAuthorByName(localId, 'Existing author');
+    expect(linked.created).toBe(false);
+
+    const rows = await f.store.list();
+    expect(rows.map(row => row.operationKind)).toEqual(['entry.create','entry.author.create-and-link','entry.authors.set']);
+    const parent = rows[0]!.opId;
+    expect(rows.slice(1).map(row => row.payload.parentCreateOpId)).toEqual([parent, parent]);
+    expect(rows.slice(1).map(row => row.baseVersion)).toEqual([0, 0]);
+
+    const cold = f.cold(); await cold.preferOfflineSnapshot!();
+    expect((await cold.getEntry(localId)).producers.map(row => row.name).sort()).toEqual(['Brand new author','Existing author']);
+    f.reconnect(); await cold.getSyncCapabilities({replay:false}); await cold.flushOfflineOutbox!();
+    expect(await f.store.list()).toEqual([]);
+
+    const entryId = f.db.prepare('SELECT id FROM entries WHERE sync_uid=?').pluck().get(uid) as number;
+    expect(f.db.prepare('SELECT p.name FROM entry_producers ep JOIN producers p ON p.id=ep.producer_id WHERE ep.entry_id=? ORDER BY p.name').pluck().all(entryId))
+      .toEqual(['Brand new author','Existing author']);
+  } finally { f.close(); }
+});

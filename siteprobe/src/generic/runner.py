@@ -13,7 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from . import canonical, crawl_state, export_layout, media, review, review_media, site_api, taxonomy
+from . import canonical, crawl_state, export_layout, media, review, review_media, select, site_api, taxonomy
+from . import diagnostics as diag
 from .bundle import RawBundle
 from .extract import extract_work
 from .registry import get_for as get_site_for
@@ -49,6 +50,7 @@ class RunOptions:
     dry_run: bool = False
     project_root: Path = PROJECT_ROOT
     workers: int = 4
+    max_pages: int | None = None
     progress: Callable[[str], None] = field(default=lambda message: print(message, flush=True))
 
 
@@ -65,6 +67,12 @@ class RunResult:
     # Set when the run scanned for review instead of downloading.
     review_html: Path | None = None
     review_summary: dict[str, Any] = field(default_factory=dict)
+    # Structured reasons a stage produced nothing a caller can act on (plan §4.1). Always present,
+    # so a caller reads `findings.length` rather than testing for the key's existence.
+    findings: list[diag.Finding] = field(default_factory=list)
+    # The cards a review run listed, so a probe can pick one whose `detail_url` names a work to read.
+    # Empty for a download run, whose product is the records.
+    cards: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def record_count(self) -> int:
@@ -198,6 +206,9 @@ def listing_name(template: SiteTemplate, kind: str, ref: dict[str, str],
 
 
 def run(options: RunOptions) -> RunResult:
+    # Freeze the run's clock once (plan §5-D.2): a relative date read a minute apart must not become a
+    # different day if the run crosses midnight, and every date this run writes is measured from here.
+    select.freeze_clock()
     template, target_kind, ref = resolve(options)
     options.progress(f"site: {template.key} ({template.display_name}) kind: {target_kind}")
     if not ref.get("id") and not ref.get("user"):
@@ -220,11 +231,15 @@ def run(options: RunOptions) -> RunResult:
     if options.review:
         scan_options = dict(site_api.iter_options(options, listing, template))
         scan_options.update({"export_dir": listing, "workers": options.workers})
+        if options.max_pages is not None:
+            scan_options["max_pages"] = options.max_pages
         options.progress(f"scanning for review into {listing}")
         scanner = site_api.optional_scan_review(fetcher)
         # A site's own review only handles the kinds it was built for; it declines
         # the rest, and those get the generic card-based page below.
         scanned = scanner(template, target_kind, ref, scan_options) if scanner else None
+        cards: list[dict[str, Any]] = []
+        findings: list[diag.Finding] = []
         if scanned is not None:
             review_html = Path(scanned["review_html"])
             summary = dict(scanned.get("summary") or {})
@@ -244,16 +259,17 @@ def run(options: RunOptions) -> RunResult:
             # page it lists is the one the person asked for.
             scan_options["target_url"] = target_url
             cards = list(cards_hook(template, target_kind, ref, scan_options))
-            repeated = site_api.repeated_card_ids(cards)
-            if repeated:
-                warnings.append(f"{len(repeated)} id(s) appear on more than one card "
-                                f"({', '.join(repeated)[:60]}): the listing is not reading "
-                                f"distinct works")
-                options.progress(f"warning: {warnings[-1]}")
+            # The same states the Builder checks over its own cards, asked again where the *data* is
+            # produced: a rule set that slipped past the authoring check must not pass silently here.
+            findings = diag.classify_cards(cards, target_kind=target_kind, url=target_url)
+            if diag.blocking_findings(findings):
+                raise diag.DiagnosticError("the listing has no valid, distinct work identities",
+                                           findings=findings)
             if options.limit:
                 cards = cards[: options.limit]
             if not cards:
-                raise ValueError(f"nothing was listed for {target_kind} {ref.get('id')}")
+                raise diag.DiagnosticError(
+                    f"nothing was listed for {target_kind} {ref.get('id')}", findings=findings)
             meta = {
                 "source_site": template.source_site,
                 "target_kind": target_kind,
@@ -267,7 +283,8 @@ def run(options: RunOptions) -> RunResult:
             }
             # The page needs covers it can show; a remote URL is not that, for
             # reasons that differ per site and are handled by one download here.
-            review_media.localize_covers(cards, listing, template, options.progress)
+            if options.with_media:
+                review_media.localize_covers(cards, listing, template, options.progress)
             review_html = review.write_review(listing, cards, meta)
             # `count` is the one key every review carries, whatever the site calls it; `cards`
             # stays as the generic shape it always was.
@@ -289,6 +306,8 @@ def run(options: RunOptions) -> RunResult:
             warnings=warnings,
             review_html=review_html,
             review_summary=summary,
+            findings=findings,
+            cards=cards,
         )
 
     # A download run fetches only what the listing does not already hold. A review
@@ -331,9 +350,11 @@ def run(options: RunOptions) -> RunResult:
     # the whole manifest unreadable rather than just that one work — T³ validates
     # every item in a manifest together. Drop it here, loudly, and keep the rest.
     usable: list[dict[str, Any]] = []
+    dropped: list[tuple[str, list[str]]] = []
     for record in records:
         missing = canonical.missing_fields(record)
         if missing:
+            dropped.append((str(record.get("source_id") or ""), list(missing)))
             bundle.warnings.append(
                 f"work {record.get('source_id') or '?'}: the page did not contain the "
                 f"work's data (missing {', '.join(missing)}); skipped"
@@ -341,6 +362,29 @@ def run(options: RunOptions) -> RunResult:
             continue
         usable.append(record)
     records = usable
+
+    # Why this run produced what it did, as data (plan §4.1): a required field no page answered, a
+    # repeated id, and a listing that named no work are the three states the first batch exists to
+    # stop hiding behind a friendly sentence.
+    findings = diag.classify_records(records, target_kind=target_kind, dropped=dropped,
+                                    expect_cover="cover_url" in template.work_fields)
+    duplicate_faults = [finding for finding in findings if finding.code == "SOURCE_ID_DUPLICATED"]
+    if duplicate_faults:
+        raise diag.DiagnosticError("the export contains repeated work identities", duplicate_faults)
+    if not items:
+        if is_single_work:
+            findings.append(diag.acquisition_empty(kind=target_kind, url=target_url))
+        elif not skip:
+            findings.append(diag.listing_rows_empty(kind=target_kind, url=target_url))
+    if not records and not skip and not options.dry_run:
+        # Nothing survived to be exported: the listing named no work, or every work it named was
+        # unreadable. An empty export that still reports success is exactly the state the plan's
+        # §5-A completion criterion forbids, so the run fails with its reasons attached.
+        raise diag.DiagnosticError(
+            f"nothing usable was read for {target_kind} "
+            f"{ref.get('id') or ref.get('user') or ''}".strip(),
+            findings=findings,
+        )
 
     # Tag policy runs before writing so the exported 分类标签 is already filtered;
     # the same dictionary accumulates across every listing of this site.
@@ -362,7 +406,12 @@ def run(options: RunOptions) -> RunResult:
             media_stats["pruned_stale"] = pruned
         gaps = media.missing_media(records, listing)
         if gaps:
-            # A counter is easy to miss; naming the works is not.
+            # A counter is easy to miss; naming the works is not. And it is a *distinct* reason from a
+            # field the page never had (plan §5-D.6): the cover address was read, the bytes did not
+            # land — so it is a media failure, not a missing field, and it warns rather than blocks.
+            findings.append(diag.cover_fetch_failed(
+                detail=f"{len(gaps)} work(s) are missing media: "
+                       + ", ".join(gaps[:8]) + (f" (+{len(gaps) - 8} more)" if len(gaps) > 8 else "")))
             options.progress(
                 f"{len(gaps)} work(s) are missing media; re-run to fetch them: "
                 + ", ".join(gaps[:12]) + (f" (+{len(gaps) - 12} more)" if len(gaps) > 12 else "")
@@ -404,6 +453,7 @@ def run(options: RunOptions) -> RunResult:
         origin=origin,
         warnings=warnings,
         media_stats=media_stats,
+        findings=findings,
     )
 
 

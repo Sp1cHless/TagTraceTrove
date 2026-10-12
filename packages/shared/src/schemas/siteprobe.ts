@@ -25,6 +25,36 @@ export const siteprobeErrorCodeSchema = z.enum([
   'INTERNAL',
 ]);
 
+/**
+ * Where a fault was seen — the tool's own stage vocabulary (`siteprobe/src/generic/diagnostics.py`,
+ * `STAGES`). Keep the two lists in step, the same way the error codes above are.
+ */
+export const siteprobeFindingStageSchema = z.enum([
+  'target',
+  'acquisition',
+  'listing',
+  'work',
+  'media',
+  'import',
+]);
+
+/**
+ * One structured reason a run produced nothing (plan §4.1). Carried on the events that already
+ * exist rather than as a new event, so a caller that ignores it reads exactly the event it read
+ * before. `code` is the contract and is not reworded; `message` is a sentence and may be.
+ */
+export const siteprobeFindingSchema = z.strictObject({
+  code: z.string().trim().min(1),
+  stage: siteprobeFindingStageSchema,
+  severity: z.enum(['error', 'warning', 'info']),
+  message: z.string(),
+  field: z.string().optional(),
+  target_kind: z.string().optional(),
+  evidence: z.record(z.string(), z.unknown()).optional(),
+  suggested_action: z.string().optional(),
+});
+
+
 /** One target kind a site declares: what the UI offers as "object type". */
 export const siteprobeTargetSchema = z.strictObject({
   kind: z.string().trim().min(1),
@@ -112,6 +142,8 @@ const siteprobeReviewEventSchema = z.strictObject({
    */
   count: z.number().int().nonnegative().optional(),
   warnings: z.array(z.string()),
+  /** Why a stage produced nothing, when it did (plan §4.1). Optional: an older tool omits it. */
+  findings: z.array(siteprobeFindingSchema).optional(),
 });
 
 /** One site's own description of itself, as markdown — empty when the folder has none. */
@@ -144,6 +176,8 @@ export const siteprobeResultEventSchema = z.strictObject({
   origin: siteprobeOriginSchema.nullable(),
   media: z.record(z.string(), z.number()),
   warnings: z.array(z.string()),
+  /** Structured reasons this run produced nothing, empty when it is clean (plan §4.1). */
+  findings: z.array(siteprobeFindingSchema).optional(),
   /** Only on a selection run: the file it downloaded. */
   selection: z.string().optional(),
 });
@@ -154,6 +188,34 @@ export const siteprobeErrorEventSchema = z.strictObject({
   message: z.string(),
   command: z.string().optional(),
   selection: z.string().optional(),
+  /**
+   * The reasons a `DiagnosticError` failed the run. The `code` above stays inside its enum for
+   * callers already branching on it; the specific stage travels here (plan §4.1).
+   */
+  findings: z.array(siteprobeFindingSchema).optional(),
+});
+
+/**
+ * One bounded runtime check, reported per stage (plan §5-A) — the `integration probe` command's
+ * answer. A stage that was `skipped` or `unavailable` is not a pass, and `ok` is false whenever any
+ * finding is error-severity.
+ */
+export const siteprobeProbeEventSchema = z.strictObject({
+  event: z.literal('probe'),
+  target: z.string(),
+  /** The probed address, with query values redacted. */
+  input: z.string(),
+  ok: z.boolean(),
+  budget: z.strictObject({ seconds: z.number(), used: z.number() }),
+  /** The standard export the probe wrote, for T³'s own parser to read — never the live export tree. */
+  export: z.string().nullable(),
+  stages: z.array(z.strictObject({
+    stage: siteprobeFindingStageSchema,
+    status: z.enum(['passed', 'failed', 'skipped', 'unavailable']),
+    detail: z.string(),
+    findings: z.array(siteprobeFindingSchema),
+  })),
+  findings: z.array(siteprobeFindingSchema),
 });
 
 export const siteprobeEventSchema = z.union([
@@ -176,6 +238,7 @@ export const siteprobeLineSchema = z.union([
   siteprobeReviewEventSchema,
   siteprobeResultEventSchema,
   siteprobeErrorEventSchema,
+  siteprobeProbeEventSchema,
 ]);
 
 export const siteprobeRunStatusSchema = z.enum(['running', 'done', 'failed', 'cancelled']);
@@ -398,3 +461,6 @@ export type SiteprobeStatus = z.infer<typeof siteprobeStatusSchema>;
 export type SiteprobeRevealFolder = z.infer<typeof siteprobeRevealFolderRequestSchema>['folder'];
 export type SiteprobeRevealFolderResult = z.infer<typeof siteprobeRevealFolderSchema>;
 export type SiteprobeErrorCode = z.infer<typeof siteprobeErrorCodeSchema>;
+export type SiteprobeFindingStage = z.infer<typeof siteprobeFindingStageSchema>;
+export type SiteprobeFinding = z.infer<typeof siteprobeFindingSchema>;
+export type SiteprobeProbeEvent = z.infer<typeof siteprobeProbeEventSchema>;

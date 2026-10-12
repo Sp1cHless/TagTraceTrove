@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>T³ 操作手册</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1f232c; --text:#e8eaf0; --muted:#9aa3b2;
+    --line:#2a2f3a; --accent:#4c8dff; --accent-soft:#1e2a44; --good:#3fb950; --warn:#d29922; --bad:#f85149;
+    --radius:14px; --maxw:900px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text); line-height:1.7;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  }
+  a{color:var(--accent); text-decoration:none}
+  a:hover{text-decoration:underline}
+  header.top{
+    position:sticky; top:0; z-index:20; backdrop-filter:blur(10px);
+    background:color-mix(in srgb, var(--bg) 82%, transparent);
+    border-bottom:1px solid var(--line);
+    padding:12px 18px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  }
+  header.top h1{font-size:1.05rem; margin:0; font-weight:650; letter-spacing:.02em}
+  header.top .sub{color:var(--muted); font-size:.82rem}
+  header.top .spacer{flex:1}
+  .lang{display:flex; gap:6px; font-size:.85rem}
+  .lang a{padding:4px 10px; border:1px solid var(--line); border-radius:999px}
+  .lang a.active{background:var(--accent-soft); border-color:var(--accent); color:var(--text)}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:26px 18px 90px}
+  h2{font-size:1.35rem; margin:2.2em 0 .6em; padding-bottom:.35em; border-bottom:1px solid var(--line)}
+  h3{font-size:1.06rem; margin:1.6em 0 .4em; color:#dfe3ec}
+  h4{font-size:.98rem; margin:1.2em 0 .3em; color:var(--muted); font-weight:600}
+  p{margin:.6em 0}
+  ul,ol{margin:.5em 0 .8em; padding-left:1.35em}
+  li{margin:.28em 0}
+  code{background:var(--panel2); padding:.12em .42em; border-radius:6px; font-size:.9em; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  pre{background:var(--panel2); padding:14px 16px; border-radius:var(--radius); overflow:auto; border:1px solid var(--line)}
+  pre code{background:none; padding:0}
+  kbd{background:var(--panel2); border:1px solid var(--line); border-bottom-width:2px; border-radius:6px; padding:.08em .45em; font-size:.85em}
+  .toc{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px 20px}
+  .toc h2{margin-top:0; border:0; font-size:1rem; color:var(--muted)}
+  .toc ol{columns:2; column-gap:28px}
+  @media (max-width:620px){ .toc ol{columns:1} }
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px 20px; margin:1em 0}
+  .note,.tip,.warn{border-left:4px solid; padding:12px 16px; border-radius:8px; margin:1em 0; background:var(--panel)}
+  .note{border-color:var(--accent)}
+  .tip{border-color:var(--good)}
+  .warn{border-color:var(--warn)}
+  .note b,.tip b,.warn b{display:block; margin-bottom:.2em}
+  table{width:100%; border-collapse:collapse; margin:1em 0; font-size:.93rem; display:block; overflow-x:auto}
+  th,td{border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top}
+  th{background:var(--panel2); font-weight:600}
+  .path{color:var(--muted); font-size:.88em}
+  .pill{display:inline-block; background:var(--accent-soft); color:var(--accent); border-radius:999px; padding:.05em .6em; font-size:.8em; margin-right:.3em}
+  hr{border:0; border-top:1px solid var(--line); margin:2.4em 0}
+  footer{color:var(--muted); font-size:.85rem; text-align:center; padding:30px 0}
+  .lead{color:var(--muted)}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>T³ 操作手册</h1>
+  <span class="sub">Tag · Trace · Trove</span>
+  <span class="spacer"></span>
+  <nav class="lang"><a class="active" href="zh.html">中文</a><a href="en.html">English</a></nav>
+</header>
+
+<div class="wrap">
+
+<p class="lead">本手册按功能分类，逐一说明 T³ 每个界面的用途与操作方法。桌面端与手机端共用同一套界面；手机端提到的差别会单独标注。<br>
+想了解底层设计请看 <code>docs/architecture.md</code>；想了解当前进度看 <code>docs/status.md</code>。</p>
+
+<nav class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#s0">第一次运行</a></li>
+    <li><a href="#s1">界面总览</a></li>
+    <li><a href="#s2">首页 Home</a></li>
+    <li><a href="#s3">画廊 Gallery（浏览 / 排序 / 筛选）</a></li>
+    <li><a href="#s4">作品详情 Entry（查看与编辑）</a></li>
+    <li><a href="#s5">新建作品</a></li>
+    <li><a href="#s6">作者 Authors</a></li>
+    <li><a href="#s7">合集 Collections</a></li>
+    <li><a href="#s8">稍后再看 / 最近观看 / 随机推荐</a></li>
+    <li><a href="#s9">搜索 Search</a></li>
+    <li><a href="#s10">设置 Settings</a></li>
+    <li><a href="#s11">进阶功能 Advanced</a></li>
+    <li><a href="#s12">从网站导入</a></li>
+    <li><a href="#s13">离线资料库</a></li>
+    <li><a href="#s14">手机端</a></li>
+    <li><a href="#s15">备份与恢复</a></li>
+    <li><a href="#s16">排错与常见问题</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="s0">1. 第一次运行</h2>
+
+<h3>启动</h3>
+<ul>
+  <li>在仓库根目录双击 <code>T3.exe</code>：桌面服务在后台启动，自动打开浏览器，并常驻系统托盘。右键托盘图标可退出。</li>
+  <li><code>T3.bat</code> 做同样的事，只是跑在一个控制台窗口里——<b>关掉那个窗口即停止服务</b>。</li>
+  <li>首次启动会自动构建前端，稍等片刻。之后再次双击若服务已在运行，只会重新打开浏览器。</li>
+</ul>
+
+<h3>数据放在哪</h3>
+<p>默认都在 <code>apps/server/.data/</code>：</p>
+<table>
+  <tr><th>路径</th><th>内容</th></tr>
+  <tr><td><code>library.db</code></td><td>整个资料库（SQLite 单文件）</td></tr>
+  <tr><td><code>assets/</code></td><td>封面、预览图、缩略图</td></tr>
+  <tr><td><code>backups/</code></td><td>整库备份</td></tr>
+  <tr><td><code>templates/</code></td><td>各画廊的模板文件</td></tr>
+</table>
+<div class="tip"><b>它就是一叠文件</b>把这个 <code>.data</code> 文件夹整体拷走就是完整备份。</div>
+
+<h3>为手机开放访问（可选）</h3>
+<p>右键托盘图标 → 打开 <b>Allow phone access (LAN)</b>。这会用 <code>0.0.0.0</code> 重启服务并列出本机的局域网地址；点选一项即可复制，粘贴到手机。关闭它则恢复只监听本机。</p>
+
+<!-- ============================================================ -->
+<h2 id="s1">2. 界面总览</h2>
+
+<h3>左侧栏（导航）</h3>
+<p>侧栏是最高优先级的导航：<b>在任何页面、任何层级，点侧栏立即切换过去</b>。自上而下通常有：</p>
+<ul>
+  <li><b>首页 Home</b>、<b>搜索框</b>、若干<b>画廊</b>（每个 Entry 类型一座）、<b>作者 Authors</b>、<b>合集 Collections</b>、<b>稍后再看 View later</b>、<b>最近观看 Recently viewed</b>、<b>随机推荐 Random pick</b>。</li>
+  <li>手机端（窄屏）侧栏变成一个可滑出的抽屉，支持遮罩、<kbd>Esc</kbd> 与浏览器返回键关闭。</li>
+</ul>
+
+<h3>顶栏</h3>
+<ul>
+  <li>左侧是<b>返回</b>按钮（在首页时禁用）与当前页标题。</li>
+  <li>右侧依次是：<b>主题切换</b>（明/暗）、<b>设置</b>齿轮。</li>
+</ul>
+
+<h3>右下角浮动按钮</h3>
+<p>每个页面右下角固定有两个按钮：上为<b>返回上一级</b>，下为<b>回到顶部</b>。它们与顶栏的返回是同一个动作，所以长页面里也随时能返回。</p>
+<div class="tip"><b>返回会记住你来时的位置</b>从作者页打开作品、再返回，会回到那个作者的同一页、同一滚动位置、同样的筛选与排序。打开新页面总是从顶部开始。</div>
+
+<!-- ============================================================ -->
+<h2 id="s2">3. 首页 Home</h2>
+<p>首页是「继续看下去」的入口，不是统计面板。</p>
+<ul>
+  <li><b>主区（Hero）</b>：一句问候 + <b>「新增条目」</b>按钮，直接进入新建作品。</li>
+  <li><b>氛围小结</b>：会轮换显示「如今收录 N 条」「你有 M 座画廊」「最近看过《…》」，是氛围提示，不是精确统计卡。</li>
+  <li><b>最近观看</b>：最近打开过来源链接的作品，点一张卡片直接进入其详情。</li>
+  <li><b>最近的画廊</b>：给几扇门，回到常用的画廊。</li>
+  <li><b>空状态</b>：库里还没有内容时，显示「添加第一条记录」。</li>
+  <li>如果所有画廊都被 NSFW 设置隐藏，首页会直接提示并提供「显示 NSFW 内容」按钮。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s3">4. 画廊 Gallery</h2>
+
+<h3>浏览</h3>
+<p>每座画廊对应一个 <b>Entry 类型</b>（如 <code>comic</code>、<code>game</code>）。用全新类型创建一条作品，那座画廊就自动出现。作品以封面叠层卡片呈现，一页多行，行数可在设置里调。</p>
+
+<h3>排序</h3>
+<p>画廊标题旁的 <b>Sort</b> 下拉提供：<b>最新优先</b>、<b>最早优先</b>、<b>标题 A–Z</b>、<b>标题 Z–A</b>、按<b>类型</b>，以及各类评分/使用排序（见下）。</p>
+
+<h3>筛选栏</h3>
+<p>网格上方是筛选栏，由若干行组成，<b>所有条件用 AND 叠加</b>——每多选一个标签，结果只会更窄：</p>
+<ul>
+  <li><b>维度 + 标签</b>行：输入即联想（<code>TagCombobox</code>，近似拼写也认）。同一个标签只能在整个筛选栏里选一次。</li>
+  <li><b>所有标签</b>行：不限定维度地匹配标签。</li>
+  <li><b>+ Authors</b>：新增一行作者筛选，行内作者之间是 OR。</li>
+  <li>筛选进行中，标题会显示 <code>命中 / 总数</code>；同时作者页的文件夹会被<b>临时展开</b>，所有命中作品平铺成一个网格，清空筛选即恢复。</li>
+</ul>
+
+<h3>评分与使用排序</h3>
+<p>每个评分维度在排序下拉里多出一条 <b>「应用作者评分」</b>（带 👤 标记）：作品自己没有该维度评分时，借用其作者在同一维度上的评分（取作者中的最高分；作品作者数 ≥ 4 时不借用）。<b>评分筛选</b>只看作品自身评分。</p>
+<p>使用记录（观看数 / 最近观看 / 点赞数）只出现在<b>排序</b>里，不提供数值或日期筛选条件。</p>
+
+<h3>移动画廊顺序</h3>
+<p>侧栏里用 <b>Move Galleries</b> 进入排序模式，用上/下按钮调整。也可在设置里调整每页行数。</p>
+
+<h3>分页</h3>
+<p>网格底部的分页条按每屏实际能放的卡片数翻页；手机端每页行数翻倍。切换筛选或排序会回到第 1 页。</p>
+
+<!-- ============================================================ -->
+<h2 id="s4">5. 作品详情 Entry</h2>
+
+<h3>只读视图</h3>
+<ul>
+  <li>顶部是标题、类型徽标、日期、页数/时长等统计行，以及工具栏。</li>
+  <li>工具栏上有 <b>Edit</b>、<b>Like</b>（👍，可重复点）、<b>稍后再看</b>时钟按钮、<b>📁+ 加入合集</b>、删除等。</li>
+  <li>板块（Section）与维度（Facet）按布局排列，标签以 chip 呈现；<b>双击标签</b>打开跨画廊的标签结果页。</li>
+  <li><b>评分区</b>：只读时已评分显示部分填充的 ★，未评分显示「未评分」。</li>
+  <li><b>内容区</b>：有序的内容行（如 <code>Source URL</code>、<code>description</code>、短评等）。<code>content_type</code> 是自由文本。</li>
+  <li>打开作品的<b>来源链接</b>（点 Source URL）才会记一次浏览——打开详情卡片本身不算。</li>
+</ul>
+
+<h3>编辑视图（点 Edit）</h3>
+<ul>
+  <li><b>标题</b>：双击标题进入就地编辑，<kbd>Enter</kbd> 或失焦保存，<kbd>Esc</kbd> 取消。</li>
+  <li><b>类型</b>：切换类型等于换画廊。</li>
+  <li><b>日期 / 页数 / 时长</b>：就地编辑。日期接受 <code>yyyy-mm-dd</code>、<code>yyyy-mm</code> 或 <code>yyyy</code>；时长接受 <code>h:mm:ss</code> / <code>mm:ss</code> / <code>ss</code>。时长可清空。</li>
+  <li><b>板块与维度</b>：空板块首行同时给出 <b>+ 维度</b> 与 <b>+ 标签</b>；已命名维度有左标签列与右标签列；可对维度上/下排序。板块标题在编辑态可<b>重命名</b>或<b>删除</b>。</li>
+  <li><b>标签</b>：拖动可换维度，双击可重命名（只改这一条作品的该标签），也可删除。</li>
+  <li><b>内容</b>：新增、编辑、删除、上下移动，回车或失焦保存。</li>
+  <li><b>评分</b>：每行一个半星选择器（0.5–5 半星步进）加清除按钮；<b>+ Rating</b> 为整座画廊新建一个共享评分维度。评分行的上/下按钮重排的是<b>整个画廊共享</b>的维度顺序。</li>
+  <li><b>作者</b>：可用简洁控件新建 / 关联 / 解绑作者；匹配永远由你确认，绝不自动。</li>
+  <li><b>全部转为多作者</b>：当作品有 ≥2 位作者且不全是 <code>multiple author</code> 时出现。它把所有署名作者替换为一个共享的 <code>multiple author</code> 作者，不判断谁「值得留下」。只出现在这部作品里的作者会归零并从列表消失（行不删除，后续导入仍可重新关联）；有其它作品的作者只是少这一部。</li>
+  <li><b>保存为模板 / 应用 tag 布局</b>（工具栏）：前者重建该类型的共享布局；后者只把本作品的「标签→维度」位置同步给同类型的其它作品（跳过本作品没有的标签）。</li>
+</ul>
+
+<div class="note"><b>首次结构化的提醒</b>当你在某座画廊的<b>唯一一件</b>作品上点 Done，而该画廊还没有任何板块时，会弹出询问：是否把这件作品的板块与维度应用到整座画廊。选择应用，效果与工具栏的「保存为模板」相同。</div>
+
+<h3>合并作品</h3>
+<p>在<b>作者页</b>的编辑态进入 <b>Merge works / 合并作品</b>：点选<b>两件同画廊</b>的作品，选择保留哪一件、用哪个标题、是否合并标签、是否把被吸收作品的来源链接复制过去。服务端在一个事务里完成复制并删除被吸收的作品；被吸收作品的其它内容、媒体、评分、使用、文件夹、合集、稍后再看都<b>不会</b>被复制。</p>
+
+<!-- ============================================================ -->
+<h2 id="s5">6. 新建作品</h2>
+<p>从首页「新增条目」或侧栏进入新建页。</p>
+<ul>
+  <li>填<b>标题</b>（必填）与<b>类型</b>：类型可以填新名字（新画廊）或已有名字（加入该画廊）。</li>
+  <li><b>封面 / 预览</b>：选择本地图片上传；新上传会自动生成 512px 的卡片缩略图，原图用于详情页。</li>
+  <li><b>来源 URL</b>：可填网址，也可填本地文件的完整路径。</li>
+  <li><b>模板按钮</b>（画廊字段下方）：已有画廊显示「模板就绪——打开详细编辑」，新类型显示「新画廊——创建它的模板」。它总是先用已填信息创建作品，再打开这件作品自己的编辑器。</li>
+  <li>展开「初始内容 / 初始评分 / 稍后再看」可在创建时一并写入。</li>
+</ul>
+<div class="tip"><b>离线也能创建</b>手机/离线状态下同样可以新建作品（含封面）——它会进入待同步队列，联网后自动落地。详见第 13 节。</div>
+
+<!-- ============================================================ -->
+<h2 id="s6">7. 作者 Authors</h2>
+
+<h3>列表</h3>
+<ul>
+  <li>列表只显示<b>名下至少有一件作品</b>的作者。删掉某作者的最后一件作品，只会让他从可检索处消失，行不会删除，后续导入可重新关联。</li>
+  <li>可按<b>主导画廊类型</b>筛选，并按 <b>最近观看 / 观看最多 / 点赞最多</b> 排序。</li>
+  <li>两组独立筛选：<b>Author tags</b>（作者自己的标签词表）与 <b>Works contain tags</b>（名下作品携带的标签，不会复制到作者身上）。多个作品标签必须同时出现在<b>同一件</b>作品上。</li>
+  <li>卡片上以淡色显示该作者的其它已记录拼写（别名）。</li>
+</ul>
+
+<h3>详情</h3>
+<ul>
+  <li>信息板：基本信息、<b>作者标签</b>（独立词表）、<b>作者内容</b>（一条短评/备注）。作者没有板块/维度布局。</li>
+  <li><b>评分区</b>：半星选择、<b>+ Rating</b>、共享上/下重排。评分属于该作者的<b>主导画廊分区</b>；没有作品的作者会显示提示。</li>
+  <li><b>作品区</b>：以画廊风格卡片分页展示名下作品；打开作品复用作品的详情导航，返回时回到该作者。</li>
+  <li><b>文件夹 Directories</b>：纯展示的分组，不改变作品类型、也不产生新画廊。`+ Directory` 新建；把一张散作品拖到另一张上会新建文件夹，拖到已有文件夹上会移入；文件夹右上角可编辑标题与简介（就地保存）；还可把作品「移出」回散作品。</li>
+  <li><b>作者别名</b>（在进阶功能的「作者别名」标签页维护）：一个显示名 + 一组解析到它的拼写（如假名/汉字/中文译名/罗马字）。保存后会立即合并已存在的重复作者行，使任何拼写都指向同一个人。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s7">8. 合集 Collections</h2>
+<ul>
+  <li>作品合集与作者合集两类，类型在创建时固定。<b>作品合集可以有一层子文件夹</b>；作者合集是扁平的。</li>
+  <li>合集页是一排<b>平铺的分页</b>：先是每座画廊，然后（如有）「未分配」，最后是「作者」。NSFW 画廊在 SFW 模式下会连同它的分页一起隐藏。</li>
+  <li>编辑态：新建、删除、拖动重排文件夹。进入某个作品合集后，有 <b>+ New subfolder</b>；子文件夹以文件夹卡片显示在成员之上，点进去不退出编辑模式。</li>
+  <li>普通模式点成员打开作品详情；<b>编辑模式</b>点成员是「选中待整理」，然后用子文件夹上的 <b>Move here</b> 或子文件夹内的 <b>Move out</b> 移动。成员卡片右上角的删除控件只解除「与当前文件夹的关联」，不删除作品。</li>
+  <li><b>加入合集</b>：作品详情页与作者信息板有常驻的 📁+ 按钮；菜单里已加入的显示 ✓ 且禁用。菜单优先列出<b>投向该作品所在画廊</b>的文件夹，外加「未分配」的文件夹。</li>
+  <li><b>为全部添加 tag</b>：在文件夹编辑视图里可给文件夹内<b>所有</b>作品（含子文件夹）加同一个标签；每个作品沿用其画廊既有的维度归属；没有结构的画廊会被跳过并计数。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s8">9. 稍后再看 / 最近观看 / 随机推荐</h2>
+
+<h3>稍后再看 View later</h3>
+<ul>
+  <li>独立的<b>作品</b>与<b>作者</b>两个列表，保存在资料库里，所有连到本库的桌面/手机浏览器共享。</li>
+  <li>在作品页/作者页点<b>时钟按钮</b>加入或移除；加入后变成「已勾选的时钟」。</li>
+  <li>列表按加入顺序排列，各客户端会自行拉取同步（不要求同时在线）。</li>
+</ul>
+
+<h3>最近观看 Recently viewed</h3>
+<ul>
+  <li>按画廊分组、浏览器风格标签页。默认「最近观看」模式，隐藏从未看过的作品，最多显示 72 张卡片。</li>
+  <li>模式按钮（★ / 观看最多 / 点赞最多）是<b>开关</b>：再点一次即退出该模式。</li>
+</ul>
+
+<h3>随机推荐 Random pick</h3>
+<ul>
+  <li>三种模式：<b>作品 / 作者 / 标签</b>。作品可从全部可见画廊抽取，也可先在某座画廊内用筛选栏收窄范围。</li>
+  <li>每次点 <b>🎲 随机</b> 抽一页（24 张作品/作者卡片，或恰好一个标签）。标签用一张大卡片揭示，点开进入标签结果页。</li>
+  <li>作者按派生的 NSFW 状态过滤；标签只从当前可见画廊的词表里去重抽取，所以 SFW 模式下不会抽到只属于 NSFW 的标签。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s9">10. 搜索 Search</h2>
+<ul>
+  <li>侧栏的搜索框聚焦或提交即打开搜索页（与画廊筛选状态相互独立）。</li>
+  <li>三种范围：<b>作品 Entries</b>、<b>标签 Tags</b>、<b>作者 Authors</b>。</li>
+  <li>支持<b>近似拼写</b>；作者搜索也会匹配其已记录的别名拼写（输入别名，结果卡片仍显示作者本名，下方以淡色显示命中的拼写）。</li>
+  <li>标签搜索受当前 Show NSFW 偏好影响：SFW 模式会略去只被 NSFW 画廊使用的标签，共享标签的计数也只统计 SFW 用法。</li>
+  <li>进入某个结果再返回，会带回原来的查询与范围，不会重置。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s10">11. 设置 Settings</h2>
+<p>点顶栏齿轮打开设置面板（日常用得到的都在这里）：</p>
+<ul>
+  <li><b>显示 NSFW 画廊与作者</b>：全局可见性开关。关闭时隐藏 NSFW 画廊、NSFW 作者、合集里的 NSFW 成员/封面/计数，以及随机推荐里的 NSFW 内容。</li>
+  <li><b>语言 Language</b>：English / 简体中文。</li>
+  <li><b>每页行数 Rows per page</b>：控制画廊网格每页行数（手机端自动翻倍）。</li>
+  <li><b>主题色 Accent color</b>：蓝 / 青 / 紫 / 玫瑰 / 琥珀 / 绿，六套预设。</li>
+  <li><b>Connect to APP</b>：手机配对区块（见第 14 节）。</li>
+  <li><b>进阶功能 Advanced function</b>：进入进阶功能页（第 12 节）。</li>
+</ul>
+<p>顶栏还有一个<b>明/暗主题切换</b>按钮。</p>
+
+<!-- ============================================================ -->
+<h2 id="s11">12. 进阶功能 Advanced</h2>
+<p>进阶功能页的标签很多，窄屏可<b>左右滚动</b>。各标签页：</p>
+
+<h3>标签 Tags（词典）</h3>
+<ul>
+  <li>管理 Entry 词表的<b>别名</b>：一个拼写 → 一个规范名，可带 partition 标签（series / characters / types / tags 等）。</li>
+  <li><b>占位行</b>（规范名为空）只是记录了某个待定名字，不参与解析；可一键填入别名表单。</li>
+  <li><b>标签合并</b>：选保留的标签与被吸收的标签，确认后所有赋值改指向保留者，被合并的行直接删除（执行前自动备份）。</li>
+</ul>
+
+<h3>作者合并 Author merge</h3>
+<ul>
+  <li>一键检测重复作者：第一次点只是<b>列出计划分组</b>，再点一次才执行（带备份与完整性报告）。</li>
+  <li>识别规则包括：规范化同名、分隔符变体（<code>_</code>/<code>-</code>/<code>.</code> 视为空白，<code>arai_kazuki</code> 与 <code>Arai Kazuki</code> 视为同一人）、以及经 producer 词典解析到同一规范名的拼写。</li>
+  <li>每组保留作品最多的行；作品数相同时优先保留不含分隔符的拼写。作品、作者标签、作者评分、文件夹都会迁移到保留行。</li>
+</ul>
+
+<h3>作者别名 Author aliases</h3>
+<p>见第 7 节「作者」。</p>
+
+<h3>画廊模板 Gallery templates</h3>
+<ul>
+  <li>按画廊展示模板概要：结构维度、tag→维度归属、本地文件路径（<code>&lt;type&gt;.template.json</code> / <code>&lt;type&gt;.tag-layout.json</code>）与是否已生成。</li>
+  <li>模板的保存与应用在<b>任意作品卡片</b>上进行（工具栏的「保存为模板」「应用 tag 布局」）。</li>
+  <li><b>通用模板 Common template</b>：仓库自带的板块/维度（基本信息 / 类型 / 角色 / 语言 / 标签 / 所有标签 / 综合评分），jia应用即复制进该画廊，之后可自由改名/清空/删除。它同样带有「内容种类」（每个画廊自带 Source URL / description；作品有内容时才显示该行）。</li>
+  <li><b>标题缩减</b>（模板卡片内的一个子卡片）：针对 <code>原文 | 译文</code> 形式的标题，逐条列出两侧，由你决定保留前半还是后半。默认会按可判断方向预选（译文侧含汉字/假名时保留译文；另一侧只有韩文时保留原文；两侧都是纯 ASCII 时不预选）。执行前自动备份，且只应用标题仍与清单一致的条目。</li>
+</ul>
+
+<h3>未分类 Tag Unassigned tags</h3>
+<ul>
+  <li>按画廊列出仍落在默认未命名位置的标签；选择目标维度即可归位（已归类的作品自动跳过）。</li>
+  <li>若某标签在同类作品的其它地方多数放在某维度，会给出 <b>Follow</b> 一键跟随。</li>
+</ul>
+
+<h3>来源维护 Source maintenance</h3>
+<p>见第 12 节的来源库部分。</p>
+
+<h3>系统 System</h3>
+<ul>
+  <li><b>错误与日志</b>：显示桌面服务的日志尾部、最近的客户端错误，可一键<b>复制用于报错</b>。</li>
+  <li><b>数据库</b>：<b>立即备份</b>、<b>导出</b>（下载为真实的库文件）、<b>从文件恢复</b>。恢复是<b>暂存式</b>的：上传后先校验并暂存，需要你从托盘退出并重开桌面端才会真正替换（替换前会先把当前库另存为备份）。</li>
+  <li><b>设置</b>：<b>启动时自动允许手机访问</b>（默认开）。关闭后桌面端不会向局域网广告地址。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s12">13. 从网站导入</h2>
+<p>导入分两条路，都在 T³ 界面内完成：<b>规则构建器</b>（学一个网站）和<b>链接导入</b>（把抓取结果落到库里）。</p>
+
+<h3>第一步：规则构建器（SiteProbe）</h3>
+<p>它会在你的浏览器里打开真实页面，让你点选，然后为这个站点学出规则。过程全程有引导，首次大约几分钟。</p>
+<ol>
+  <li><b>准备工作页地址</b>：准备 2–3 个该站不同作品的网址（<span class="pill">作品适配器</span>）。想学全标签就选标签多的作品；允许多作者就选多作者的。</li>
+  <li>点「开始作品适配器」后，浏览器会打开标注页。<b>把页面上真实的值复制、黏进搜索框，选最匹配的候选</b>。工具会打分，但<b>分数不是重点，选你认为最对的</b>；像 <code>$authorS$</code>、<code>123title456</code> 这类「页面代码」可能得分很高，但如果页面上显示的是干净值，工具一定也抓到了它。</li>
+  <li>看到「适配器已生成」后可<b>导入第一件作品预览</b>，确认结果。</li>
+  <li>需要的话再建<b>列表适配器</b>（<span class="pill">search / artist / favorites / album / playlist</span>）：填列表的<b>第一页地址</b>与<b>第二页地址</b>（第二页是必填——它教适配器如何翻页），按引导标注卡片。</li>
+</ol>
+<div class="warn"><b>当前限制</b>只适用于「简单站点」。需要登录的站点、专门反爬的站点（会封调试端口或打乱封面）超出通用机制；这些由随程序发布的手写适配器覆盖，或需要单独写一个。</div>
+<div class="tip"><b>规则要能命名自己的地址</b>列表适配器学到的规则必须能翻页、能定位每一张卡片的作品地址——只认识一个地址的规则是失败的设计。因此第二页地址是必填的。</div>
+
+<h3>第二步：链接导入</h3>
+<ol>
+  <li>新建页（或进阶功能里的导入面板）提供<b>导入导出文件夹</b>（拖入或浏览选择）与<b>批量导入</b>（拖入包含 <code>items/&lt;id&gt;</code> 子文件夹的父文件夹）。</li>
+  <li>选好<b>画廊 / 类型</b>。映射会根据该类型已保存的模板自动预填：<code>分类标签</code>→标签维度，<code>作品</code>→Series、<code>登场人物</code>→Characters、<code>作品类型</code>→Type、<code>language</code>→Language，<code>作者</code>→作者。<b>未映射的字段保持「忽略」，绝不猜。</b></li>
+  <li>若该画廊还没有模板，会提示：用<b>通用模板</b>，或<b>自建模板</b>（否则标签会丢失）。</li>
+  <li><b>模板卡片预览</b>会实时显示每个字段映射将产生的标签落点。若模板有 <code>Type</code> 维度，可手工补一个作品类型值（会作为 Tag 存入该维度）。</li>
+  <li><b>按作者评分</b>：复核页不给单件作品打分，而是按作者名提供评分——勾选「给该作者评分」后展开该画廊的评分维度。<b>评分存在作者身上</b>，本批次的每件作品共用这一次决定。</li>
+  <li>点「导入 N 个条目」提交。导入是<b>幂等</b>的：已有的作品会被跳过并报告为「库中已有」，重复导入安全。</li>
+</ol>
+<div class="note"><b>导入后的复核</b>导入完成会进入一个<b>一次性</b>的批量复核合集，标记新卡片与「库中已有」的卡片。你可以随时完成或从侧栏离开。若一批太大一次看不完，点 <b>存为临时合集</b>，把整批放进名为「临时」「临时2」…的合集里，复核结束后它仍保留。</div>
+
+<h3>更新与游标</h3>
+<p>库会记住每个站点的<b>工作 id</b> 与每个列表的<b>更新游标</b>。因此一个月后再抓同一收藏夹，只需要抓新增的那些，旧的自动跳过。命令行入口：</p>
+<pre><code>pnpm import:cursor status --site hitomi.la --kind folder --ref folder-42
+pnpm import:cursor filter --site hitomi.la --ids 100,120   # 只列出还没有的 id
+pnpm import:cursor set    --site hitomi.la --kind artist --ref some-artist --source-id 3220586 --commit</code></pre>
+
+<h3>来源库与来源维护</h3>
+<ul>
+  <li><b>来源库</b>是从所有作品的 Content 里<b>动态提取</b>的网址集合：已知站点按 <code>known:&lt;site&gt;</code> 归类，其它按 <code>host:&lt;hostname&gt;</code>。手动新增的 Content 也会立即被识别，无需额外同步。</li>
+  <li><b>来源维护</b>用于站点失效/换域名时：先给来源组打上 <code>invalid</code> 标注（只标注，不动任何内容），再对候选做检索、按证据分档（<code>exact-safe</code> / <code>strong-review</code> / …）复核，最后一次性提交。提交会重新校验每一项并先做真实备份，任何过期事实都会整体中止（409，零写入）。<b>旧网址永远不会被替换或删除，只会追加新的 Source URL。</b></li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s13">14. 离线资料库</h2>
+<p>浏览器（含手机 App 的 WebView）可以保有一份<b>离线副本</b>，断网时照常浏览与做部分编辑，联网后自动同步。相关设置都在<b>进阶功能 → 离线资料库</b>。</p>
+
+<h3>首次下载</h3>
+<ol>
+  <li>点 <b>Download offline library</b>。可选离线媒体级别：<b>仅元数据</b>（不含图片）、<b>缩略图</b>（不含原图）、或<b>指定原图</b>（填原始素材引用）。</li>
+  <li>下载会先落地元数据，再预载媒体；进度会显示「已处理/总数」。预载只在本页打开时进行，中断的下载会在下次启动时续传。</li>
+</ol>
+
+<h3>自动更新与自动同步</h3>
+<ul>
+  <li>重新连上服务器后，会<b>自动</b>把本地离线编辑重放（syncing），再<b>自动</b>更新已保存的副本（updating）——不再需要手动的 Sync now。</li>
+  <li>空闲心跳不会重复下载；失败的更新会留待后续心跳重试。</li>
+  <li>进度与错误横幅只提供信息，成功后自动消失。</li>
+</ul>
+
+<h3>离线能做什么</h3>
+<ul>
+  <li><b>浏览</b>：画廊、作品、作者、筛选、合集、搜索、随机、稍后再看等读操作。</li>
+  <li><b>编辑现有作品</b>：标题 / 日期 / 页数等标量、评分值、标签的增/移/删、作者的新建与关联/解绑、内容（Content）的增删改排序、作品的封面与预览（新增/替换/删除/排序）。</li>
+  <li><b>创建</b>：带封面/预览的新作品。</li>
+  <li><b>合集</b>：创建、改名、NSFW、成员增删、排序。</li>
+  <li><b>使用事件</b>：浏览与点赞（每次是一个独立事件，丢响应也不会重复计数）。</li>
+</ul>
+<div class="warn"><b>离线不做的</b>删除作品、合并作品、导入、模板/词表等破坏性或全局操作仍需桌面服务端；界面会明确提示「离线不可用」，而不是去连服务器然后弹报错。</div>
+
+<h3>系统信息与诊断</h3>
+<p>离线资料库页最下方是诊断区：<b>离线编辑支持</b>概览、<b>存储用量</b>与持久化状态（自动检查并自动请求持久化），以及<b>可复制的完整报告</b>（缓存的能力标志、快照头与 ACK、本地意图、媒体/队列错误、原生传输状态等）。报错时把这份报告复制给维护者即可。</p>
+
+<h3>待处理工作（导出 / 恢复）</h3>
+<p>正常情况下这些东西是<b>透明</b>的——重连后自动同步。导出/恢复待处理工作文件，是给「换设备前先抢救一下」这类诊断场景用的：导出的是一份<b>私有 JSON</b>（不含你的库，只含排队中的编辑与暂存的图片，上限 96 MiB），恢复也只写回<b>待处理队列</b>，不会替换你的资料库，也不会自动发送任何东西。</p>
+<div class="note"><b>清理只发生在落地之后</b>队列里的操作一旦被证明已在服务器落地（有更新的快照覆盖了对应回执），本地才会移除它。取消一次排队操作绝不会顺手毁掉数据。</div>
+
+<!-- ============================================================ -->
+<h2 id="s14">15. 手机端</h2>
+
+<h3>配对（一次即可）</h3>
+<ol>
+  <li>在<b>桌面端</b>打开 <b>设置 → Connect to APP</b>，点<b>创建配对二维码</b>。</li>
+  <li>二维码<b>2 分钟</b>内有效，请立刻用手机端扫描；也可用下方的<b>复制粘贴</b>方式（不是扫码）。</li>
+  <li>连接是加密的，并做了证书固定。授权失败或证书问题都<b>不会</b>清空你已排队的工作。</li>
+</ol>
+<p>面板底部是<b>已授权设备</b>列表，可撤销设备或删除记录。还有一个<b>手动恢复加密连接</b>的折叠区，仅在崩溃留下死锁时使用，需按提示核实真实的 PID，绝不猜。</p>
+
+<h3>使用</h3>
+<ul>
+  <li>手机端是同一套界面，响应式布局；窄屏侧栏变抽屉。</li>
+  <li>所有触屏交互都有明确的<b>点按路径</b>（不依赖长按、悬停或 HTML5 拖拽）；触控目标约 44×44 CSS 像素。</li>
+  <li>删除等破坏性操作使用桌面端同样的<b>两段式确认</b>（先点一次「预备」，再确认）。</li>
+  <li>浏览器返回与页面内返回都会恢复原页与滚动位置；打开新页面总是从顶部开始。</li>
+</ul>
+
+<h3>离线与同步</h3>
+<p>手机端常驻离线副本：断网可浏览、编辑、创建、补图、合并（部分），联网后自动重放并更新副本。Android 会调度受限网络下的后台传输；依赖未就绪的编辑会等它的前置完成后才进行。超大图片（原生上限 20 MiB）需要前台 Update。</p>
+<div class="tip">手机上「离线可编辑」之外的操作会直接标注为不可用，并提示 <b>not available under offline</b>，不会徒劳地去连服务器。</div>
+
+<!-- ============================================================ -->
+<h2 id="s15">16. 备份与恢复</h2>
+<ul>
+  <li><b>命令行</b>：<code>pnpm db:backup</code> 生成一份自包含备份目录（库快照 + <code>assets/</code> + manifest）；<code>pnpm db:restore &lt;备份目录&gt;</code> 恢复。恢复前会校验备份能通过 <code>db:doctor</code>，并先把当前库另存一份。</li>
+  <li><b>应用内</b>：进阶功能 → 系统 → 备份 / 导出 / 恢复。恢复是暂存式的，需要从托盘退出并重开桌面端才生效。</li>
+  <li>恢复前请先<b>停止 T³ 服务</b>（否则会因文件被占用而明确报错，而不是静默半覆盖）。</li>
+  <li>只有完整的备份<b>目录</b>能通过工具恢复；旧的单文件快照（如 <code>library.db.merge-backup-*</code>）缺少素材树，不能用它恢复。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s16">17. 排错与常见问题</h2>
+
+<h4>界面显示「正在查看已保存的离线副本」</h4>
+<p>说明桌面服务暂时连不上，当前用的是离线副本。服务恢复后会自动切回在线并同步。若这是刚重启桌面端后的几秒，属正常现象。</p>
+
+<h4>改了服务端代码但界面没变</h4>
+<p>打包入口（<code>T3.exe</code> / <code>T3.bat</code>）只在启动时加载一次服务端源码，<b>需要重启</b>；只重建前端会留下「新前端 ↔ 旧服务端」。开发时用 <code>pnpm dev:server</code>（带 watch）。</p>
+
+<h4>手机端「输入后不弹候选」</h4>
+<p>已知的输入法（IME）组字问题已修：输入框用普通的 <code>@input</code> 读取（<code>v-model</code> 在组字期间会丢事件）。若仍异常，请确认已装最新版。</p>
+
+<h4>作品封面在网格里是旧的</h4>
+<p>媒体地址是<b>按位置</b>命名的，同一地址可能先后是不同字节。修改封面后回到网格若仍是旧的，重新打开该作品即可；详情页总是取原图。</p>
+
+<h4>导入报「服务端仍在处理」</h4>
+<p>导入没有在预期时间内完成，但服务端可能仍在写入。<b>同一批次导入两次是安全的</b>（幂等）——重试前先看一眼作品列表。</p>
+
+<h4>需要报告 bug</h4>
+<p>到<b>进阶功能 → 系统</b>或<b>离线资料库</b>底部，点「复制用于报错」，把整份报告贴给维护者。它包含日志尾部、客户端最近错误、能力标志与队列状态。</p>
+
+<hr>
+<p class="lead">本手册随版本更新。若界面文字与本手册不一致，以界面为准；本手册对应 <code>docs/status.md</code> 所述的当前状态。</p>
+</div>
+<footer>T³ — Tag · Trace · Trove · 本地优先的个人索引</footer>
+</body>
+</html>

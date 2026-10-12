@@ -6,6 +6,10 @@ none of this needs the network: the rules are resolved against documents that ar
 already on disk, which is also why this step can be tested without a browser.
 
     python learn.py <session-dir> <session-dir> [<session-dir> ...]
+    python learn.py --browser --install <session-dir> <session-dir>
+
+`--browser` preserves the acquisition mode of browser-recorded sessions when no served
+comparison is available. `--install` regenerates the local adapter from existing annotations.
 
 Writes into the first session's directory:
 
@@ -19,7 +23,9 @@ import json
 import sys
 from pathlib import Path
 
-from src.builder.learn import PRUNE, UNPROVEN, draft_site_json, learn, load_session
+from src.builder.learn import PRUNE, UNPROVEN, draft_site_json, learn_for_runtime, load_session
+from src.builder import paths
+from src.builder.roundtrip import install
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -43,11 +49,12 @@ def main(argv: list[str] | None = None) -> int:
         fields = ", ".join(sorted(sample.annotated)) or "no annotation"
         print(f"    {sample.name:28} {len(sample.harvest.candidates):5} candidate(s)  {fields}")
 
-    learning = learn(samples)
+    learning = learn_for_runtime(samples, browser_capture="--browser" in arguments)
     root = directories[0]
     learning.write(root / "learning.json")
     draft_path = root / "draft_site.json"
-    draft_path.write_text(json.dumps(draft_site_json(samples, learning),
+    draft = draft_site_json(samples, learning)
+    draft_path.write_text(json.dumps(draft,
                                      ensure_ascii=False, indent=2) + "\n",
                           encoding="utf-8")
 
@@ -71,6 +78,15 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print(f"    learning {root / 'learning.json'}")
     print(f"    draft    {draft_path}")
+    if "--install" in arguments:
+        marked = {name for sample in samples for name, value in sample.annotated.items()
+                  if value is not None and value != "" and value != [] and name not in sample.absent}
+        missing_fields = marked - set(learning.chosen_rules())
+        if missing_fields:
+            print("[STOP] annotated fields have no verified rule: " + ", ".join(sorted(missing_fields)))
+            return 1
+        target = install(draft, paths.home() / "local", source=str(root))
+        print(f"    installed {target} (acquisition: {learning.acquisition})")
     return 0
 
 

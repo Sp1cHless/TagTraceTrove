@@ -2,20 +2,37 @@ import { snapshotState, nextSnapshotRevision, SNAPSHOT_REVISION_KEY, type Snapsh
 import { operationFingerprint, validatePendingParent, appliedRemovalIds, type OutboxStore, type PendingSyncOperation } from './outbox-store.js';
 import { validateExistingMediaStage, type MediaOutboxStore, type StagedMediaUpload } from './media-outbox-store.js';
 import { planPendingWorkRestore, RESTORE_CLIENT_KEY, type AtomicPendingWorkStore } from './pending-work-restore.js';
+import { LOCAL_FINAL_STATE_KEY, readLocalFinalState, planLocalFinalState, orderLocalMedia, mergeImportedLocalFinalState, validateLocalMediaReceipts, type LocalFinalStateStore } from './local-final-state.js';
 
 /** Unified memory adapter, not a composition of independently awaited enqueue loops. */
-export function createMemoryOfflineStore(): SnapshotStore & OutboxStore & MediaOutboxStore & AtomicPendingWorkStore {
+export function createMemoryOfflineStore(): SnapshotStore & OutboxStore & MediaOutboxStore & AtomicPendingWorkStore & LocalFinalStateStore {
   const generations = new Map<number,string>();
   const meta = new Map<string,string>();
   const operations = new Map<string,PendingSyncOperation>();
   const media = new Map<string,StagedMediaUpload>();
   const clone = <T>(value:T):T => structuredClone(value);
   return {
+    async captureLocalFinalState(freeze=false) {
+      const local=readLocalFinalState(meta.get(LOCAL_FINAL_STATE_KEY));
+      if(freeze){local.drafts=[];local.mediaDrafts=local.mediaDrafts.filter(id=>local.deferredMedia.includes(id));meta.set(LOCAL_FINAL_STATE_KEY,JSON.stringify(local));}
+      return {snapshot:generations.get(Number(meta.get('activeGeneration')))??null,generationId:Number(meta.get('activeGeneration'))||0,
+        revision:meta.get(SNAPSHOT_REVISION_KEY)??'0',clientId:meta.get('t3.offline-client-id')??'',
+        operations:[...operations.values()].map(clone),media:orderLocalMedia([...media.values()],local).map(clone),local};
+    },
+    async editLocalFinalState(change,rebase) {
+      const snapshot=snapshotState(meta.get('activeGeneration'),generations.get(Number(meta.get('activeGeneration'))),meta.get(SNAPSHOT_REVISION_KEY)).active?.snapshot??null;
+      const plan=planLocalFinalState(snapshot,[...operations.values()],[...media.values()],meta.get(LOCAL_FINAL_STATE_KEY),change);
+      if(rebase)plan.operations=rebase(snapshot,plan.operations,plan.media,plan.local);
+      const preparedRows=plan.operations.map(clone),preparedMedia=plan.media.map(clone),control=JSON.stringify(plan.local);
+      operations.clear();media.clear();for(const row of preparedRows)operations.set(row.opId,row);for(const image of preparedMedia)media.set(image.uploadId,image);
+      meta.set(LOCAL_FINAL_STATE_KEY,control);meta.set(SNAPSHOT_REVISION_KEY,nextSnapshotRevision(meta.get(SNAPSHOT_REVISION_KEY)));
+    },
     async captureSnapshot() { return snapshotState(meta.get('activeGeneration'), generations.get(Number(meta.get('activeGeneration'))), meta.get(SNAPSHOT_REVISION_KEY)); },
     async getOrCreateMeta(key, create) { const existing = meta.get(key); if (existing !== undefined) return existing; const value = create(); meta.set(key, value); return value; },
     async clearSnapshot() {
       // Check and delete synchronously: enqueue/media/activation cannot interleave.
-      if (operations.size || media.size) throw new Error('Cannot clear the offline snapshot while unsynced edits or media are pending');
+      const local=readLocalFinalState(meta.get(LOCAL_FINAL_STATE_KEY));
+      if (operations.size || media.size || local.media.length || local.deleted.length) throw new Error('Cannot clear the offline snapshot while unsynced edits or media are pending');
       meta.set(SNAPSHOT_REVISION_KEY,nextSnapshotRevision(meta.get(SNAPSHOT_REVISION_KEY)));
       meta.set('activeGeneration','0'); meta.delete('pendingSnapshotAck'); generations.clear();
     },
@@ -33,7 +50,8 @@ export function createMemoryOfflineStore(): SnapshotStore & OutboxStore & MediaO
       if (base ? active!==String(base.generationId) || generations.get(base.generationId)!==JSON.stringify(base.snapshot)
         : active!==undefined && active!=='0') return null;
       if (meta.has('pendingSnapshotAck')) return null;
-      if (discardPrevious && (operations.size || media.size)) return null;
+      const local=readLocalFinalState(meta.get(LOCAL_FINAL_STATE_KEY));
+      if (discardPrevious && (operations.size || media.size || local.media.length || local.deleted.length)) return null;
       const id=Math.max(0,...generations.keys())+1;
       const prunedGenerations=[...generations.keys()].filter(key=>discardPrevious || key!==base?.generationId);
       const nextRevision=nextSnapshotRevision(meta.get(SNAPSHOT_REVISION_KEY));
@@ -57,12 +75,18 @@ export function createMemoryOfflineStore(): SnapshotStore & OutboxStore & MediaO
     },
     async restorePendingWork(work,clientId,commit) {
       const result=planPendingWorkRestore(work,clientId,meta.get(RESTORE_CLIENT_KEY),
-        generations.get(Number(meta.get('activeGeneration'))),[...operations.values()],[...media.values()],meta.get('activeGeneration'));
+        generations.get(Number(meta.get('activeGeneration'))),[...operations.values()],[...media.values()],meta.get('activeGeneration'),meta.get('verifiedReplayProjection'),readLocalFinalState(meta.get(LOCAL_FINAL_STATE_KEY)));
+      const snapshot=snapshotState(meta.get('activeGeneration'),generations.get(Number(meta.get('activeGeneration'))),'0').active?.snapshot;
+      if(!snapshot)throw new Error('A saved library is needed for restored results');
+      const restored=mergeImportedLocalFinalState(meta.get(LOCAL_FINAL_STATE_KEY),work.localFinalState,snapshot,clientId,[...operations.values(),...result.operations],[...media.values(),...result.media]);
+      validateLocalMediaReceipts(work.localMediaReceipts??[],restored,snapshot);
       if (commit) {
         // Clone everything before publishing anything; no await/observable partial state.
         const preparedOperations=result.operations.map(clone); const preparedMedia=result.media.map(clone);
         for (const row of preparedOperations) operations.set(row.opId,row);
         for (const row of preparedMedia) media.set(row.uploadId,row);
+        if(work.localFinalState)meta.set(LOCAL_FINAL_STATE_KEY,JSON.stringify(restored));
+        for(const receipt of work.localMediaReceipts??[])meta.set(`localMediaReceipt.${receipt.uploadId}`,JSON.stringify(receipt));
       }
       return result.preview;
     },
@@ -88,7 +112,7 @@ export function createMemoryOfflineStore(): SnapshotStore & OutboxStore & MediaO
       for (const row of preparedMedia) media.set(row.uploadId,row);
     },
     async list() { return [...operations.values()].map(clone); },
-    async listMedia() { return [...media.values()].map(clone); },
+    async listMedia() { return orderLocalMedia([...media.values()],readLocalFinalState(meta.get(LOCAL_FINAL_STATE_KEY))).map(clone); },
     async update(opId,patch) { const row=operations.get(opId); if (row) operations.set(opId,clone({...row,...patch})); },
     async updateMedia(uploadId,patch) { const row=media.get(uploadId); if (row) media.set(uploadId,clone({...row,...patch})); },
     async remove(opId) { operations.delete(opId); },

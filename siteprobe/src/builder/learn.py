@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 from urllib.parse import urlparse
@@ -80,6 +80,8 @@ class Sample:
     #: The page as the site served it, when the caller fetched it. A crawl reads *this* document, so
     #: it is what a rule has to be checked against — the capture's markup is the browser's rendering.
     served: str | None = None
+    #: Preserve the user's date meaning even when equal timestamps merge or candidate ids change.
+    date_kinds: dict[str, str] = field(default_factory=dict)
 
     @property
     def url(self) -> str:
@@ -246,6 +248,7 @@ class Learning:
 
     fields: list[FieldReport]
     notes: list[str] = field(default_factory=list)
+    acquisition: str = "http"
 
     def chosen_rules(self) -> dict[str, dict[str, Any]]:
         """The rule to install for each field, with its verified alternatives behind it.
@@ -278,6 +281,7 @@ class Learning:
 
     def to_json(self) -> dict[str, Any]:
         return {
+            "acquisition": self.acquisition,
             "notes": self.notes,
             "fields": {
                 report.field: {
@@ -501,8 +505,8 @@ def read_rule(rule: dict[str, Any], capture: Capture,
 
 
 def _reads_the_annotation(rule: dict[str, Any], candidate: Candidate, expected: Any,
-                          reference: Sample, field: str) -> dict[str, Any]:
-    """The candidate's own rule that reproduces the annotated value, or the one given.
+                          reference: Sample, field: str) -> dict[str, Any] | None:
+    """The candidate's own rule that reproduces the annotated value, or no usable rule.
 
     Measured on iwara (2026-10-11): a picture offered at two sizes is one candidate (`merge_image_variants`),
     so the cover candidate held both the page's `og:image` — the *thumbnail* variant — and the picture
@@ -511,15 +515,14 @@ def _reads_the_annotation(rule: dict[str, Any], candidate: Candidate, expected: 
     what the rest of this file does; this is the proposal path doing the same.
     """
     names = reference.document_names
-    if same_members(expected, read_rule(rule, reference.capture, names)):
-        return rule
-    for source in candidate.sources:
-        alternative = source.rule
-        if not alternative or alternative == rule or alternative.get("conflict"):
+    for alternative in [rule, *(source.rule for source in candidate.sources)]:
+        if not alternative or alternative.get("conflict"):
             continue
-        if same_members(expected, read_rule(alternative, reference.capture, names)):
-            return alternative
-    return rule
+        measured = _with_field_limit(_with_split(alternative, field,
+                                                 reference.annotated.get(field)), field)
+        if same_members(expected, read_rule(measured, reference.capture, names)):
+            return measured
+    return None
 
 
 def assembled_rule(samples: list[Sample], field: str) -> dict[str, Any] | None:
@@ -652,6 +655,19 @@ def _whole_token(text: str, part: str) -> bool:
     return not before.isalnum() and not after.isalnum()
 
 
+def _field_candidates(reference: Sample, field: str, expected: Any) -> list[Any]:
+    candidates = list(reference.harvest.candidates)
+    if field not in ("date", "date_added"):
+        return candidates
+    meaning = reference.date_kinds.get(field)
+    picked = next((candidate for candidate in candidates
+                   if candidate.candidate_id == reference.picks.get(field)
+                   and _is_what_was_annotated(expected, candidate.value, field)), None)
+    meaning = meaning or (picked.context.get("date_kind") if picked else None)
+    return ([candidate for candidate in candidates if candidate.context.get("date_kind") == meaning]
+            if meaning else candidates)
+
+
 def apply_to(references: Sample | Iterable[Sample], capture: Capture) -> dict[str, dict[str, Any]]:
     """The samples' hypotheses, applied to a page that was never annotated.
 
@@ -684,7 +700,7 @@ def apply_to(references: Sample | Iterable[Sample], capture: Capture) -> dict[st
     applied: dict[str, dict[str, Any]] = {}
     for field, (reference, expected) in answers.items():
         expected = answer_members(field, expected)
-        candidates = list(reference.harvest.candidates)
+        candidates = _field_candidates(reference, field, expected)
         picked = reference.picks.get(field)
         if picked:
             # The person's own click first. Two fields can carry the same word — a work's title and
@@ -707,12 +723,16 @@ def apply_to(references: Sample | Iterable[Sample], capture: Capture) -> dict[st
             # — and the person, accepting it, made the two pages disagree for good. The rule that
             # reproduces the annotated value on the page it was annotated from is the one to propose.
             rule = _reads_the_annotation(rule, candidate, expected, reference, field)
+            if rule is None:
+                continue
             # The value is read with the very rule that gets recorded, cap included. Reading it with
             # the uncapped one proposed nineteen pictures while the rule beside them said three, and
             # the page records what it is shown: the two halves then disagreed, and the field was
             # pruned over a difference that only ever existed between them.
             rule = named_document(_with_field_limit(rule, field), reference.document_names)
             applied[field] = {"value": read_rule(rule, capture, target_names), "rule": rule}
+            if field in ("date", "date_added") and candidate.context.get("date_kind"):
+                applied[field]["date_kind"] = candidate.context["date_kind"]
             break
     return applied
 
@@ -742,11 +762,16 @@ def load_session(directory: Path, name: str | None = None) -> Sample:
         explicitly_absent = {str(name) for name in (payload.get("absent") or [])}
         picks = {str(field): str(candidate)
                  for field, candidate in (payload.get("picks") or {}).items()}
+        date_kinds = {str(field): hypothesis["date_kind"]
+                      for field, hypothesis in (payload.get("hypotheses") or {}).items()
+                      if isinstance(hypothesis, dict)
+                      and hypothesis.get("date_kind") in ("published", "updated", "created", "unknown")}
     else:
         explicitly_absent = set()
         picks = {}
+        date_kinds = {}
     return Sample(name=name or directory.name, capture=capture, harvest=result,
-                  annotated=annotated, absent=explicitly_absent, picks=picks)
+                  annotated=annotated, absent=explicitly_absent, picks=picks, date_kinds=date_kinds)
 
 
 def learn(samples: list[Sample],
@@ -789,7 +814,7 @@ def learn(samples: list[Sample],
         expected = answer_members(field, answer)
         hypotheses: list[Hypothesis] = []
         seen: set[str] = set()
-        for candidate in source.harvest.candidates:
+        for candidate in _field_candidates(source, field, expected):
             if not _is_what_was_annotated(expected, candidate.value, field):
                 continue
             # Every source that carries a rule is its own hypothesis. The plan's
@@ -833,6 +858,34 @@ def learn(samples: list[Sample],
             ]
         reports.append(FieldReport(field=field, kind=kind, hypotheses=hypotheses))
     return Learning(fields=reports, notes=notes)
+
+
+def learn_for_runtime(samples: list[Sample], *, browser_capture: bool = False) -> Learning:
+    """Select the reader that preserves the annotated fields, using both recorded representations.
+
+    Prefer HTTP when it can reproduce the annotations. A browser-only field must not be
+    pruned merely because the served page has not rendered it. Change the declared reader
+    only when the rendered samples recover that field without losing the HTTP fields.
+    """
+    http_learning = learn(samples)
+    if not browser_capture:
+        return http_learning
+    if not any(sample.served is not None for sample in samples):
+        http_learning.acquisition = "browser"
+        http_learning.notes.append("runtime uses the browser-rendered page; "
+                                   "no served sample was available to verify HTTP")
+        return http_learning
+    rendered = learn([replace(sample, served=None) for sample in samples])
+    http_fields = set(http_learning.chosen_rules())
+    rendered_fields = set(rendered.chosen_rules())
+    if rendered_fields - http_fields and http_fields <= rendered_fields:
+        rendered.acquisition = "browser"
+        recovered = ", ".join(sorted(rendered_fields - http_fields))
+        rendered.notes.append("runtime uses the browser-rendered page"
+                              + (f" to preserve annotated fields: {recovered}" if recovered else
+                                 "; no served sample was available to verify HTTP"))
+        return rendered
+    return http_learning
 
 
 def _read(rule: dict[str, Any], field: str, sample: Sample, *,
@@ -1197,6 +1250,7 @@ def draft_site_json(samples: list[Sample], learning: Learning) -> dict[str, Any]
         },
         "documents": documents,
         "work": {
+            "acquisition": learning.acquisition,
             "fields": runtime_fields(learning),
             # A declared passthrough key is written into the record verbatim; without
             # the declaration the runtime drops the field it was learned for.

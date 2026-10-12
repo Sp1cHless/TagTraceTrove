@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "key": "rule34video.com",
+  "display_name": "rule34video.com",
+  "tool": "rule34video_com",
+  "source_site": "rule34video.com",
+  "export_group": "rule34video.com",
+  "media_id_prefix": "rule34video.com",
+  "hosts": [
+    "rule34video.com"
+  ],
+  "targets": {
+    "work": {
+      "url_pattern": "^https?://rule34video\\.com(?:/video)(?:/[^/]+)/(?P<id>[^/]+)",
+      "label": "Work",
+      "single": true
+    }
+  },
+  "documents": {
+    "work": {
+      "page": {
+        "format": "html"
+      },
+      "jsonld": {
+        "format": "json"
+      }
+    }
+  },
+  "work": {
+    "fields": {
+      "title": {
+        "from": "json",
+        "document": "jsonld",
+        "path": "name",
+        "fallback": [
+          {
+            "from": "html",
+            "document": "page",
+            "select": "h1.title_video",
+            "text": true,
+            "matches": 1
+          },
+          {
+            "from": "html",
+            "document": "page",
+            "select": "title",
+            "text": true
+          },
+          {
+            "from": "html",
+            "document": "page",
+            "select": "div.video_tools.vp",
+            "attr": "data-video-title"
+          }
+        ]
+      },
+      "author": {
+        "from": "html",
+        "document": "page",
+        "select": "span.name",
+        "text": true,
+        "matches": 1
+      },
+      "date_added": {
+        "from": "json",
+        "document": "jsonld",
+        "path": "uploadDate",
+        "fallback": [
+          {
+            "from": "json",
+            "document": "inline:0",
+            "path": "uploadDate"
+          }
+        ]
+      },
+      "tags": {
+        "from": "html",
+        "document": "page",
+        "select": "span[data-item-type=\"tag\"] a",
+        "text": true,
+        "list": true,
+        "fallback": [
+          {
+            "from": "html",
+            "document": "page",
+            "select": "span.tag_vote_chip.js-video-vote-chip a.tag_item",
+            "text": true,
+            "list": true
+          },
+          {
+            "from": "html",
+            "document": "page",
+            "select": "span[data-item-type=\"tag\"] a.tag_item",
+            "text": true,
+            "list": true
+          }
+        ]
+      },
+      "works": {
+        "from": "html",
+        "document": "page",
+        "select": "span[data-item-type=\"category\"] a",
+        "text": true,
+        "list": true,
+        "fallback": [
+          {
+            "from": "html",
+            "document": "page",
+            "select": "div[data-suggest-type=\"category\"] a",
+            "text": true,
+            "list": true
+          },
+          {
+            "from": "html",
+            "document": "page",
+            "select": "div[data-suggest-type=\"category\"] a.item.btn_link",
+            "text": true,
+            "list": true
+          },
+          {
+            "from": "html",
+            "document": "page",
+            "select": "span[data-item-type=\"category\"] a.item.btn_link",
+            "text": true,
+            "list": true
+          }
+        ]
+      }
+    },
+    "passthrough": []
+  },
+  "_draft": {
+    "generated_from": [
+      "20261011-144833-work1",
+      "20261011-145046-work2"
+    ],
+    "review": [
+      "the target's other kinds (artist, listing, search) are not derived here",
+      "the export manifest shape is not derived here",
+      "field rules were learned from one kind of page; a listing page is Phase 7",
+      "date reads document 'inline:0', which needs a request recipe"
+    ]
+  }
+}

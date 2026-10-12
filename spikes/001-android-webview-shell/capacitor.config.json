@@ -1,6 +1,7 @@
 {
   "appId": "com.speechless666.t3.spike",
-  "appName": "T3 C0 Spike",
+  "appName": "T3",
+  "loggingBehavior": "debug",
   "webDir": "web-dist",
   "server": {
     "androidScheme": "https",

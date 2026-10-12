@@ -106,6 +106,13 @@ function createAuthorApi() {
       mediaCleanupFailed: false,
     };
   });
+  const updateAuthor = vi.fn(async () => ({
+    id: 3,
+    name: 'Example Author',
+    occupation: 'Artist',
+    artworkRef: 'author.webp',
+    content: 'Important author note',
+  }));
   const api = {
     assetUrl: (path: string) => path,
     getAuthor,
@@ -115,13 +122,7 @@ function createAuthorApi() {
     updateAuthorDirectory,
     listEntrySources,
     mergeAuthorEntries,
-    updateAuthor: vi.fn(async () => ({
-      id: 3,
-      name: 'Example Author',
-      occupation: 'Artist',
-      artworkRef: 'author.webp',
-      content: 'Important author note',
-    })),
+    updateAuthor,
     assignAuthorTag: vi.fn(async () => undefined),
     renameAuthorTag: vi.fn(async () => undefined),
     removeAuthorTag: vi.fn(async () => undefined),
@@ -167,6 +168,7 @@ function createAuthorApi() {
     moveEntryToAuthorDirectory,
     removeEntryFromAuthorDirectory,
     updateAuthorDirectory,
+    updateAuthor,
     listEntrySources,
     mergeAuthorEntries,
     createAuthorRatingSlot,
@@ -669,6 +671,43 @@ describe('AuthorPage', () => {
     await wrapper.get('[data-testid="start-author-editing"]').trigger('click');
     expect(wrapper.find('[data-move-work-to-directory-id]').exists()).toBe(false);
     expect(wrapper.get('[data-author-work-id="8"] .author-card-main').attributes('aria-pressed')).toBe('false');
+  });
+
+
+  it('commits the basics from Done and keeps the editor open when the save is refused', async () => {
+    const { api, updateAuthor } = createAuthorApi();
+    const wrapper = await openAuthor(api);
+    await wrapper.get('[data-testid="start-author-editing"]').trigger('click');
+    await flushPromises();
+    // The form's own submit button is gone: Done is the single commit.
+    expect(wrapper.find('.author-edit-form button[type="submit"]').exists()).toBe(false);
+
+    await wrapper.get('input[name="authorName"]').setValue('Renamed Author');
+    await wrapper.get('input[name="authorOccupation"]').setValue('Writer');
+    await wrapper.get('[data-testid="finish-author-editing"]').trigger('click');
+    await flushPromises();
+    expect(updateAuthor).toHaveBeenCalledWith(3, {
+      name: 'Renamed Author',
+      occupation: 'Writer',
+      artworkRef: 'author.webp',
+      content: 'Important author note',
+    });
+    expect(wrapper.find('[data-testid="start-author-editing"]').exists()).toBe(true);
+  });
+
+  it('keeps the editor open when the basics cannot be saved', async () => {
+    const { api, updateAuthor } = createAuthorApi();
+    updateAuthor.mockRejectedValueOnce(new Error('Author is unavailable in the offline copy'));
+    const wrapper = await openAuthor(api);
+    await wrapper.get('[data-testid="start-author-editing"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('input[name="authorName"]').setValue('Renamed Author');
+    await wrapper.get('[data-testid="finish-author-editing"]').trigger('click');
+    await flushPromises();
+    // Still editing, with the typed name intact and the refusal visible.
+    expect(wrapper.find('[data-testid="finish-author-editing"]').exists()).toBe(true);
+    expect((wrapper.get('input[name="authorName"]').element as HTMLInputElement).value).toBe('Renamed Author');
+    expect(wrapper.text()).toContain('Author is unavailable in the offline copy');
   });
 
   it('keeps work merging separate from Directory editing and confirms the title, Tags, and Sources', async () => {

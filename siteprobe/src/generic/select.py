@@ -40,6 +40,7 @@ without the site supplying code.
 from __future__ import annotations
 
 import re
+from contextlib import contextmanager
 from datetime import date, timedelta
 from typing import Any, Iterable
 from urllib.parse import parse_qs, urljoin, urlparse
@@ -47,6 +48,7 @@ from urllib.parse import parse_qs, urljoin, urlparse
 from .document import Document, DocumentBag
 from .htmltree import Element, select_all, select_one
 from .text_normalization import decode_entities, to_simplified
+from .dates import extract_date
 
 #: Attribute names that are two spellings of **one value**, because a script moved it between the page
 #: as served and the page as rendered. Bootstrap's tooltip copies `title` into `data-original-title`
@@ -98,20 +100,24 @@ def _date_only(value: str) -> str:
     return f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
 
 
-def _relative_date(value: str) -> str:
+def _relative_date(value: str, *, today: "date | None" = None) -> str:
     """Turn a recent, human-readable date into the same date shape as older rows.
 
     Listing pages commonly replace only their newest absolute dates with ``5 days ago`` or
     ``yesterday``.  This is a display convention, not a site-specific data format, so it belongs
     beside the other generic selector transforms.  Absolute ISO-like dates still pass through the
     ordinary date normaliser; unknown spellings are preserved rather than silently erased.
+
+    `today` is the run's **frozen** clock (plan §5-D.2): one run that crosses midnight must not give
+    two works read a minute apart two different dates. `frozen_clock` sets it for the whole run; an
+    explicit argument wins, so a test can pin a day.
     """
     text = str(value).strip()
     absolute = _date_only(text)
     if absolute:
         return absolute
     lowered = text.casefold()
-    today = date.today()
+    today = today or _RUN_TODAY or date.today()
     if lowered == "today":
         return today.isoformat()
     if lowered == "yesterday":
@@ -124,6 +130,31 @@ def _relative_date(value: str) -> str:
     unit = match.group(2)
     days = amount * 7 if unit == "week" else amount if unit == "day" else 0
     return (today - timedelta(days=days)).isoformat()
+
+
+# The run's clock, frozen once. Extraction is single-threaded (the media downloads use threads, and
+# none of them converts a date), so one module value is the whole mechanism — the alternative is
+# threading a clock through every `apply_transforms` call site, which buys nothing a single run needs.
+_RUN_TODAY: "date | None" = None
+
+
+def freeze_clock(today: "date | None" = None) -> "date":
+    """Freeze this run's clock at today, once. Called at the start of a run."""
+    global _RUN_TODAY
+    _RUN_TODAY = today or date.today()
+    return _RUN_TODAY
+
+
+@contextmanager
+def frozen_clock(today: "date | None" = None):
+    """Freeze the clock for a block, then restore — for a test that must pin a day."""
+    global _RUN_TODAY
+    previous = _RUN_TODAY
+    _RUN_TODAY = today or date.today()
+    try:
+        yield _RUN_TODAY
+    finally:
+        _RUN_TODAY = previous
 
 
 SPLIT_RE = re.compile(r"\s*[,，、;；|]\s*")
@@ -170,6 +201,7 @@ _TRANSFORMS = {
     # otherwise useful tag and is removed here.
     "strip_gender_marker": lambda value: re.sub(r"\s*[\u2640\ufe0f]\s*", " ", str(value)).strip(),
     "date_only": _date_only,
+    "extract_date": extract_date,
     "relative_date": _relative_date,
     "basename": _basename,
     "strip_query": _strip_query,

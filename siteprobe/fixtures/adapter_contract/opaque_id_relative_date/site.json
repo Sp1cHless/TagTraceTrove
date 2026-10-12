@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "key": "fix.test",
+  "display_name": "fix.test",
+  "tool": "fix_test",
+  "source_site": "fix.test",
+  "export_group": "fix_test",
+  "media_id_prefix": "fix",
+  "hosts": ["fix.test"],
+  "url_base": "https://fix.test",
+  "targets": {
+    "work": {
+      "label": "Work",
+      "single": true,
+      "url_pattern": "^https?://fix\\.test/video/(?P<id>[^/]+)(?:/[^/]+)?"
+    }
+  },
+  "documents": {"work": {"page": {"format": "html"}}},
+  "work": {
+    "fields": {
+      "title": {"from": "html", "document": "page", "select": "h1", "text": true},
+      "date_added": {"from": "html", "document": "page", "select": "time", "text": true,
+                     "transform": ["relative_date"]},
+      "cover_url": {"from": "html", "document": "page", "select": "img.cover", "attr": "src",
+                    "absolute": true}
+    }
+  }
+}

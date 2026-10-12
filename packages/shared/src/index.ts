@@ -9,6 +9,12 @@ export {
 } from './search/suggestions.js';
 export * from './schemas/api.js';
 export * from './schemas/siteprobe.js';
+export {
+  describeFindings,
+  findingAdvice,
+  primaryFinding,
+  type SiteprobeFindingSummary,
+} from './siteprobe/findings.js';
 export * from './schemas/suggestions.js';
 export * from './schemas/source-maintenance.js';
 export * from './schemas/sync.js';

@@ -1,5 +1,26 @@
 apply plugin: 'com.android.application'
 
+// Private signing material lives outside the checkout. CI may override each
+// value through its secret environment; missing credentials never fall back
+// to the debug certificate or silently produce an unsigned release.
+def signingPropertiesPath = System.getenv('T3_ANDROID_SIGNING_PROPERTIES') ?: new File(System.getProperty('user.home'), '.t3/signing/android-release.properties').absolutePath
+def releaseSigningProperties = new Properties()
+def signingPropertiesFile = new File(signingPropertiesPath)
+if (signingPropertiesFile.isFile()) {
+    signingPropertiesFile.withInputStream { releaseSigningProperties.load(it) }
+}
+def signingValue = { String environment, String property -> System.getenv(environment) ?: releaseSigningProperties.getProperty(property) }
+def releaseStorePath = signingValue('T3_ANDROID_STORE_FILE', 'storeFile')
+def releaseStorePassword = signingValue('T3_ANDROID_STORE_PASSWORD', 'storePassword')
+def releaseKeyAlias = signingValue('T3_ANDROID_KEY_ALIAS', 'keyAlias')
+def releaseKeyPassword = signingValue('T3_ANDROID_KEY_PASSWORD', 'keyPassword')
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.project == project && it.name.toLowerCase().contains('release') }
+        && (!releaseStorePath || !new File(releaseStorePath).isFile() || !releaseStorePassword || !releaseKeyAlias || !releaseKeyPassword)) {
+        throw new GradleException('Release signing is missing. Configure T3_ANDROID_SIGNING_PROPERTIES or the T3_ANDROID_* signing environment variables. Never use the debug key for distribution.')
+    }
+}
+
 android {
     namespace = "com.speechless666.t3.spike"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +28,8 @@ android {
         applicationId "com.speechless666.t3.spike"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 49
-        versionName "0.0.49-c3-offline-parity"
+        versionCode 100
+        versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -17,8 +38,22 @@ android {
         }
     }
     testOptions { unitTests.includeAndroidResources = true }
-    buildTypes {
+    signingConfigs {
         release {
+            if (releaseStorePath) storeFile = new File(releaseStorePath)
+            storePassword = releaseStorePassword
+            keyAlias = releaseKeyAlias
+            keyPassword = releaseKeyPassword
+        }
+    }
+    buildTypes {
+        debug {
+            versionNameSuffix '-dev'
+        }
+        release {
+            debuggable false
+            jniDebuggable false
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

@@ -28,6 +28,7 @@ from urllib.parse import parse_qs, parse_qsl, urlparse
 
 from ..generic.document import Document as RuntimeDocument
 from ..generic.document import DocumentBag
+from ..generic import identity
 from ..generic.extract import extract_listing_page, rows_of
 from ..generic.htmltree import Element, parse_html, select_all
 from ..generic.pages import is_page_address, page_number_of
@@ -287,40 +288,28 @@ def _as_shipped(rule: dict[str, Any], field: str, answer: Any) -> dict[str, Any]
 
 
 def target_rule_for_id(rule: dict[str, Any], href: str,
-                       work_url_pattern: str) -> dict[str, Any] | None:
+                       work_url_pattern: str, *, base: str | None = None) -> dict[str, Any] | None:
     """Narrow a card link with the id captured by the site's already-learned work target.
 
-    The target pattern tells us *which path segment* is the work id.  The selector itself keeps a
+    The target pattern tells us *which path segment* is the work id. The selector itself keeps a
     relative path pattern because card hrefs are filtered before they are absolutised.
+
+    The reading is `identity.narrowing`, the same one the runtime uses to name a work — so a card and
+    the work page it points at cannot disagree about the id (plan §5-C). It also covers a query id,
+    which no path-segment reading can find.
     """
-    try:
-        matched = re.compile(work_url_pattern, re.IGNORECASE).search(href)
-    except re.error:
+    narrowed_pair = identity.narrowing(href, work_url_pattern, base=base)
+    if narrowed_pair is None:
         return None
-    if matched is None:
-        return None
-    if "id" in matched.groupdict() and matched.group("id") is not None:
-        identifier = matched.group("id")
-    elif matched.groups():
-        identifier = matched.group(1)
-    else:
-        return None
-    path = urlparse(href).path or href
-    segments = [part for part in path.split("/") if part]
-    try:
-        index = segments.index(identifier)
-    except ValueError:
-        return None
-    prefix = (re.escape(segments[index - 1]) + "/") if index else ""
-    pattern = (r"(?:^|/)" + prefix + r"([^/?#]+)(?=/|[?#]|$)")
+    pattern, group = narrowed_pair
     narrowed = {key: value for key, value in rule.items()
                 if key not in ("absolute", "filter", "group")}
     if narrowed.get("fallback"):
         narrowed["fallback"] = [
-            target_rule_for_id(branch, href, work_url_pattern) or branch
+            target_rule_for_id(branch, href, work_url_pattern, base=base) or branch
             for branch in narrowed["fallback"]
         ]
-    return {**narrowed, "filter": [pattern], "group": 1}
+    return {**narrowed, "filter": [pattern], "group": group}
 
 
 def segment_rule_for_id(rule: dict[str, Any], href: str) -> dict[str, Any]:

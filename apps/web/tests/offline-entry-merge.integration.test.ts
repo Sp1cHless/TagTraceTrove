@@ -95,9 +95,12 @@ it('queued merge holds both owners and refuses to stack on queued owner work',as
  const f=await fixture();try{
   await f.offline();
   await f.api.mergeAuthorEntries({authorId:f.author.id,keepEntryId:f.keep.id,absorbEntryId:f.absorb.id,copyTags:true,sourceUrls:[]});
-  await expect(f.api.updateEntry(f.keep.id,{title:'Too late'})).rejects.toThrow('atomic Entry merge');
+  // The kept work stays editable — only the absorbed one (and stacking another
+  // merge on the pair) waits for the sync.
+  await f.api.updateEntry(f.keep.id,{title:'Edited after the merge'});
+  await expect(f.api.updateEntry(f.absorb.id,{title:'Too late'})).rejects.toThrow('being absorbed');
   await expect(f.api.mergeAuthorEntries({authorId:f.author.id,keepEntryId:f.film.id,absorbEntryId:f.keep.id,copyTags:true,sourceUrls:[]})).rejects.toThrow();
-  expect(await f.store.list()).toHaveLength(1);
+  expect((await f.store.list()).map(row=>row.operationKind)).toEqual(['entry.merge','entry.update']);
  }finally{f.close();}
 });
 it('merge and independent originals export, restore atomically and settle in order',async()=>{

@@ -39,30 +39,14 @@ class TargetRule:
     single: bool = False
 
     def match(self, raw: str) -> dict[str, str] | None:
-        if self.url_pattern is None:
-            return None
-        found = self.url_pattern.search(raw)
-        if found is None:
-            return None
-        # A pattern may offer several ways to find the id, and only one branch
-        # captures. Take the declared group, else the first named group that
-        # actually matched, else the first positional group.
-        named = {key: value for key, value in found.groupdict().items() if value}
-        if self.id_group and named.get(self.id_group):
-            return {"id": named[self.id_group], **named}
-        if named:
-            first = next(iter(named.values()))
-            return {"id": first, **named}
-        if found.groups() and found.group(1):
-            return {"id": found.group(1)}
-        # No group, no id: a pattern that matches but captures nothing is reported by
-        # `target_pattern_problem` rather than accepted here — "a listing target pattern must
-        # capture an id" is this tool's own rule (measured once as a learned 18comic search target
-        # that resolved through no code path at all while the adapter installs and reports
-        # success). I tried relaxing it for a real buondua rule set whose two samples were the same
-        # page, which left a literal pattern — and the suite's own test refused the relaxation,
-        # correctly: the defect is in the samples the rule was learned from, not in this matcher.
-        return None
+        # The reading lives in `identity.extract` so the Builder's card narrowing and this agree by
+        # construction, not by luck (plan §5-C). A pattern that matches but captures nothing is `None`
+        # there — "a listing target pattern must capture an id" is this tool's own rule, measured once
+        # as a learned 18comic search target that resolved through no code path at all while the
+        # adapter installed and reported success.
+        from . import identity
+
+        return identity.extract(raw, self.url_pattern, id_group=self.id_group)
 
 
 @dataclass
@@ -95,6 +79,10 @@ class SiteTemplate:
     work_constants: dict[str, Any]
     work_defaults: dict[str, Any]
     source_tags_from: str | None
+    # How a *work* page is read (`http` or `browser`). Kept apart from a listing's own `acquisition`
+    # (plan §5-B.5): a site can read its works over HTTP while a listing needs the browser, or the
+    # other way round. Absent means HTTP, so no existing site changes.
+    work_acquisition: str
     directory: Path
     raw: dict[str, Any]
 
@@ -188,6 +176,7 @@ def load_template(path: Path) -> SiteTemplate:
         work_constants=dict(work.get("constants") or {}),
         work_defaults=dict(work.get("defaults") or {}),
         source_tags_from=work.get("source_tags_from"),
+        work_acquisition=str(work.get("acquisition") or "http"),
         directory=path.parent,
         raw=document,
     )

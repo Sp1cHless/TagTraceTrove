@@ -4,6 +4,12 @@ coverage/
 .env
 .env.*
 !.env.example
+# Android signing credentials must never enter source or release archives.
+*.jks
+*.keystore
+*.p12
+*signing.properties
+.signing/
 .data/
 *.log
 *.db

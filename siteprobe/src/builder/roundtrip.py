@@ -120,14 +120,14 @@ def template_from(draft: dict[str, Any], directory: Path) -> SiteTemplate:
 
 
 def runtime_item(template: SiteTemplate, capture: Capture,
-                 names: dict[str, str] | None = None) -> RawItem:
+                 names: dict[str, str] | None = None, served: str | None = None) -> RawItem:
     """The item a declarative adapter would hand the extractor, from a recorded page.
 
     `names` gives a recorded response the name its request has — what the runtime's recipe produces —
     so a rule naming `network:api.example/work/{id}` finds it here as well.
     """
     markup = capture.markup
-    text = markup.text if markup is not None else ""
+    text = served if served is not None else (markup.text if markup is not None else "")
     item_texts = dict(declarative.documents_from(template, text))
     for document in capture.of_format("json"):
         stable = (names or {}).get(document.name)
@@ -184,7 +184,7 @@ def _carried(record_members: list[Any], value: Any) -> bool:
 
 
 def runtime_bag(template: SiteTemplate, capture: Capture,
-                names: dict[str, str] | None = None) -> DocumentBag:
+                names: dict[str, str] | None = None, served: str | None = None) -> DocumentBag:
     """The bag the runtime builds for a declarative adapter, from a recorded page.
 
     Built through `extract.build_bag` with documents produced by
@@ -198,7 +198,7 @@ def runtime_bag(template: SiteTemplate, capture: Capture,
     markup = capture.markup
     text = markup.text if markup is not None else ""
     documents = declarative.documents_from(template, text)
-    item = runtime_item(template, capture, names)
+    item = runtime_item(template, capture, names, served)
     return build_bag(template, item)
 
 
@@ -266,8 +266,16 @@ def compare(sample: Sample, draft: dict[str, Any], directory: Path) -> RoundTrip
         return result
 
     builder_bag = capture_to_bag(sample.capture, sample.document_names)
-    installed_bag = runtime_bag(template, sample.capture, sample.document_names)
-    record = extract_work(template, runtime_item(template, sample.capture, sample.document_names))
+    served = None if template.work_acquisition == "browser" else sample.served
+    installed_bag = runtime_bag(template, sample.capture, sample.document_names, served)
+    record = extract_work(template, runtime_item(template, sample.capture, sample.document_names, served))
+    for annotation_name, accepted in sample.annotated.items():
+        field_name = FIELD_TO_RUNTIME.get(annotation_name)
+        if (field_name and accepted is not None and accepted != "" and accepted != []
+                and field_name not in fields and annotation_name not in sample.absent):
+            result.comparisons.append(Comparison(
+                field=field_name, accepted=accepted, builder=None, runtime=None, verdict=DISAGREE,
+                detail="the annotated field was discarded from the draft; it was not verified"))
     # What the reader *declares* it can produce. Asking it what it produces for an
     # empty page answers a different question — and answered it wrongly: `jsonld` is
     # produced from the page's own text, so every JSON-LD rule was reported unrunnable
@@ -523,3 +531,50 @@ def _adapter_beside(learned_root: Path, name: str) -> str | None:
 
 def _slug(value: str) -> str:
     return re.sub(r"[^a-z0-9_]+", "_", value.casefold()).strip("_") or "site"
+
+
+def probe_draft(draft: dict[str, Any], url: str, *, building: str = "work",
+                site_key: str | None = None, target_kind: str | None = None,
+                run: Any = None) -> Any:
+    """Run the runtime once against a **draft**, before it is installed (plan §5-A.3).
+
+    The round trip above compares rules against the markup that was recorded, and it is right about
+    what it checks — but it never asks the runtime to fetch. So it is installed, and the first live
+    run is where a page that reads nothing is discovered. This closes that gap the honest way: the
+    draft is written into a **scratch home** the probe owns, the runtime is pointed at that home for
+    one bounded run, and nothing touches the real adapter tree or export tree.
+
+    `run` is injectable so a test can measure the classification without a network; a real Builder
+    leaves it None and the runtime does the fetching.
+    """
+    import tempfile
+
+    from ..generic.probe import ProbeRequest, runtime_probe
+
+    with tempfile.TemporaryDirectory(prefix="siteprobe-probe-home-") as name:
+        home = Path(name)
+        install(draft, home / "local", source="probe")
+        request = ProbeRequest(
+            url=url, site_key=site_key or str(draft.get("key") or "") or None,
+            target_kind=target_kind, building=building, home=home,
+            expect_cover="cover_url" in ((draft.get("work") or {}).get("fields") or {}),
+        )
+        return runtime_probe(request, run=run)
+
+
+def format_probe_report(report: Any) -> list[str]:
+    """A probe report as lines a person reads at the terminal.
+
+    Deliberately per stage and never a single verdict: the plan's §5-A.8 forbids wrapping a
+    `skipped` or an `unavailable` stage as a pass, so each stage says its own status and the reader
+    sees at once which part was actually checked.
+    """
+    lines = [f"=== runtime probe ({report.target}) — {'PASS' if report.ok else 'FAIL'}",
+             f"    budget: {report.used_seconds:.1f}s of {report.budget_seconds:.0f}s"]
+    for stage in report.stages:
+        lines.append(f"    {stage.stage:12} {stage.status:12} {stage.detail}")
+        for finding in stage.findings:
+            lines.append(f"        [{finding.severity}] {finding.code}: {finding.message}")
+    if report.export:
+        lines.append(f"    export: {report.export}")
+    return lines

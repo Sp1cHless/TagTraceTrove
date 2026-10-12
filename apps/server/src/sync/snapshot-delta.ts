@@ -22,9 +22,15 @@ function bound(cache: Cache) {
   while (cache.bases.size + cache.sessions.size > MAX_ITEMS
     || [...cache.bases.values()].reduce((n,row)=>n+Buffer.byteLength(row.text),0)
       + [...cache.sessions.values()].reduce((n,row)=>n+Buffer.byteLength(row.insert),0) > MAX_BYTES) {
-    const base = cache.bases.keys().next().value;
-    if (base !== undefined) cache.bases.delete(base);
-    else { const session = cache.sessions.keys().next().value; if (session === undefined) break; cache.sessions.delete(session); }
+    // Sessions and baselines share the same budget. Always evicting baselines
+    // lets old sessions consume every slot and immediately evicts a freshly
+    // fetched full baseline, making ACK recovery impossible until TTL expiry.
+    const base = [...cache.bases.entries()].sort((a,b) => a[1].expires - b[1].expires)[0];
+    const session = [...cache.sessions.entries()].sort((a,b) => a[1].expires - b[1].expires)[0];
+    if (base && (!session || base[1].expires < session[1].expires)) cache.bases.delete(base[0]);
+    else if (session) cache.sessions.delete(session[0]);
+    else if (base) cache.bases.delete(base[0]);
+    else break;
   }
 }
 export function rememberSnapshot(db:T3Database,snapshot:SyncSnapshot,media:'none'|'thumbnails') {

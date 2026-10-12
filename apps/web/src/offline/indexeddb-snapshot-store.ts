@@ -8,6 +8,7 @@ import {
   type PendingSyncOperation,
 } from './outbox-store.js';
 import { mediaQueueIdentity, validateExistingMediaStage, type MediaOutboxStore, type StagedMediaUpload } from './media-outbox-store.js';
+import { LOCAL_FINAL_STATE_KEY, planLocalFinalState, readLocalFinalState, orderLocalMedia, mergeImportedLocalFinalState, validateLocalMediaReceipts, type LocalFinalStateStore } from './local-final-state.js';
 
 const DATABASE_VERSION = 3;
 const GENERATIONS_STORE = 'snapshotGenerations';
@@ -18,8 +19,8 @@ const OUTBOX_OPERATION_ID_INDEX = 'opId';
 
 export const DEFAULT_OFFLINE_DATABASE_NAME = 't3-offline';
 
-export interface IndexedDbOfflineStore extends SnapshotStore, OutboxStore, MediaOutboxStore, AtomicPendingWorkStore {
-  captureNativeTransfers(): Promise<import("./native-background-transfer.js").NativeTransferCapture>;
+export interface IndexedDbOfflineStore extends SnapshotStore, OutboxStore, MediaOutboxStore, AtomicPendingWorkStore, LocalFinalStateStore {
+  captureNativeTransfers(freeze?:boolean): Promise<import("./native-background-transfer.js").NativeTransferCapture>;
   close(): void;
 }
 
@@ -101,20 +102,56 @@ export function createIndexedDbOfflineStore(
   }
 
   return {
-    async captureNativeTransfers() {
+    async captureNativeTransfers(freeze=false) {
+      const capture=await this.captureLocalFinalState(freeze);
+      return {snapshot:capture.snapshot,revision:capture.revision,clientId:capture.clientId,operations:capture.operations,
+        media:capture.media.filter(row=>!capture.local.deferredMedia.includes(row.uploadId))};
+    },
+    async captureLocalFinalState(freeze=false) {
       const database = await open();
-      return new Promise<import('./native-background-transfer.js').NativeTransferCapture>((resolve, reject) => {
-        const tx = database.transaction([META_STORE, GENERATIONS_STORE, OUTBOX_STORE, MEDIA_OUTBOX_STORE], 'readonly');
+      return new Promise<import('./local-final-state.js').LocalEditCapture>((resolve, reject) => {
+        const tx = database.transaction([META_STORE, GENERATIONS_STORE, OUTBOX_STORE, MEDIA_OUTBOX_STORE], freeze?'readwrite':'readonly');
         const meta = tx.objectStore(META_STORE);
         const pointer = meta.get('activeGeneration'); const revision = meta.get(SNAPSHOT_REVISION_KEY);
         const client = meta.get('t3.offline-client-id');
         const rows = tx.objectStore(OUTBOX_STORE).getAll(); const images = tx.objectStore(MEDIA_OUTBOX_STORE).getAll();
+        const control=meta.get(LOCAL_FINAL_STATE_KEY);
         let raw: IDBRequest | undefined;
         pointer.onsuccess = () => { raw = tx.objectStore(GENERATIONS_STORE).get(Number(pointer.result) || 0); };
-        tx.oncomplete = () => resolve({ snapshot: typeof raw?.result === 'string' ? raw.result : null,
-          revision: String(revision.result ?? '0'), clientId: String(client.result ?? ''),
-          operations: (rows.result as Array<{operation: PendingSyncOperation}>).map(row => row.operation), media: images.result as StagedMediaUpload[] });
-        tx.onabort = tx.onerror = () => reject(tx.error ?? new Error('Native handoff capture aborted'));
+        let local:ReturnType<typeof readLocalFinalState>;let error:unknown;
+        control.onsuccess=()=>{try{local=readLocalFinalState(control.result);if(freeze){local.drafts=[];local.mediaDrafts=local.mediaDrafts.filter(id=>local.deferredMedia.includes(id));meta.put(JSON.stringify(local),LOCAL_FINAL_STATE_KEY);}}catch(cause){error=cause;tx.abort();}};
+        tx.oncomplete = () => resolve({snapshot:typeof raw?.result === 'string'?raw.result:null,generationId:Number(pointer.result)||0,
+          revision:String(revision.result??'0'),clientId:String(client.result??''),local,
+          operations:(rows.result as Array<{operation:PendingSyncOperation}>).map(row=>row.operation),media:orderLocalMedia(images.result as StagedMediaUpload[],local)});
+        tx.onabort = tx.onerror = () => reject(error??tx.error ?? new Error('Local edit capture aborted'));
+      });
+    },
+    async editLocalFinalState(change,rebase) {
+      const database=await open();
+      return new Promise<void>((resolve,reject)=>{
+        const tx=database.transaction([META_STORE,GENERATIONS_STORE,OUTBOX_STORE,MEDIA_OUTBOX_STORE],'readwrite');
+        const meta=tx.objectStore(META_STORE),outbox=tx.objectStore(OUTBOX_STORE),media=tx.objectStore(MEDIA_OUTBOX_STORE);
+        const pointer=meta.get('activeGeneration'),revision=meta.get(SNAPSHOT_REVISION_KEY),control=meta.get(LOCAL_FINAL_STATE_KEY);
+        const rows=outbox.getAll(),images=media.getAll();let raw:IDBRequest|undefined;let error:unknown;let applied=false;
+        const apply=()=>{
+          if(applied || !raw || [raw,revision,control,rows,images].some(request=>request.readyState!=='done'))return;
+          applied=true;
+          try{
+            const snapshot=snapshotState(pointer.result,raw.result,revision.result).active?.snapshot??null;
+            const plan=planLocalFinalState(snapshot,(rows.result as Array<{operation:PendingSyncOperation}>).map(row=>row.operation),images.result,control.result,change);
+            if(rebase)plan.operations=rebase(snapshot,plan.operations,plan.media,plan.local);
+            outbox.clear();for(const operation of plan.operations)outbox.add({opId:operation.opId,fingerprint:operationFingerprint(operation),operation});
+            const previous=new Map((images.result as StagedMediaUpload[]).map(image=>[image.uploadId,image]));
+            const retained=new Set(plan.media.map(image=>image.uploadId));
+            for(const id of previous.keys())if(!retained.has(id))media.delete(id);
+            for(const image of plan.media){const old=previous.get(image.uploadId);if(!old || mediaQueueIdentity([old])!==mediaQueueIdentity([image]))media.put(image);}
+            meta.put(JSON.stringify(plan.local),LOCAL_FINAL_STATE_KEY);
+            meta.put(nextSnapshotRevision(revision.result as string|undefined),SNAPSHOT_REVISION_KEY);
+          }catch(cause){error=cause;tx.abort();}
+        };
+        revision.onsuccess=control.onsuccess=rows.onsuccess=images.onsuccess=apply;
+        pointer.onsuccess=()=>{raw=tx.objectStore(GENERATIONS_STORE).get(Number(pointer.result)||0);raw.onsuccess=apply;};
+        tx.oncomplete=()=>resolve();tx.onerror=tx.onabort=()=>reject(error??tx.error??new Error('Local edit transaction aborted'));
       });
     },
     async captureSnapshot() {
@@ -172,19 +209,27 @@ export function createIndexedDbOfflineStore(
         const rows = outbox.getAll(); const images = media.getAll();
         const client = meta.get(RESTORE_CLIENT_KEY); const active = meta.get('activeGeneration');
         const verified = meta.get('verifiedReplayProjection');
+        const control=meta.get(LOCAL_FINAL_STATE_KEY);
         let raw: IDBRequest | undefined;
         function validate() {
-          if (rows.readyState !== 'done' || images.readyState !== 'done' || client.readyState !== 'done' || verified.readyState !== 'done' || !raw || raw.readyState !== 'done') return;
+          if (rows.readyState !== 'done' || images.readyState !== 'done' || client.readyState !== 'done' || verified.readyState !== 'done' || control.readyState!=='done' || !raw || raw.readyState !== 'done') return;
           try {
             result = planPendingWorkRestore(work, clientId, client.result, raw.result,
-              (rows.result as Array<{operation: PendingSyncOperation}>).map(row=>row.operation), images.result as StagedMediaUpload[], active.result, verified.result);
+              (rows.result as Array<{operation: PendingSyncOperation}>).map(row=>row.operation), images.result as StagedMediaUpload[], active.result, verified.result,readLocalFinalState(control.result));
+            const snapshot=snapshotState(active.result,raw.result,'0').active?.snapshot;
+            if(!snapshot)throw new Error('A saved library is needed for restored results');
+            const restored=mergeImportedLocalFinalState(control.result,work.localFinalState,snapshot,clientId,
+              [...(rows.result as Array<{operation:PendingSyncOperation}>).map(row=>row.operation),...result.operations],[...images.result,...result.media]);
+            validateLocalMediaReceipts(work.localMediaReceipts??[],restored,snapshot);
             if (commit) {
               for (const operation of result.operations) outbox.add({opId:operation.opId,fingerprint:operationFingerprint(operation),operation});
               for (const upload of result.media) media.add(upload);
+              if(work.localFinalState)meta.put(JSON.stringify(restored),LOCAL_FINAL_STATE_KEY);
+              for(const receipt of work.localMediaReceipts??[])meta.put(JSON.stringify(receipt),`localMediaReceipt.${receipt.uploadId}`);
             }
           } catch (cause) { explicitError = cause instanceof Error ? cause : new Error('Pending-work restore failed'); transaction.abort(); }
         }
-        rows.onsuccess = images.onsuccess = client.onsuccess = verified.onsuccess = validate;
+        rows.onsuccess = images.onsuccess = client.onsuccess = verified.onsuccess = control.onsuccess = validate;
         active.onsuccess = () => { raw = generations.get(Number(active.result)); raw.onsuccess = validate; };
         transaction.oncomplete = () => result ? resolve(result.preview) : reject(new Error('Pending-work validation did not complete'));
         transaction.onerror = transaction.onabort = () => reject(explicitError ?? transaction.error ?? new Error('Pending-work restore aborted; nothing was restored'));
@@ -197,10 +242,13 @@ export function createIndexedDbOfflineStore(
         const operations = transaction.objectStore(OUTBOX_STORE).count();
         const media = transaction.objectStore(MEDIA_OUTBOX_STORE).count();
         const revision = transaction.objectStore(META_STORE).get(SNAPSHOT_REVISION_KEY);
+        const local=transaction.objectStore(META_STORE).get(LOCAL_FINAL_STATE_KEY);
         let explicitError: Error | null = null;
         function clear() {
-          if (operations.readyState !== 'done' || media.readyState !== 'done' || revision.readyState !== 'done') return;
-          if (operations.result > 0 || media.result > 0) {
+          if (operations.readyState !== 'done' || media.readyState !== 'done' || revision.readyState !== 'done' || local.readyState!=='done') return;
+          let control:ReturnType<typeof readLocalFinalState>;
+          try{control=readLocalFinalState(local.result);}catch(cause){explicitError=cause as Error;transaction.abort();return;}
+          if (operations.result > 0 || media.result > 0 || control.media.length || control.deleted.length) {
             explicitError = new Error('Cannot clear the offline snapshot while unsynced edits or media are pending');
             transaction.abort(); return;
           }
@@ -209,7 +257,7 @@ export function createIndexedDbOfflineStore(
           transaction.objectStore(META_STORE).delete('pendingSnapshotAck');
           transaction.objectStore(GENERATIONS_STORE).clear();
         }
-        operations.onsuccess = media.onsuccess = revision.onsuccess = clear;
+        operations.onsuccess = media.onsuccess = revision.onsuccess = local.onsuccess = clear;
         transaction.oncomplete = () => resolve();
         transaction.onerror = transaction.onabort = () => reject(explicitError ?? transaction.error ?? new Error('Snapshot Clear aborted'));
       });
@@ -244,12 +292,14 @@ export function createIndexedDbOfflineStore(
         const active=meta.get('activeGeneration'); const keys=generations.getAllKeys(); const pending=meta.get('pendingSnapshotAck');
         const revision=meta.get(SNAPSHOT_REVISION_KEY); const client=meta.get('t3.offline-client-id');
         const operations=transaction.objectStore(OUTBOX_STORE).count(); const media=transaction.objectStore(MEDIA_OUTBOX_STORE).count();
+        const local=meta.get(LOCAL_FINAL_STATE_KEY);
         let raw:IDBRequest|undefined; let result:number|null=null;
         const prunedGenerations:number[]=[]; let installedRevision='0';
         function install() {
           if (keys.readyState!=='done' || active.readyState!=='done' || pending.readyState!=='done' || !raw || raw.readyState!=='done') return;
-          if (revision.readyState !== 'done' || client.readyState !== 'done' || operations.readyState !== 'done' || media.readyState !== 'done') return;
-          if (discardPrevious && (operations.result > 0 || media.result > 0)) return;
+          if (revision.readyState !== 'done' || client.readyState !== 'done' || operations.readyState !== 'done' || media.readyState !== 'done' || local.readyState!=='done') return;
+          const control=readLocalFinalState(local.result);
+          if (discardPrevious && (operations.result > 0 || media.result > 0 || control.media.length || control.deleted.length)) return;
           if (clientId !== undefined && client.result !== clientId) return;
           if (expectedRevision !== undefined && (revision.result ?? '0') !== expectedRevision) return;
           if (pending.result !== undefined) return;
@@ -264,7 +314,7 @@ export function createIndexedDbOfflineStore(
             generations.delete(key); if (typeof key === 'number') prunedGenerations.push(key);
           }
         }
-        keys.onsuccess=pending.onsuccess=revision.onsuccess=client.onsuccess=operations.onsuccess=media.onsuccess=install;
+        keys.onsuccess=pending.onsuccess=revision.onsuccess=client.onsuccess=operations.onsuccess=media.onsuccess=local.onsuccess=install;
         active.onsuccess=()=>{raw=generations.get(Number(active.result)||0);raw.onsuccess=install;};
         transaction.oncomplete=()=>resolve(result===null ? null : {generationId:result,prunedGenerations,revision:installedRevision});
         transaction.onerror=transaction.onabort=()=>reject(transaction.error??new Error('Snapshot install aborted'));
@@ -427,12 +477,12 @@ export function createIndexedDbOfflineStore(
     },
     async listMedia() {
       const records = await transact(MEDIA_OUTBOX_STORE, 'readonly', (store) => store.getAll());
-      return (records as StagedMediaUpload[]).map((record) => ({
+      return orderLocalMedia((records as StagedMediaUpload[]).map((record) => ({
         ...record,
         status: record.status ?? 'pending',
         lastAttemptAt: record.lastAttemptAt ?? null,
         lastError: record.lastError ?? null,
-      }));
+      })),readLocalFinalState(await this.readMeta(LOCAL_FINAL_STATE_KEY)));
     },
     async updateMedia(uploadId, patch) {
       const database = await open();

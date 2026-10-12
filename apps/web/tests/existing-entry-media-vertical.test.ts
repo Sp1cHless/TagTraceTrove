@@ -135,7 +135,13 @@ describe('existing Entry real cold client/server media vertical',()=>{
    await expect(h.api.setEntryMediaOrder!(h.entry.id,[])).rejects.toThrow(/Native.*attempt/u);
    expect(h.nativeTrace.filter(row=>row.method==='pause').at(-1)?.args).toMatchObject({captureUploadIds:[before[0]!.uploadId]});
    expect(await h.store.listMedia()).toEqual(before);expect(await h.store.list()).toEqual([]);
-   expect(await h.api.getEntryMediaRemovalBlockReason!(h.entry.id)).toMatch(/Native.*uncertain/u);
+   // The API answers with a code; the page turns it into the sentence.
+   expect(await h.api.getEntryMediaRemovalBlockReason!(h.entry.id)).toBe('native-uncertain');
+   // A cover that was never sent is not an uncertain attempt (reported from the
+   // device, where the editor refused a fresh work's cover with the wrong
+   // sentence). The reason must name that situation.
+   await h.api.uploadEntryMedia(h.entry.id,'cover',new File(['cover'],'cover.png',{type:'image/png'}) as unknown as globalThis.File);
+   expect(await h.api.getEntryMediaRemovalBlockReason!(h.entry.id)).toBe('cover-not-uploaded');
   }finally{await h.cleanup();}
  },30000);
 

@@ -45,12 +45,14 @@ import { mutationQueuePlan, missingForegroundMutationCapabilities, referencedEnt
 import { getClientIdentity, readSnapshotMediaMode } from './client-identity.js';
 import { evictEntryMediaRefs } from './offline-media.js';
 import { cachedMediaObjectUrls } from './cached-media-object-urls.js';
+import { LOCAL_FINAL_STATE_KEY, readLocalFinalState, type LocalFinalStateStore, type LocalMediaIntent, type LocalMediaItem, type LocalFinalState } from './local-final-state.js';
 import { matchCachedMediaResponse } from './cached-media-response.js';
 import {
   ACTIVE_GENERATION_KEY,
   verifyChecksum,
   applySnapshot,
-  readActiveSnapshot,
+  readActiveSnapshot as readStoredSnapshot,
+  snapshotState,
   type SnapshotStore,
 } from './snapshot-store.js';
 
@@ -76,10 +78,17 @@ export interface OfflineMutationDiagnostic {
 
 export interface OfflineApiState {
   mode: 'online' | 'offline';
+  automaticSyncPhase?: 'syncing' | 'updating' | null;
+  lastAutomaticSyncError?: string | null;
+  lastAutomaticSyncAt?: string | null;
+  offlineCopyRevision?: string | null;
+  lastSnapshotSettlement?: { snapshotSeq: number; acknowledgement: boolean; operations: number; media: number };
   lastFallbackAt: string | null;
   connectionPhase?: 'checking' | 'opening-copy' | 'switching' | 'no-copy' | null;
   /** Last uncached IndexedDB generation read + validation + projection (milliseconds). */
   lastLocalLoadMs?: number | null;
+  /** Phase timings of the last offline library load, in milliseconds. */
+  lastLocalLoadPhases?: Record<string, number> | null;
   pendingCount?: number;
   conflictCount?: number;
   failedCount?: number;
@@ -139,7 +148,7 @@ export interface OfflineApiState {
 
 import { preparePendingWork, type AtomicPendingWorkStore } from './pending-work-restore.js';
 
-export type OfflineStore = SnapshotStore & Partial<OutboxStore> & Partial<MediaOutboxStore>;
+export type OfflineStore = SnapshotStore & Partial<OutboxStore> & Partial<MediaOutboxStore> & Partial<LocalFinalStateStore>;
 
 interface OfflineApiOptions {
   state?: OfflineApiState;
@@ -206,6 +215,26 @@ const GALLERY_ORDER_CAPABILITY_KEY = 'capability.offlineGalleryOrder';
 const COLLECTION_MANAGEMENT_CAPABILITY_KEY = 'capability.offlineCollectionManagement';
 const AUTHOR_DIRECTORIES_CAPABILITY_KEY = 'capability.offlineAuthorDirectories';
 const MAX_STAGED_MEDIA_BYTES = 20 * 1024 * 1024;
+
+const installedProjectionProofs=new Map<string,{libraryId:string;syncEpoch:string;fingerprints:Set<string>}>();
+async function readActiveSnapshot(store:SnapshotStore) {
+  const active=await readStoredSnapshot(store);
+  if(active){
+    try{
+      const proof=JSON.parse(await store.readMeta('verifiedReplayProjection')??'null') as {checksum?:unknown;operations?:unknown}|null;
+      if(proof?.checksum===active.snapshot.header.checksum && Array.isArray(proof.operations) && proof.operations.every(value=>typeof value==='string')){
+        installedProjectionProofs.set(active.snapshot.header.checksum,{libraryId:active.snapshot.header.libraryId,syncEpoch:active.snapshot.header.syncEpoch,fingerprints:new Set(proof.operations)});
+        if(installedProjectionProofs.size>8)installedProjectionProofs.delete(installedProjectionProofs.keys().next().value!);
+      }
+    }catch{/* A malformed seal does not grant installed-state authority. */}
+  }
+  return active;
+}
+function remainingProjectionOperations(snapshot:SyncSnapshot,operations:PendingSyncOperation[]) {
+  const proof=installedProjectionProofs.get(snapshot.header.checksum);
+  return proof?.libraryId===snapshot.header.libraryId && proof.syncEpoch===snapshot.header.syncEpoch
+    ? operations.filter(row=>!proof.fingerprints.has(operationFingerprint(row))):operations;
+}
 
 // A presentation-only negative ID must survive partial replay and app restart.
 // Hash the complete stable UUID (not the position in the remaining outbox).
@@ -515,10 +544,15 @@ function producerVersionDelta(operation: SyncReplayRequest): number {
   return 0;
 }
 
-function producerVersionAdvances(operations: SyncReplayRequest[], producerUid: string): number {
-  return operations
-    .filter((operation) => operation.entityKind === 'producer' && operation.entityUid === producerUid)
-    .reduce((total, operation) => total + producerVersionDelta(operation), 0);
+function producerReplayVersion(snapshot:SyncSnapshot,operations:PendingSyncOperation[],uid:string):number {
+  let version=snapshot.payload.producers.find(row=>row.syncUid?.toLowerCase()===uid.toLowerCase())?.syncVersion??0;
+  for(const op of parsedEntryOperations(remainingProjectionOperations(snapshot,operations))){
+    if(version===0 && (op.operationKind==='producer.create' && op.entityUid.toLowerCase()===uid.toLowerCase()
+      || op.operationKind==='entry.author.create-and-link' && op.payload.producerUid.toLowerCase()===uid.toLowerCase()
+      || op.operationKind==='entry.authors.convert-to-multi' && op.payload.targetUid.toLowerCase()===uid.toLowerCase()))version=1;
+    else if(op.entityKind==='producer' && op.entityUid.toLowerCase()===uid.toLowerCase())version+=producerVersionDelta(op);
+  }
+  return version;
 }
 
 function entryAuthorsVersionDelta(operation: EntryAuthorsOperation): number {
@@ -529,8 +563,10 @@ function entryAuthorsVersionDelta(operation: EntryAuthorsOperation): number {
 }
 
 function entryTagsVersionDelta(operation: EntryTagsOperation): number {
-  const base = new Map(operation.baseValues.tags.map((tag) => [normalizeTag(tag.name), tag.facetId]));
-  const desired = new Map(operation.payload.tags.map((tag) => [normalizeTag(tag.name), tag.facetId]));
+  const identity = (tag: EntryTagsOperation['payload']['tags'][number]) => tag.facetUid === undefined
+    ? `id:${tag.facetId}` : `uid:${tag.facetUid.toLowerCase()}`;
+  const base = new Map(operation.baseValues.tags.map((tag) => [normalizeTag(tag.name), identity(tag)]));
+  const desired = new Map(operation.payload.tags.map((tag) => [normalizeTag(tag.name), identity(tag)]));
   return [...base].filter(([name, facetId]) => !desired.has(name) || desired.get(name) !== facetId).length
     + [...desired.keys()].filter((name) => !base.has(name)).length;
 }
@@ -550,6 +586,7 @@ function advancesEntryVersion(operation: SyncReplayRequest): boolean {
     || operation.operationKind === 'entry.usage'
     || operation.operationKind === 'entry.view-later.set'
     || operation.operationKind === 'entry.rating.set'
+    || operation.operationKind === 'entry.merge'
     || operation.operationKind === 'entry.contents.set';
 }
 
@@ -561,6 +598,9 @@ function advancesEntryVersion(operation: SyncReplayRequest): boolean {
  */
 function entryServerAdvances(operation: SyncReplayRequest): number {
   if (operation.operationKind === 'collection.common-tag.add') return 1;
+  // The conversion replaces the whole Author set with the target: every frozen
+  // Author row goes and the target arrives (measured: 2 Authors -> +3).
+  if (operation.operationKind === 'entry.authors.convert-to-multi') return operation.baseValues.authors.length + 1;
   if (operation.operationKind === 'entry.create'
     || operation.operationKind === 'entry.update'
     || operation.operationKind === 'entry.contents.set'
@@ -569,6 +609,37 @@ function entryServerAdvances(operation: SyncReplayRequest): number {
   if (operation.operationKind === 'entry.authors.set') return entryAuthorsVersionDelta(operation);
   if (operation.operationKind === 'entry.tags.set') return entryTagsVersionDelta(operation);
   return advancesEntryVersion(operation) ? 1 : 0;
+}
+
+/** Count the actual ordered replay, including type-wide commands that update
+ * this Entry without owning its envelope. Never add queue advances twice to a
+ * projected version, or omit the tag relinks performed by a template. */
+function entryReplayVersion(snapshot: SyncSnapshot, operations: PendingSyncOperation[], uid: string): number {
+  operations=remainingProjectionOperations(snapshot,operations);
+  const owner = uid.toLowerCase();
+  let version = snapshot.payload.entries.find(row => row.syncUid?.toLowerCase() === owner)?.syncVersion ?? 0;
+  for (const [index, stored] of operations.entries()) {
+    if (stored.libraryId !== snapshot.header.libraryId || stored.syncEpoch !== snapshot.header.syncEpoch) continue;
+    const op = parsedEntryOperations([stored])[0];
+    if (!op) continue;
+    if (bulkTouchesEntry(op, uid)) version += entryServerAdvances(op);
+    if (op.operationKind !== 'entry.layout-template.apply' && op.operationKind !== 'entry.tag-layout.apply') continue;
+    const prior = snapshotWithOverlays(snapshot, operations.slice(0, index));
+    const entry = prior.payload.entries.find(row => row.syncUid?.toLowerCase() === owner);
+    if (!entry) continue;
+    if (op.operationKind === 'entry.layout-template.apply') {
+      const type = prior.payload.entryTagLayouts?.find(row => row.syncUid.toLowerCase() === op.entityUid.toLowerCase())?.entryType;
+      if (entry.type === type) version += prior.payload.entryTags.filter(row => row.entryId === entry.id).length;
+    } else if (entry.type === op.baseValues.entryType && owner !== op.entityUid.toLowerCase()) {
+      for (const row of prior.payload.entryTags.filter(row => row.entryId === entry.id)) {
+        const tagUid = prior.payload.tags.find(tag => tag.id === row.tagId)?.syncUid?.toLowerCase();
+        const facetUid = prior.payload.tagGroups.find(facet => facet.id === row.facetId)?.syncUid?.toLowerCase();
+        const target = op.baseValues.assignments.find(assignment => assignment.tagUid.toLowerCase() === tagUid);
+        if (target && target.facetUid.toLowerCase() !== facetUid) version += 1;
+      }
+    }
+  }
+  return version;
 }
 
 function applyEntryPatch<T extends SyncSnapshot['payload']['entries'][number]>(
@@ -598,7 +669,27 @@ function presentationFacetId(tag: EntryTagsOperation['payload']['tags'][number],
   return facet.id;
 }
 
+/**
+ * The projection is the expensive part of every offline read and every gesture
+ * asks for it several times (once per guard, once per helper). One result per
+ * (saved copy, queued work) pair is enough, and the key is cheap: the ops are
+ * already fingerprinted for the library cache.
+ */
+const projectionMemo = new WeakMap<SyncSnapshot, {key: string; result: SyncSnapshot}>();
 function snapshotWithOverlays(
+  snapshot: SyncSnapshot,
+  operations: PendingSyncOperation[],
+): SyncSnapshot {
+  operations=remainingProjectionOperations(snapshot,operations);
+  const key = operations.map(operationFingerprint).join('|');
+  const cached = projectionMemo.get(snapshot);
+  if (cached !== undefined && cached.key === key) return cached.result;
+  const result = projectSnapshot(snapshot, operations);
+  projectionMemo.set(snapshot, {key, result});
+  return result;
+}
+
+function projectSnapshot(
   snapshot: SyncSnapshot,
   operations: PendingSyncOperation[],
 ): SyncSnapshot {
@@ -732,10 +823,26 @@ function snapshotWithOverlays(
     && collectionCreateOperations.length === 0
     && collectionProducerOperations.length === 0) return snapshot;
 
+  // Index the queued work by owner once: the per-row scans below were O(rows ×
+  // operations), which at this library's size cost a full second per projection
+  // (measured on the device: 1098 ms of a 1110 ms load).
+  const operationsByOwner = new Map<string, typeof parsed>();
+  for (const operation of parsed) {
+    const key = operation.entityUid.toLowerCase();
+    const list = operationsByOwner.get(key);
+    if (list === undefined) operationsByOwner.set(key, [operation]); else list.push(operation);
+  }
+  const entryPatchesByOwner = new Map<string, EntryUpdateOperation[]>();
+  for (const operation of entryOperations) {
+    const owner = operation.entityUid.toLowerCase();
+    const list = entryPatchesByOwner.get(owner);
+    if (list === undefined) entryPatchesByOwner.set(owner, [operation]); else list.push(operation);
+  }
   const entries = snapshot.payload.entries.map((entry) => {
-    const patches = entryOperations.filter((operation) => bulkTouchesEntry(operation, entry.syncUid));
+    const owner = entry.syncUid?.toLowerCase();
+    const patches = owner === undefined ? [] : entryPatchesByOwner.get(owner) ?? [];
     const current=patches.reduce((current, operation) => applyEntryPatch(current, operation.payload), entry);
-    const delta=parsed.filter(op=>op.entityUid===entry.syncUid).reduce((total,op)=>total+entryVersionDelta(op),0);
+    const delta=(owner === undefined ? [] : operationsByOwner.get(owner) ?? []).reduce((total,op)=>total+entryVersionDelta(op),0);
     return {...current,...(entry.syncVersion===undefined?{}:{syncVersion:entry.syncVersion+delta})};
   });
   const producerCreates = parsed.filter((row): row is Extract<SyncReplayRequest,{operationKind:'producer.create'}> => row.operationKind === 'producer.create');
@@ -746,8 +853,14 @@ function snapshotWithOverlays(
     if (producerRows.some(owner => owner.id === id)) throw new Error('Local Author ID collision');
     producerRows.push({id,syncUid:row.entityUid,syncVersion:1,...row.payload,galleryAnchor:null});
   }
+  const producerPatchesByOwner = new Map<string, ProducerUpdateOperation[]>();
+  for (const operation of producerUpdateOperations) {
+    const key = operation.entityUid.toLowerCase();
+    const list = producerPatchesByOwner.get(key);
+    if (list === undefined) producerPatchesByOwner.set(key, [operation]); else list.push(operation);
+  }
   const producers = producerRows.map((producer) => {
-    const patches = producerUpdateOperations.filter((operation) => operation.entityUid === producer.syncUid);
+    const patches = producer.syncUid === undefined ? [] : producerPatchesByOwner.get(producer.syncUid.toLowerCase()) ?? [];
     return patches.reduce((current, operation) => ({
       ...current,
       ...(operation.payload.name === undefined ? {} : { name: operation.payload.name.trim() }),
@@ -800,10 +913,22 @@ function snapshotWithOverlays(
         if (producers.some((row) => row.id === producerId)) {
           throw new Error('Local Author ID collision; cannot safely project this copy');
         }
-        producers.push({
+        const created: SyncSnapshot['payload']['producers'][number] = {
           id: producerId, syncUid: operation.payload.producerUid, syncVersion: 1,
-          name: operation.payload.name, occupation: null, artworkRef: null, content: null,
-        });
+          name: operation.payload.name, occupation: null, artworkRef: null, content: null,galleryAnchor:null,
+        };
+        // The base snapshot never held this Author, so the patch pass above
+        // skipped it: its own profile saves must land on the projection.
+        for (const update of producerUpdateOperations) {
+          if (update.entityUid.toLowerCase() !== operation.payload.producerUid.toLowerCase()) continue;
+          const patch = update.payload;
+          if (patch.name !== undefined) created.name = patch.name;
+          if (Object.hasOwn(patch, 'occupation')) created.occupation = patch.occupation ?? null;
+          if (Object.hasOwn(patch, 'artworkRef')) created.artworkRef = patch.artworkRef ?? null;
+          if (Object.hasOwn(patch, 'content')) created.content = patch.content ?? null;
+          if (Object.hasOwn(patch, 'galleryAnchor')) created.galleryAnchor = patch.galleryAnchor ?? null;
+        }
+        producers.push(created);
         producerIdsByUid.set(operation.payload.producerUid, producerId);
       }
       if (entry !== undefined && !entryProducers.some((row) => row.entryId === entry.id && row.producerId === producerId)) {
@@ -1227,16 +1352,10 @@ function snapshotWithOverlays(
   const originalContentsByUid = new Map(snapshot.payload.entryContents.flatMap((content) => (
     content.syncUid === undefined ? [] : [[content.syncUid, content] as const]
   )));
-  const localContentIds = new Map<string, number>();
-  let nextLocalContentId = -1;
-  for (const operation of contentsOperations) {
-    for (const content of [...operation.baseValues.contents, ...operation.payload.contents]) {
-      if (!originalContentsByUid.has(content.syncUid) && !localContentIds.has(content.syncUid)) {
-        localContentIds.set(content.syncUid, nextLocalContentId);
-        nextLocalContentId -= 1;
-      }
-    }
-  }
+  // One deterministic presentation id per Content identity: a counter would
+  // hand the same row a different id on the next projection call, so an edit
+  // addressed by the id it was just given could no longer find its row.
+  const contentIdFor = (syncUid: string): number => originalContentsByUid.get(syncUid)?.id ?? localCollectionId(syncUid);
   const entryContents = snapshot.payload.entryContents.map((content) => ({ ...content }));
   for (const operation of entryCreateOperations) {
     const entryId = entryIdsByUid.get(operation.entityUid);
@@ -1244,7 +1363,7 @@ function snapshotWithOverlays(
     for (const desired of operation.payload.contents ?? []) {
       if (entryContents.some((content) => content.syncUid === desired.syncUid)) continue;
       entryContents.push({
-        id: localCollectionId(desired.syncUid),
+        id: contentIdFor(desired.syncUid),
         entryId,
         syncUid: desired.syncUid,
         syncVersion: 1,
@@ -1257,22 +1376,13 @@ function snapshotWithOverlays(
   for (const operation of contentsOperations) {
     const entryId = entryIdsByUid.get(operation.entityUid);
     if (entryId === undefined) continue;
-    // A row that already exists — including one projected from a queued
-    // create — keeps its presentation id across the rewrite.
-    const assignedIds = new Map(entryContents.flatMap((row) => (
-      row.entryId === entryId && row.syncUid !== undefined ? [[row.syncUid, row.id] as const] : []
-    )));
     for (let index = entryContents.length - 1; index >= 0; index -= 1) {
       if (entryContents[index]?.entryId === entryId) entryContents.splice(index, 1);
     }
     for (const desired of operation.payload.contents) {
       const original = originalContentsByUid.get(desired.syncUid);
-      // Prefer the id the row already carries (a queued create projects one)
-      // over the counter reserved for this rewrite, so an edit addressed by
-      // its presentation id still resolves afterwards.
-      const existing = assignedIds.get(desired.syncUid) ?? localContentIds.get(desired.syncUid);
       entryContents.push({
-        id: original?.id ?? existing ?? nextLocalContentId,
+        id: contentIdFor(desired.syncUid),
         entryId,
         syncUid: desired.syncUid,
         syncVersion: original?.syncVersion ?? 1,
@@ -1280,10 +1390,6 @@ function snapshotWithOverlays(
         content: desired.content,
         sortOrder: desired.sortOrder,
       });
-      if (original === undefined && existing === undefined) {
-        localContentIds.set(desired.syncUid, nextLocalContentId);
-        nextLocalContentId -= 1;
-      }
     }
   }
   // Content appended to a pending Entry is part of its content like any other:
@@ -1295,7 +1401,7 @@ function snapshotWithOverlays(
     const nextSortOrder = entryContents.filter(row => row.entryId === entryId)
       .reduce((maximum, row) => Math.max(maximum, row.sortOrder), -1) + 1;
     entryContents.push({
-      id: localCollectionId(operation.payload.content.syncUid),
+      id: contentIdFor(operation.payload.content.syncUid),
       entryId,
       syncUid: operation.payload.content.syncUid,
       syncVersion: 1,
@@ -1343,30 +1449,36 @@ function applyMergeProjection(
   snapshot: SyncSnapshot,
   op: Extract<SyncReplayRequest, { operationKind: 'entry.merge' }>,
 ): SyncSnapshot {
-  const result = structuredClone(snapshot), p = result.payload;
+  // Only the rows this merge touches change, and no row is written in place —
+  // a whole-copy clone cost ~190 ms per queued merge on the device.
+  const p = { ...snapshot.payload };
   const keep = p.entries.find(row => row.syncUid === op.entityUid);
   const absorb = p.entries.find(row => row.syncUid === op.payload.absorbUid);
   if (!keep || !absorb) throw new Error('Merge owner missing');
-  if (typeof op.payload.title === 'string') keep.title = op.payload.title;
+  const kept = typeof op.payload.title === 'string' ? { ...keep, title: op.payload.title } : keep;
+  p.entries = p.entries.map(row => row.id === kept.id ? kept : row);
   const absorbedContents = p.entryContents.filter(row => row.entryId === absorb.id);
   if (op.payload.copyTags) {
+    p.entryTags = [...p.entryTags];
     for (const row of p.entryTags.filter(row => row.entryId === absorb.id)) {
       if (!p.entryTags.some(candidate => candidate.entryId === keep.id && candidate.tagId === row.tagId)) {
         p.entryTags.push({ ...row, entryId: keep.id });
       }
     }
   }
+  p.entryProducers = [...p.entryProducers];
   for (const row of p.entryProducers.filter(row => row.entryId === absorb.id)) {
     if (!p.entryProducers.some(candidate => candidate.entryId === keep.id && candidate.producerId === row.producerId)) {
       p.entryProducers.push({ ...row, entryId: keep.id });
     }
   }
-  const nextSort = p.entryContents.filter(row => row.entryId === keep.id).reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
+  p.entryContents = [...p.entryContents];
+  const nextSort = p.entryContents.filter(row => row.entryId === kept.id).reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
   op.payload.sources.forEach((source, index) => {
     const copied = absorbedContents.find(row => row.contentType === 'Source URL' && row.content === source.url);
     if (!copied) throw new Error('Merge needs trusted selected sources');
-    if (p.entryContents.some(row => row.entryId === keep.id && row.contentType === 'Source URL' && row.content === source.url)) return;
-    p.entryContents.push({ ...copied, syncUid: source.contentUid, entryId: keep.id, sortOrder: nextSort + index });
+    if (p.entryContents.some(row => row.entryId === kept.id && row.contentType === 'Source URL' && row.content === source.url)) return;
+    p.entryContents.push({ ...copied, syncUid: source.contentUid, entryId: kept.id, sortOrder: nextSort + index });
   });
   const deletedId = absorb.id;
   p.entries = p.entries.filter(row => row.id !== deletedId);
@@ -1378,7 +1490,7 @@ function applyMergeProjection(
   p.entryUsage = p.entryUsage.filter(row => row.entryId !== deletedId);
   p.viewLaterEntries = p.viewLaterEntries.filter(row => row.subjectId !== deletedId);
   p.entryRatingValues = p.entryRatingValues.filter(row => row.entryId !== deletedId);
-  return result;
+  return { ...snapshot, payload: p };
 }
 
 /** Per-type tag layout projection: desired section/facet rows replace the type's groups. */
@@ -1386,7 +1498,10 @@ function applyTagLayoutProjection(
   snapshot: SyncSnapshot,
   op: Extract<SyncReplayRequest, { operationKind: 'entry.tag-layout.set' }>,
 ): SyncSnapshot {
-  const result = structuredClone(snapshot), p = result.payload;
+  // Only this type's groups and the layout rows change: copying the whole saved
+  // copy here cost ~190 ms per queued layout original on the device (measured),
+  // and a queue holding five of them paid it five times per read.
+  const p = { ...snapshot.payload };
   let layout = p.entryTagLayouts?.find(row => row.syncUid === op.entityUid);
   if (layout === undefined && op.payload.entryType !== undefined) {
     // Fresh-type original: the layout row materializes with this operation.
@@ -1431,7 +1546,7 @@ function applyTagLayoutProjection(
   } else if (op.payload.entryType !== undefined) {
     p.entryTagLayouts = [...(p.entryTagLayouts ?? []), { entryType: op.payload.entryType, syncUid: op.entityUid, syncVersion: 1 + delta }];
   }
-  return result;
+  return { ...snapshot, payload: p };
 }
 
 /** Apply-tag-layout: peer Entries of the type take the source Entry's placements. */
@@ -1512,6 +1627,50 @@ function applyLayoutTemplateApplyProjection(
   const sectionRenames = prior.filter(row => row.groupKind === 'section').length;
   p.entryTagLayouts = p.entryTagLayouts?.map(row => row.syncUid === op.entityUid ? { ...row, syncVersion: row.syncVersion + inserts + deletes + sectionRenames } : row);
   return result;
+}
+
+type LayoutReplacement = Extract<SyncReplayRequest, {operationKind:'entry.tag-layout.set' | 'entry.layout-template.apply'}>;
+type ReplayTagState = Array<{entryUid:string; tags:Array<{name:string; facetUid:string}>}>;
+
+function canonicalLayoutGroups(groups: LayoutReplacement['payload']['groups']) {
+  return groups.map(row => ({...row, syncUid:row.syncUid.toLowerCase(), parentUid:row.parentUid?.toLowerCase() ?? null}))
+    .sort((a,b) => a.syncUid.localeCompare(b.syncUid));
+}
+
+/** Both replacement kinds own the same resource. Fold their accepted commands
+ * in queue order; only insertions AFTER the last replacement survive it. */
+function finalReplayLayoutGroups(operations: SyncReplayRequest[], uid: string, entryType: string) {
+  const replacements = operations.filter((row):row is LayoutReplacement =>
+    (row.operationKind === 'entry.tag-layout.set' || row.operationKind === 'entry.layout-template.apply')
+    && row.entityUid.toLowerCase() === uid.toLowerCase());
+  const last = replacements.at(-1);
+  if (!last) return undefined;
+  const groups = last.payload.groups.map(row => ({...row}));
+  for (const op of operations.slice(operations.indexOf(last) + 1)) {
+    if (op.operationKind !== 'entry.facet.create' || op.payload.entryType !== entryType) continue;
+    if (!groups.some(row => row.syncUid.toLowerCase() === op.entityUid.toLowerCase())) {
+      groups.push({syncUid:op.entityUid, name:op.payload.name, groupKind:'facet', parentUid:op.payload.sectionUid, sortOrder:0});
+    }
+  }
+  return {last, replacements, groups:canonicalLayoutGroups(groups)};
+}
+
+function replayTagState(snapshot: SyncSnapshot, entries: Set<string>): ReplayTagState {
+  return snapshot.payload.entries.filter(row => row.syncUid && entries.has(row.syncUid.toLowerCase())).map(entry => ({
+    entryUid:entry.syncUid!.toLowerCase(),
+    tags:snapshot.payload.entryTags.filter(row => row.entryId === entry.id).map(row => {
+      const tag = snapshot.payload.tags.find(tagRow => tagRow.id === row.tagId);
+      const facet = snapshot.payload.tagGroups.find(group => group.id === row.facetId && group.groupKind === 'facet');
+      if (!tag || !facet?.syncUid) throw new Error('The queued tag result has an unresolved Facet');
+      return {name:normalizeTag(tag.name), facetUid:facet.syncUid.toLowerCase()};
+    }).sort((a,b) => a.name.localeCompare(b.name)),
+  }));
+}
+
+function isReplayTagState(value: unknown): value is ReplayTagState {
+  return Array.isArray(value) && value.every(entry => entry && typeof entry.entryUid === 'string'
+    && Array.isArray(entry.tags) && entry.tags.every((tag:unknown) => tag !== null && typeof tag === 'object'
+      && typeof (tag as {name?:unknown}).name === 'string' && typeof (tag as {facetUid?:unknown}).facetUid === 'string'));
 }
 
 function viewLaterStateFromSnapshot(snapshot: SyncSnapshot): ViewLaterState {  const byPosition = (
@@ -1793,13 +1952,19 @@ export function createOfflineAwareGalleryApi(
     const failures = operations.filter((operation) => operation.status === 'failed').length;
     const storedError = operations.find((operation) => operation.lastError !== null)?.lastError ?? fallbackError;
     setReplayState(pending, conflicts, failures, storedError);
+    // Draft reduction may have replaced/cancelled the caller's provisional
+    // envelope. Refresh the count from committed state without changing the
+    // success of the local edit if diagnostic storage is temporarily busy.
+    if(store.captureLocalFinalState)void setReplayStateFromStore(fallbackError).catch(()=>undefined);
   }
 
   async function setReplayStateFromStore(fallbackError: string | null = null): Promise<void> {
     const operations = await listOperations();
     const media = hasMediaOutbox(store) ? await store.listMedia() : [];
+    const local=readLocalFinalState(await store.readMeta(LOCAL_FINAL_STATE_KEY));
     const pending = operations.filter((operation) => operation.status === 'pending').length
-      + media.filter((upload) => upload.status === 'pending').length;
+      + media.filter((upload) => upload.status === 'pending').length
+      + local.media.filter(row=>!row.compiled).length + local.deleted.filter(row=>!row.compiledOpId).length;
     const conflicts = operations.filter((operation) => operation.status === 'conflict').length;
     const failures = operations.filter((operation) => operation.status === 'failed').length
       + media.filter((upload) => upload.status === 'failed').length;
@@ -1815,6 +1980,142 @@ export function createOfflineAwareGalleryApi(
     loadingLibrary = null;
   }
 
+  function rebaseLocalDraftVersions(snapshot:SyncSnapshot|null,rows:PendingSyncOperation[],media:StagedMediaUpload[],local:LocalFinalState) {
+    if(!snapshot)return rows;
+    return rows.map((row,index)=>{
+      if(!local.drafts.includes(row.opId) || row.baseVersion===0 || row.entityKind!=='entry' || row.operationKind==='entry.authors.convert-to-multi')return row;
+      const prior=rows.slice(0,index);
+      const version=entryReplayVersion(snapshot,prior,row.entityUid)+parsedMediaOrderOperations(prior).filter(op=>op.entityUid===row.entityUid).length
+        + media.filter(image=>image.entryUid===row.entityUid && !local.deferredMedia.includes(image.uploadId)).length;
+      return {...row,baseVersion:version};
+    });
+  }
+
+  async function localMediaContext(entryId:number) {
+    if(!store.captureLocalFinalState || !store.editLocalFinalState)throw new Error('Local result storage is unavailable');
+    const captured=await store.captureLocalFinalState();
+    const active=snapshotState(captured.generationId,captured.snapshot,captured.revision).active;
+    if(!active)throw new Error('A saved library is needed for local edits');
+    const projected=snapshotWithOverlays(active.snapshot,captured.operations);
+    const entry=projected.payload.entries.find(row=>row.id===entryId || row.syncUid && localCollectionId(row.syncUid)===entryId);
+    if(!entry?.syncUid)throw new Error('This work is no longer in the local library');
+    const saved=active.snapshot.payload.entries.find(row=>row.syncUid===entry.syncUid);
+    const visible=(await loadOfflineLibrary())?.getEntry(entry.id);
+    if(!visible)throw new Error('This work is no longer in the local library');
+    const previous=captured.local.media.find(row=>row.entryUid===entry.syncUid);
+    const intent:LocalMediaIntent=previous?structuredClone(previous):{
+      entryUid:entry.syncUid,libraryId:active.snapshot.header.libraryId,syncEpoch:active.snapshot.header.syncEpoch,clientId,revision:randomUUID(),
+      baselineVersion:saved?.syncVersion??0,baselineRefs:[...(saved?.coverRef?[saved.coverRef]:[]),...(saved?.previewRefs??[])],
+      baselineCoverRef:saved?.coverRef??null,baselinePreviewRefs:[...(saved?.previewRefs??[])],items:[],desired:[],
+    };
+    const current=[...(visible.coverRef?[visible.coverRef]:[]),...visible.previewRefs];
+    const selected:string[]=[];
+    for(const ref of current){
+      const image=captured.media.find(row=>ref.includes(`#t3-upload=${row.uploadId}`) || ref.includes(`.${row.uploadId}.`));
+      const existing=intent.items.find(item=>image?item.uploadId===image.uploadId:item.ref===ref);
+      const item:LocalMediaItem=existing??{key:image?`upload:${image.uploadId}`:randomUUID(),ref:image?null:ref,...(image?{uploadId:image.uploadId}:{})};
+      if(!existing)intent.items.push(item);selected.push(item.key);
+    }
+    if(!previous)intent.desired=selected;
+    return {captured,active,entry,saved,visible,current,selected,intent,previous};
+  }
+
+  async function saveLocalMediaSelection(entryId:number,refs:string[]) {
+    const context=await localMediaContext(entryId);
+    if(new Set(refs).size!==refs.length || refs.some(ref=>!context.current.includes(ref)))throw new Error('Select images from the current work');
+    context.intent.desired=refs.map(ref=>context.selected[context.current.indexOf(ref)]!);
+    context.intent.revision=randomUUID();
+    await store.editLocalFinalState!({kind:'media',intent:context.intent,...(context.previous?{expectedRevision:context.previous.revision}:{})},rebaseLocalDraftVersions);
+    invalidateOfflineLibrary();setMode('offline');await setReplayStateFromStore();
+    return (await loadOfflineLibrary())!.getEntry(context.entry.id);
+  }
+
+  async function stageLocalImage(entryId:number,kind:'cover'|'preview',file:File) {
+    if(!ALLOWED_MEDIA_TYPES.has(file.type as StagedMediaUpload['mimeType']) || file.size<=0 || file.size>MAX_STAGED_MEDIA_BYTES)throw new Error('Unsupported image type or size');
+    if(await store.readMeta(MEDIA_UPLOAD_CAPABILITY_KEY)!=='1')throw new Error('This library does not support image synchronization');
+    const context=await localMediaContext(entryId);
+    const prior=context.captured.media.filter(row=>row.entryUid===context.entry.syncUid);
+    const ordinal=kind==='cover'?0:prior.filter(row=>row.kind==='preview').length;
+    if(ordinal>31 || ordinal>0 && await store.readMeta(MEDIA_MULTIPLE_PREVIEWS_CAPABILITY_KEY)!=='1')throw new Error('The preview limit has been reached');
+    const uploadId=randomUUID();
+    const upload:StagedMediaUpload={uploadId,libraryId:context.intent.libraryId,syncEpoch:context.intent.syncEpoch,entryUid:context.entry.syncUid!,kind,ordinal,
+      mimeType:file.type as StagedMediaUpload['mimeType'],byteLength:file.size,sha256:await sha256Hex(file),blob:file,status:'pending',lastAttemptAt:null,lastError:null,
+      ...(context.saved?{existingEntry:{expectedCoverRef:context.saved.coverRef,expectedPreviewRefs:[...context.saved.previewRefs]},...(kind==='cover' && context.saved.coverRef!==null?{replace:true}:{})}:{})};
+    const create=context.captured.operations.find(row=>row.operationKind==='entry.create' && row.entityUid===context.entry.syncUid);
+    const deferred=!context.saved && (!create || !context.captured.local.drafts.includes(create.opId));
+    const item:LocalMediaItem={key:`upload:${uploadId}`,ref:null,uploadId};context.intent.items.push(item);
+    context.intent.desired=kind==='cover'?[item.key,...context.intent.desired.slice(context.visible.coverRef?1:0)]:[...context.intent.desired,item.key];
+    context.intent.revision=randomUUID();
+    await store.editLocalFinalState!({kind:'media',intent:context.intent,upload,deferred,...(context.previous?{expectedRevision:context.previous.revision}:{})},rebaseLocalDraftVersions);
+    invalidateOfflineLibrary();setMode('offline');await setReplayStateFromStore();
+    return (await loadOfflineLibrary())!.getEntry(context.entry.id);
+  }
+
+  /** Materialize immutable requests only after their predecessors have receipts
+   * and an installed, acknowledged baseline. This never blocks local editing. */
+  async function compileLocalFinalResults():Promise<boolean> {
+    if(!store.captureLocalFinalState || !store.editLocalFinalState || !hasOutbox(store))return false;
+    const captured=await store.captureLocalFinalState();
+    const active=snapshotState(captured.generationId,captured.snapshot,captured.revision).active;
+    if(!active || await store.readMeta('pendingSnapshotAck')!==null)return false;
+    let changed=false;
+    const extensions:Record<string,string>={'image/png':'png','image/jpeg':'jpg','image/gif':'gif','image/webp':'webp','image/avif':'avif'};
+    for(const intent of captured.local.media){
+      if(intent.clientId!==clientId || intent.libraryId!==active.snapshot.header.libraryId || intent.syncEpoch!==active.snapshot.header.syncEpoch || intent.compiled)continue;
+      const entry=active.snapshot.payload.entries.find(row=>row.syncUid===intent.entryUid);
+      if(!entry || captured.operations.some(row=>row.entityUid===intent.entryUid))continue;
+      const ownMedia=captured.media.filter(row=>row.entryUid===intent.entryUid);
+      const deferred=ownMedia.filter(row=>captured.local.deferredMedia.includes(row.uploadId));
+      if(deferred.length && ownMedia.length===deferred.length){
+        let cover=entry.coverRef;const previews=[...entry.previewRefs];
+        const uploads=deferred.map(row=>{
+          const ordinal=row.kind==='cover'?0:previews.length;
+          const upload={...row,ordinal,existingEntry:{expectedCoverRef:cover,expectedPreviewRefs:[...previews]},...(row.kind==='cover' && cover!==null?{replace:true}:{replace:undefined})};
+          const ref=`/api/assets/entries/${entry.id}/${row.kind==='cover'?'cover':ordinal===0?'preview':`preview-${ordinal+1}`}.${row.uploadId}.${extensions[row.mimeType]}`;
+          if(row.kind==='cover')cover=ref;else previews.push(ref);return upload;
+        });
+        await store.editLocalFinalState({kind:'prepare-media',uploads});changed=true;continue;
+      }
+      if(ownMedia.length)continue;
+      let cover='baselineCoverRef' in intent?intent.baselineCoverRef??null:intent.baselineRefs[0]??null;
+      const previews=[...(intent.baselinePreviewRefs??intent.baselineRefs.slice(1))];
+      const mapping=new Map(intent.items.filter(item=>!item.uploadId && item.ref!==null).map(item=>[item.key,item.ref!]));
+      const uploaded:string[]=[];let ready=true;
+      for(const item of intent.items.filter(item=>item.uploadId)){
+        const raw=await store.readMeta(`localMediaReceipt.${item.uploadId}`);
+        if(!raw){if(intent.desired.includes(item.key))ready=false;continue;}
+        const receipt=JSON.parse(raw) as {entryUid:string;kind:'cover'|'preview';relativeRef:string;entityId:number};
+        if(receipt.entryUid!==intent.entryUid || receipt.entityId!==entry.id)throw new Error('Image receipt belongs to another work');
+        mapping.set(item.key,receipt.relativeRef);uploaded.push(item.uploadId!);
+        if(receipt.kind==='cover')cover=receipt.relativeRef;else previews.push(receipt.relativeRef);
+      }
+      if(!ready)continue;
+      const base=[...(cover?[cover]:[]),...previews];
+      const desired=intent.desired.map(key=>{const ref=mapping.get(key);if(!ref)throw new Error('A selected local image is not ready');return ref;});
+      const actual=[...(entry.coverRef?[entry.coverRef]:[]),...entry.previewRefs];
+      if(JSON.stringify(actual)===JSON.stringify(desired) && JSON.stringify(actual)===JSON.stringify(base)){
+        await store.editLocalFinalState({kind:'settle-media',entryUid:intent.entryUid,revision:intent.revision});changed=true;continue;
+      }
+      const operation=createPendingSyncOperation({clientId,libraryId:intent.libraryId,syncEpoch:intent.syncEpoch,entityKind:'entry',entityUid:intent.entryUid,
+        operationKind:'entry.media.set',baseVersion:entry.syncVersion!,baseValues:{refs:base},payload:{refs:desired}},{randomUUID});
+      syncReplayRequestSchema.parse(wireFields(operation));
+      const finalRefs=renamedEntryMediaRefs(entry.id,desired);
+      await store.editLocalFinalState({kind:'compile-media',entryUid:intent.entryUid,revision:intent.revision,operation,
+        refs:intent.desired.map((key,index)=>({key,ref:finalRefs[index]!})),uploaded});changed=true;
+    }
+    for(const intent of captured.local.deleted){
+      if(intent.clientId!==clientId || intent.libraryId!==active.snapshot.header.libraryId || intent.syncEpoch!==active.snapshot.header.syncEpoch || intent.compiledOpId)continue;
+      const entry=active.snapshot.payload.entries.find(row=>row.syncUid===intent.entryUid);
+      if(!entry || captured.media.some(row=>row.entryUid===intent.entryUid) || captured.operations.some(row=>row.entityUid===intent.entryUid
+        || parsedEntryOperations([row]).some(op=>referencedEntityKeys(op).includes(`entry:${intent.entryUid}`))))continue;
+      const operation=createPendingSyncOperation({clientId,libraryId:intent.libraryId,syncEpoch:intent.syncEpoch,entityKind:'entry',entityUid:intent.entryUid,
+        operationKind:'entry.delete',baseVersion:entry.syncVersion!,baseValues:{},payload:{}},{randomUUID});
+      await store.editLocalFinalState({kind:'compile-delete',entryUid:intent.entryUid,revision:intent.revision,operation});changed=true;
+    }
+    if(changed)invalidateOfflineLibrary();
+    return changed;
+  }
+
   async function listOperations(): Promise<PendingSyncOperation[]> {
     return hasOutbox(store) ? store.list() : [];
   }
@@ -1823,20 +2124,35 @@ export function createOfflineAwareGalleryApi(
     if (loadingLibrary !== null) return loadingLibrary;
     const pending = (async () => {
       const startedAt = performance.now();
+      const phases: Record<string, number> = {};
+      const mark = (name: string, at: number) => { phases[name] = Math.round(performance.now() - at); };
+      let phaseAt = startedAt;
       const generationId = await store.readMeta(ACTIVE_GENERATION_KEY);
       if (generationId === null || generationId === '0') return null;
       const operations = await listOperations();
       const media = hasMediaOutbox(store) ? await store.listMedia() : [];
-      const key = `${generationId}:${operations.map(operationFingerprint).join('|')}:${mediaQueueIdentity(media)}`;
+      const localRaw=await store.readMeta(LOCAL_FINAL_STATE_KEY);
+      const local=readLocalFinalState(localRaw);
+      mark('queued', phaseAt); phaseAt = performance.now();
+      const key = `${generationId}:${operations.map(operationFingerprint).join('|')}:${mediaQueueIdentity(media)}:${localRaw}`;
       if (cachedLibrary !== null && cachedLibraryKey === key) return cachedLibrary;
       const active = await readActiveSnapshot(store);
       if (active === null) return null;
+      mark('savedCopy', phaseAt); phaseAt = performance.now();
       // Receipt-verified candidate identity affects projection, never cleanup.
       let settled: {checksum: string; operations: string[]; media: string[]} | undefined;
       try { settled = JSON.parse(await store.readMeta('verifiedReplayProjection') ?? 'null') ?? undefined; } catch { /* malformed metadata grants nothing */ }
       const covered = settled?.checksum === active.snapshot.header.checksum ? settled : undefined;
-      const projected = snapshotWithOverlays(active.snapshot, operations.filter(row => row.clientId === clientId && row.libraryId === active.snapshot.header.libraryId && row.syncEpoch === active.snapshot.header.syncEpoch
+      const projectedBase = snapshotWithOverlays(active.snapshot, operations.filter(row => row.clientId === clientId && row.libraryId === active.snapshot.header.libraryId && row.syncEpoch === active.snapshot.header.syncEpoch
         && !covered?.operations.includes(operationFingerprint(row))));
+      // Staged media is written onto the projection below, and with no queued
+      // work the projection *is* the saved snapshot: take our own copies so a
+      // read can never mutate the copy every other reader shares.
+      mark('project', phaseAt); phaseAt = performance.now();
+      const projected = media.length === 0 && local.media.length===0 && local.deleted.length===0 ? projectedBase : {
+        ...projectedBase,
+        payload: { ...projectedBase.payload, entries: projectedBase.payload.entries.map(entry => ({ ...entry, previewRefs: [...entry.previewRefs] })) },
+      };
       // A queued create's staged cover is shown from its own bytes: the work
       // is visible with its picture the moment it is created offline, instead
       // of waiting for the replay to move the file onto the server.
@@ -1865,8 +2181,33 @@ export function createOfflineAwareGalleryApi(
         else entry.previewRefs.push(ref);
         entry.previewRef = entry.previewRefs[0] ?? null;
       }
+      for(const intent of local.media){
+        if(intent.clientId!==clientId || intent.libraryId!==active.snapshot.header.libraryId || intent.syncEpoch!==active.snapshot.header.syncEpoch)continue;
+        const entry=projected.payload.entries.find(row=>row.syncUid?.toLowerCase()===intent.entryUid.toLowerCase());
+        if(!entry)continue;
+        const refs=intent.desired.map(key=>{
+          const item=intent.items.find(row=>row.key===key);
+          if(!item)throw new Error('Local image selection is incomplete');
+          return item.uploadId?stagedObjectUrls.get(item.uploadId)??item.ref:item.ref;
+        }).filter((ref):ref is string=>ref!==null && ref!==undefined);
+        entry.coverRef=refs[0]??null;entry.previewRefs=refs.slice(1);entry.previewRef=entry.previewRefs[0]??null;
+      }
+      const deleted=new Set(local.deleted.filter(row=>row.clientId===clientId && row.libraryId===active.snapshot.header.libraryId && row.syncEpoch===active.snapshot.header.syncEpoch)
+        .flatMap(intent=>projected.payload.entries.filter(row=>row.syncUid?.toLowerCase()===intent.entryUid.toLowerCase()).map(row=>row.id)));
+      if(deleted.size){
+        const p=projected.payload;
+        p.entries=p.entries.filter(row=>!deleted.has(row.id));p.entryProducers=p.entryProducers.filter(row=>!deleted.has(row.entryId));p.entryTags=p.entryTags.filter(row=>!deleted.has(row.entryId));
+        p.entryContents=p.entryContents.filter(row=>!deleted.has(row.entryId));p.entryRatingValues=p.entryRatingValues.filter(row=>!deleted.has(row.entryId));p.entryUsage=p.entryUsage.filter(row=>!deleted.has(row.entryId));
+        p.viewLaterEntries=p.viewLaterEntries.filter(row=>!deleted.has(row.subjectId));p.collectionMembers=p.collectionMembers.filter(row=>!('entryId' in row) || !deleted.has(row.entryId));
+        p.authorDirectoryEntries=p.authorDirectoryEntries.filter(row=>!deleted.has(row.entryId));
+      }
+      mark('stagedMedia', phaseAt); phaseAt = performance.now();
       const library = createOfflineLibrary(projected);
-      if (options.state !== undefined) options.state.lastLocalLoadMs = Math.round(performance.now() - startedAt);
+      mark('library', phaseAt);
+      if (options.state !== undefined) {
+        options.state.lastLocalLoadMs = Math.round(performance.now() - startedAt);
+        options.state.lastLocalLoadPhases = phases;
+      }
       cachedLibraryKey = key;
       cachedLibrary = library;
       return library;
@@ -2070,14 +2411,10 @@ export function createOfflineAwareGalleryApi(
       throw transportError ?? new Error('Entry is unavailable in the offline copy');
     }
 
-    const parsed = parsedEntryOperations(operations);
     const projectedBefore = snapshotWithOverlays(active.snapshot, operations);
     const present = projectedBefore.payload.viewLaterEntries
       .some((membership) => membership.subjectId === entryId);
     if (present === desiredPresent) return viewLaterStateFromSnapshot(projectedBefore);
-    const versionAdvances = parsed
-      .filter((operation) => bulkTouchesEntry(operation, original.syncUid))
-      .reduce((total, operation) => total + entryServerAdvances(operation), 0);
     const operation = createPendingSyncOperation({
       clientId,
       libraryId: active.snapshot.header.libraryId,
@@ -2085,7 +2422,7 @@ export function createOfflineAwareGalleryApi(
       entityKind: 'entry',
       entityUid: original.syncUid,
       operationKind: 'entry.view-later.set',
-      baseVersion: original.syncVersion + versionAdvances,
+      baseVersion: entryReplayVersion(active.snapshot, operations, original.syncUid),
       baseValues: { present },
       payload: { present: desiredPresent },
     }, { randomUUID });
@@ -2111,14 +2448,31 @@ export function createOfflineAwareGalleryApi(
       // serializes behind the original instead of being held.
       const created=`producer:${(conversion as Extract<SyncReplayRequest,{operationKind:'entry.authors.convert-to-multi'}>).payload.targetUid.toLowerCase()}`;
       const scope=new Set([`${row.entityKind}:${row.entityUid.toLowerCase()}`,...referencedEntityKeys(conversion)].filter(key=>key.toLowerCase()!==created));
-      if(row.clientId!==operation.clientId || row.libraryId!==operation.libraryId || row.syncEpoch!==operation.syncEpoch || [`${operation.entityKind}:${operation.entityUid.toLowerCase()}`,...referencedEntityKeys(candidate)].some(key=>scope.has(key.toLowerCase())))throw new Error('Sync the intersecting atomic Author conversion before editing its owners');
+      // The converted Entry itself stays editable for everything that does not
+      // touch the Author set the original froze; its other owners stay off
+      // limits, and so do the commands that would rewrite that set.
+      const convertedEntry=`entry:${row.entityUid.toLowerCase()}`;
+      const rewritesAuthors=operation.operationKind==='entry.authors.set' || operation.operationKind==='entry.author.create-and-link'
+        || operation.operationKind==='entry.authors.convert-to-multi' || operation.operationKind==='entry.merge';
+      const candidateKeys=[`${operation.entityKind}:${operation.entityUid.toLowerCase()}`,...referencedEntityKeys(candidate)].map(key=>key.toLowerCase());
+      const touchesFrozenOwner=candidateKeys.some(key=>scope.has(key) && !(key===convertedEntry && !rewritesAuthors));
+      if(row.clientId!==operation.clientId || row.libraryId!==operation.libraryId || row.syncEpoch!==operation.syncEpoch || touchesFrozenOwner)throw new Error('Sync the intersecting atomic Author conversion before editing its owners');
     }
     for(const row of (await store.list()).filter(row=>row.operationKind==='entry.merge' && row.opId!==operation.opId)) {
       const merge=transportOperation(row);
       if(merge.operationKind!=='entry.merge')throw new Error('Invalid merge original');
-      const keys=new Set<string>([`entry:${merge.entityUid.toLowerCase()}`,`entry:${merge.payload.absorbUid.toLowerCase()}`]);
+      // Only the absorbed Entry is off limits — it is about to disappear. The
+      // kept Entry stays editable: the planner replays that work after the
+      // merge and the merge's own revision is a floor, so both settle in order.
+      const absorbed=`entry:${merge.payload.absorbUid.toLowerCase()}`;
       const candidate=transportOperation(operation);
-      if(row.clientId!==operation.clientId || row.libraryId!==operation.libraryId || row.syncEpoch!==operation.syncEpoch || [`${operation.entityKind}:${operation.entityUid.toLowerCase()}`,...referencedEntityKeys(candidate)].some(key=>keys.has(key.toLowerCase())))throw new Error('Sync the atomic Entry merge before editing its owners');
+      const candidateKeys=[`${operation.entityKind}:${operation.entityUid.toLowerCase()}`,...referencedEntityKeys(candidate)].map(key=>key.toLowerCase());
+      const touchesAbsorbed=candidateKeys.includes(absorbed);
+      // Two merges over the same pair are not stacked: each one freezes both
+      // works, so a second must wait for the first.
+      const mergeKeys=new Set([`entry:${merge.entityUid.toLowerCase()}`,absorbed]);
+      const stacked=operation.operationKind==='entry.merge' && candidateKeys.some(key=>mergeKeys.has(key));
+      if(row.clientId!==operation.clientId || row.libraryId!==operation.libraryId || row.syncEpoch!==operation.syncEpoch || touchesAbsorbed || stacked)throw new Error('This work is being absorbed by a queued merge; let it sync first');
     }
     if ((operation.entityKind === 'entry' || operation.entityKind === 'producer') && (await store.list()).some(row => row.operationKind === `${operation.entityKind}.delete` && bulkTouchesEntry(row, operation.entityUid))) {
       throw new Error('Entry deletion is already queued; retain its original operation before editing');
@@ -2126,16 +2480,19 @@ export function createOfflineAwareGalleryApi(
     // Only NEW envelopes acquire the complete crossqueue Entry revision.
     if (operation.entityKind === 'entry' && operation.operationKind !== 'entry.authors.convert-to-multi' && operation.baseVersion > 0 && hasMediaOutbox(store)) {
       const active = await readActiveSnapshot(store);
-      const owner = active?.snapshot.payload.entries.find(row => row.syncUid === operation.entityUid);
-      if (owner?.syncVersion !== undefined) {
-        const prior = await store.list();
-        const advances = parsedEntryOperations(prior).filter(row => bulkTouchesEntry(row, operation.entityUid)).reduce((total,row)=>total+entryVersionDelta(row),0)
+      const prior = await store.list();
+      const knownOwner = active?.snapshot.payload.entries.some(row => row.syncUid?.toLowerCase() === operation.entityUid.toLowerCase())
+        || prior.some(row => row.operationKind === 'entry.create' && row.entityUid.toLowerCase() === operation.entityUid.toLowerCase());
+      if (active && knownOwner) {
+        const version = entryReplayVersion(active.snapshot, prior, operation.entityUid)
           + parsedMediaOrderOperations(prior).filter(row=>row.entityUid===operation.entityUid).length;
-        const media = (await store.listMedia()).filter(row=>row.entryUid===operation.entityUid && row.existingEntry);
-        operation = {...operation,baseVersion:owner.syncVersion+advances+media.length};
+        const control=readLocalFinalState(await store.readMeta(LOCAL_FINAL_STATE_KEY));
+        const media = (await store.listMedia()).filter(row=>row.entryUid===operation.entityUid && !control.deferredMedia.includes(row.uploadId));
+        operation = {...operation,baseVersion:version+media.length};
       }
     }
-    await store.enqueue(operation);
+    if(store.editLocalFinalState)await store.editLocalFinalState({kind:'operation',operation,editable:mode==='offline' && operation.lastAttemptAt===null},rebaseLocalDraftVersions);
+    else await store.enqueue(operation);
     // Durable canonical commit precedes the retry mirror. Native failure must never
     // report a failed mutation or invite a second submit with a new UUID.
     try { await options.nativeTransfers?.handoff(); } catch { /* unchanged foreground retry remains available */ }
@@ -2152,19 +2509,18 @@ export function createOfflineAwareGalleryApi(
       throw new Error('This offline copy has not enabled offline Producer View later; update it while online');
     }
     const active = await readActiveSnapshot(store);
-    const localCreates = (await store.list()).filter(row => row.operationKind === 'producer.create' && row.clientId === clientId && row.libraryId === active?.snapshot.header.libraryId && row.syncEpoch === active?.snapshot.header.syncEpoch);
+    const localCreates = await listOperations();
     const original = active === null ? undefined : snapshotWithOverlays(active.snapshot, localCreates).payload.producers.find((producer) => producer.id === producerId);
     if (active === null || original?.syncUid === undefined || original.syncVersion === undefined) {
       throw transportError ?? new Error('Producer is unavailable in the offline copy or is missing stable identity/version; update it while online');
     }
 
     const operations = await store.list();
-    const parsed = parsedEntryOperations(operations);
     const projectedBefore = snapshotWithOverlays(active.snapshot, operations);
     const present = projectedBefore.payload.viewLaterProducers
       .some((membership) => membership.subjectId === producerId);
     if (present === desiredPresent) return viewLaterStateFromSnapshot(projectedBefore);
-    const nextBaseVersion = original.syncVersion + producerVersionAdvances(parsed, original.syncUid);
+    const nextBaseVersion = producerReplayVersion(active.snapshot,operations,original.syncUid);
     const operation = createPendingSyncOperation({
       clientId,
       libraryId: active.snapshot.header.libraryId,
@@ -2200,13 +2556,12 @@ export function createOfflineAwareGalleryApi(
       throw new Error('This offline copy has not enabled offline Author ratings; update it while online');
     }
     const active = await readActiveSnapshot(store);
-    const localCreates = (await store.list()).filter(row => row.operationKind === 'producer.create' && row.clientId === clientId && row.libraryId === active?.snapshot.header.libraryId && row.syncEpoch === active?.snapshot.header.syncEpoch);
+    const localCreates = await listOperations();
     const original = active === null ? undefined : snapshotWithOverlays(active.snapshot, localCreates).payload.producers.find((producer) => producer.id === producerId);
     if (active === null || original?.syncUid === undefined || original.syncVersion === undefined) {
       throw transportError ?? new Error('Author is unavailable in the offline copy or is missing stable identity/version; update it while online');
     }
     const operations = await store.list();
-    const parsed = parsedEntryOperations(operations);
     const projectedBefore = snapshotWithOverlays(active.snapshot, operations);
     const slot = projectedBefore.payload.ratingSlots.find((candidate) => (
       candidate.id === slotId && (candidate.subjectKind === 'producer' || candidate.subjectKind === 'author_self')
@@ -2221,7 +2576,7 @@ export function createOfflineAwareGalleryApi(
       value.producerId === producerId && value.slotId === slotId
     ))?.stars ?? null;
     if (currentStars === desiredStars) return { slotId, name: slot.name, stars: desiredStars };
-    const nextBaseVersion = original.syncVersion + producerVersionAdvances(parsed, original.syncUid);
+    const nextBaseVersion = producerReplayVersion(active.snapshot,operations,original.syncUid);
     const operation = createPendingSyncOperation({
       clientId,
       libraryId: active.snapshot.header.libraryId,
@@ -2257,12 +2612,14 @@ export function createOfflineAwareGalleryApi(
     }
     const active = await readActiveSnapshot(store);
     const existingRows = hasOutbox(store) ? await store.list() : [];
-    const original = active === null ? undefined : snapshotWithOverlays(active.snapshot, existingRows.filter(row => row.operationKind === 'producer.create')).payload.producers.find((producer) => producer.id === authorId);
+    // An Author created offline arrives either as a standalone create or as the
+    // target of an Entry's create-and-link, so both must be overlaid before the
+    // frozen identity is read.
+    const original = active === null ? undefined : snapshotWithOverlays(active.snapshot, existingRows).payload.producers.find((producer) => producer.id === authorId);
     if (active === null || original?.syncUid === undefined || original.syncVersion === undefined) {
       throw transportError ?? new Error('Author is unavailable in the offline copy or is missing stable identity/version');
     }
     const operations = await store.list();
-    const parsed = parsedEntryOperations(operations);
     const projected = snapshotWithOverlays(active.snapshot, operations);
     const current = projected.payload.producers.find((producer) => producer.id === authorId);
     if (current === undefined) throw new Error('Author is unavailable in the offline copy');
@@ -2300,7 +2657,7 @@ export function createOfflineAwareGalleryApi(
       entityKind: 'producer',
       entityUid: original.syncUid,
       operationKind: 'producer.update',
-      baseVersion: original.syncVersion + producerVersionAdvances(parsed, original.syncUid),
+      baseVersion: producerReplayVersion(active.snapshot,operations,original.syncUid),
       baseValues,
       payload,
     }, { randomUUID });
@@ -2326,13 +2683,12 @@ export function createOfflineAwareGalleryApi(
       throw new Error('This offline copy has not enabled offline Author tag editing; update it while online');
     }
     const active = await readActiveSnapshot(store);
-    const localCreates = (await store.list()).filter(row => row.operationKind === 'producer.create' && row.clientId === clientId && row.libraryId === active?.snapshot.header.libraryId && row.syncEpoch === active?.snapshot.header.syncEpoch);
+    const localCreates = await listOperations();
     const original = active === null ? undefined : snapshotWithOverlays(active.snapshot, localCreates).payload.producers.find((producer) => producer.id === authorId);
     if (active === null || original?.syncUid === undefined || original.syncVersion === undefined) {
       throw transportError ?? new Error('Author is unavailable in the offline copy or is missing stable identity/version');
     }
     const operations = await store.list();
-    const parsed = parsedEntryOperations(operations);
     const projected = snapshotWithOverlays(active.snapshot, operations);
     const baseTags = producerTagValuesFromSnapshot(projected, authorId);
     const desiredTags = mutate(baseTags, projected).map((tag) => {
@@ -2348,7 +2704,7 @@ export function createOfflineAwareGalleryApi(
       entityKind: 'producer',
       entityUid: original.syncUid,
       operationKind: 'producer.tags.set',
-      baseVersion: original.syncVersion + producerVersionAdvances(parsed, original.syncUid),
+      baseVersion: producerReplayVersion(active.snapshot,operations,original.syncUid),
       baseValues: { tags: baseTags },
       payload: { tags: desiredTags },
     }, { randomUUID });
@@ -2749,13 +3105,16 @@ export function createOfflineAwareGalleryApi(
     }
     if (keep.type !== absorb.type) throw new Error('Entry merge requires both works to use the same Gallery');
     const keepUid = keep.syncUid.toLowerCase(), absorbUid = absorb.syncUid.toLowerCase();
-    for (const row of operations) {
-      const op = transportOperation(row);
-      const keys = new Set([`${op.entityKind}:${op.entityUid.toLowerCase()}`,...referencedEntityKeys(op)].map(key => key.toLowerCase()));
-      if (keys.has(`entry:${keepUid}`) || keys.has(`entry:${absorbUid}`)) {
-        throw new Error('Sync the queued work on both Entries before merging them');
-      }
-    }
+    // Either Entry may carry queued work — merging two works that were created
+    // offline is the ordinary case here. The planner replays every command on
+    // both Entries first, so each frozen revision is the projected one plus what
+    // those commands will add.
+    const advances = (uid: string) => parsedEntryOperations(operations)
+      .filter(row => bulkTouchesEntry(row, uid))
+      .reduce((total, row) => total + entryServerAdvances(row), 0);
+    // The absorbed work's images are never copied and it is about to disappear.
+    // They are left staged (cancelling the merge must not lose them) and cleaned
+    // up only once the merge has actually landed.
     const available = projected.payload.entryContents
       .filter(row => row.entryId === absorb.id && row.contentType === 'Source URL')
       .map(row => ({ row, url: row.content }));
@@ -2767,7 +3126,7 @@ export function createOfflineAwareGalleryApi(
     const operation = createPendingSyncOperation({
       clientId, libraryId: active.snapshot.header.libraryId, syncEpoch: active.snapshot.header.syncEpoch,
       entityKind: 'entry', entityUid: keep.syncUid, operationKind: 'entry.merge',
-      baseVersion: keep.syncVersion, baseValues: { absorbVersion: absorb.syncVersion },
+      baseVersion: keep.syncVersion + advances(keepUid), baseValues: { absorbVersion: absorb.syncVersion + advances(absorbUid) },
       payload: { absorbUid: absorb.syncUid, copyTags: input.copyTags, ...(input.title ? { title: input.title } : {}), sources: selected },
     }, { randomUUID });
     const normalized = { ...operation, ...transportOperation(operation) } as PendingSyncOperation;
@@ -2888,7 +3247,10 @@ export function createOfflineAwareGalleryApi(
     const operation = createPendingSyncOperation({
       clientId, libraryId: active.snapshot.header.libraryId, syncEpoch: active.snapshot.header.syncEpoch,
       entityKind: 'entry', entityUid: source.syncUid, operationKind: 'entry.tag-layout.apply',
-      baseVersion: source.syncVersion,
+      // The server checks this against the source Entry's exact revision, and a
+      // queued Entry starts at 0 — so the frozen base counts every queued op
+      // that will advance it first (the create itself is one).
+      baseVersion: entryReplayVersion(active.snapshot, operations, source.syncUid),
       baseValues: { entryType: source.type, assignments }, payload: {},
     }, { randomUUID });
     const normalized = { ...operation, ...transportOperation(operation) } as PendingSyncOperation;
@@ -2896,7 +3258,17 @@ export function createOfflineAwareGalleryApi(
     setReplayStateFromOperations([...operations, normalized]);
     invalidateOfflineLibrary();
     setMode('offline');
-    return { entryType: source.type, entriesAffected: 0, tagsMoved: 0, entriesScanned: Math.max(0, projected.payload.entries.filter(row => row.type === source.type).length - 1), backupPath: null, foreignKeyCheckPass: true, doctorPass: true, doctorIssues: [], templateFiles: null };
+    const targets = new Map(assignments.map(row => [row.tagUid.toLowerCase(), row.facetUid.toLowerCase()]));
+    const changedEntries = new Set<number>();
+    let tagsMoved = 0;
+    for (const row of projected.payload.entryTags) {
+      if (row.entryId === source.id || !projected.payload.entries.some(entry => entry.id === row.entryId && entry.type === source.type)) continue;
+      const tagUid = projected.payload.tags.find(tag => tag.id === row.tagId)?.syncUid?.toLowerCase();
+      const facetUid = projected.payload.tagGroups.find(facet => facet.id === row.facetId)?.syncUid?.toLowerCase();
+      const target = tagUid === undefined ? undefined : targets.get(tagUid);
+      if (target !== undefined && target !== facetUid) { changedEntries.add(row.entryId); tagsMoved += 1; }
+    }
+    return { entryType: source.type, entriesAffected: changedEntries.size, tagsMoved, entriesScanned: Math.max(0, projected.payload.entries.filter(row => row.type === source.type).length - 1), backupPath: null, foreignKeyCheckPass: true, doctorPass: true, doctorIssues: [], templateFiles: null };
   }
 
   async function enqueueLayoutTemplateApply(entryId: number, transportError?: unknown): Promise<import('@t3/shared').LayoutTemplateApplyResponse> {
@@ -3140,28 +3512,32 @@ export function createOfflineAwareGalleryApi(
       && (row.syncUid?.toLowerCase() === source.entityUid.toLowerCase() || row.name === source.payload.name))?.id ?? id;
   }
 
-  /** The stable uid of a Facet queued inside a layout original, or undefined for a saved row. */
-  function queuedLayoutFacetUid(facetId: number, projected: SyncSnapshot, raw: SyncSnapshot, operations: PendingSyncOperation[]): string | undefined {
-    const group = projected.payload.tagGroups.find(row => row.id === facetId);
-    if (!group?.syncUid) return undefined;
-    if (raw.payload.tagGroups.some(row => row.syncUid?.toLowerCase() === group.syncUid!.toLowerCase())) return undefined;
-    const uid = group.syncUid.toLowerCase();
-    const queued = operations.some(row => {
-      if (row.operationKind !== 'entry.tag-layout.set') return false;
-      const op = transportOperation(row);
-      return op.operationKind === 'entry.tag-layout.set' && op.payload.groups.some(candidate => candidate.syncUid.toLowerCase() === uid);
-    });
-    return queued ? group.syncUid : undefined;
+  /**
+   * A Facet is addressed by its stable uid unless it is a settled row of the
+   * saved copy. Probing for a specific queued creator missed the default Facet
+   * of an offline-created Section, whose id is local and whose uid is the only
+   * identity the server can resolve.
+   */
+  function facetTransportIdentity(
+    facetId: number,
+    projected: SyncSnapshot,
+    raw: SyncSnapshot | undefined,
+    operations: PendingSyncOperation[],
+  ): {facetId: number} | {facetUid: string} {
+    const facet = projected.payload.tagGroups.find(row => row.id === facetId);
+    if (raw === undefined) {
+      const facetCreate = operations.find(row => row.operationKind === 'entry.facet.create' && row.entityUid.toLowerCase() === facet?.syncUid?.toLowerCase());
+      return facetCreate ? { facetUid: facetCreate.entityUid } : { facetId };
+    }
+    if (raw.payload.tagGroups.some(row => row.id === facetId)) return { facetId };
+    return facet?.syncUid === undefined ? { facetId } : { facetUid: facet.syncUid };
   }
 
   function stableTagValues(values: EntryTagsOperation['payload']['tags'], snapshot: SyncSnapshot, operations: PendingSyncOperation[], raw?: SyncSnapshot): EntryTagsOperation['payload']['tags'] {
     return values.map(value => {
       const tag = snapshot.payload.tags.find(row => normalizeTag(row.name) === normalizeTag(value.name));
       const source = operations.find(row => row.operationKind === 'entry.tag.create' && (row.entityUid.toLowerCase() === tag?.syncUid?.toLowerCase() || normalizeTag(String(row.payload.name)) === normalizeTag(value.name)));
-      const facet = snapshot.payload.tagGroups.find(row => row.id === value.facetId);
-      const facetSource = operations.find(row => row.operationKind === 'entry.facet.create' && row.entityUid.toLowerCase() === facet?.syncUid?.toLowerCase());
-      const layoutQueuedUid = facetSource || raw === undefined ? undefined : queuedLayoutFacetUid(value.facetId!, snapshot, raw, operations);
-      return { name: value.name, ...(source ? { tagUid: source.entityUid } : {}), ...(facetSource ? { facetUid: facetSource.entityUid } : layoutQueuedUid ? { facetUid: layoutQueuedUid } : { facetId: value.facetId! }) };
+      return { name: value.name, ...(source ? { tagUid: source.entityUid } : {}), ...facetTransportIdentity(value.facetId!, snapshot, raw, operations) };
     });
   }
 
@@ -3182,7 +3558,18 @@ export function createOfflineAwareGalleryApi(
       const source = operations.find(row => row.operationKind === 'entry.facet.create' && row.entityKind === 'entry_facet'
         && row.entityUid.toLowerCase() === value.facetUid!.toLowerCase() && row.clientId === clientId
         && row.libraryId === snapshot.header.libraryId && row.syncEpoch === snapshot.header.syncEpoch);
-      if (!source || source.status !== 'pending') throw new Error('Pending Facet source is missing or blocked; refresh and retry');
+      if (source === undefined) {
+        const owner = operations.find(row => row.clientId === clientId && row.libraryId === snapshot.header.libraryId
+          && row.syncEpoch === snapshot.header.syncEpoch
+          && (row.operationKind === 'entry.tag-layout.set' || row.operationKind === 'entry.layout-template.apply')
+          && (transportOperation(row) as Extract<SyncReplayRequest, {operationKind:'entry.tag-layout.set' | 'entry.layout-template.apply'}>).payload.groups
+            .some(group => group.groupKind === 'facet' && group.syncUid.toLowerCase() === value.facetUid!.toLowerCase()));
+        if (owner?.status === 'pending') continue;
+        const saved = snapshot.payload.tagGroups.some(row => row.groupKind === 'facet' && row.syncUid?.toLowerCase() === value.facetUid!.toLowerCase());
+        if (saved && owner === undefined) continue;
+        throw new Error('The selected Facet has no active local creation');
+      }
+      if (source.status !== 'pending') throw new Error('The selected Facet creation is blocked');
       facetCreates.push({ facetUid: value.facetUid, createOpId: source.opId });
     }
     return { ...(tagCreates.length ? { tagCreates } : {}), ...(facetCreates.length ? { facetCreates } : {}) };
@@ -3589,7 +3976,8 @@ export function createOfflineAwareGalleryApi(
       });
     }
     if ((await missingForegroundMutationCapabilities(transportOperation(normalized), key => store.readMeta(key))).length) throw new Error('Entry creation is not available under offline: required capability unavailable');
-    await store.enqueueEntryCreate(normalized, media);
+    if(store.editLocalFinalState)await store.editLocalFinalState({kind:'create',operation:normalized,media});
+    else await store.enqueueEntryCreate(normalized, media);
     // Native is a retry mirror, never the commit authority. Failure cannot invite resubmission.
     try { await options.nativeTransfers?.handoff(); } catch { /* foreground exact retry remains available */ }
     // The Outbox+media transaction is the commit boundary. A later status read
@@ -3736,15 +4124,17 @@ export function createOfflineAwareGalleryApi(
     const siblings = operations.filter(row => row.entityUid === parent.entityUid
       && row.clientId === clientId && row.libraryId === parent.libraryId && row.syncEpoch === parent.syncEpoch);
     if (siblings.some(row => row.status !== 'pending')) throw new Error('Pending Entry is blocked');
-    const tags = parsedEntryOperations(siblings).filter((row): row is EntryTagsOperation =>
-      row.operationKind === 'entry.tags.set' && row.payload.parentCreateOpId === parent.opId);
     const projected = snapshotWithOverlays(active.snapshot, operations);
     const facets = projected.payload.tagGroups.filter(row => row.groupKind === 'facet'
       && row.entryType === create.payload.type && projected.payload.tagGroups.some(section =>
         section.id === row.parentId && section.groupKind === 'section' && section.entryType === create.payload.type));
-    const transportTags: EntryTagsOperation['payload']['tags'] = tags.at(-1)?.payload.tags ?? pendingOwnerSnapshotTags(active.snapshot, parent.entityUid);
+    // A type-wide layout/template can move these assignments after the last
+    // tags.set. Freeze the state the editor actually sees, keeping originals
+    // immutable and expressing rebuilt Facets by their current stable uid.
+    const tags = pendingOwnerSnapshotTags(projected, parent.entityUid);
+    const transportTags = stableTagValues(tags, projected, operations, active.snapshot);
     return { operations, parent, facets, snapshot: projected, raw: active.snapshot, transportTags,
-      tags: transportTags.map(row => ({ name: row.name, facetId: presentationFacetId(row, projected.payload.tagGroups) })) };
+      tags };
   }
 
   async function getPendingOfflineEntryTagOptions(localKey: string): Promise<PendingOfflineEntryTagOptions> {
@@ -3822,42 +4212,13 @@ export function createOfflineAwareGalleryApi(
     }).sort((a, b) => normalizeTag(a.name).localeCompare(normalizeTag(b.name)));
     if (new Set(desired.map(row => normalizeTag(row.name))).size !== desired.length) throw new Error('Duplicate Tag');
     if (JSON.stringify(desired) === JSON.stringify(context.tags)) return;
-    const transportDesired: EntryTagsOperation['payload']['tags'] = desired.map(tag => {
-      const cachedTag = context.snapshot.payload.tags.find(row => normalizeTag(row.name) === normalizeTag(tag.name));
-      const cachedFacet = context.facets.find(row => row.id === tag.facetId);
-      const tagCreate = context.operations.find(row => row.operationKind === 'entry.tag.create'
-        && (row.entityUid.toLowerCase() === cachedTag?.syncUid?.toLowerCase() || normalizeTag(String(row.payload.name)) === normalizeTag(tag.name)));
-      const facetCreate = context.operations.find(row => row.operationKind === 'entry.facet.create'
-        && row.entityUid.toLowerCase() === cachedFacet?.syncUid?.toLowerCase());
-      const layoutQueuedUid = facetCreate ? undefined : queuedLayoutFacetUid(tag.facetId, context.snapshot, context.raw, context.operations);
-      return { name: tag.name, ...(tagCreate ? { tagUid: tagCreate.entityUid } : {}),
-        ...(facetCreate ? { facetUid: facetCreate.entityUid } : layoutQueuedUid ? { facetUid: layoutQueuedUid } : { facetId: tag.facetId }) };
-    });
-    const dependencies = { tagCreates: [] as Array<{tagUid: string; createOpId: string}>,
-      facetCreates: [] as Array<{facetUid: string; createOpId: string}> };
-    for (const value of [...context.transportTags, ...transportDesired]) {
-      for (const kind of ['tag', 'facet'] as const) {
-        const stableUid = kind === 'tag' ? value.tagUid : value.facetUid;
-        if (stableUid === undefined) continue;
-        const source = context.operations.find(row => row.operationKind === `entry.${kind}.create`
-          && row.entityKind === `entry_${kind}` && row.entityUid.toLowerCase() === stableUid.toLowerCase()
-          && row.clientId === clientId && row.libraryId === context.parent.libraryId && row.syncEpoch === context.parent.syncEpoch);
-        if (!source || source.status !== 'pending') throw new Error('Pending Tag or Facet source is missing or blocked; refresh and retry');
-        if (kind === 'tag' && !dependencies.tagCreates.some(row => row.tagUid.toLowerCase() === stableUid.toLowerCase())) {
-          dependencies.tagCreates.push({ tagUid: stableUid, createOpId: source.opId });
-        }
-        if (kind === 'facet' && !dependencies.facetCreates.some(row => row.facetUid.toLowerCase() === stableUid.toLowerCase())) {
-          dependencies.facetCreates.push({ facetUid: stableUid, createOpId: source.opId });
-        }
-      }
-    }
+    const transportDesired = stableTagValues(desired, context.snapshot, context.operations, context.raw);
+    const dependencies = tagCreationDependencies([...context.transportTags, ...transportDesired], context.operations, context.raw);
     const operation = createPendingSyncOperation({
       clientId, libraryId: context.parent.libraryId, syncEpoch: context.parent.syncEpoch,
       entityKind: 'entry', entityUid: context.parent.entityUid, operationKind: 'entry.tags.set',
       baseVersion: 0, baseValues: { tags: context.transportTags.map(serializableTag) },
-      payload: { parentCreateOpId: context.parent.opId, tags: transportDesired.map(serializableTag),
-        ...(dependencies.tagCreates.length ? { tagCreates: dependencies.tagCreates } : {}),
-        ...(dependencies.facetCreates.length ? { facetCreates: dependencies.facetCreates } : {}) },
+      payload: { parentCreateOpId: context.parent.opId, tags: transportDesired.map(serializableTag), ...dependencies },
     }, { randomUUID });
     const normalized = { ...operation, ...transportOperation(operation) } as PendingSyncOperation;
     await enqueueDurably(normalized);
@@ -4150,7 +4511,7 @@ export function createOfflineAwareGalleryApi(
     });
   }
 
-  async function replayPendingOperations(reconcileConnected = false): Promise<void> {
+  async function replayPendingOperations(reconcileConnected = false,localPasses=4): Promise<void> {
     if (replayPromise !== null) return replayPromise;
     replayPromise = (async () => {
       if (!hasOutbox(store) || online.replaySyncOperation === undefined) return;
@@ -4161,8 +4522,10 @@ export function createOfflineAwareGalleryApi(
       if (await store.readMeta('pendingSnapshotAck') !== null) {
         await retryPendingSnapshotAck(online, store, await online.getSyncCapabilities(), clientId);
       }
-      const operations = await store.list();
-      const mediaBeforeReplay = hasMediaOutbox(store) ? await store.listMedia() : [];
+      await compileLocalFinalResults();
+      const boundary=store.captureLocalFinalState?await store.captureLocalFinalState(true):undefined;
+      const operations = boundary?.operations ?? await store.list();
+      const mediaBeforeReplay = boundary?.media ?? (hasMediaOutbox(store) ? await store.listMedia() : []);
       const multiplePreviewEntryUids = new Set(mediaBeforeReplay
         .filter((upload) => upload.kind === 'preview' && upload.ordinal > 0)
         .map((upload) => upload.entryUid));
@@ -4170,7 +4533,7 @@ export function createOfflineAwareGalleryApi(
         || await store.readMeta(MEDIA_MULTIPLE_PREVIEWS_CAPABILITY_KEY) === '1';
       await setReplayStateFromStore();
       if (operations.length === 0 && mediaBeforeReplay.length === 0) return;
-      const replayBase = store.captureSnapshot ? await store.captureSnapshot() : undefined;
+      const replayBase = boundary?snapshotState(boundary.generationId,boundary.snapshot,boundary.revision):store.captureSnapshot ? await store.captureSnapshot() : undefined;
       const activeBeforeReplay = replayBase ? replayBase.active : await readActiveSnapshot(store);
       const appliedOperations: SyncReplayRequest[] = [];
       const collectionDeleteReceipts=new Map<string,CollectionDeleteReceipt>();
@@ -4486,7 +4849,22 @@ export function createOfflineAwareGalleryApi(
             lastAttemptAt: new Date().toISOString(),
             lastError: null,
           });
-          const result = await online.replaySyncOperation(operation);
+          let result: Awaited<ReturnType<NonNullable<GalleryApi['replaySyncOperation']>>>;
+          try {
+            result = await online.replaySyncOperation(operation);
+          } catch (cause) {
+            // The server *answered* — a refusal for this payload alone. It must
+            // fail by itself: rethrowing here aborted the whole replay, so one
+            // unacceptable original left every later operation queued forever
+            // (measured on the device: 66 pending, none attempted again).
+            if (!(cause instanceof ApiError) || cause.status < 400 || cause.status >= 500) throw cause;
+            replayError = cause.message;
+            await store.update(stored.opId, { status: 'failed', lastError: replayError });
+            for (const key of entityDependencies) blockedEntities.add(key);
+            blockedEntities.add(entityKey);
+            attemptedOpId = null;
+            continue;
+          }
           operation = authorIdentityView(operation);
           if (result.status === 'applied') {
             if (result.opId.toLowerCase() !== operation.opId.toLowerCase()) throw new Error('Replay receipt identity mismatch');
@@ -4575,8 +4953,12 @@ export function createOfflineAwareGalleryApi(
           const readyEntryUids = new Set(
             activeBeforeReplay?.snapshot.payload.entries.map((entry) => entry.syncUid) ?? [],
           );
+          const mergedAway = new Set(appliedOperations
+            .filter(operation => operation.operationKind === 'entry.merge')
+            .map(operation => operation.payload.absorbUid.toLowerCase()));
           for (const operation of appliedOperations) {
-            if (operation.operationKind === 'entry.create') readyEntryUids.add(operation.entityUid);
+            if (operation.operationKind !== 'entry.create' || mergedAway.has(operation.entityUid.toLowerCase())) continue;
+            readyEntryUids.add(operation.entityUid);
           }
           const blockedCoverOwners = new Set(mediaBeforeReplay.filter(row => row.kind === 'cover' && row.status === 'failed').map(row => row.entryUid));
           const blockedPreviewOrdinals = new Map<string, number>();
@@ -4607,7 +4989,7 @@ export function createOfflineAwareGalleryApi(
               replayError ??= 'An earlier Preview failed; later previews remain queued';
               continue;
             }
-            if (upload.status !== 'pending' || !readyEntryUids.has(upload.entryUid)) continue;
+            if (boundary?.local.deferredMedia.includes(upload.uploadId) || upload.status !== 'pending' || !readyEntryUids.has(upload.entryUid)) continue;
             attemptedUploadId = upload.uploadId;
             await store.updateMedia(upload.uploadId, {
               lastAttemptAt: new Date().toISOString(),
@@ -4628,6 +5010,7 @@ export function createOfflineAwareGalleryApi(
               }, upload.blob);
               if (upload.existingEntry && result.uploadId !== upload.uploadId) throw new Error('Media receipt upload identity mismatch');
               mediaReceipts.set(upload.uploadId,result);
+              if(store.editLocalFinalState)await store.writeMeta(`localMediaReceipt.${upload.uploadId}`,JSON.stringify({entryUid:upload.entryUid,kind:upload.kind,...result}));
               appliedMedia.push(upload);
               maxAppliedServerSeq = Math.max(maxAppliedServerSeq, result.serverSeq);
               attemptedUploadId = null;
@@ -4661,14 +5044,42 @@ export function createOfflineAwareGalleryApi(
             setMode('online');
             return;
           }
+          // Freeze the complete tag result before installing a new generation.
+          // ACK/response-loss retries must use this same receipt-bound expected
+          // state, not reapply old numeric Facet ids to the installed result.
+          let expectedReplayTags: ReplayTagState | undefined;
+          if (activeBeforeReplay && appliedOperations.some(op => op.operationKind === 'entry.layout-template.apply' || op.operationKind === 'entry.tag-layout.apply')) {
+            const originals = operations.filter(row => appliedOperations.some(op => op.opId === row.opId));
+            const fingerprints = originals.map(operationFingerprint);
+            const proofKey = 'compoundTagReplayExpectation';
+            try {
+              const saved = JSON.parse(await store.readMeta(proofKey) ?? 'null') as {fingerprints?:unknown; tags?:unknown} | null;
+              if (saved && JSON.stringify(saved.fingerprints) === JSON.stringify(fingerprints) && isReplayTagState(saved.tags)) expectedReplayTags = saved.tags;
+            } catch { /* Malformed local proof grants no settlement. */ }
+            if (expectedReplayTags === undefined) {
+              const projected = snapshotWithOverlays(activeBeforeReplay.snapshot, originals);
+              const types = new Set(appliedOperations.flatMap(op => op.operationKind === 'entry.tag-layout.apply' ? [op.baseValues.entryType]
+                : op.operationKind === 'entry.layout-template.apply' ? projected.payload.entryTagLayouts?.filter(row => row.syncUid.toLowerCase() === op.entityUid.toLowerCase()).map(row => row.entryType) ?? [] : []));
+              const owners = new Set(appliedOperations.filter(op => op.operationKind === 'entry.tags.set').map(op => op.entityUid.toLowerCase()));
+              for (const entry of projected.payload.entries) if (entry.syncUid && types.has(entry.type)) owners.add(entry.syncUid.toLowerCase());
+              expectedReplayTags = replayTagState(projected, owners);
+              await store.writeMeta(proofKey, JSON.stringify({fingerprints, tags:expectedReplayTags}));
+            }
+          }
           const first = appliedOperations[0];
           let candidate = store.captureSnapshot && store.installSnapshot && store.compareSnapshotMeta && online.fetchSnapshotDelta && online.ackSnapshotDelta
             ? await fetchSnapshotCandidate(online, activeBeforeReplay, await online.getSyncCapabilities(), clientId, await readSnapshotMediaMode(store))
             : { snapshot: await online.fetchSyncSnapshot() };
-          if ((entryDeleteReceipts.size || producerDeleteReceipts.size || collectionDeleteReceipts.size || commonTagReceipts.size) && !candidate.acknowledgement && online.fetchSnapshotDelta && online.ackSnapshotDelta) {
+          // A full fallback registers a fresh server baseline. Reacquire its
+          // install-bound ACK for every replay kind, including tag-layout apply.
+          if (!candidate.acknowledgement && online.fetchSnapshotDelta && online.ackSnapshotDelta) {
             candidate = await fetchSnapshotCandidate(online, { generationId: 0, snapshot: candidate.snapshot }, await online.getSyncCapabilities(), clientId, await readSnapshotMediaMode(store));
           }
           const snapshot = candidate.snapshot;
+          if (options.state) options.state.lastSnapshotSettlement = {
+            snapshotSeq: snapshot.header.snapshotSeq, acknowledgement: candidate.acknowledgement !== undefined,
+            operations: appliedOperations.length, media: appliedMedia.length,
+          };
           for (const operation of appliedOperations) {
             if (operation.operationKind !== 'entry.authors.convert-to-multi') continue;
             const receipt = causalReceipts.get(operation.opId)!;
@@ -4705,7 +5116,9 @@ export function createOfflineAwareGalleryApi(
             // uid only names the projected row until settlement.
             const copiedSources=operation.payload.sources.every(source=>snapshot.payload.entryContents.some(row=>row.entryId===keep?.id&&row.contentType==='Source URL'&&row.content===source.url));
             const copiedTags=!operation.payload.copyTags||snapshot.payload.entryTags.some(row=>row.entryId===keep?.id);
-            if(!merge || !journal?.length || !absorbedGone || !keep || keep.syncVersion!==receipt.resourceVersion || !copiedSources || !copiedTags)throw new Error('Merge snapshot lacks exact absorbed identity, revision and copied proof');
+            // A later queued command on the kept Entry legitimately bumps it past
+            // the merge's own revision, so the revision is a floor.
+            if(!merge || !journal?.length || !absorbedGone || !keep || (keep.syncVersion ?? 0) < receipt.resourceVersion || !copiedSources || !copiedTags)throw new Error('Merge snapshot lacks exact absorbed identity, revision and copied proof');
             if(typeof operation.payload.title==='string' && keep.title!==operation.payload.title)throw new Error('Merge snapshot lacks exact absorbed identity, revision and copied proof');
             const proofKey='entryMergeProof.'+operation.opId;
             const proof=JSON.stringify({receipt,fingerprint:operationFingerprint(operations.find(row=>row.opId===operation.opId)!)});
@@ -4717,24 +5130,25 @@ export function createOfflineAwareGalleryApi(
               if(JSON.stringify(actual)!==JSON.stringify(journal))throw new Error('Merge needs exact same-operation cascade journal');
               await store.writeMeta(proofKey,proof);
             }
+            // The absorbed work is gone for good, so its staged images are too.
+            if (hasMediaOutbox(store)) {
+              for (const upload of (await store.listMedia()).filter(row => row.entryUid.toLowerCase() === operation.payload.absorbUid.toLowerCase())) {
+                await store.removeMedia(upload.uploadId);
+              }
+            }
           }
           {
-            // Layout originals of one type queue serially: earlier receipts hand
-            // their resulting revision to the next baseVersion, and only the last
-            // payload must match the settled snapshot.
-            const layoutOps = new Map<string, Extract<SyncReplayRequest,{operationKind:'entry.tag-layout.set'}>[]>();
+            // Layout edits and template rebuilds are one chronological resource
+            // chain. Later accepted commands may consume an earlier identity.
+            const layoutOps = new Map<string, LayoutReplacement[]>();
             for (const operation of appliedOperations) {
-              if (operation.operationKind !== 'entry.tag-layout.set') continue;
+              if (operation.operationKind !== 'entry.tag-layout.set' && operation.operationKind !== 'entry.layout-template.apply') continue;
               const list = layoutOps.get(operation.entityUid.toLowerCase()) ?? [];
               list.push(operation);
               layoutOps.set(operation.entityUid.toLowerCase(), list);
             }
-            const canonical = (groups: Array<{ syncUid: string; name: string; groupKind: 'section' | 'facet'; parentUid: string | null; sortOrder: number }>) => groups
-              .map(row => ({ ...row, syncUid: row.syncUid.toLowerCase(), parentUid: row.parentUid === null ? null : row.parentUid.toLowerCase() }))
-              .sort((a, b) => a.syncUid.localeCompare(b.syncUid));
             for (const [uid, list] of layoutOps) {
               if (!candidate.acknowledgement) throw new Error('Tag layout settlement needs durable ACK');
-              list.sort((a, b) => a.clientCreatedAt.localeCompare(b.clientCreatedAt));
               // Non-layout queued kinds (a staged facet.create) also bump the
               // layout version between originals, so the chain is monotonic
               // rather than exact; the settled snapshot anchors the end state.
@@ -4747,26 +5161,17 @@ export function createOfflineAwareGalleryApi(
               const receipt = causalReceipts.get(last.opId)!;
               const layout = snapshot.payload.entryTagLayouts?.find(row => row.syncUid.toLowerCase() === uid);
               const type = layout?.entryType;
-              const actual = canonical(snapshot.payload.tagGroups.filter(row => row.entryType === type && row.syncUid).map(row => {
+              const actual = canonicalLayoutGroups(snapshot.payload.tagGroups.filter(row => row.entryType === type && row.syncUid).map(row => {
                 const parent = row.parentId === null ? null : snapshot.payload.tagGroups.find(candidateRow => candidateRow.id === row.parentId && candidateRow.entryType === type);
                 return { syncUid: row.syncUid!, name: row.name, groupKind: row.groupKind, parentUid: parent?.syncUid ?? null, sortOrder: row.sortOrder };
               }));
-              // A staged facet.create rides inside this same ordered replay and
-              // adds its own group (and one layout revision) after the original
-              // froze its payload, so the end state is the payload plus every
-              // applied facet-create of this type — the layout revision is
-              // therefore a floor, not an equality.
-              const staged = appliedOperations
-                .filter((row): row is Extract<SyncReplayRequest,{operationKind:'entry.facet.create'}> => row.operationKind === 'entry.facet.create' && row.payload.entryType === type)
-                .map(row => ({ syncUid: row.entityUid, name: row.payload.name, groupKind: 'facet' as const, parentUid: row.payload.sectionUid, sortOrder: 0 }));
-              const expected = canonical([...last.payload.groups,
-                ...staged.filter(row => !last.payload.groups.some(group => group.syncUid.toLowerCase() === row.syncUid.toLowerCase()))]);
-              if (!layout || layout.syncVersion < receipt.resourceVersion || JSON.stringify(actual) !== JSON.stringify(expected)) {
+              const expected = type === undefined ? undefined : finalReplayLayoutGroups(appliedOperations, uid, type);
+              if (!layout || !expected || layout.syncVersion < receipt.resourceVersion || JSON.stringify(actual) !== JSON.stringify(expected.groups)) {
                 throw new Error('Tag layout snapshot lacks exact applied groups and revision');
               }
               for (const operation of list) {
                 const opReceipt = causalReceipts.get(operation.opId)!;
-                const proofKey='tagLayoutProof.'+operation.opId;
+                const proofKey=(operation.operationKind === 'entry.layout-template.apply' ? 'layoutTemplateProof.' : 'tagLayoutProof.')+operation.opId;
                 const proof=JSON.stringify({receipt:opReceipt,fingerprint:operationFingerprint(operations.find(row=>row.opId===operation.opId)!)});
                 if (await store.readMeta(proofKey)!==proof) await store.writeMeta(proofKey,proof);
               }
@@ -4775,57 +5180,16 @@ export function createOfflineAwareGalleryApi(
           for (const operation of appliedOperations) {
             if (operation.operationKind !== 'entry.tag-layout.apply') continue;
             const receipt = causalReceipts.get(operation.opId)!;
-            if (!candidate.acknowledgement) throw new Error('Tag layout apply settlement needs durable ACK');
-            const peerIds = new Set(snapshot.payload.entries.filter(row => row.type === operation.baseValues.entryType && row.syncUid !== operation.entityUid).map(row => row.id));
-            for (const assignment of operation.baseValues.assignments) {
-              const tag = snapshot.payload.tags.find(row => row.syncUid?.toLowerCase() === assignment.tagUid.toLowerCase());
-              const facet = snapshot.payload.tagGroups.find(row => row.syncUid?.toLowerCase() === assignment.facetUid.toLowerCase());
-              if (!tag || !facet) throw new Error('Tag layout apply snapshot lacks the frozen tag or Facet');
-              for (const row of snapshot.payload.entryTags) {
-                if (peerIds.has(row.entryId) && row.tagId === tag.id && row.facetId !== facet.id) {
-                  throw new Error('Tag layout apply snapshot retains a misplaced peer assignment');
-                }
-              }
-            }
+            if (!candidate.acknowledgement) throw new Error(`Tag layout apply settlement needs durable ACK (snapshot ${snapshot.header.snapshotSeq})`);
+            if (!expectedReplayTags) throw new Error('Tag layout apply settlement lacks its ordered tag result');
             const proofKey='tagLayoutApplyProof.'+operation.opId;
             const proof=JSON.stringify({receipt,fingerprint:operationFingerprint(operations.find(row=>row.opId===operation.opId)!)});
             if (await store.readMeta(proofKey)!==proof) await store.writeMeta(proofKey,proof);
           }
-          {
-            const templateOps = new Map<string, Extract<SyncReplayRequest,{operationKind:'entry.layout-template.apply'}>[]>();
-            for (const operation of appliedOperations) {
-              if (operation.operationKind !== 'entry.layout-template.apply') continue;
-              const list = templateOps.get(operation.entityUid.toLowerCase()) ?? [];
-              list.push(operation);
-              templateOps.set(operation.entityUid.toLowerCase(), list);
-            }
-            const canonical = (groups: Array<{ syncUid: string; name: string; groupKind: 'section' | 'facet'; parentUid: string | null; sortOrder: number }>) => groups
-              .map(row => ({ ...row, syncUid: row.syncUid.toLowerCase(), parentUid: row.parentUid === null ? null : row.parentUid.toLowerCase() }))
-              .sort((a, b) => a.syncUid.localeCompare(b.syncUid));
-            for (const [uid, list] of templateOps) {
-              if (!candidate.acknowledgement) throw new Error('Layout template settlement needs durable ACK');
-              list.sort((a, b) => a.clientCreatedAt.localeCompare(b.clientCreatedAt));
-              for (let index = 0; index < list.length - 1; index += 1) {
-                if (causalReceipts.get(list[index]!.opId)!.resourceVersion !== list[index + 1]!.baseVersion) {
-                  throw new Error('Layout template receipts do not chain onto the next frozen base');
-                }
-              }
-              const last = list.at(-1)!;
-              const receipt = causalReceipts.get(last.opId)!;
-              const layout = snapshot.payload.entryTagLayouts?.find(row => row.syncUid.toLowerCase() === uid);
-              const actual = canonical(snapshot.payload.tagGroups.filter(row => row.entryType === layout?.entryType && row.syncUid).map(row => {
-                const parent = row.parentId === null ? null : snapshot.payload.tagGroups.find(candidateRow => candidateRow.id === row.parentId && candidateRow.entryType === layout?.entryType);
-                return { syncUid: row.syncUid!, name: row.name, groupKind: row.groupKind, parentUid: parent?.syncUid ?? null, sortOrder: row.sortOrder };
-              }));
-              if (!layout || layout.syncVersion !== receipt.resourceVersion || JSON.stringify(actual) !== JSON.stringify(canonical([...last.payload.groups]))) {
-                throw new Error('Layout template snapshot lacks exact rebuilt groups and revision');
-              }
-              for (const operation of list) {
-                const opReceipt = causalReceipts.get(operation.opId)!;
-                const proofKey='layoutTemplateProof.'+operation.opId;
-                const proof=JSON.stringify({receipt:opReceipt,fingerprint:operationFingerprint(operations.find(row=>row.opId===operation.opId)!)});
-                if (await store.readMeta(proofKey)!==proof) await store.writeMeta(proofKey,proof);
-              }
+          if (expectedReplayTags) {
+            const actual = replayTagState(snapshot, new Set(expectedReplayTags.map(row => row.entryUid)));
+            if (JSON.stringify(actual.sort((a,b) => a.entryUid.localeCompare(b.entryUid))) !== JSON.stringify([...expectedReplayTags].sort((a,b) => a.entryUid.localeCompare(b.entryUid)))) {
+              throw new Error('Snapshot refresh failed: the ordered tag/layout result is missing');
             }
           }
           const partitionWrites=appliedOperations.filter((op):op is Extract<SyncReplayRequest,{operationKind:'gallery.partition.set'}>=>op.operationKind==='gallery.partition.set');
@@ -4914,6 +5278,12 @@ export function createOfflineAwareGalleryApi(
               || receipt.resourceVersion >= deletion.resourceVersion) throw new Error('Entry deletion cannot settle a noncausal predecessor');
             return true;
           };
+          // An absorbed Entry's own commands settle into the kept one, so its
+          // owner-scoped proofs below must be read against the merged result.
+          const mergeOperations = appliedOperations.filter(row => row.operationKind === 'entry.merge');
+          const absorbedUids = new Set(mergeOperations.map(row => row.payload.absorbUid.toLowerCase()));
+          const mergedKeepUids = new Set(mergeOperations.map(row => row.entityUid.toLowerCase()));
+          const containsAll = (actual: string[], desired: string[]) => desired.every(value => actual.includes(value));
           const settledBeforeProducerDelete = (operation: SyncReplayRequest): boolean => {
             if (operation.entityKind !== 'producer' || operation.operationKind === 'producer.delete') return false;
             const deletion = producerDeleteReceipts.get(operation.entityUid);
@@ -5086,10 +5456,12 @@ export function createOfflineAwareGalleryApi(
             contentTimelines.set(operation.entityUid, timeline);
           }
           for (const [uid, timeline] of contentTimelines) {
+            if (absorbedUids.has(uid.toLowerCase())) continue;
             const owner = snapshot.payload.entries.find(row => row.syncUid === uid);
             if (!owner || owner.id !== appliedContentOwnerIds.get(uid)) throw new Error('Snapshot refresh failed: pending Content owner identity is missing');
             const actual = snapshot.payload.entryContents.filter(row => row.entryId === owner.id);
-            if ((timeline.complete && actual.length !== timeline.contents.length) || timeline.contents.some(content =>
+            const merged = mergedKeepUids.has(uid.toLowerCase());
+            if ((timeline.complete && !merged && actual.length !== timeline.contents.length) || timeline.contents.some(content =>
               !actual.some(row => row.syncUid === content.syncUid && row.contentType === content.contentType
                 && row.content === content.content && (!timeline.complete || row.sortOrder === content.sortOrder)))) {
               throw new Error('Snapshot refresh failed: pending Content final timeline is missing');
@@ -5105,8 +5477,11 @@ export function createOfflineAwareGalleryApi(
             lastAppliedMetadata.set(operation.entityUid, desired);
           }
           for (const [uid, desired] of lastAppliedMetadata) {
+            if (absorbedUids.has(uid.toLowerCase())) continue;
             const owner = snapshot.payload.entries.find(row => row.syncUid === uid);
-            if (!owner || owner.id !== appliedMetadataOwnerIds.get(uid) || Object.entries(desired).some(([key, value]) => owner[key as 'title' | 'uploadDate' | 'pageCount' | 'durationSeconds'] !== value)) {
+            // A merge applied later owns the kept Entry's title.
+            if (!owner || owner.id !== appliedMetadataOwnerIds.get(uid)
+              || (!mergedKeepUids.has(uid.toLowerCase()) && Object.entries(desired).some(([key, value]) => owner[key as 'title' | 'uploadDate' | 'pageCount' | 'durationSeconds'] !== value))) {
               throw new Error('Snapshot refresh failed: pending metadata desired fields are missing');
             }
           }
@@ -5121,6 +5496,7 @@ export function createOfflineAwareGalleryApi(
             }
           }
           for (const [uid, producerUids] of lastAppliedAuthors) {
+            if (absorbedUids.has(uid.toLowerCase())) continue;
             const writes = appliedOperations.filter(row => row.entityUid === uid && (row.operationKind === 'entry.authors.set' || row.operationKind === 'entry.author.create-and-link'));
             if (writes.length > 0 && writes.every(settledBeforeDelete)) continue;
             if (!snapshot.payload.entries.some(row => row.syncUid?.toLowerCase() === uid.toLowerCase() && row.id === appliedContentOwnerIds.get(uid))) {
@@ -5128,7 +5504,8 @@ export function createOfflineAwareGalleryApi(
             }
             const actual = pendingOwnerSnapshotAuthors(snapshot, uid);
             const desired = producerUids.map(uid => uid.toLowerCase()).sort();
-            if (JSON.stringify(actual) !== JSON.stringify(desired)) {
+            const merged = mergedKeepUids.has(uid.toLowerCase());
+            if (merged ? !containsAll(actual, desired) : JSON.stringify(actual) !== JSON.stringify(desired)) {
               throw new Error('Snapshot refresh failed: pending Author desired set is missing');
             }
           }
@@ -5144,6 +5521,12 @@ export function createOfflineAwareGalleryApi(
           }
           for (const operation of appliedOperations) {
             if (operation.operationKind !== 'entry.facet.create') continue;
+            const consumed = appliedOperations.slice(appliedOperations.indexOf(operation) + 1).some(op =>
+              (op.operationKind === 'entry.tag-layout.set' || op.operationKind === 'entry.layout-template.apply')
+              && op.baseValues.groups.some(group => group.syncUid.toLowerCase() === operation.entityUid.toLowerCase()));
+            // A later verified layout command may rename/remove/rebuild this
+            // Facet. Its exact final groups were checked above as one chain.
+            if (consumed) continue;
             const facet = snapshot.payload.tagGroups.find(row => row.id === appliedFacetIds.get(operation.entityUid.toLowerCase()));
             const section = snapshot.payload.tagGroups.find(row => row.syncUid?.toLowerCase() === operation.payload.sectionUid.toLowerCase());
             if (!facet || facet.groupKind !== 'facet' || facet.name !== operation.payload.name || facet.entryType !== operation.payload.entryType
@@ -5157,8 +5540,10 @@ export function createOfflineAwareGalleryApi(
           }
           for (const operation of lastAppliedTags.values()) {
             if (settledBeforeDelete(operation)) continue;
+            if (absorbedUids.has(operation.entityUid.toLowerCase())) continue;
             const entry = snapshot.payload.entries.find(row => row.syncUid === operation.entityUid);
             if (!entry || entry.id !== appliedTagOwnerIds.get(operation.entityUid.toLowerCase())) throw new Error('Snapshot refresh failed: pending Tag owner identity is missing');
+            if (expectedReplayTags?.some(row => row.entryUid === operation.entityUid.toLowerCase())) continue;
             const actual = snapshot.payload.entryTags.filter(row => row.entryId === entry.id).map(row => ({
               name: normalizeTag(snapshot.payload.tags.find(tag => tag.id === row.tagId)?.name ?? ''), facetId: row.facetId,
             })).sort((a, b) => a.name.localeCompare(b.name));
@@ -5169,7 +5554,9 @@ export function createOfflineAwareGalleryApi(
                 facetId: row.facetUid === undefined ? row.facetId : appliedFacetIds.get(row.facetUid.toLowerCase()) ?? snapshot.payload.tagGroups.find(facet => facet.syncUid?.toLowerCase() === row.facetUid!.toLowerCase())?.id };
             })
               .sort((a, b) => a.name.localeCompare(b.name));
-            if (JSON.stringify(actual) !== JSON.stringify(desired)) throw new Error('Snapshot refresh failed: pending Tag desired set is missing');
+            const merged = mergedKeepUids.has(operation.entityUid.toLowerCase());
+            if (merged ? !containsAll(actual.map(row => `${row.name}|${row.facetId}`), desired.map(row => `${row.name}|${row.facetId}`))
+              : JSON.stringify(actual) !== JSON.stringify(desired)) throw new Error('Snapshot refresh failed: pending Tag desired set is missing');
           }
           const lastDeletion = new Map<string, SyncEntryMediaOperation>();
           for (const operation of appliedOperations) {
@@ -5208,11 +5595,25 @@ export function createOfflineAwareGalleryApi(
             const owner = snapshot.payload.entries.find(row => row.syncUid === upload.entryUid);
             let expectedRef: string | undefined = receipt.relativeRef;
             let expectedPosition = upload.kind === 'cover' ? 0 : upload.ordinal + 1;
-            for (const operation of appliedOperations) {
-              if (operation.operationKind !== 'entry.media.set' || operation.entityUid !== upload.entryUid || operation.baseVersion < receipt.resourceVersion) continue;
-              const position = operation.payload.refs.indexOf(expectedRef!);
-              expectedPosition = position;
-              expectedRef = position < 0 ? undefined : renamedEntryMediaRefs(receipt.entityId, operation.payload.refs)[position];
+            const mediaEvents = [
+              ...appliedMedia.filter(row => row.kind === 'cover' && row.entryUid === upload.entryUid && row.uploadId !== upload.uploadId)
+                .map(row => ({kind:'cover' as const, receipt:mediaReceipts.get(row.uploadId)!})),
+              ...appliedOperations.filter((operation):operation is Extract<SyncReplayRequest,{operationKind:'entry.media.set'}> => operation.operationKind === 'entry.media.set' && operation.entityUid === upload.entryUid)
+                .map(operation => ({kind:'order' as const, receipt:appliedReceipts.get(operation.opId)!, operation})),
+            ].filter(event => event.receipt.serverSeq > receipt.serverSeq)
+              .sort((a,b) => a.receipt.serverSeq - b.receipt.serverSeq);
+            for (const event of mediaEvents) {
+              if (event.receipt.entityId !== receipt.entityId || event.receipt.resourceVersion < receipt.resourceVersion) throw new Error('Media successor receipt belongs to another owner or revision');
+              if (expectedRef === undefined) continue;
+              if (event.kind === 'cover') {
+                // A later accepted cover replaces slot zero. A cover already
+                // moved into previews remains there and must still be verified.
+                if (expectedPosition === 0) expectedRef = undefined;
+              } else {
+                const position = event.operation.payload.refs.indexOf(expectedRef);
+                expectedPosition = position;
+                expectedRef = position < 0 ? undefined : renamedEntryMediaRefs(receipt.entityId, event.operation.payload.refs)[position];
+              }
             }
             if (!owner || owner.id !== receipt.entityId || (owner.syncVersion ?? 0) < receipt.resourceVersion
               || (expectedRef !== undefined && [owner.coverRef, ...owner.previewRefs][expectedPosition] !== expectedRef)) {
@@ -5256,6 +5657,13 @@ export function createOfflineAwareGalleryApi(
           if (hasMediaOutbox(store)) {
             for (const upload of appliedMedia) await store.removeMedia(upload.uploadId);
           }
+          if(store.editLocalFinalState){
+            const controlled=new Set([...(boundary?.local.media.flatMap(row=>row.compiled?[row.compiled.opId]:[])??[]),...(boundary?.local.deleted.flatMap(row=>row.compiledOpId?[row.compiledOpId]:[])??[])]);
+            for(const op of appliedOperations)if(controlled.has(op.opId)){
+              const version=deletionReceipts.get(op.opId)?.resourceVersion??appliedReceipts.get(op.opId)?.resourceVersion;
+              if(version!==undefined)await store.editLocalFinalState({kind:'ack',opId:op.opId,serverVersion:version});
+            }
+          }
           await options.nativeTransfers?.reconcile();
           invalidateOfflineLibrary();
           if (options.state !== undefined) {
@@ -5288,7 +5696,9 @@ export function createOfflineAwareGalleryApi(
     })().finally(() => {
       replayPromise = null;
     });
-    return replayPromise;
+    const pass=replayPromise;
+    await pass;
+    if(localPasses>0 && options.state?.lastReplayError==null && await compileLocalFinalResults())await replayPendingOperations(reconcileConnected,localPasses-1);
   }
 
   async function discardBlockedOfflineOperations(): Promise<void> {
@@ -5461,6 +5871,32 @@ export function createOfflineAwareGalleryApi(
       const active = await readActiveSnapshot(store);
       if (!active) throw new Error('Conversion needs a trusted saved copy');
       const snapshot = active.snapshot;
+      {
+        // A work that has never reached the server has no Author versions or
+        // work lists to freeze, so the gesture degenerates to exactly what it
+        // means here: make the multiple-author Author its only Author.
+        const queuedKey = await pendingEntryLocalKey(entryId);
+        if (queuedKey !== null) {
+          const projected = snapshotWithOverlays(snapshot, await store.list());
+          const current = projected.payload.entryProducers
+            .filter(row => row.entryId === entryId)
+            .map(row => projected.payload.producers.find(producer => producer.id === row.producerId))
+            .filter((producer): producer is NonNullable<typeof producer> => producer !== undefined && producer.syncUid !== undefined);
+          const existingTarget = projected.payload.producers.find(row => (
+            row.syncUid !== undefined && row.name.replace(/[A-Z]/g, char => char.toLowerCase()) === 'multiple author'
+          ));
+          if (current.length < 2
+            && !(current.length === 1 && existingTarget !== undefined && current[0]!.syncUid === existingTarget.syncUid)) {
+            throw new Error('Conversion needs at least two Authors');
+          }
+          const created = existingTarget === undefined ? await enqueueOfflinePendingEntryAuthorCreate(queuedKey, 'multiple author') : undefined;
+          const targetUid = existingTarget?.syncUid ?? created!.producerUid;
+          await enqueueOfflinePendingEntryAuthors(queuedKey, [targetUid]);
+          invalidateOfflineLibrary();
+          return { entryId, multiAuthorId: existingTarget?.id ?? localCollectionId(targetUid), multiAuthorName: 'multiple author',
+            convertedAuthors: current.filter(row => row.syncUid !== targetUid).map(row => ({ id: row.id, name: row.name })) };
+        }
+      }
       const entry = snapshot.payload.entries.find(row => row.id === entryId);
       if (!entry?.syncUid || !entry.syncVersion || entry.id <= 0) throw new Error('Conversion needs a server-synced Entry');
       const pending = await store.list();
@@ -5782,7 +6218,26 @@ export function createOfflineAwareGalleryApi(
       if (isOnlineMode()) await replayPendingOperations();
     },
     async deleteEntry(entryId) {
-      if (entryId <= 0) throw new Error('Pending Entry creation must be reconciled before ordinary deletion');
+      if(store.captureLocalFinalState && store.editLocalFinalState){
+        const captured=await store.captureLocalFinalState();
+        const active=snapshotState(captured.generationId,captured.snapshot,captured.revision).active;
+        const entry=active?snapshotWithOverlays(active.snapshot,captured.operations).payload.entries.find(row=>row.id===entryId || row.syncUid && localCollectionId(row.syncUid)===entryId):undefined;
+        if(entry?.syncUid && active){
+          if(entry.id>0 && await store.readMeta('capability.offlineEntryDelete')!=='1')throw new Error('This library does not support Entry deletion');
+          const wasOnline=isOnlineMode();
+          await store.editLocalFinalState({kind:'delete',intent:{entryUid:entry.syncUid,clientId,libraryId:active.snapshot.header.libraryId,syncEpoch:active.snapshot.header.syncEpoch,revision:randomUUID()}});
+          invalidateOfflineLibrary();setMode('offline');await setReplayStateFromStore();
+          if(wasOnline)await replayPendingOperations();
+          return;
+        }
+      }
+      if (entryId <= 0) {
+        // Deliberately refused, not a limitation of the offline copy: the queued
+        // originals of a work that has not been created yet must be reconciled
+        // (or discarded explicitly from the offline library) so nothing typed
+        // here is lost silently.
+        throw new Error('This work was created offline and is still pending; let it sync before deleting it');
+      }
       if (!hasOutbox(store)) throw new Error('Entry deletion needs a durable local queue');
       const active = await readActiveSnapshot(store);
       let owner: Pick<SyncSnapshot['payload']['entries'][number], 'id' | 'syncUid' | 'syncVersion'> | undefined = active?.snapshot.payload.entries.find(row => row.id === entryId);
@@ -5832,13 +6287,22 @@ export function createOfflineAwareGalleryApi(
       if (isOnlineMode()) await replayPendingOperations();
     },
     async uploadEntryMedia(entryId, kind, file) {
+      if(store.editLocalFinalState && (mode==='offline' || entryId<0 || readLocalFinalState(await store.readMeta(LOCAL_FINAL_STATE_KEY)).media.length>0))return stageLocalImage(entryId,kind,file);
       const enqueue = async () => {
         if (!hasMediaOutbox(store) || !store.enqueueExistingEntryMedia || !store.captureSnapshot) throw new Error('Offline media storage is unavailable');
         if (await store.readMeta('capability.existingEntryMedia') !== '1') throw new Error('Existing Entry media is not enabled; refresh the offline copy');
         const captured = await store.captureSnapshot();
         const active = captured.active;
         const entry = active?.snapshot.payload.entries.find(row => row.id === entryId && row.id > 0);
-        if (!active || !entry?.syncUid) throw new Error('Existing Entry is unavailable in the offline copy');
+        if (!active || !entry?.syncUid) {
+          // Staged media addresses a server-side position, so a work that has
+          // not reached the server cannot take more images yet. Its composer
+          // carried the initial Cover/Previews, which do upload with the create.
+          if (await pendingEntryLocalKey(entryId) !== null) {
+            throw new Error('This work was created offline; let it sync before adding more images');
+          }
+          throw new Error('Existing Entry is unavailable in the offline copy');
+        }
         if (!ALLOWED_MEDIA_TYPES.has(file.type as StagedMediaUpload['mimeType']) || file.size <= 0 || file.size > MAX_STAGED_MEDIA_BYTES) throw new Error('Unsupported offline image type or size');
         const rows = await store.listMedia();
         const prior = rows.filter(row => row.entryUid === entry.syncUid);
@@ -5882,6 +6346,7 @@ export function createOfflineAwareGalleryApi(
         return entry;
       } catch (cause) {
         if (!isOfflineTransportError(cause)) throw cause;
+        if(store.editLocalFinalState)return stageLocalImage(entryId,kind,file);
         return enqueue();
       }
     },
@@ -5895,16 +6360,23 @@ export function createOfflineAwareGalleryApi(
      * server refuses a list that moved underneath them.
      */
     async getEntryMediaRemovalBlockReason(entryId) {
-      if(entryId<=0)return 'This Entry has no server row yet; sync it before deleting or moving images';
+      if(store.editLocalFinalState)return null;
+      // A code, not a sentence: the page owns the wording (and the language).
+      // The three reasons are different situations and must not be conflated —
+      // a cover that was never sent is not an "uncertain attempt" (reported from
+      // the device, where the editor refused with the wrong sentence).
+      if(entryId<=0)return 'no-server-row';
       if(!hasMediaOutbox(store))return null;
       const active=await readActiveSnapshot(store);const uid=active?.snapshot.payload.entries.find(row=>row.id===entryId)?.syncUid;
       const staged=(await store.listMedia()).filter(row=>row.entryUid===uid);
       if(!staged.length)return null;
-      if(staged.some(row=>row.status!=='pending' || row.lastAttemptAt!==null || row.kind!=='preview'))return 'Upload attempted or uncertain; use foreground Update before deleting or moving images';
-      if(options.nativeTransfers && !await options.nativeTransfers.inspectPreviewCancel?.(staged))return 'Native upload attempted or uncertain; use foreground Update before deleting or moving images';
+      if(staged.some(row=>row.status!=='pending' || row.lastAttemptAt!==null))return 'upload-uncertain';
+      if(staged.some(row=>row.kind!=='preview'))return 'cover-not-uploaded';
+      if(options.nativeTransfers && !await options.nativeTransfers.inspectPreviewCancel?.(staged))return 'native-uncertain';
       return null;
     },
     async setEntryMediaOrder(entryId, refs) {
+      if(store.editLocalFinalState && (mode==='offline' || entryId<0 || readLocalFinalState(await store.readMeta(LOCAL_FINAL_STATE_KEY)).media.length>0))return saveLocalMediaSelection(entryId,refs);
       // The record the callers get back is the copy's own view of the Entry,
       // already wearing the order that was just queued.
       const recordFrom = (snapshot: SyncSnapshot): EntryRecordDto => {
@@ -6004,6 +6476,7 @@ export function createOfflineAwareGalleryApi(
         return updated;
       } catch (cause) {
         if (!isOfflineTransportError(cause)) throw cause;
+        if(store.editLocalFinalState)return saveLocalMediaSelection(entryId,refs);
         return enqueue();
       }
     },
@@ -6016,6 +6489,7 @@ export function createOfflineAwareGalleryApi(
     async getSyncCapabilities(probeOptions?: { replay?: boolean }) {
       try {
         const result = await online.getSyncCapabilities();
+        await store.writeMeta('offlineCapabilityReport', JSON.stringify({ checkedAt: new Date().toISOString(), ...result }));
         if(result.featureFlags?.offlineMutations !== undefined)await store.writeMeta('capability.offlineMutations',result.featureFlags.offlineMutations === true ? '1' : '0');
         if(result.featureFlags?.offlineEntryUpdate !== undefined)await store.writeMeta('capability.offlineEntryUpdate',result.featureFlags.offlineEntryUpdate === true ? '1' : '0');
          for (const flag of ['offlineEntryMultiAuthorConversion', 'offlineCollectionCommonTag', 'offlineCollectionDelete', 'offlineStandaloneAuthorDirectorySeed', 'offlineAuthorDelete', 'offlineStandaloneAuthorCreate', 'offlineEntryDelete', 'offlineEntryDuration', 'offlineAuthorSelfRatings', 'offlineRatingSlotDelete', 'offlineEntryMerge', 'offlineEntryTagLayout']) {
@@ -6568,6 +7042,29 @@ export function createOfflineAwareGalleryApi(
     },
     async linkEntryAuthorByName(entryId, name) {
       return diagnoseMutation('entry-author-by-name', ENTRY_AUTHORS_CAPABILITY_KEY, async () => {
+        const pendingKey = await pendingEntryLocalKey(entryId);
+        if (pendingKey !== null) {
+          // A queued Entry has no server row, so its revision is 0 and the
+          // versioned Author envelopes cannot be expressed (base 0 without a
+          // parent is not a valid body). The link rides the same parent-bound
+          // machinery the pending Author editor already uses.
+          const context = await pendingAuthorContext(pendingKey);
+          const active = await readActiveSnapshot(store);
+          const snapshot = active === null ? context.snapshot : snapshotWithOverlays(active.snapshot, await listOperations());
+          const existing = resolveOfflineAuthorByName(snapshot, name);
+          if (existing === null) {
+            const author = await enqueueOfflinePendingEntryAuthorCreate(pendingKey, canonicalOfflineAuthorName(snapshot, name));
+            invalidateOfflineLibrary();
+            return { entryId, producerId: localCollectionId(author.producerUid), producerName: author.name, created: true };
+          }
+          const producerUid = snapshot.payload.producers.find((row) => row.id === existing.id)?.syncUid;
+          if (producerUid === undefined) throw new Error('Select an existing saved Author');
+          const desired = new Set(context.producerUids.map(uid => uid.toLowerCase()));
+          desired.add(producerUid.toLowerCase());
+          await enqueueOfflinePendingEntryAuthors(pendingKey, [...desired]);
+          return { entryId, producerId: existing.id, producerName: existing.name,
+            created: false, ...(existing.matchedAlias === undefined ? {} : { matchedAlias: existing.matchedAlias }) };
+        }
         const enqueue = async (cause?: unknown) => {
           if (cause !== undefined && !isOfflineTransportError(cause)) throw cause;
           const active = await readActiveSnapshot(store);
@@ -6577,9 +7074,9 @@ export function createOfflineAwareGalleryApi(
           const snapshot = snapshotWithOverlays(active.snapshot, pending);
           const existing = resolveOfflineAuthorByName(snapshot, name);
           if (existing === null) return enqueueEntryAuthorCreate(entryId, canonicalOfflineAuthorName(snapshot, name), cause);
-          if (existing.id < 0 && !snapshot.payload.entryProducers.some((row) => (
-            row.entryId === entryId && row.producerId === existing.id
-          ))) throw new Error('Sync the newly created Author before linking it to another Entry');
+          // A queued Author may be linked to another work: the command carries
+          // its create as an explicit predecessor (`producerCreates`), which the
+          // shared cross-Entry capability gates.
           await enqueueEntryAuthors(entryId, existing.id, true, cause);
           return { entryId, producerId: existing.id, producerName: existing.name,
             created: false, ...(existing.matchedAlias === undefined ? {} : { matchedAlias: existing.matchedAlias }) };
@@ -7491,6 +7988,14 @@ export function createOfflineAwareGalleryApi(
     async getEntry(entryId) {
       const active = await readActiveSnapshot(store);
       const owner = active?.snapshot.payload.entries.find(row => row.id === entryId);
+      const local=readLocalFinalState(await store.readMeta(LOCAL_FINAL_STATE_KEY));
+      if(local.deleted.some(row=>row.entryUid===owner?.syncUid || localCollectionId(row.entryUid)===entryId))throw new Error('This work is deleted locally');
+      if(entryId<0){
+        const library=await loadOfflineLibrary();
+        if(!library)throw new Error('This local work is unavailable');
+        const settled=active?.snapshot.payload.entries.find(row=>row.syncUid && localCollectionId(row.syncUid)===entryId);
+        return library.getEntry(settled?.id??entryId);
+      }
       if (owner && (await listOperations()).some(row => row.operationKind === 'entry.delete' && row.entityUid === owner.syncUid)) throw new Error('Entry deletion is queued locally');
       return withFallback(async () => {
         const remote = await online.getEntry(entryId);

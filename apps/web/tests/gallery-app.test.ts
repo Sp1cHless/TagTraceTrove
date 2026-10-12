@@ -16,6 +16,20 @@ import { setLocale } from '../src/i18n.js';
 import { createMemorySnapshotStore } from '../src/offline/snapshot-store.js';
 import { showNsfw } from '../src/stores/preferences.js';
 
+it('automatic offline UX shows an information-only progress banner and moves diagnostics to the offline library', async () => {
+  const api=createMemoryApi();
+  const wrapper=mount(GalleryApp,{props:{api,offlineState:{mode:'online',lastFallbackAt:null,automaticSyncPhase:'syncing'}}});
+  await flushPromises();
+  expect(wrapper.get('[data-testid="offline-mode-banner"]').findAll('button')).toHaveLength(0);
+  expect(wrapper.get('[data-testid="offline-auto-sync-status"]').text()).toContain('Syncing');
+  await wrapper.setProps({offlineState:{mode:'online',lastFallbackAt:null,automaticSyncPhase:null,pendingCount:0}});await flushPromises();
+  expect(wrapper.find('[data-testid="offline-mode-banner"]').exists()).toBe(false);
+  await wrapper.get('[data-testid="settings-button"]').trigger('click');
+  await wrapper.get('[data-testid="advanced-entry"]').trigger('click');await flushPromises();
+  await wrapper.get('[data-testid="advanced-tab-offline"]').trigger('click');await flushPromises();
+  expect(wrapper.get('[data-testid="offline-system-information"]').find('[data-testid="offline-diagnostics-copy"]').exists()).toBe(true);
+});
+
 function createMemoryApi(options: {
   withAuthors?: boolean;
   withDirectory?: boolean;
@@ -8215,6 +8229,41 @@ describe('Entry media strip, expand mode, and adding images', () => {
     await wrapper.get(`[data-entry-id="${entryId}"]`).trigger('click');
     await flushPromises();
   }
+
+  it('updates the retained gallery card after offline cover deletion and replacement', async () => {
+    const api = createMemoryApi();
+    const media = { coverRef: '/api/assets/entries/1/cover.webp' as string | null, previewRefs: [] as string[] };
+    withEntryMedia(api, media);
+    const query = api.queryEntryPage.bind(api);
+    api.queryEntryPage = async input => {
+      const result = await query(input);
+      return { ...result, items: result.items.map(item => item.id === 1
+        ? { ...item, coverRef: media.coverRef, previewRef: media.previewRefs[0] ?? null, previewRefs: [...media.previewRefs] }
+        : item) };
+    };
+    api.setEntryMediaOrder = vi.fn(async (_id, refs) => {
+      media.coverRef = refs[0] ?? null; media.previewRefs = refs.slice(1);
+      return api.getEntry(1);
+    });
+    api.uploadEntryMedia = vi.fn(async () => {
+      media.coverRef = 'blob:local-new-cover#t3-upload=new';
+      return api.getEntry(1);
+    });
+    const wrapper = mount(GalleryApp, { props: { api, offlineState: { mode: 'offline', lastFallbackAt: null } } });
+    await flushPromises();await openGalleryType(wrapper);
+    await openEntryForEditing(wrapper, 1);
+    await wrapper.get('[data-testid="media-edit-toggle"]').trigger('click');await flushPromises();
+    await wrapper.get('[data-testid="media-delete"]').trigger('click');await flushPromises();
+    await wrapper.get('[data-testid="entry-back"]').trigger('click');await flushPromises();
+    expect(wrapper.get('[data-entry-id="1"]').find('.entry-stack-image').exists()).toBe(false);
+    await openEntryForEditing(wrapper, 1);
+    const input = wrapper.get('[data-testid="media-add-file"]');
+    Object.defineProperty(input.element, 'files', { value: [new File(['new'], 'cover.png', { type: 'image/png' })], configurable: true });
+    await input.trigger('change');await flushPromises();
+    await wrapper.get('[data-testid="entry-back"]').trigger('click');await flushPromises();
+    const card = wrapper.get('[data-entry-id="1"]');
+    expect(card.findComponent({ name: 'LazyCardImage' }).props('src')).toBe(media.coverRef);
+  });
 
   it('offers no expand control for a single image and keeps the pager out of the way', async () => {
     const api = createMemoryApi();

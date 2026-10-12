@@ -31,6 +31,8 @@ import json
 import re
 from typing import Any
 
+from . import acquisition
+from . import diagnostics as diag
 from . import unknown_url
 from .bundle import RawItem
 from .extract import extract_listing_page
@@ -126,6 +128,10 @@ def list_cards(template: SiteTemplate, kind: str, ref: dict[str, str],
 
     Pagination is the rule's own (`next_selector` / `page_param`), and a page that repeats a card
     ends the walk: a site whose "next" link stays put would otherwise loop until `max_pages`.
+
+    Acquisition goes through the shared engine (`acquisition.session`), so the rule's declared mode is
+    honoured — `browser` reads the rendered page, `http` the markup as sent — and, for a browser rule,
+    **one** context reads every page of the walk instead of a fresh browser per page (plan §5-B.4).
     """
     rule = template.listings.get(kind) or template.listing
     if rule is None:
@@ -134,36 +140,38 @@ def list_cards(template: SiteTemplate, kind: str, ref: dict[str, str],
     if not url.startswith(("http://", "https://")):
         raise ValueError(f"{template.key}: {kind} {ref.get('id')!r} has no address to list")
 
+    plan = acquisition.plan_for(rule.acquisition, profile=options.get("profile_dir"))
     progress = options.get("progress") or (lambda _message: None)
     cards: list[dict[str, Any]] = []
     seen: set[str] = set()
     page_url: str | None = url
-    for page in range(1, max(1, rule.max_pages) + 1):
-        if rule.acquisition == "browser":
-            # The rule was learned from rendered markup, so the runtime must read the same
-            # document class.  This is acquisition metadata on a declarative listing, not a
-            # per-site fetcher: any Builder run made with --browser can reproduce its input.
-            from ..builder.capture import capture_browser  # noqa: PLC0415
-
-            capture = capture_browser(page_url, profile=options.get("profile_dir"))
-            markup = capture.markup
-            text = markup.text if markup is not None else ""
-            final = capture.final_url or page_url
-        else:
-            status, body, _kind, final = unknown_url.fetch(page_url)
-            text = body.decode("utf-8", "replace")
-        found, next_url = extract_listing_page(template, rule.document, text,
-                                               final or page_url, kind)
-        fresh = [card for card in found
-                 if not card.get("source_id") or str(card["source_id"]) not in seen]
-        for card in fresh:
-            if card.get("source_id"):
-                seen.add(str(card["source_id"]))
-        cards.extend(fresh)
-        progress(f"listed page {page}: {len(fresh)} new card(s), {len(cards)} in total")
-        if not next_url or not fresh:
-            break
-        page_url = next_url
+    with acquisition.session(plan) as reader:
+        for page in range(1, max(1, min(rule.max_pages, options.get("max_pages", rule.max_pages))) + 1):
+            read = reader.read(page_url)
+            if not read.readable:
+                finding = (diag.acquisition_failed(kind=kind, url=page_url,
+                                                   detail="; ".join(read.notes))
+                           if read.status is None or not 200 <= read.status < 300
+                           else diag.acquisition_empty(kind=kind, url=page_url))
+                raise diag.DiagnosticError("the listing page could not be acquired", [finding])
+            text = read.html
+            final = read.final_url or page_url
+            found, next_url = extract_listing_page(template, rule.document, text,
+                                                   final or page_url, kind)
+            faults = diag.blocking_findings(diag.classify_cards(found, target_kind=kind,
+                                                               url=page_url))
+            if found and faults:
+                raise diag.DiagnosticError("the listing contains invalid work identities", faults)
+            fresh = [card for card in found
+                     if not card.get("source_id") or str(card["source_id"]) not in seen]
+            for card in fresh:
+                if card.get("source_id"):
+                    seen.add(str(card["source_id"]))
+            cards.extend(fresh)
+            progress(f"listed page {page}: {len(fresh)} new card(s), {len(cards)} in total")
+            if not next_url or not fresh:
+                break
+            page_url = next_url
     return cards
 
 
@@ -189,26 +197,30 @@ def list_work_urls(template: SiteTemplate, kind: str, ref: dict[str, str],
 def read_work(template: SiteTemplate, url: str, options: dict[str, Any] | None = None):
     """One work, read from the template alone. Returns a RawItem, or None.
 
-    None means the page could not be read as a work at all — a status the caller
-    reports rather than a half-filled record.
+    None means the page could not be read as a work at all — a status the caller reports rather than a
+    half-filled record.
+
+    Acquisition is the template's own `work.acquisition` (plan §5-B.5): a work whose fields were
+    learned from rendered markup is read through the browser, while a listing of the same site may
+    still be read over HTTP — the two halves keep their own mode. Absent, it is HTTP, so no existing
+    site changes.
     """
-    try:
-        status, body, _kind, final = unknown_url.fetch(url)
-    except Exception:  # noqa: BLE001 - reported as an unreadable page
-        return None
-    if not (200 <= status < 300) or not body:
+    options = options or {}
+    plan = acquisition.plan_for(template.work_acquisition, profile=options.get("profile_dir"))
+    read = acquisition.read_page(url, plan)
+    if not read.readable:
         return None
 
-    text = body.decode("utf-8", "replace")
+    text = read.html
     matched = template.match_target(url)
     if matched is not None and matched[1].get("id"):
         source_id = str(matched[1]["id"])
     else:
         # No pattern captured an id, so the address is the identity. The last path
         # segment is stable for a working target and costs nothing to fall back to.
-        source_id = final.rstrip("/").rsplit("/", 1)[-1] or "work"
+        source_id = (read.final_url or url).rstrip("/").rsplit("/", 1)[-1] or "work"
 
-    item = RawItem(source_id=source_id, target_url=final or url)
+    item = RawItem(source_id=source_id, target_url=read.final_url or url)
     for name, document in {**documents_from(template, text),
                            **request_documents(template, url)}.items():
         item.add(name, document)

@@ -2,9 +2,9 @@
 
 T³ is a lightweight personal collection index.
 
-For the live implementation boundary read `CURRENT.md`; unfinished offline features and grouped App acceptance are tracked in `docs/offline-completion-status.md`. These are operational status, not replacements for the guardrails below.
+For the live implementation boundary read `docs/status.md`; the board documents under `docs/` (`architecture.md`, `database.md`, `http-api.md`, `import-and-source.md`, `offline-sync.md`, `mobile.md`, `ui-design.md`, `siteprobe.md`, `development.md`) carry the detailed technical reference, and unfinished work is tracked in `docs/roadmap.md`. These are operational status, not replacements for the guardrails below.
 
-Current data model: Entry and Producer are the core subjects. `Entry.type` supplies classification. Collections (migration `010_collections.sql`) are lightweight user-curated folders of Entries or Producers — the only stored grouping subject; Gallery itself remains a read-time projection of `Entry.type`, never a table. Entry and Producer tags use separate vocabularies. Entry tags always belong to Facets, and Facets always belong to Sections of the same Entry type. See `docs/current-architecture.md`.
+Current data model: Entry and Producer are the core subjects. `Entry.type` supplies classification. Collections (migration `010_collections.sql`) are lightweight user-curated folders of Entries or Producers — the only stored grouping subject; Gallery itself remains a read-time projection of `Entry.type`, never a table. Entry and Producer tags use separate vocabularies. Entry tags always belong to Facets, and Facets always belong to Sections of the same Entry type. See `docs/architecture.md`.
 
 Product priorities:
 1. fast daily use

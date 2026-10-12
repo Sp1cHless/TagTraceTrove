@@ -845,8 +845,19 @@ function beginAuthorEdit(): void {
   editingAuthor.value = true;
 }
 
-async function saveAuthor(): Promise<void> {
-  if (!activeAuthor.value) return;
+function authorBasicsDirty(): boolean {
+  const author = activeAuthor.value;
+  if (!author) return false;
+  return authorName.value !== author.name
+    || (authorOccupation.value || null) !== (author.occupation ?? null)
+    || (authorArtwork.value || null) !== (author.artworkRef ?? null)
+    || (authorContent.value || null) !== (author.content ?? null);
+}
+
+/** Commits the basics; false keeps the editor open so nothing typed is lost. */
+async function saveAuthor(): Promise<boolean> {
+  if (!activeAuthor.value) return true;
+  if (!authorBasicsDirty()) return true;
   error.value = null;
   try {
     await props.api.updateAuthor(activeAuthor.value.id, {
@@ -860,8 +871,10 @@ async function saveAuthor(): Promise<void> {
     clearDragState();
     await refreshAuthor();
     emit('authors-changed');
+    return true;
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.updateAuthor');
+    return false;
   }
 }
 
@@ -1315,8 +1328,14 @@ function clearDragState(): void {
   dropTarget.value = null;
 }
 
+/**
+ * Leaving edit mode commits the basics first: the editor's other surfaces
+ * (Tags, ratings, Directories, merge) apply as they are used, so a lone Done
+ * button must not silently drop a typed name.
+ */
 async function finishAuthorEdit(): Promise<void> {
   if (entryMergeMode.value) await cancelEntryMerge();
+  if (!(await saveAuthor())) return;
   editingAuthor.value = false;
   clearDragState();
 }
@@ -1586,7 +1605,6 @@ async function removeFromDirectory(): Promise<void> {
           <label>{{ t('author.occupation') }}<input v-model="authorOccupation" name="authorOccupation"></label>
           <label>{{ t('author.artwork') }}<input v-model="authorArtwork" name="authorArtwork"></label>
           <label>{{ t('author.content') }}<textarea v-model="authorContent" name="authorContent" rows="5" /></label>
-          <button type="submit" class="primary-button">{{ t('author.save') }}</button>
         </form>
         <div v-else class="author-basics">
           <template v-if="activeAuthor.artworkRef">

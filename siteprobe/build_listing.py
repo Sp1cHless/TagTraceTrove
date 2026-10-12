@@ -41,8 +41,9 @@ from src.builder.learn import draft_base, learn, load_session
 from src.builder.listing import (card_rule_for_id, cards_as_read_by_the_runtime,
                                  check_over_cards, listing_draft, listing_rules,
                                  pagination_from, rule_from, target_pattern_problem)
-from src.builder.roundtrip import install
+from src.builder.roundtrip import format_probe_report, install, probe_draft
 from src.builder.session_server import Session, choose_card, serve
+from src.generic import diagnostics as diag
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 LEARNED_ROOT = paths.home() / "local"
@@ -443,6 +444,24 @@ def main(argv: list[str] | None = None) -> int:
     # was written anyway, and the crawl that followed came back with 0 items. The draft is the file
     # the runtime is asked about, so what is measured is what would be installed, and a site the
     # tool has never seen fails here — loudly, at the terminal — instead of on the user's next run.
+    # The live half these checks cannot see: every check above reads the page that was captured, and
+    # the runtime that will be used fetches. One bounded probe of the live listing — one page, then
+    # one work from it — turns "installed successfully, then imported nothing" into a refusal here
+    # (plan §5-A.3). A network failure is advisory; a listing that reads no card is a data fault.
+    if "--no-probe" not in arguments:
+        report = probe_draft(draft, pages[0][0], building="listing", target_kind=kind)
+        print()
+        for line in format_probe_report(report):
+            print(line)
+        blocking = diag.blocking_findings(report.findings())
+        if blocking and "--force" not in arguments:
+            print()
+            print("[STOP] the runtime read nothing usable from the live listing:")
+            for finding in blocking:
+                print(f"       {finding.code}: {finding.message}")
+            print("       nothing was installed; re-run with --force to install anyway.")
+            return 1
+
     installed, read = install_if_the_runtime_reads(draft, draft_path, pages[0][0], pages[0][1],
                                                    source=str(directory))
     if installed is None:

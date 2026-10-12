@@ -330,6 +330,13 @@ export interface PendingOfflineEntryCreate {
     status?: 'pending' | 'conflict' | 'failed'; lastError?: string | null }>;
 }
 
+/** Every way an Entry's images can be unavailable for deletion or reordering. */
+export type EntryMediaRemovalBlockReason =
+  | 'no-server-row'
+  | 'upload-uncertain'
+  | 'cover-not-uploaded'
+  | 'native-uncertain';
+
 export interface GalleryApi {
   resumeNativeTransfers?(): Promise<{active:number;completed:number;held:number;remainingOperations:number;standaloneMedia?:number;foregroundMedia?:number;dependencyHeld?:number;capabilityHeld?:number;foregroundReason?:string}>;
   previewPendingWorkRestore?(text: string): Promise<import('../offline/pending-work-restore.js').PendingWorkRestorePreview>;
@@ -367,8 +374,11 @@ export interface GalleryApi {
     kind: 'cover' | 'preview',
     file: File,
   ): Promise<EntryRecordDto>;
-  /** The Entry's media list in display order; the first ref is the cover. */
-  getEntryMediaRemovalBlockReason?(entryId:number):Promise<string|null>;
+  /**
+   * Why the Entry's images cannot be deleted or reordered right now, or null
+   * when they can. A code rather than a sentence, so the page owns the wording.
+   */
+  getEntryMediaRemovalBlockReason?(entryId:number):Promise<EntryMediaRemovalBlockReason|null>;
   setEntryMediaOrder?(entryId: number, refs: string[]): Promise<EntryRecordDto>;
   previewSiteProbeFolder(files: File[]): Promise<ImportPreview>;
   /** The same preview for an export the server can read itself (a crawl T³ started). */

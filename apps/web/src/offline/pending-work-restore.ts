@@ -3,11 +3,13 @@ import { conversionCascadeOwners } from './entry-multi-author.js';
 import { normalizeTag, pendingWorkFileSchema, syncReplayRequestSchema, syncSnapshotSchema, type SyncSnapshot, type SyncReplayRequest } from '@t3/shared';
 import { operationFingerprint, type PendingSyncOperation } from './outbox-store.js';
 import type { StagedMediaUpload } from './media-outbox-store.js';
+import type { LocalFinalState } from './local-final-state.js';
+import { randomUuid } from './random-id.js';
 
 export const MAX_RESTORE_FILE_BYTES = 96 * 1024 * 1024;
 const MAX_BINARY_BYTES = 64 * 1024 * 1024;
 export const RESTORE_CLIENT_KEY = 'pendingWork.clientId';
-export interface PreparedPendingWork { operations: PendingSyncOperation[]; media: StagedMediaUpload[]; expectedSnapshot?: string }
+export interface PreparedPendingWork { operations: PendingSyncOperation[]; media: StagedMediaUpload[]; expectedSnapshot?: string;localFinalState?:LocalFinalState;localMediaReceipts?:Array<{uploadId:string;entryUid:string;kind:'cover'|'preview';entityId:number;relativeRef:string}> }
 export interface PendingWorkRestorePreview {
   operationCount: number; mediaCount: number; binaryBytes: number;
   addedOperations: number; addedMedia: number; identicalOperations: number; identicalMedia: number;
@@ -53,7 +55,17 @@ export async function preparePendingWork(text: string): Promise<PreparedPendingW
     const blob = new Blob([bytes], {type:metadata.mimeType});
     media.push({...metadata,blob});
   }
-  return {operations:structuredClone(source.operations),media};
+  const local:LocalFinalState|undefined=result.data.localFinalState?{...structuredClone(result.data.localFinalState),derived:result.data.localFinalState.derived??[]}:undefined;
+  if(local){
+    // An exported deferred Blob has no submitted body. Restore it as a fresh
+    // local copy so an older export can never rewrite a UUID submitted later.
+    const remap=new Map(local.deferredMedia.map(id=>[id,randomUuid()]));
+    for(const image of media)if(remap.has(image.uploadId))image.uploadId=remap.get(image.uploadId)!;
+    local.deferredMedia=local.deferredMedia.map(id=>remap.get(id)!);local.mediaOrder=local.mediaOrder.map(id=>remap.get(id)??id);
+    local.mediaDrafts=[...local.deferredMedia];local.drafts=[];
+    for(const intent of local.media)for(const item of intent.items)if(item.uploadId && remap.has(item.uploadId))item.uploadId=remap.get(item.uploadId)!;
+  }
+  return {operations:structuredClone(source.operations),media,...(local?{localFinalState:local}:{}),...(result.data.localMediaReceipts?{localMediaReceipts:result.data.localMediaReceipts}:{})};
 }
 
 export function mediaFingerprint(media: StagedMediaUpload): string {
@@ -65,6 +77,7 @@ const uid = (value:string) => value.toLowerCase();
 /** Pure latest-state validation, called synchronously INSIDE the storage transaction. */
 export function planPendingWorkRestore(work: PreparedPendingWork, clientId: string, boundClient: unknown,
   rawSnapshot: unknown, existing: PendingSyncOperation[], existingMedia: StagedMediaUpload[], generation?: unknown, verifiedProjection?: unknown,
+  localFinalState?:LocalFinalState,
 ): {operations:PendingSyncOperation[];media:StagedMediaUpload[];preview:PendingWorkRestorePreview} {
   if (boundClient !== clientId) throw new Error('Pending-work restore belongs to a different device');
   let snapshot: SyncSnapshot;
@@ -240,8 +253,13 @@ export function planPendingWorkRestore(work: PreparedPendingWork, clientId: stri
     if (!live) { media.push(row); liveUploads.set(uid(row.uploadId),row); }
   }
   const slots = new Set<string>();
+  const deferred=new Set([...(localFinalState?.deferredMedia??[]),...(work.localFinalState?.deferredMedia??[])]);
   for (const row of liveUploads.values()) {
     if (row.blob.size!==row.byteLength || row.blob.type!==row.mimeType) throw new Error('A staged image is incomplete');
+    if(deferred.has(row.uploadId)){
+      if(row.lastAttemptAt!==null || row.status!=='pending' || !union.some(op=>op.operationKind==='entry.create' && uid(op.entityUid)===uid(row.entryUid)) && !payload.entries.some(entry=>entry.syncUid && uid(entry.syncUid)===uid(row.entryUid)))throw new Error('Deferred image has no local owner');
+      continue;
+    }
     const key = `${uid(row.entryUid)}:${row.kind}:${row.ordinal}`;
     if (slots.has(key) || (row.kind==='cover' && row.ordinal!==0)) throw new Error('Duplicate or invalid staged image position');
     slots.add(key);
@@ -256,11 +274,15 @@ export function planPendingWorkRestore(work: PreparedPendingWork, clientId: stri
     // Keep the original create even if its authoritative Entry is already present.
     if (row.existingEntry ? !payload.entries.some(entry=>entry.syncUid && uid(entry.syncUid)===uid(row.entryUid)) : !union.some(op=>op.operationKind==='entry.create' && uid(op.entityUid)===uid(row.entryUid))) throw new Error('A staged image is missing its original Entry create');
   }
-  return {operations,media,preview:{operationCount:work.operations.length,mediaCount:work.media.length,
-    binaryBytes:work.media.reduce((sum,row)=>sum+row.byteLength,0),snapshotIdentity,addedOperations:operations.length,addedMedia:media.length,
-    identicalOperations:work.operations.length-operations.length,identicalMedia:work.media.length-media.length,
-    scope:work.operations.length || work.media.length ? 'This device and current library only' : 'Empty file: no work to restore'}};
+  const intents=[...(work.localFinalState?.media.filter(row=>!row.compiled)??[]),...(work.localFinalState?.deleted.filter(row=>!row.compiledOpId)??[])];
+  const identical=intents.filter(row=>[...(localFinalState?.media??[]),...(localFinalState?.deleted??[])].some(existing=>jsonEqual(existing,row))).length;
+  return {operations,media,preview:{operationCount:work.operations.length+intents.length,mediaCount:work.media.length,
+    binaryBytes:work.media.reduce((sum,row)=>sum+row.byteLength,0),snapshotIdentity,addedOperations:operations.length+intents.length-identical,addedMedia:media.length,
+    identicalOperations:work.operations.length-operations.length+identical,identicalMedia:work.media.length-media.length,
+    scope:work.operations.length || work.media.length || intents.length ? 'This device and current library only' : 'Empty file: no work to restore'}};
 }
+
+const jsonEqual=(left:unknown,right:unknown)=>JSON.stringify(left)===JSON.stringify(right);
 
 function validateReferences(op: SyncReplayRequest, snapshot: SyncSnapshot, union: PendingSyncOperation[], index: number): void {
   const payload = snapshot.payload;

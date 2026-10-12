@@ -63,6 +63,18 @@ it('accepts stable Entry Tag and Facet creates with causal complete-set referenc
     ...facetCreate,
     payload: { ...facetCreate.payload, entryType: 'game' },
   }).success).toBe(false);
+  // A Facet queued inside a layout original has no facet-create to declare: the
+  // server resolves it from tag_groups.sync_uid and the planner orders it.
+  const layoutFacetUid = randomUUID();
+  expect(syncReplayOperationSchema.safeParse({
+    ...assignment,
+    payload: { tags: [{ name: 'School Life', tagUid, facetUid: layoutFacetUid }], tagCreates: [{ tagUid, createOpId: tagCreate.opId }] },
+  }).success).toBe(true);
+  // A declared dependency that nothing references is still refused.
+  expect(syncReplayOperationSchema.safeParse({
+    ...assignment,
+    payload: { ...assignment.payload, facetCreates: [...assignment.payload.facetCreates, { facetUid: layoutFacetUid, createOpId: facetCreate.opId }] },
+  }).success).toBe(false);
 });
 
 it('parses stable Entry Tag vocabulary and shared layout snapshot identities', () => {

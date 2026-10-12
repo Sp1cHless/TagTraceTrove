@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>T³ User Manual</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1f232c; --text:#e8eaf0; --muted:#9aa3b2;
+    --line:#2a2f3a; --accent:#4c8dff; --accent-soft:#1e2a44; --good:#3fb950; --warn:#d29922; --bad:#f85149;
+    --radius:14px; --maxw:900px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text); line-height:1.7;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  a{color:var(--accent); text-decoration:none}
+  a:hover{text-decoration:underline}
+  header.top{
+    position:sticky; top:0; z-index:20; backdrop-filter:blur(10px);
+    background:color-mix(in srgb, var(--bg) 82%, transparent);
+    border-bottom:1px solid var(--line);
+    padding:12px 18px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  }
+  header.top h1{font-size:1.05rem; margin:0; font-weight:650; letter-spacing:.02em}
+  header.top .sub{color:var(--muted); font-size:.82rem}
+  header.top .spacer{flex:1}
+  .lang{display:flex; gap:6px; font-size:.85rem}
+  .lang a{padding:4px 10px; border:1px solid var(--line); border-radius:999px}
+  .lang a.active{background:var(--accent-soft); border-color:var(--accent); color:var(--text)}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:26px 18px 90px}
+  h2{font-size:1.35rem; margin:2.2em 0 .6em; padding-bottom:.35em; border-bottom:1px solid var(--line)}
+  h3{font-size:1.06rem; margin:1.6em 0 .4em; color:#dfe3ec}
+  h4{font-size:.98rem; margin:1.2em 0 .3em; color:var(--muted); font-weight:600}
+  p{margin:.6em 0}
+  ul,ol{margin:.5em 0 .8em; padding-left:1.35em}
+  li{margin:.28em 0}
+  code{background:var(--panel2); padding:.12em .42em; border-radius:6px; font-size:.9em; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  pre{background:var(--panel2); padding:14px 16px; border-radius:var(--radius); overflow:auto; border:1px solid var(--line)}
+  pre code{background:none; padding:0}
+  kbd{background:var(--panel2); border:1px solid var(--line); border-bottom-width:2px; border-radius:6px; padding:.08em .45em; font-size:.85em}
+  .toc{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px 20px}
+  .toc h2{margin-top:0; border:0; font-size:1rem; color:var(--muted)}
+  .toc ol{columns:2; column-gap:28px}
+  @media (max-width:620px){ .toc ol{columns:1} }
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px 20px; margin:1em 0}
+  .note,.tip,.warn{border-left:4px solid; padding:12px 16px; border-radius:8px; margin:1em 0; background:var(--panel)}
+  .note{border-color:var(--accent)}
+  .tip{border-color:var(--good)}
+  .warn{border-color:var(--warn)}
+  .note b,.tip b,.warn b{display:block; margin-bottom:.2em}
+  table{width:100%; border-collapse:collapse; margin:1em 0; font-size:.93rem; display:block; overflow-x:auto}
+  th,td{border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top}
+  th{background:var(--panel2); font-weight:600}
+  .pill{display:inline-block; background:var(--accent-soft); color:var(--accent); border-radius:999px; padding:.05em .6em; font-size:.8em; margin-right:.3em}
+  hr{border:0; border-top:1px solid var(--line); margin:2.4em 0}
+  footer{color:var(--muted); font-size:.85rem; text-align:center; padding:30px 0}
+  .lead{color:var(--muted)}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>T³ User Manual</h1>
+  <span class="sub">Tag · Trace · Trove</span>
+  <span class="spacer"></span>
+  <nav class="lang"><a href="zh.html">中文</a><a class="active" href="en.html">English</a></nav>
+</header>
+
+<div class="wrap">
+
+<p class="lead">This manual is organized by feature and explains what every screen in T³ is for and how to use it. The desktop and
+phone share one interface; phone-specific differences are called out. For the underlying design see <code>docs/architecture.md</code>;
+for what is implemented right now see <code>docs/status.md</code>.</p>
+
+<nav class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#s0">First run</a></li>
+    <li><a href="#s1">Interface overview</a></li>
+    <li><a href="#s2">Home</a></li>
+    <li><a href="#s3">Gallery (browse / sort / filter)</a></li>
+    <li><a href="#s4">Entry detail (view &amp; edit)</a></li>
+    <li><a href="#s5">Creating an Entry</a></li>
+    <li><a href="#s6">Authors</a></li>
+    <li><a href="#s7">Collections</a></li>
+    <li><a href="#s8">View later / Recently viewed / Random</a></li>
+    <li><a href="#s9">Search</a></li>
+    <li><a href="#s10">Settings</a></li>
+    <li><a href="#s11">Advanced function</a></li>
+    <li><a href="#s12">Importing from websites</a></li>
+    <li><a href="#s13">Offline library</a></li>
+    <li><a href="#s14">The phone app</a></li>
+    <li><a href="#s15">Backup &amp; restore</a></li>
+    <li><a href="#s16">Troubleshooting</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="s0">1. First run</h2>
+
+<h3>Launching</h3>
+<ul>
+  <li>Double-click <code>T3.exe</code> in the repo root: the desktop server starts hidden, opens your browser and lives in the
+      system tray. Right-click the tray icon to exit.</li>
+  <li><code>T3.bat</code> does the same thing in a console window — <b>closing that window stops the server</b>.</li>
+  <li>The first launch builds the web UI automatically; give it a moment. Later launches, when the server is already running,
+      just re-open the browser.</li>
+</ul>
+
+<h3>Where your data lives</h3>
+<p>By default everything is under <code>apps/server/.data/</code>:</p>
+<table>
+  <tr><th>Path</th><th>Contents</th></tr>
+  <tr><td><code>library.db</code></td><td>The whole library (one SQLite file)</td></tr>
+  <tr><td><code>assets/</code></td><td>Covers, previews, thumbnails</td></tr>
+  <tr><td><code>backups/</code></td><td>Whole-library backups</td></tr>
+  <tr><td><code>templates/</code></td><td>Per-Gallery template files</td></tr>
+</table>
+<div class="tip"><b>It's just files</b>Copying the <code>.data</code> folder is a complete backup.</div>
+
+<h3>Opening access for your phone (optional)</h3>
+<p>Right-click the tray icon → turn on <b>Allow phone access (LAN)</b>. This restarts the server on <code>0.0.0.0</code> and
+lists the machine's local addresses; click one to copy, then paste it on your phone. Turning it off returns to localhost-only.</p>
+
+<!-- ============================================================ -->
+<h2 id="s1">2. Interface overview</h2>
+
+<h3>The sidebar (navigation)</h3>
+<p>The sidebar is top-priority navigation: <b>from any page, at any depth, clicking a sidebar item switches there immediately</b>.
+It usually holds, top to bottom: <b>Home</b>, the <b>search field</b>, your <b>Galleries</b> (one per Entry type), <b>Authors</b>,
+<b>Collections</b>, <b>View later</b>, <b>Recently viewed</b>, <b>Random pick</b>.</p>
+<p>On the phone (narrow screens) the sidebar becomes a slide-out drawer with an overlay, <kbd>Esc</kbd>, and the browser Back button.</p>
+
+<h3>The top bar</h3>
+<ul>
+  <li>Left: a <b>Back</b> button (disabled on Home) and the current page title.</li>
+  <li>Right: the <b>theme toggle</b> (light/dark) and the <b>Settings</b> gear.</li>
+</ul>
+
+<h3>The floating buttons (lower-right)</h3>
+<p>Every view carries two fixed buttons in the lower-right corner: <b>Back</b> on top, <b>scroll-to-top</b> below. The floating
+Back runs the same action as the top-bar Back, so a long page can always be left.</p>
+<div class="tip"><b>Back remembers where you came from</b>Opening an Entry from an Author and going back returns to that Author, on the
+same page, scroll position, filter and sort. A newly opened page always starts at the top.</div>
+
+<!-- ============================================================ -->
+<h2 id="s2">3. Home</h2>
+<p>Home is a "keep going" entry point, not a stats dashboard.</p>
+<ul>
+  <li><b>Hero</b>: a greeting plus an <b>Add a new entry</b> button that goes straight to the creation page.</li>
+  <li><b>Ambient summary</b>: rotates through "now holding N entries", "you have M galleries", "recently viewed …". It's
+      atmosphere, not a precise stat card.</li>
+  <li><b>Recently viewed</b>: works whose source URL you opened most recently; a card opens the Entry detail.</li>
+  <li><b>Recent galleries</b>: a few doors back into the collection.</li>
+  <li><b>Empty state</b>: when the library has nothing yet, it offers "add the first entry".</li>
+  <li>If every Gallery is hidden by your NSFW setting, Home says so and offers a <b>Show NSFW content</b> button.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s3">4. Gallery</h2>
+
+<h3>Browsing</h3>
+<p>Each Gallery corresponds to one <b>Entry type</b> (e.g. <code>comic</code>, <code>game</code>). Create a work with a brand-new
+type and that Gallery appears automatically. Works show as depth-stacked cover cards, several rows per page; the row count is
+adjustable in Settings.</p>
+
+<h3>Sorting</h3>
+<p>The <b>Sort</b> control next to the Gallery title offers <b>Newest first</b>, <b>Oldest first</b>, <b>Title (A–Z)</b>,
+<b>Title (Z–A)</b>, by <b>Type</b>, plus the rating and usage sorts below.</p>
+
+<h3>The filter bar</h3>
+<p>Above the grid is a filter bar of rows; <b>everything combines with AND</b> — every tag you add only narrows the result:</p>
+<ul>
+  <li><b>Facet + tags</b> rows: type to search (near-character ranking; close spelling is accepted). A tag can be picked only
+      once across the whole bar.</li>
+  <li>An <b>All tags</b> row matches tags regardless of Facet.</li>
+  <li><b>+ Authors</b> adds an author row; authors within that row are OR'd.</li>
+  <li>While filtering, the heading shows <code>shown / total</code>, and the Author page's Directories are temporarily
+      <b>unfolded</b> into one flat grid of matches. Clearing the filter restores them.</li>
+</ul>
+
+<h3>Rating &amp; usage sorts</h3>
+<p>Every rating dimension gets an extra sort option, <b>Apply author rating</b> (marked 👤): a work with no value of its own
+borrows its Authors' value for the same-named dimension (the highest Author value; works with four or more Authors never
+borrow). <b>Rating filters</b> still look at the work's own value only.</p>
+<p>Usage (views / last viewed / likes) appears in <b>sorting only</b> — never as a numeric or date filter.</p>
+
+<h3>Reordering Galleries</h3>
+<p>In the sidebar, use <b>Move Galleries</b> to enter reorder mode and move them with the up/down buttons.</p>
+
+<h3>Pagination</h3>
+<p>The pager under the grid pages by the cards the layout can actually show; on phones the rows-per-page preference doubles.
+Changing the filter or sort returns to page 1.</p>
+
+<!-- ============================================================ -->
+<h2 id="s4">5. Entry detail</h2>
+
+<h3>Read mode</h3>
+<ul>
+  <li>The header shows the title, a type badge, the stats row (date, pages/duration) and the toolbar.</li>
+  <li>The toolbar has <b>Edit</b>, <b>Like</b> (👍, re-clickable), the <b>View later</b> clock, <b>📁+ add to collection</b>,
+      and delete.</li>
+  <li>Sections and Facets lay out per the Gallery template; tags show as chips. <b>Double-clicking a tag</b> opens a
+      cross-Gallery result page of every work carrying it.</li>
+  <li><b>Ratings</b>: rated rows show a partially filled ★; unrated rows show "Unrated".</li>
+  <li><b>Content</b>: ordered rows such as <code>Source URL</code>, <code>description</code>, or a short review.
+      <code>content_type</code> is free text.</li>
+  <li>A view is recorded only when you <b>open the work's source URL</b> — opening the detail card does not count.</li>
+</ul>
+
+<h3>Edit mode (click Edit)</h3>
+<ul>
+  <li><b>Title</b>: double-click to edit inline; <kbd>Enter</kbd> or blur saves, <kbd>Esc</kbd> cancels.</li>
+  <li><b>Type</b>: switching the type moves the work to another Gallery.</li>
+  <li><b>Date / pages / duration</b>: inline. Dates accept <code>yyyy-mm-dd</code>, <code>yyyy-mm</code> or <code>yyyy</code>;
+      duration accepts <code>h:mm:ss</code> / <code>mm:ss</code> / <code>ss</code> and can be cleared.</li>
+  <li><b>Sections &amp; Facets</b>: an empty Section's first row offers <b>+ Facet</b> and <b>+ Tag</b> together; named Facets
+      have a label column and a tag column; Facets can be reordered. A Section's title can be <b>renamed</b> or <b>deleted</b>.</li>
+  <li><b>Tags</b>: drag to move between Facets, double-click to rename (this work's placement only), or delete.</li>
+  <li><b>Content</b>: add, edit, delete, reorder; Enter or blur saves.</li>
+  <li><b>Ratings</b>: a half-star picker (0.5–5 in half steps) and a clear button per row; <b>+ Rating</b> adds a shared
+      dimension for the whole Gallery. The row up/down controls reorder the <b>whole Gallery's</b> shared slot order.</li>
+  <li><b>Authors</b>: compact controls create / link / unlink; matching is always your explicit confirmation, never automatic.</li>
+  <li><b>Convert all Authors</b>: appears when a work has ≥2 credited Authors and they are not all
+      <code>multiple author</code>. It replaces every credited Author with one shared <code>multiple author</code> and does not
+      judge who "deserves" to stay. Authors appearing only on this work fall to zero and disappear from lists (rows are kept,
+      so a later import can relink them); Authors that keep other works simply lose this one.</li>
+  <li><b>Save as template / Apply tag layout</b> (toolbar): the first rebuilds the type's shared layout; the second only syncs
+      this work's tag→Facet placement onto other works of the same type (skipping tags this work lacks).</li>
+</ul>
+
+<div class="note"><b>The first-time structure prompt</b>Clicking Done on a Gallery's <b>only</b> work when that Gallery has no Sections
+yet raises a modal asking whether to apply this work's Sections and Facets to the whole Gallery. Applying does exactly what the
+toolbar's "Save as template" does.</div>
+
+<h3>Merging works</h3>
+<p>On an <b>Author page</b>, Edit mode → <b>Merge works</b>: pick <b>two works of the same Gallery</b>, then choose the keeper,
+the title to save, whether to union Tags, and which detected source URLs to copy. One server transaction copies and then deletes
+the absorbed work. The absorbed work's other Content, media, Ratings, usage, Directories, Collections and View later are
+<b>not</b> copied.</p>
+
+<!-- ============================================================ -->
+<h2 id="s5">6. Creating an Entry</h2>
+<p>Reach it from Home's "Add a new entry" or the sidebar.</p>
+<ul>
+  <li>Fill in the <b>title</b> (required) and the <b>type</b>: a new name creates a Gallery, an existing name joins it.</li>
+  <li><b>Cover / Preview</b>: pick local images. New uploads get a 512px card thumbnail automatically; the original is used on
+      the detail page.</li>
+  <li><b>Source URL</b>: a web URL, or a full local file path.</li>
+  <li><b>The template button</b> (under the Gallery field): an existing Gallery reads "Template ready — open detailed editing", a
+      new type reads "New Gallery — create its template". Either way it creates the work with what you filled in, then opens that
+      work's own editor.</li>
+  <li>You can also set initial Content, initial ratings and View later membership right here.</li>
+</ul>
+<div class="tip"><b>You can create offline too</b>On the phone or while offline, a new Entry (with a cover) goes into the pending
+queue and lands automatically when you're back online. See §13.</div>
+
+<!-- ============================================================ -->
+<h2 id="s6">7. Authors</h2>
+
+<h3>The list</h3>
+<ul>
+  <li>Only Authors with <b>at least one linked work</b> are listed. Deleting an Author's last work hides the Author from every
+      discoverable place without deleting the row — a later import can relink them.</li>
+  <li>Filter by <b>dominant Gallery type</b>; sort by <b>last viewed / most viewed / most liked</b>.</li>
+  <li>Two independent filter groups: <b>Author tags</b> (the Author's own vocabulary) and <b>Works contain tags</b> (tags carried
+      by their works, not copied onto the Author). Multiple work tags must sit on the <b>same</b> work.</li>
+  <li>Cards show the Author's other recorded spellings (aliases) as a faded sub-line.</li>
+</ul>
+
+<h3>The detail page</h3>
+<ul>
+  <li>One information board: basics, the <b>Author Tags</b> row (independent vocabulary), and the Author's <b>content</b> note.
+      Authors have no Section/Facet layout.</li>
+  <li><b>Ratings</b>: half-star picker, <b>+ Rating</b>, shared up/down reordering. Ratings belong to the Author's
+      <b>dominant-Gallery partition</b>; a workless Author shows a hint.</li>
+  <li><b>Works</b>: Gallery-style cards, paged server-side. Opening one reuses Entry navigation; going back returns to the Author.</li>
+  <li><b>Directories</b>: presentation-only grouping that never changes a work's type and never creates a Gallery.
+      <code>+ Directory</code> creates one; dropping one loose work onto another creates a Directory, dropping onto an existing one
+      moves the work in; the Directory's title/description save inline; a work can be moved back out to "loose".</li>
+  <li><b>Author aliases</b> (maintained under Advanced → Author aliases): one display name plus the spellings that resolve to it
+      (kana/kanji, a translated name, romaji/English). Saving immediately merges existing duplicate rows so every spelling points
+      at one person.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s7">8. Collections</h2>
+<ul>
+  <li>Two kinds, fixed at creation: <b>entry</b> collections (may have <b>one level of subfolders</b>) and <b>producer</b>
+      (Author) collections (flat).</li>
+  <li>The Collections page is one flat row of pages: every Gallery, then "Unfiled" when such folders exist, then Authors. An NSFW
+      Gallery hidden in SFW mode takes its page and its folders with it.</li>
+  <li>Edit mode creates, deletes and drag-reorders folders. Inside an entry collection there is <b>+ New subfolder</b>; child
+      folders show as folder cards above the members, and opening one does not leave Edit mode.</li>
+  <li>In normal mode, clicking a member opens the Entry; in <b>Edit mode</b> a click selects the member for organizing, then use
+      <b>Move here</b> on a subfolder or <b>Move out</b> inside one. The remove control on a member card only unlinks it from the
+      active folder — the work stays.</li>
+  <li><b>Adding to a Collection</b>: Entry details and the Author board carry a 📁+ button; already-joined folders show ✓ and are
+      disabled. The menu prefers the folders curated onto <b>that work's own Gallery page</b>, plus the unfiled ones.</li>
+  <li><b>Add common tag</b>: from a folder's edit view, put one tag on <b>every</b> work it holds (subfolders included). Each work
+      keeps its own Gallery's placement; Galleries with no structure are reported as skipped.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s8">9. View later / Recently viewed / Random</h2>
+
+<h3>View later</h3>
+<ul>
+  <li>Independent <b>Entries</b> and <b>Authors</b> lists, stored in the library and shared across every desktop/phone browser
+      connected to it.</li>
+  <li>Use the <b>clock button</b> on an Entry or Author page to add/remove; when saved it becomes a checked clock.</li>
+  <li>Lists keep insertion order and clients pull them on their own (no need to be online at the same time).</li>
+</ul>
+
+<h3>Recently viewed</h3>
+<ul>
+  <li>Grouped by Gallery with browser-style tabs. Opens in "Last viewed" mode, hides works never viewed, shows at most 72 cards.</li>
+  <li>The mode buttons (★ / Most viewed / Most liked) are <b>toggles</b>: clicking the active one exits it.</li>
+</ul>
+
+<h3>Random pick</h3>
+<ul>
+  <li>Three modes: <b>Works / Authors / Tags</b>. Works can be dealt from all visible Galleries, or from one Gallery narrowed by
+      the filter bar.</li>
+  <li>Each press of <b>🎲 Random</b> deals one page (24 work/author cards, or exactly one Tag). A Tag is revealed on a large card
+      that opens the Tag results page.</li>
+  <li>Authors are filtered by their derived NSFW state; tags are deduplicated from the currently visible Galleries, so SFW mode
+      never deals an NSFW-only tag.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s9">10. Search</h2>
+<ul>
+  <li>Focusing the sidebar search field or submitting a query opens the Search page (independent of the Gallery filter state).</li>
+  <li>Three scopes: <b>Entries</b>, <b>Tags</b>, <b>Authors</b>.</li>
+  <li>Close spelling is accepted; Author search also matches recorded alias spellings (the result card keeps the author's own
+      name and shows the matched spelling underneath).</li>
+  <li>Tag search respects your Show NSFW preference: SFW mode omits tags used only by NSFW Galleries, and shared-tag counts
+      include only SFW usage.</li>
+  <li>Navigating into a result and back carries the current query and scope, so the search state is restored.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s10">11. Settings</h2>
+<p>Click the gear in the top bar (the daily controls live here):</p>
+<ul>
+  <li><b>Show NSFW galleries and authors</b>: the global visibility switch. Off hides NSFW Galleries, NSFW Authors, NSFW
+      members/covers/counts inside Collections, and NSFW content from Random.</li>
+  <li><b>Language</b>: English / 简体中文.</li>
+  <li><b>Rows per page</b>: the Gallery grid's rows per page (doubled on phones).</li>
+  <li><b>Accent color</b>: blue / teal / violet / rose / amber / green — six presets.</li>
+  <li><b>Connect to APP</b>: the phone-pairing block (§14).</li>
+  <li><b>Advanced function</b>: opens the Advanced page (§12).</li>
+</ul>
+<p>The top bar also has a <b>light/dark theme toggle</b>.</p>
+
+<!-- ============================================================ -->
+<h2 id="s11">12. Advanced function</h2>
+<p>The Advanced page has several tabs; on narrow screens the tab row <b>scrolls</b>.</p>
+
+<h3>Tags (dictionary)</h3>
+<ul>
+  <li>Manages <b>aliases</b> for the Entry vocabulary: a spelling → a canonical name, optionally with a partition label
+      (series / characters / types / tags / …).</li>
+  <li><b>Placeholder rows</b> (empty canonical) just record a pending name and never resolve anything; they can be filled with one
+      click into the alias form.</li>
+  <li><b>Tag merge</b>: pick the tag to keep and the tags to absorb; after confirming, all assignments re-point to the kept tag and
+      the merged rows are deleted (with a pre-transaction backup).</li>
+</ul>
+
+<h3>Author merge</h3>
+<ul>
+  <li>One-button duplicate detection: the <b>first tap only plans</b> the groups, the second executes (with backup + integrity
+      report).</li>
+  <li>Detection rules: identical normalized names; separator variants (<code>_</code>/<code>-</code>/<code>.</code> count as
+      whitespace, so <code>arai_kazuki</code> and <code>Arai Kazuki</code> are one Author); and spellings that resolve through the
+      producer dictionary to the same canonical name.</li>
+  <li>Each group keeps the row with the most works; on equal work counts the separator-free spelling becomes the display name.
+      Works, Author tags, Author ratings and Directories transfer to the survivor.</li>
+</ul>
+
+<h3>Author aliases</h3>
+<p>See §7, "Authors".</p>
+
+<h3>Gallery templates</h3>
+<ul>
+  <li>Per-Gallery summary: structure dimensions, tag→Facet assignments, the local file paths
+      (<code>&lt;type&gt;.template.json</code> / <code>&lt;type&gt;.tag-layout.json</code>) and whether they exist.</li>
+  <li>Saving/applying a template happens on <b>any Entry card</b> (the toolbar's "Save as template" / "Apply tag layout").</li>
+  <li><b>Common template</b>: the repository's built-in Sections/Facets (basic info / Type / Characters / Language / Tags / All
+      tags / overall rating). Applying copies them into that Gallery, where they can be renamed, emptied or deleted like any
+      template you built. It also brings the "Content kinds" note (each Gallery has built-in <code>Source URL</code> /
+      <code>description</code>; a work shows a row only when it has text).</li>
+  <li><b>Title shortening</b> (a sub-card inside the Templates card): for Entries titled <code>original | translation</code>, it
+      lists both sides and lets you pick which to keep. It pre-selects by determinable direction (the translated side when it
+      carries Han/Kana; the original when the other side is only Hangul; nothing when both sides are ASCII). It writes a database
+      backup first and only applies entries whose title still matches the plan.</li>
+</ul>
+
+<h3>Unassigned tags</h3>
+<ul>
+  <li>Lists, per Gallery, tags still sitting in the unnamed default position; pick a target Facet to move them (entries that
+      already classify the tag are skipped).</li>
+  <li>When a majority of same-type entries keep the tag in a named Facet, a <b>Follow</b> button moves them there in one click.</li>
+</ul>
+
+<h3>Source maintenance</h3>
+<p>See §12, "Source library".</p>
+
+<h3>System</h3>
+<ul>
+  <li><b>Errors and log</b>: shows the desktop server's log tail and recent client errors, with <b>Copy for a bug report</b>.</li>
+  <li><b>Database</b>: <b>Back up now</b>, <b>Export</b> (downloads as a real library file), <b>Restore from file</b>. A restore is
+      <b>staged</b>: the upload is validated and kept aside, and you must exit the desktop from the tray and open it again to put it
+      in place (the replaced library is backed up first).</li>
+  <li><b>Settings</b>: <b>Automatically allow phone access at startup</b> (on by default). Turning it off keeps the desktop
+      invisible to the network.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s12">13. Importing from websites</h2>
+<p>Import has two doors, both inside T³: the <b>rule builder</b> (learn a site) and <b>link import</b> (commit a crawl's output).</p>
+
+<h3>Step 1 — the rule builder (SiteProbe)</h3>
+<p>It opens a real page in your browser, lets you click the parts you care about, and learns that site's rules. It is guided
+start to finish; the first adapter takes a few minutes of your attention.</p>
+<ol>
+  <li><b>Prepare 2–3 work addresses</b> of the site (<span class="pill">work adapter</span>). Favour pages that actually carry what
+      you want — many tags if you want every tag, several authors if a work can have them.</li>
+  <li>Click "start the work-page adapter"; the builder opens the annotation page. <b>Copy a real value from the page, paste it into
+      the search box, and pick the closest match.</b> The tool scores candidates, but <b>the score is not the point — pick the best
+      match</b>. Values like <code>$authorS$</code> or <code>123title456</code> look like page code and can score high, but if the
+      clean value is shown on the page the tool has also harvested it.</li>
+  <li>When it says the adapter is built, you can <b>import the first work for preview</b>.</li>
+  <li>Optionally add a <b>listing adapter</b> (<span class="pill">search / artist / favorites / album / playlist</span>): give the
+      listing's <b>first</b> and <b>second</b> page URLs (the second is required — it teaches pagination), then annotate the cards.</li>
+</ol>
+<div class="warn"><b>Current limits</b>Simple sites only. Sites that need a sign-in, or that defend themselves against scripts
+(blocking the debug port, scrambling covers), are beyond the generic mechanism; the shipped adapters cover those, or such a site
+needs a dedicated adapter.</div>
+<div class="tip"><b>A rule must name its own addresses</b>A learned listing must be able to turn the page and locate each card's work
+address — a rule that knows only one address is a failed design. That is why the second page URL is required.</div>
+
+<h3>Step 2 — link import</h3>
+<ol>
+  <li>The creation page (and the Advanced import panel) offers <b>Import an export folder</b> (drop or browse) and <b>Batch import</b>
+      (drop a parent folder containing <code>items/&lt;id&gt;</code> subfolders).</li>
+  <li>Choose the <b>Gallery / type</b>. The mapping is prefilled from that type's saved template: <code>分类标签</code>→tags,
+      <code>作品</code>→Series, <code>登场人物</code>→Characters, <code>作品类型</code>→Type, <code>language</code>→Language,
+      <code>作者</code>→Author. <b>Unmapped fields stay explicitly "Ignore" — nothing is guessed.</b></li>
+  <li>If the Gallery has no template yet, T³ offers to take the <b>common template</b> or to <b>build your own</b> (otherwise the
+      works' tags would be lost).</li>
+  <li>A <b>template preview card</b> shows live where each mapped field will land. When the template owns a <code>Type</code>
+      Facet you can type a work type (saved as a Tag under that Facet) for sites whose exports omit it.</li>
+  <li><b>Per-author ratings</b>: the review does not rate individual works; it offers a rating per <b>Author name</b> — tick
+      "Rate this Author" to reveal the Gallery's rating dimensions. The rating is stored on the Author and shared by the whole
+      batch.</li>
+  <li>Click "Import N Entries". Import is <b>idempotent</b>: works already present are skipped and reported as "Already in the
+      library", so importing the same batch twice is safe.</li>
+</ol>
+<div class="note"><b>The post-import review</b>After importing you land in a <b>one-time</b> batch review listing the new cards and the
+"already in the library" ones. Finish it or leave from any sidebar item. If a batch is too large to check in one sitting, click
+<b>Save as temporary Collection</b> to file the whole run into a Collection named 临时 / 临时2 / …, which survives the review.</div>
+
+<h3>Updates and cursors</h3>
+<p>The library remembers each site's <b>work IDs</b> and each listing's <b>update cursor</b>. Re-crawl the same favourites folder a
+month later and only the new works need fetching. Command-line entry points:</p>
+<pre><code>pnpm import:cursor status --site hitomi.la --kind folder --ref folder-42
+pnpm import:cursor filter --site hitomi.la --ids 100,120   # ids not held yet
+pnpm import:cursor set    --site hitomi.la --kind artist --ref some-artist --source-id 3220586 --commit</code></pre>
+
+<h3>Source library &amp; Source maintenance</h3>
+<ul>
+  <li>The <b>Source library</b> is derived <b>dynamically</b> from every work's Content: known sites are grouped as
+      <code>known:&lt;site&gt;</code>, others as <code>host:&lt;hostname&gt;</code>. Content you add by hand is recognized immediately
+      with no extra sync.</li>
+  <li><b>Source maintenance</b> handles a site going invalid or changing domain: annotate a source group as <code>invalid</code>
+      (annotation only — no Content is touched), run a search job whose candidates are <b>banded by evidence</b>
+      (<code>exact-safe</code> / <code>strong-review</code> / …), review, then commit once. The commit re-verifies every item and
+      takes a real backup; any stale fact aborts the whole batch (409, zero writes). <b>Old URLs are never replaced or
+      deleted — new Source URLs are appended.</b></li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s13">14. Offline library</h2>
+<p>The browser (including the phone app's WebView) can keep an <b>offline copy</b>: browse and make some edits without a
+connection, then sync automatically when you're back. Its settings are under <b>Advanced → Offline library</b>.</p>
+
+<h3>First download</h3>
+<ol>
+  <li>Click <b>Download offline library</b>. Choose an offline-media level: <b>Metadata only</b> (no images),
+      <b>Thumbnails</b> (no originals), or <b>Selected originals</b> (list the asset refs).</li>
+  <li>The download installs metadata first, then prefetches media; progress shows processed/total. Preload runs only while the
+      page is open; interrupted downloads resume on the next launch.</li>
+</ol>
+
+<h3>Automatic update &amp; sync</h3>
+<ul>
+  <li>On reconnect, local edits are replayed automatically (syncing), then the saved copy is updated automatically (updating) —
+      there is no manual "Sync now".</li>
+  <li>Idle heartbeats never re-download; a failed update stays due for a later heartbeat.</li>
+  <li>Progress and error banners are informational and disappear on success.</li>
+</ul>
+
+<h3>What works offline</h3>
+<ul>
+  <li><b>Browsing</b>: Galleries, Entries, Authors, filters, Collections, Search, Random, View later and the other reads.</li>
+  <li><b>Editing existing works</b>: title / date / pages and other scalars, rating values, tag add/move/remove, Author
+      create-and-link/unlink, Content add/edit/remove/reorder, and an Entry's cover &amp; previews (add / replace / delete /
+      order).</li>
+  <li><b>Creating</b>: a new Entry with a cover/preview.</li>
+  <li><b>Collections</b>: create, rename, NSFW, membership, ordering.</li>
+  <li><b>Usage events</b>: views and likes (each is an independent event, so a lost response never double-counts).</li>
+</ul>
+<div class="warn"><b>Not offline</b>Deleting an Entry, merging works, importing, and template/dictionary (global) operations still
+need the desktop server. The UI marks these <b>not available under offline</b> rather than attempting a doomed request.</div>
+
+<h3>System information &amp; diagnostics</h3>
+<p>The bottom of the Offline library page holds diagnostics: an <b>Offline editing support</b> summary, <b>storage usage</b> and
+persistence status (checked and requested automatically), and a <b>copyable full report</b> (cached capability flags, snapshot
+header and ACK, local intentions, media/outbox errors, native-transfer status). Paste that report when reporting a problem.</p>
+
+<h3>Pending work (export / restore)</h3>
+<p>Normally this is <b>transparent</b> — it syncs automatically on reconnect. Exporting/restoring a pending-work file is a diagnostic
+escape hatch for cases like moving to a new device: the export is a <b>private JSON</b> (not your library — just queued edits and
+staged images, capped at 96 MiB), and a restore writes back into the <b>pending queue only</b>. It never replaces your library and
+never sends anything.</p>
+<div class="note"><b>Cleanup only after landing</b>A queued operation is removed locally only once it is proven applied on the server
+(a newer snapshot covering its receipt). Cancelling a queued operation never quietly destroys data.</div>
+
+<!-- ============================================================ -->
+<h2 id="s14">15. The phone app</h2>
+
+<h3>Pairing (once)</h3>
+<ol>
+  <li>On the <b>desktop</b>, open <b>Settings → Connect to APP</b> and click <b>Create pairing QR</b>.</li>
+  <li>The QR is valid for <b>2 minutes</b> — scan it right away; a copy/paste fallback is also available (not a camera scan).</li>
+  <li>The connection is encrypted and certificate-pinned. Certificate or authorization failures <b>never</b> clear queued work.</li>
+</ol>
+<p>The panel also lists <b>Authorized devices</b> (revoke a device or remove a record) and has a collapsed <b>manual encrypted
+connection recovery</b> section for a crash-left dead lock; it asks you to verify the real PID — never a guess.</p>
+
+<h3>Using it</h3>
+<ul>
+  <li>The phone is the same interface, responsive; on narrow screens the sidebar becomes a drawer.</li>
+  <li>Every touch interaction has a clear <b>tap path</b> (never hover-, long-press- or HTML5-drag-only); touch targets are about
+      44×44 CSS px.</li>
+  <li>Destructive actions use the same <b>two-step arm/confirm</b> pattern as the desktop.</li>
+  <li>Browser Back and the in-page Back both restore the source page and scroll position; a new page starts at the top.</li>
+</ul>
+
+<h3>Offline &amp; sync</h3>
+<p>The phone keeps an offline copy: browse, edit, create, add images and merge (some) with no connection, then it replays and
+updates automatically. Android schedules network-constrained background work; edits that depend on an unfinished predecessor wait
+for it. Very large images (native limit 20 MiB) need a foreground Update.</p>
+<div class="tip">Anything beyond the offline allowlist is marked inside the app as <b>not available under offline</b> instead of
+trying to reach the server and reporting its error.</div>
+
+<!-- ============================================================ -->
+<h2 id="s15">16. Backup &amp; restore</h2>
+<ul>
+  <li><b>Command line</b>: <code>pnpm db:backup</code> writes a self-contained backup directory (library snapshot +
+      <code>assets/</code> + manifest); <code>pnpm db:restore &lt;backupDir&gt;</code> restores. A restore first checks the backup
+      passes <code>db:doctor</code> and snapshots the current library.</li>
+  <li><b>In the app</b>: Advanced → System → Back up / Export / Restore. A restore is staged and needs an exit-and-reopen from the tray.</li>
+  <li>Stop the T³ server before restoring (otherwise it fails with a clear "file in use" error rather than a silent partial
+      overwrite).</li>
+  <li>Only complete backup <b>directories</b> are restorable through the tool; legacy single-file snapshots
+      (<code>library.db.merge-backup-*</code>) lack the assets tree.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="s16">17. Troubleshooting</h2>
+
+<h4>"Viewing the saved offline copy"</h4>
+<p>The desktop server can't be reached right now, so the offline copy is in use. It switches back and syncs automatically once the
+server answers. A few seconds right after a desktop restart is normal.</p>
+
+<h4>I changed server code but the UI didn't</h4>
+<p>The packaged entries (<code>T3.exe</code> / <code>T3.bat</code>) load the server sources once at start and <b>need a restart</b>;
+rebuilding only the web UI leaves a fresh front-end talking to an older server. In development use <code>pnpm dev:server</code>
+(with watch).</p>
+
+<h4>Phone: typing shows no suggestions</h4>
+<p>The known IME (composition) bug is fixed: the field reads input through a plain <code>@input</code> handler (<code>v-model</code>
+drops events while composing). If it still misbehaves, make sure you're on the latest build.</p>
+
+<h4>A cover in the grid looks stale</h4>
+<p>Media addresses are <b>positional</b>, so the same address can hold different bytes over time. After changing a cover, reopen the
+work; the detail page always reads the original.</p>
+
+<h4>Import says the server may still be working</h4>
+<p>The import didn't finish in the expected time, but the server may still be writing. <b>Importing the same batch twice is safe</b>
+(it's idempotent) — check the works list before retrying.</p>
+
+<h4>Reporting a bug</h4>
+<p>Go to <b>Advanced → System</b> or the bottom of <b>Offline library</b> and click <b>Copy for a bug report</b>. Paste the whole
+report to the maintainer; it includes the log tail, recent client errors, capability flags and queue state.</p>
+
+<hr>
+<p class="lead">This manual is updated with the version. Where the UI text and this manual disagree, trust the UI. It reflects the
+current state described in <code>docs/status.md</code>.</p>
+</div>
+<footer>T³ — Tag · Trace · Trove · a local-first personal index</footer>
+</body>
+</html>

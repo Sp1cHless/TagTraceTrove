@@ -1,5 +1,9 @@
 # 001 — Android WebView shell
 
+## Android 1.0.0 Release — current configuration
+
+Formal label T3, versionName 1.0.0 / versionCode 100, dedicated Release certificate, non-debuggable. Signed APK `T3-1.0.0.apk` and verified public manifest `.hermes/artifacts/android-release-1.0.0.json`. Signing key/credentials live outside this checkout; backup/build instructions are in [RELEASE.md](RELEASE.md). The new signature does not directly cover-install over debug-signed r25; this artifact has not replaced the phone's existing data or been published. Earlier release records below are historical.
+
 ## v48 Chinese UI font and copy — authoritative current status
 
 T³'s own voice is now 霞鹜文楷 (LXGW WenKai Lite, SIL OFL 1.1), applied app-wide on `body` and limited by `unicode-range` to Han, so Latin and the Arabic numerals stay in Inter; every library value (work titles, tags, author names, Section/Facet names, contents) carries `.t3-library-text` and goes back to the platform stack. The split is deliberate rather than decorative: scraped content is multi-language with rare glyphs, which a bundled subset cannot cover by construction, while the app's own copy is a closed set it covers exactly (measured: 0.2880% of the library's 628575 characters missing, all of it Korean or emoji the full 13.2 MB font cannot draw either). Also in this batch: the Chinese dictionary pass (`section` → 板块, `facet` → 维度), the shipped `common-template.json` renamed to Chinese, and `SuggestionInput` sized by `field-sizing: content` so a Chinese placeholder is no longer cut off. Full description and the two by-design residuals in `CURRENT.md`.

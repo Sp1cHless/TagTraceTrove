@@ -1272,7 +1272,10 @@ def test_a_browser_learned_artist_listing_keeps_opaque_ids_and_relative_dates(
     from datetime import date, timedelta
 
     from build_listing import url_pattern_for
-    from src.builder import capture as capture_module
+    from contextlib import contextmanager
+
+    from src.generic import acquisition
+    from src.generic.acquisition import PageRead
     from src.generic.declarative import list_cards
     from src.generic.template import TargetRule, load_template
 
@@ -1314,21 +1317,28 @@ def test_a_browser_learned_artist_listing_keeps_opaque_ids_and_relative_dates(
     template = load_template(path)
     assert template.listings["artist"].acquisition == "browser"
 
-    seen_profile = []
+    seen_plans = []
 
-    def rendered(url, *, profile=None, **_kwargs):
-        seen_profile.append(profile)
-        return Capture(url=url, final_url=url, status=200,
-                       documents=[Document(name="page", text=html, format="markup")])
+    class _FakeReader:
+        def read(self, url, **_kwargs):
+            return PageRead(url=url, final_url=url, status=200, content_type="text/html", html=html)
 
-    monkeypatch.setattr(capture_module, "capture_browser", rendered)
+    @contextmanager
+    def fake_session(plan):
+        seen_plans.append(plan)
+        yield _FakeReader()
+
+    # The runtime reads through the shared engine now (plan §5-B), not the Builder's capture module:
+    # the rule's mode decides the reader, and one session reads the whole walk.
+    monkeypatch.setattr(acquisition, "session", fake_session)
     cards = list_cards(template, "artist", {"id": "mingminga"},
                        {"target_url": listing_url, "profile_dir": tmp_path / "profile"})
 
     assert [card["source_id"] for card in cards] == ["H9fsLsKTpR1Vcx", "bCiZIXUeR4tLq5"]
     assert cards[0]["date_added"] == (date.today() - timedelta(days=5)).isoformat()
     assert cards[1]["date_added"] == "2026-09-01"
-    assert seen_profile == [tmp_path / "profile"]
+    assert [plan.mode for plan in seen_plans] == ["browser"], "the rule's mode decides the reader"
+    assert seen_plans[0].profile == tmp_path / "profile"
     matched = TargetRule(kind="artist", url_pattern=__import__("re").compile(
         draft["targets"]["artist"]["url_pattern"]), id_group=None, label="artist").match(listing_url)
     assert matched == {"id": "mingminga"}

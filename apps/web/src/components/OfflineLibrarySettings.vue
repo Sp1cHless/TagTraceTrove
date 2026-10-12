@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
-import { MAX_RESTORE_FILE_BYTES, type PendingWorkRestorePreview } from '../offline/pending-work-restore.js';
+import { computed, onMounted, ref, watch } from 'vue';
 import type { GalleryApi } from '../api/gallery.js';
 import { cancelMediaPreload, saveMediaPreloadChoice, startMediaPreload, type MediaPreloadMode } from '../offline/offline-media-task.js';
 import { clearOfflineSnapshot, downloadOfflineSnapshot } from '../offline/offline-sync.js';
@@ -10,77 +9,28 @@ import { cachedMediaObjectUrls } from '../offline/cached-media-object-urls.js';
 import { readActiveSnapshot, type ActiveSnapshot, type SnapshotStore } from '../offline/snapshot-store.js';
 import type { OutboxStore } from '../offline/outbox-store.js';
 import type { MediaOutboxStore } from '../offline/media-outbox-store.js';
-import { buildPendingWorkExport } from '../offline/pending-work-export.js';
 import { useI18n } from '../i18n.js';
 
 const emit = defineEmits<{ updated: [] }>();
 const props = withDefaults(defineProps<{
-  api: Pick<GalleryApi, 'assetUrl' | 'getSyncCapabilities' | 'fetchSyncSnapshot' | 'flushOfflineOutbox' | 'previewPendingWorkRestore' | 'restorePendingWork' | 'resumeNativeTransfers'>;
+  api: Pick<GalleryApi, 'assetUrl' | 'getSyncCapabilities' | 'fetchSyncSnapshot' | 'flushOfflineOutbox' | 'resumeNativeTransfers'>;
   store: SnapshotStore;
   online?: boolean;
+  copyRevision?: string | null;
 }>(), { online: true });
 
 const { t } = useI18n();
 const active = ref<ActiveSnapshot | null>(null);
 const busy = ref(false);
 const issue = ref<string | null>(null);
-/** The export button sits far below the page-top status line; its result speaks here. */
-const exportResult = ref<string | null>(null);
 const mediaStatus = ref<string | null>(null);
-const nativeStatus = ref<string | null>(null);
-async function resumeNative(): Promise<void> {
-  if (busy.value) return;
-  busy.value=true;
-  try {
-    const status=await props.api.resumeNativeTransfers?.();
-    if(!disposed && status)nativeStatus.value=t('offline.nativeStatus', { active: status.active, completed: status.completed, held: status.held, dependencies: status.dependencyHeld ?? 0, capabilityHeld: status.capabilityHeld ?? 0, foregroundOnly: status.remainingOperations, existingImages: status.standaloneMedia ?? 0, foregroundMedia: status.foregroundMedia ?? 0, reason: status.foregroundReason ?? '' });
-  } catch { if(!disposed)nativeStatus.value=t('offline.nativePaused'); }
-  finally { if(!disposed)busy.value=false; }
-}
 const preloadMode = ref<MediaPreloadMode>('thumbnails');
 const selectedOriginalRefs = ref('');
 const storageStatus = ref<string | null>(null);
 const persistenceStatus = ref<string | null>(null);
 const contentCapability = ref<string | null>(null);
+const editingSupport = ref<string | null>(null);
 const pendingStore = props.store as SnapshotStore & Partial<Pick<OutboxStore, 'list'> & Pick<MediaOutboxStore, 'listMedia'>>;
-const canExport = typeof pendingStore.list === 'function' && typeof pendingStore.listMedia === 'function';
-const canRestore = typeof props.api.previewPendingWorkRestore === 'function' && typeof props.api.restorePendingWork === 'function';
-const restorePreview = ref<PendingWorkRestorePreview | null>(null);
-const restoreIssue = ref<string | null>(null);
-const restoreResult = ref<string | null>(null);
-let restoreText: string | null = null;
-let disposed = false;
-onBeforeUnmount(() => { disposed = true; });
-async function selectRestoreFile(event: Event): Promise<void> {
-  if (busy.value || !canRestore) return;
-  const file = (event.target as HTMLInputElement).files?.[0];
-  if (!file) return;
-  busy.value = true; restorePreview.value = null; restoreText = null; restoreIssue.value = null;
-  try {
-    if (file.size > MAX_RESTORE_FILE_BYTES) throw new Error(t('offline.restoreTooLarge'));
-    const text = await file.text();
-    if (disposed) return;
-    const preview = await props.api.previewPendingWorkRestore!(text);
-    if (!disposed) { restoreText = text; restorePreview.value = preview; }
-  } catch (cause) { if (!disposed) restoreIssue.value = cause instanceof Error ? cause.message : t('offline.restorePreviewFailed'); }
-  finally { busy.value = false; }
-}
-async function confirmRestore(): Promise<void> {
-  if (busy.value || disposed || !restorePreview.value || restoreText === null || !canRestore) return;
-  busy.value = true; restoreIssue.value = null;
-  try {
-    const result = await props.api.restorePendingWork!(restoreText);
-    if (!disposed) {
-      restoreResult.value = t('offline.restoreDone', { edits: result.addedOperations, images: result.addedMedia, keptEdits: result.identicalOperations, keptImages: result.identicalMedia });
-      restorePreview.value = null; restoreText = null;
-      emit('updated');
-      try { active.value = await readActiveSnapshot(props.store); }
-      catch { restoreIssue.value = t('offline.restoreRefreshFailed'); }
-    }
-  } catch (cause) { if (!disposed) restoreIssue.value = cause instanceof Error ? cause.message : t('offline.restoreFailed'); }
-  finally { busy.value = false; }
-}
-const canRequestPersistence = typeof navigator.storage?.persist === 'function';
 
 const contentSupport = computed(() => {
   if (active.value === null) return null;
@@ -102,7 +52,7 @@ const status = computed(() => {
 });
 
 async function refreshStorageEstimate(): Promise<void> {
-  if (typeof navigator.storage?.estimate !== 'function') return;
+  if (typeof navigator.storage?.estimate !== 'function') { storageStatus.value = t('offline.storageUnavailable'); return; }
   try {
     const { usage, quota } = await navigator.storage.estimate();
     if (usage !== undefined && quota !== undefined) {
@@ -116,7 +66,7 @@ async function refreshStorageEstimate(): Promise<void> {
 }
 
 async function requestPersistence(): Promise<void> {
-  if (typeof navigator.storage?.persist !== 'function') return;
+  if (typeof navigator.storage?.persist !== 'function') { persistenceStatus.value = t('offline.persistenceUnavailable'); return; }
   try {
     const granted = await navigator.storage.persist();
     persistenceStatus.value = t(granted ? 'offline.persistenceGranted' : 'offline.persistenceDenied');
@@ -133,6 +83,11 @@ async function refreshStatus(): Promise<void> {
       props.store.readMeta('capability.offlineEntryContents'),
     ]);
     const saved = await props.store.readMeta('mediaPreloadChoice');
+    const capabilityReport = JSON.parse(await props.store.readMeta('offlineCapabilityReport') ?? 'null');
+    if (capabilityReport?.featureFlags) {
+      const flags = Object.entries(capabilityReport.featureFlags).filter(([key]) => key.startsWith('offline') && key !== 'offlineMutations');
+      editingSupport.value = t('offline.editSupportSummary', { enabled: capabilityReport.featureFlags.offlineMutations === true ? flags.filter(([, value]) => value === true).length : 0, total: flags.length });
+    }
     if (saved) {
       const choice = JSON.parse(saved) as {mode?: MediaPreloadMode;selectedRefs?: unknown};
       if (choice.mode && ['metadata','thumbnails','selected-originals'].includes(choice.mode)
@@ -200,58 +155,6 @@ async function download(): Promise<void> {
   }
 }
 
-async function checkEditingSupport(): Promise<void> {
-  busy.value = true;
-  issue.value = null;
-  try {
-    await props.api.getSyncCapabilities({ replay: false });
-    contentCapability.value = await props.store.readMeta('capability.offlineEntryContents');
-  } catch (cause) {
-    issue.value = cause instanceof Error ? cause.message : String(cause);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function syncNow(): Promise<void> {
-  // The facade probes identity, replays pending edits, and the explicit
-  // download then pulls a fresh snapshot even if the Outbox was empty.
-  await download();
-}
-
-async function exportPending(): Promise<void> {
-  if (!canExport) return;
-  busy.value = true;
-  issue.value = null;
-  exportResult.value = null;
-  try {
-    const exportData = await buildPendingWorkExport(pendingStore as SnapshotStore & Pick<OutboxStore, 'list'> & Pick<MediaOutboxStore, 'listMedia'>);
-    if (exportData.operations.length === 0 && exportData.media.length === 0) {
-      // The page-top status is out of sight from the button on a phone; say it here.
-      exportResult.value = t('offline.noPending');
-      return;
-    }
-    const blob = new Blob([JSON.stringify(exportData)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `t3-pending-work-${new Date().toISOString().replace(/[:.]/gu, '-')}.json`;
-    document.body.append(link);
-    try { link.click(); } finally {
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    }
-    // The download itself is silent; say what just left the device.
-    exportResult.value = t('offline.exported', {
-      operations: exportData.operations.length,
-      media: exportData.media.length,
-    });
-  } catch (cause) {
-    issue.value = cause instanceof Error ? cause.message : String(cause);
-  } finally {
-    busy.value = false;
-  }
-}
 
 async function clearOffline(): Promise<void> {
   busy.value = true;
@@ -283,7 +186,18 @@ async function clearOffline(): Promise<void> {
   }
 }
 
-onMounted(() => { void refreshStatus(); void refreshStorageEstimate(); });
+async function refreshSystemInformation(): Promise<void> {
+  if (props.online) {
+    try { await props.api.getSyncCapabilities({ replay: false }); }
+    catch (cause) { issue.value = cause instanceof Error ? cause.message : String(cause); }
+  }
+  await refreshStatus();
+  await requestPersistence();
+  await refreshStorageEstimate();
+}
+onMounted(() => { void refreshSystemInformation(); });
+watch(() => props.online, () => { void refreshSystemInformation(); });
+watch(() => props.copyRevision, () => { void refreshStatus(); void refreshStorageEstimate(); });
 </script>
 
 <template>
@@ -314,70 +228,22 @@ onMounted(() => { void refreshStatus(); void refreshStorageEstimate(); });
     <button
       v-if="active !== null"
       type="button"
-      data-testid="offline-sync-now"
-      :disabled="busy"
-      @click="syncNow"
-    >
-      {{ t('offline.syncNow') }}
-    </button>
-    <button
-      v-if="active !== null && canExport"
-      type="button"
-      data-testid="offline-export-pending"
-      :disabled="busy"
-      @click="exportPending"
-    >
-      {{ t('offline.exportPending') }}
-    </button>
-    <p v-if="exportResult" data-testid="offline-export-result" role="status">{{ exportResult }}</p>
-    <section v-if="api.resumeNativeTransfers">
-      <button type="button" data-testid="native-transfer-resume" :disabled="busy" @click="resumeNative">{{ t('offline.resumeNative') }}</button>
-      <small>{{ t('offline.nativeScheduleNote') }}</small>
-      <p v-if="nativeStatus" role="status">{{ nativeStatus }}</p>
-    </section>
-    <section v-if="canRestore" class="pending-work-restore">
-      <strong>{{ t('offline.restoreTitle') }}</strong>
-      <small>{{ t('offline.restoreHint') }}</small>
-      <label>{{ t('offline.restoreFileLabel') }}
-        <input type="file" accept="application/json,.json" data-testid="offline-restore-file" :disabled="busy" @change="selectRestoreFile" />
-      </label>
-      <p v-if="restorePreview" data-testid="offline-restore-preview">
-        {{ t('offline.restorePreviewCounts', { edits: restorePreview.operationCount, images: restorePreview.mediaCount, bytes: restorePreview.binaryBytes }) }}
-        {{ t('offline.restorePreviewAdds', { scope: restorePreview.scope, edits: restorePreview.addedOperations, images: restorePreview.addedMedia }) }}
-      </p>
-      <button v-if="restorePreview" type="button" data-testid="offline-restore-confirm" :disabled="busy" @click="confirmRestore">{{ t('offline.restoreConfirm') }}</button>
-      <p v-if="restoreIssue" role="alert" data-testid="offline-restore-error">{{ restoreIssue }}</p>
-      <p v-if="restoreResult" role="status" data-testid="offline-restore-result">{{ restoreResult }}</p>
-    </section>
-    <button
-      v-if="active !== null"
-      type="button"
       data-testid="offline-clear"
       :disabled="busy"
       @click="clearOffline"
     >
       {{ t('offline.clear') }}
     </button>
-    <small v-if="contentSupport" data-testid="offline-content-support">{{ contentSupport }}</small>
-    <button
-      v-if="active !== null"
-      type="button"
-      data-testid="offline-check-support"
-      :disabled="busy || !online"
-      @click="checkEditingSupport"
-    >
-      {{ t('offline.checkSupport') }}
-    </button>
-    <small v-if="storageStatus" data-testid="offline-storage-status">{{ storageStatus }} · {{ persistenceStatus }}</small>
-    <button
-      v-if="canRequestPersistence"
-      type="button"
-      data-testid="offline-request-persistence"
-      :disabled="busy"
-      @click="requestPersistence"
-    >{{ t('offline.requestPersistence') }}</button>
     <small>{{ t('offline.hint') }}</small>
     <small v-if="mediaStatus" data-testid="offline-media-status">{{ mediaStatus }}</small>
+    <section class="offline-system-information" data-testid="offline-system-information">
+      <strong>{{ t('offline.systemInformation') }}</strong>
+      <small v-if="editingSupport" data-testid="offline-edit-support">{{ editingSupport }}</small>
+      <small v-if="contentSupport" data-testid="offline-content-support">{{ contentSupport }}</small>
+      <small v-if="storageStatus" data-testid="offline-storage-status">{{ storageStatus }}</small>
+      <small v-if="persistenceStatus" data-testid="offline-persistence-status">{{ persistenceStatus }}</small>
+      <slot name="diagnostics" />
+    </section>
   </section>
 </template>
 
@@ -395,6 +261,7 @@ onMounted(() => { void refreshStatus(); void refreshStorageEstimate(); });
 /* Labels, file inputs and native status must fit the enclosing Advanced card. */
 .offline-settings > *, .offline-settings section > * { min-width: 0; max-width: 100%; }
 .offline-settings label { display: grid; gap: 0.35rem; }
+.offline-system-information { display: grid; gap: 0.35rem; }
 .offline-settings input, .offline-settings select, .offline-settings textarea, .offline-settings button { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .offline-settings textarea { width: 100%; }
 .offline-settings p,

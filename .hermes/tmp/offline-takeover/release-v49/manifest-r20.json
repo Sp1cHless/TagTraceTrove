@@ -1,0 +1,73 @@
+{
+  "artifact": "spikes\\001-android-webview-shell\\T3-v49-offline-final-state-r20.apk",
+  "versionCode": 49,
+  "versionName": "0.0.49-c3-offline-parity",
+  "diagnosticBuild": "0.0.49-c3-offline-parity-r20",
+  "apkSha256": "4da083702f6887cd95526de43ae48cffaf9e99e42d7a9174073eb302862611ed",
+  "signerCertSha256": "1035333c6fa6a18e40398739adda5a2640e6c9cf38e94bea1bf58118eb5fdf41",
+  "packagedWebManifest": {
+    "files": {
+      "assets/index-Dj2wVmuV.js": {
+        "sha256": "fc13ee218e08dadd87cfbb1033074625a85fcdf140e02efb0196428b5f3a0f6d",
+        "size": 2392456
+      },
+      "assets/index-LttZLsBw.css": {
+        "sha256": "9b15138192a15a6042597817a92113092a81b0d18e272da299b465f33b56b7dd",
+        "size": 148035
+      },
+      "assets/lxgw-wenkai-lite-10LDjgOe.woff2": {
+        "sha256": "8eb0b6d4ea7e1eb8fc0b3c5f7744c6165ef3b3cfacb381b1663cc24b7b0d9b4c",
+        "size": 4076580
+      },
+      "assets/smiley-sans-oblique-K8hpreXB.woff2": {
+        "sha256": "731f22973349404b15a88a99ef3b5dd4104c0965c23b7e485c1f11e84fea99e2",
+        "size": 1150924
+      },
+      "cordova.js": {
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "size": 0
+      },
+      "cordova_plugins.js": {
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "size": 0
+      },
+      "favicon.ico": {
+        "sha256": "9cfc395bea072ff5a7824003d38459af0c05a3182e475174e402eabb5feb9983",
+        "size": 14183
+      },
+      "icons/apple-touch-icon.png": {
+        "sha256": "39c19d8e753ca14aea4a9e5ef5229c293d6db5e31237e8ef920116df520576ea",
+        "size": 25600
+      },
+      "icons/boot.png": {
+        "sha256": "f4d42b21e1dc7e9ee69d5414ea94c890685558f40e13a73c4f14888adaa5aee6",
+        "size": 65575
+      },
+      "icons/icon-192.png": {
+        "sha256": "52103bdb19d1be9554f89786ebb4ad1ccd5bef3db28166cfaf339d32bbcdf2b6",
+        "size": 29670
+      },
+      "icons/icon-512.png": {
+        "sha256": "401c096818a803a7e0043bb4ee805eae226ae6cf62556fdd9043fd1c7f893029",
+        "size": 176020
+      },
+      "icons/icon-maskable-512.png": {
+        "sha256": "c23bde23666e74282179973d2650797e5d5b0a9ad3ccddfee27c5294bd8e148b",
+        "size": 82838
+      },
+      "index.html": {
+        "sha256": "7c6cf25abd6789ee38725ad38bc558d07742a414f6a4087c1a17f4614a61c1a9",
+        "size": 4901
+      },
+      "manifest.webmanifest": {
+        "sha256": "00aad35597da9296cf15916653fa4e5cf201319e2b4ecef446ade50a7af6c428",
+        "size": 649
+      },
+      "sw.js": {
+        "sha256": "2ea635268dede371cebd510924ccbdcc16688022d1d4c1e68841c45d63e8516c",
+        "size": 4268
+      }
+    }
+  },
+  "bundle": "assets/index-Dj2wVmuV.js"
+}

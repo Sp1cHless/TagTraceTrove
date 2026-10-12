@@ -21,7 +21,9 @@ from pathlib import Path
 from src.builder import paths
 from src.builder.harvest import joined_value
 from src.builder.learn import load_session
-from src.builder.roundtrip import AGREE, UNRUNNABLE, compare, install, unnameable_targets
+from src.builder.roundtrip import (AGREE, UNRUNNABLE, compare, format_probe_report, install,
+                                   probe_draft, unnameable_targets)
+from src.generic import diagnostics as diag
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 LEARNED_ROOT = paths.home() / "local"
@@ -73,6 +75,9 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(result.to_json(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     if should_install:
+        if not result.ok:
+            print("[STOP] the draft lost or changed an annotated field; nothing was installed.")
+            return 1
         # The same gate the two interactive builders use: a draft whose target cannot name the
         # address it was learned from installs successfully and then resolves through no code path.
         unnameable = unnameable_targets(draft, [sample.url])
@@ -83,6 +88,23 @@ def main(argv: list[str] | None = None) -> int:
             print("       nothing was installed: a target that cannot name its own address "
                   "would be invisible.")
             return 1
+        # The round trip above compares rules against the *recorded* page; it never asks the runtime
+        # to fetch. This does — one bounded probe of the live address, against the draft in a scratch
+        # home, so what is measured is what would be installed and the real tree is untouched
+        # (plan §5-A.3). A network failure is advisory; a data fault refuses the install.
+        if "--no-probe" not in arguments:
+            report = probe_draft(draft, sample.url, building="work")
+            print()
+            for line in format_probe_report(report):
+                print(line)
+            blocking = diag.blocking_findings(report.findings())
+            if blocking and "--force" not in arguments:
+                print()
+                print("[STOP] the runtime read nothing usable from this site:")
+                for finding in blocking:
+                    print(f"       {finding.code}: {finding.message}")
+                print("       nothing was installed; re-run with --force to install anyway.")
+                return 1
         target = install(draft, LEARNED_ROOT, source=str(directories[0]))
         print()
         print(f"    installed {target}")

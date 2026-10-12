@@ -53,7 +53,7 @@ import IconButton from './components/IconButton.vue';
 import LazyCardImage from './components/LazyCardImage.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
 import { supportedLocales, useI18n, type Locale } from './i18n.js';
-import { createMemorySnapshotStore, type SnapshotStore } from './offline/snapshot-store.js';
+import { createMemorySnapshotStore, readActiveSnapshot, type SnapshotStore } from './offline/snapshot-store.js';
 import type { OfflineApiState } from './offline/offline-api.js';
 import { isOfflineTransportError } from './api/transport-error.js';
 import { randomUuid } from './offline/random-id.js';
@@ -105,7 +105,7 @@ const props = defineProps<{
 const offlineStore = props.offlineStore ?? createMemorySnapshotStore();
 const offlineDiagnosticsOpen = ref(false);
 const offlineDiagnosticsText = ref('');
-const DIAGNOSTIC_BUILD = '0.0.49-c3-offline-parity-r2';
+const DIAGNOSTIC_BUILD = import.meta.env.VITE_T3_BUILD_ID ?? '1.0.0';
 // Milliseconds since WebView navigation, retained across later reconnects.
 const startupMilestones: { snapshotReadyAtMs: number | null; galleriesReadyAtMs: number | null } = {
   snapshotReadyAtMs: null,
@@ -136,7 +136,7 @@ function openNativePairing(): void {
 
 async function refreshOfflineDiagnostics(): Promise<void> {
   const list = (offlineStore as SnapshotStore & {
-    list?: () => Promise<Array<{ operationKind: string; status: string }>>;
+    list?: () => Promise<Array<{ operationKind: string; status: string; lastError?: string | null }>>;
   }).list;
   const readMeta = async (key: string): Promise<string | null> => {
     try {
@@ -145,7 +145,7 @@ async function refreshOfflineDiagnostics(): Promise<void> {
       return `read-error:${cause instanceof Error ? cause.message : String(cause)}`;
     }
   };
-  let operations: Array<{ operationKind: string; status: string }> | string = 'outbox-unavailable';
+  let operations: Array<{ operationKind: string; status: string; lastError?: string | null }> | string = 'outbox-unavailable';
   if (typeof list === 'function') {
     try {
       operations = await list.call(offlineStore);
@@ -153,20 +153,43 @@ async function refreshOfflineDiagnostics(): Promise<void> {
       operations = `read-error:${cause instanceof Error ? cause.message : String(cause)}`;
     }
   }
+  const active = await readActiveSnapshot(offlineStore).catch(() => null);
+  const ack = await readMeta('pendingSnapshotAck');
+  let pendingAck: unknown = null;
+  try { const row = JSON.parse(ack ?? 'null'); pendingAck = row ? { generationId: row.generationId, revision: row.revision, body: row.body } : null; }
+  catch { pendingAck = 'unreadable'; }
   offlineDiagnosticsText.value = JSON.stringify({
     diagnosticBuild: DIAGNOSTIC_BUILD,
     capturedAt: new Date().toISOString(),
     mode: props.offlineState?.mode ?? null,
     connectionPhase: props.offlineState?.connectionPhase ?? null,
     lastLocalLoadMs: props.offlineState?.lastLocalLoadMs ?? null,
+    lastLocalLoadPhases: props.offlineState?.lastLocalLoadPhases ?? null,
     startupMilestones,
     lastFallbackAt: props.offlineState?.lastFallbackAt ?? null,
     pendingCount: props.offlineState?.pendingCount ?? null,
     conflictCount: props.offlineState?.conflictCount ?? null,
     failedCount: props.offlineState?.failedCount ?? null,
     lastReplayError: props.offlineState?.lastReplayError ?? null,
+    automaticSyncPhase: props.offlineState?.automaticSyncPhase ?? null,
+    lastAutomaticSyncAt: props.offlineState?.lastAutomaticSyncAt ?? null,
+    lastAutomaticSyncError: props.offlineState?.lastAutomaticSyncError ?? null,
+    offlineCopyRevision: props.offlineState?.offlineCopyRevision ?? null,
+    lastSnapshotSettlement: props.offlineState?.lastSnapshotSettlement ?? null,
+    storage: await navigator.storage?.estimate?.().catch(() => null) ?? null,
+    persistentStorage: await navigator.storage?.persisted?.().catch(() => null) ?? null,
+    localFinalState: await readMeta('localFinalState.v1'),
+    snapshot: active?.snapshot.header ?? null,
+    pendingSnapshotAck: pendingAck,
+    nativeTransfers: await nativePairingBridge?.nativePromise?.('T3BackgroundTransfer', 'status', {}).catch(() => null) ?? null,
+    mediaCacheBucketCount: await globalThis.caches?.keys?.().then(keys => keys.filter(key => key.startsWith('t3-offline-media')).length).catch(() => null) ?? null,
+    mediaPreloadChoice: await readMeta('mediaPreloadChoice'),
+    mediaPreloadProgress: await readMeta('mediaPreloadProgress'),
+    mediaOutbox: await (offlineStore as SnapshotStore & { listMedia?: () => Promise<Array<{uploadId:string;kind:string;status:string;lastError:string|null}>> })
+      .listMedia?.().then(rows => rows.map(({uploadId,kind,status,lastError}) => ({uploadId,kind,status,lastError}))).catch(() => null) ?? null,
     lastCapabilityProbe: props.offlineState?.lastCapabilityProbe ?? null,
     lastSuccessfulCapabilityProbe: props.offlineState?.lastSuccessfulCapabilityProbe ?? null,
+    capabilities: await readMeta('offlineCapabilityReport'),
     lastMutationDiagnostic: props.offlineState?.lastMutationDiagnostic ?? null,
     mutationDiagnostics: props.offlineState?.mutationDiagnostics ?? [],
     metadata: {
@@ -204,7 +227,7 @@ async function refreshOfflineDiagnostics(): Promise<void> {
       offlineAuthorDirectories: await readMeta('capability.offlineAuthorDirectories'),
     },
     outbox: Array.isArray(operations)
-      ? operations.map((operation) => ({ kind: operation.operationKind, status: operation.status }))
+      ? operations.map((operation) => ({ kind: operation.operationKind, status: operation.status, error: operation.lastError ?? null }))
       : operations,
     userAgent: navigator.userAgent,
   }, null, 2);
@@ -1247,16 +1270,26 @@ watch([() => props.offlineState?.mode, () => props.offlineState?.connectionPhase
 const mediaEditMode = ref(false);
 const mediaSaving = ref(false);
 const mediaRemovalBlockReason=ref<string|null>(null);
+// The API answers with a code; the wording (and the language) is the page's.
+// An unknown value is shown as it came, so a caller that answers with its own
+// sentence still reads correctly.
+const MEDIA_BLOCK_KEYS:Record<string,Parameters<typeof t>[0]>={
+  'no-server-row':'media.blockNoServerRow',
+  'upload-uncertain':'media.blockUncertain',
+  'cover-not-uploaded':'media.blockCoverPending',
+  'native-uncertain':'media.blockNativeUncertain',
+};
+const mediaBlockText=(reason:string|null):string|null=>reason===null?null:(MEDIA_BLOCK_KEYS[reason]===undefined?reason:t(MEDIA_BLOCK_KEYS[reason]!));
 let mediaPolicyGeneration=0;
 watch([activeEntry,mediaEditMode],async([entry])=>{
   const generation=++mediaPolicyGeneration;
   if(!entry){mediaRemovalBlockReason.value=null;return;}
-  if(entry.id<=0){mediaRemovalBlockReason.value=t('media.blockNoServerRow');return;}
+  if(entry.id<=0 && !props.api.getEntryMediaRemovalBlockReason){mediaRemovalBlockReason.value=mediaBlockText('no-server-row');return;}
   mediaRemovalBlockReason.value=props.api.getEntryMediaRemovalBlockReason ? t('media.blockChecking') : null;
   try {
     const reason=await props.api.getEntryMediaRemovalBlockReason?.(entry.id) ?? null;
-    if(generation===mediaPolicyGeneration)mediaRemovalBlockReason.value=reason;
-  }catch{if(generation===mediaPolicyGeneration)mediaRemovalBlockReason.value=t('media.blockUncertain');}
+    if(generation===mediaPolicyGeneration)mediaRemovalBlockReason.value=mediaBlockText(reason);
+  }catch{if(generation===mediaPolicyGeneration)mediaRemovalBlockReason.value=mediaBlockText('upload-uncertain');}
 });
 // Media keeps positional names, so an edited list hands the browser the SAME
 // image URL for different bytes; a fresh element (keyed by this) is what makes
@@ -1874,6 +1907,20 @@ async function openEntry(entryId: number): Promise<void> {
     );
     entryCollectionIds.value = memberIds;
     activeEntry.value = detail;
+    // The backing grid survives detail navigation. Keep its media selection
+    // aligned with the detail projection, including local edits before sync.
+    const refreshMedia = (items: GalleryEntrySummary[]) => items.map(item => item.id === detail.id
+      ? { ...item, coverRef: detail.coverRef, previewRef: detail.previewRef, previewRefs: [...detail.previewRefs] }
+      : item);
+    entries.value = refreshMedia(entries.value);
+    batchReviewEntries.value = refreshMedia(batchReviewEntries.value);
+    if (tagResults.value?.kind === 'entry') {
+      tagResults.value = { ...tagResults.value, entries: refreshMedia(tagResults.value.entries) };
+    }
+    if (entryOrigin.value && 'tagResults' in entryOrigin.value) {
+      entryOrigin.value = { tagResults: { ...entryOrigin.value.tagResults,
+        entries: refreshMedia(entryOrigin.value.tagResults.entries) } };
+    }
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.loadEntry');
   }
@@ -2902,6 +2949,9 @@ watch(() => props.offlineState?.mode, (next, previous) => {
   if (!startupComplete || next === previous || next === undefined) return;
   void reloadVisibleSurfaces();
 });
+watch(() => props.offlineState?.offlineCopyRevision, (next, previous) => {
+  if (startupComplete && next && next !== previous) void reloadVisibleSurfaces();
+});
 
 watch(() => props.offlineState?.lastReplaySnapshotSeq, (next, previous) => {
   if (!startupComplete || next === undefined || next === null || next === previous) return;
@@ -3595,6 +3645,8 @@ onUnmounted(() => {
     <div
       v-if="props.offlineState?.mode === 'offline'
         || props.offlineState?.connectionPhase
+        || props.offlineState?.automaticSyncPhase
+        || props.offlineState?.lastAutomaticSyncError
         || (props.offlineState?.pendingCount ?? 0) > 0
         || (props.offlineState?.conflictCount ?? 0) > 0
         || (props.offlineState?.failedCount ?? 0) > 0"
@@ -3602,6 +3654,10 @@ onUnmounted(() => {
       data-testid="offline-mode-banner"
       role="status"
     >
+      <span v-if="props.offlineState?.automaticSyncPhase" data-testid="offline-auto-sync-status">
+        {{ t(props.offlineState.automaticSyncPhase === 'syncing' ? 'offline.autoSyncing' : 'offline.autoUpdating') }}
+      </span>
+      <span v-else-if="props.offlineState?.lastAutomaticSyncError" data-testid="offline-auto-sync-error">{{ t('offline.autoSyncError') }}</span>
       <span v-if="props.offlineState?.connectionPhase === 'checking'" data-testid="offline-connection-status">{{ t('offline.checking') }}</span>
       <span v-if="props.offlineState?.connectionPhase === 'switching'" data-testid="offline-connection-status">{{ t('offline.switching') }}</span>
       <span v-if="props.offlineState?.connectionPhase === 'opening-copy'" data-testid="offline-connection-status">{{ t('offline.openingCopy') }}</span>
@@ -3616,35 +3672,6 @@ onUnmounted(() => {
       <span v-if="(props.offlineState?.pendingCount ?? 0) > 0" data-testid="offline-pending-count">
         {{ t('offline.pendingBanner', { count: props.offlineState?.pendingCount ?? 0 }) }}
       </span>
-      <button
-        v-if="(props.offlineState?.conflictCount ?? 0) > 0 || (props.offlineState?.failedCount ?? 0) > 0"
-        type="button"
-        class="offline-discard-button"
-        data-testid="offline-discard-blocked"
-        @click="discardBlockedOfflineEdits()"
-      >
-        {{ t('offline.discardBlocked') }}
-      </button>
-      <button
-        type="button"
-        class="offline-diagnostics-button"
-        data-testid="offline-diagnostics-toggle"
-        @click="toggleOfflineDiagnostics()"
-      >
-        {{ t('diagnostics.toggle') }}
-      </button>
-      <section
-        v-if="offlineDiagnosticsOpen"
-        class="offline-diagnostics"
-        data-testid="offline-diagnostics"
-      >
-        <div class="offline-diagnostics-actions">
-          <strong>{{ t('diagnostics.title') }}</strong>
-          <button type="button" @click="refreshOfflineDiagnostics()">{{ t('diagnostics.refresh') }}</button>
-          <button type="button" @click="copyOfflineDiagnostics()">{{ t('diagnostics.copy') }}</button>
-        </div>
-        <pre>{{ offlineDiagnosticsText }}</pre>
-      </section>
     </div>
 
     <main class="app-layout">
@@ -3855,11 +3882,24 @@ onUnmounted(() => {
           v-else-if="advancedView"
           :api="api"
           :store="offlineStore"
+          :offline-copy-revision="props.offlineState?.offlineCopyRevision"
           :online="props.offlineState?.mode !== 'offline' && props.offlineState?.connectionPhase !== 'no-copy'"
           @back="closeAdvanced"
           @authors-changed="refreshAuthors"
           @updated="reloadVisibleSurfaces"
-        />
+        >
+          <template #offline-diagnostics>
+            <section class="offline-diagnostics" data-testid="offline-diagnostics-section">
+              <div class="offline-diagnostics-actions">
+                <button type="button" data-testid="offline-diagnostics-toggle" @click="toggleOfflineDiagnostics()">{{ t('diagnostics.title') }}</button>
+                <button type="button" data-testid="offline-diagnostics-copy" @click="copyOfflineDiagnostics()">{{ t('diagnostics.copy') }}</button>
+              </div>
+              <pre v-if="offlineDiagnosticsOpen" data-testid="offline-diagnostics">{{ offlineDiagnosticsText }}</pre>
+              <button v-if="(props.offlineState?.conflictCount ?? 0) > 0 || (props.offlineState?.failedCount ?? 0) > 0"
+                type="button" data-testid="offline-discard-blocked" @click="discardBlockedOfflineEdits()">{{ t('offline.discardBlocked') }}</button>
+            </section>
+          </template>
+        </AdvancedEditingPage>
         <AddEntryPage
           v-else-if="creationView === 'entry'"
           :api="api"
