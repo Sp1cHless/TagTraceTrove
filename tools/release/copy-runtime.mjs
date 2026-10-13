@@ -17,6 +17,31 @@ function locate(name, source) {
   }
   return null;
 }
+// Share dependencies at the server root. Only incompatible package versions
+// need nested copies; ordinary dependency depth must not become path depth.
+const graph = new Map();
+const hoisted = new Map();
+function collect(source) {
+  const real = realpathSync(source);
+  if (graph.has(real)) return;
+  const pkg = readPackage(real);
+  const edges = new Map();
+  graph.set(real, { pkg, edges });
+  const dependencies = { ...pkg.dependencies, ...pkg.optionalDependencies };
+  if (pkg.name === '@t3/server') dependencies.tsx = pkg.devDependencies.tsx;
+  for (const name of Object.keys(dependencies)) {
+    const dependency = locate(name, real);
+    if (!dependency) {
+      if (pkg.optionalDependencies?.[name]) continue;
+      throw new Error(`Missing installed dependency: ${pkg.name} -> ${name}`);
+    }
+    edges.set(name, dependency);
+  }
+  // Reserve direct dependencies before visiting their transitive graphs.
+  for (const [name, dependency] of edges) if (!hoisted.has(name)) hoisted.set(name, dependency);
+  for (const dependency of edges.values()) collect(dependency);
+}
+collect(join(root, 'apps/server'));
 let count = 0;
 function install(source, destination, ancestors = new Map()) {
   const real = realpathSync(source);
@@ -34,20 +59,16 @@ function install(source, destination, ancestors = new Map()) {
   count++;
   const visible = new Map(ancestors);
   visible.set(pkg.name, real);
-  const dependencies = { ...pkg.dependencies, ...pkg.optionalDependencies };
-  // The server runs TypeScript directly; tsx is a runtime dependency in this distribution.
-  if (pkg.name === '@t3/server') dependencies.tsx = pkg.devDependencies.tsx;
-  for (const name of Object.keys(dependencies)) {
-    const dependency = locate(name, real);
-    if (!dependency) {
-      if (pkg.optionalDependencies?.[name]) continue;
-      throw new Error(`Missing installed dependency: ${pkg.name} -> ${name}`);
-    }
+  for (const [name, dependency] of graph.get(real).edges) {
     if (visible.get(name) === dependency) continue;
     install(dependency, join(destination, 'node_modules', name), visible);
   }
 }
-install(join(root, 'apps/server'), join(target, 'apps/server'));
+const serverTarget = join(target, 'apps/server');
+install(join(root, 'apps/server'), serverTarget, hoisted);
+for (const [name, dependency] of hoisted) {
+  install(dependency, join(serverTarget, 'node_modules', name), hoisted);
+}
 // Only runtime sources and resources belong to the application package.
 // Server tests/scripts are removed by the caller's whitelist staging, before this copy.
 mkdirSync(join(target, 'apps/server/node_modules/.bin'), { recursive: true });

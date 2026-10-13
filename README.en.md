@@ -112,7 +112,7 @@ The desktop interface runs in a modern browser such as Chrome, Edge, or Firefox.
 ### Windows: installation and everyday use
 
 1. Download the Windows ZIP and extract it to a location where you plan to keep your library, such as `D:\Apps\`. The folder inside the archive is named **TagTraceTrove**. Move it out of any enclosing folder whose name includes the version number.
-2. Open `TagTraceTrove` and double-click **T3.exe** or **Install.cmd**. The installer installs the app in that directory, creates a desktop shortcut, and opens the app.
+2. Open `TagTraceTrove` and double-click **T3.exe**. It automatically installs the app in that directory, creates a desktop shortcut, and opens the app.
 3. For everyday use, double-click the **T3** shortcut.
 
 The release package includes the runtimes needed to install and run the app. T³ stays in the system tray after starting; the main library's default address is `http://127.0.0.1:8765`.
@@ -148,9 +148,13 @@ If the pairing panel says phone connections are disabled, enable them in the des
 1. Connect your phone to the old desktop version and wait until there is no pending work to sync.
 2. Exit the T³ instance you want to update through its system tray menu.
 3. Download the new Windows ZIP and extract it into the parent of your existing installation directory, merging the archive's **TagTraceTrove** folder with the existing one. Choose to replace program files when prompted about matching filenames. Keep the existing folder in place; do not delete it first.
-4. Run **Install.cmd** in the existing `TagTraceTrove` directory. The installer verifies the new files, backs up the entire `data` directory, installs the program into `versions/new-version`, switches the startup entry, and opens the app.
+4. Double-click **T3.exe** in the existing `TagTraceTrove` root directory. It automatically verifies the new files, backs up the entire `data` directory, installs the program into `versions/new-version`, switches the startup entry, and opens the app.
 
 The release archive contains neither your `data` directory nor your `installation.json`, so merging the extracted files preserves them. The update also preserves your instance name, ports, pairing information, and desktop shortcut. Backups are saved under `backups/pre-update-*`.
+
+Use **T3.exe** for normal installation and merged updates; running CMD manually is optional. `INSTALL.md` is documentation, not an installer. Retain the package's helper files, since automatic installation verifies them. `Install.cmd` remains an optional command-line entry.
+
+Starting with 1.0.7, the release uses shorter dependency paths. Choose a short, permanent directory for a new installation. If extraction of an older package reports that the destination path is too long, cancel and merge the complete corrected package again; do not skip files and proceed. Retain your existing `data` and internal `versions` directories.
 
 If you prefer to extract the new package separately, open a terminal in **the new package's TagTraceTrove directory** and run the following command, replacing the path with your existing installation location:
 

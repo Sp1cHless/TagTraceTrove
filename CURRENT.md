@@ -1,10 +1,10 @@
 # Current project boundary
 
-## Current formal release (1.0.5, 2026-10-13)
+## Current packaged formal release (1.0.8, 2026-10-13)
 
-The current release identity is **1.0.5 / Android code 105**, owned by `release.json`. Windows ZIP uses the fixed `TagTraceTrove` directory and defaults to installing in that selected directory, with internal `versions`, `data` and `backups`. The installed Demo library is independent of the main library and its migration/update passed the focused Windows check. The user confirmed that mobile acceptance for the formal 1.0 release is complete on 2026-10-13; historical per-build command evidence remains unchanged.
+The current packaged release identity is **1.0.8 / Android code 108**, owned by `release.json`. Windows ZIP uses the fixed `TagTraceTrove` directory and defaults to installing in that selected directory, with internal `versions`, `data` and `backups`. Shared Node dependencies are hoisted to shorten paths. The default Windows PowerShell 5.1 `-File` install path is initialized in the script body; default and explicit-path runtime checks passed. Demo was actually updated and started through its root T3.exe, with identity/epoch/content counts, 8785/8786 ports and the original main PID preserved. The formal signed/frozen-input/checksummed pipeline completed. Earlier mobile acceptance confirmation and per-build device evidence remain their dated records.
 
-Latest durable release, installation and acceptance facts are in `docs/status.md`, `docs/release-installation.md` and `docs/mobile.md`. The existing 1.0.5 package contains an old AppData uninstall path in `INSTALL.md`; use the actual installation root's `Uninstall.cmd`, as corrected in the current installation guide and release note. Distributed package bytes and checksums are unchanged. Dated records below describe earlier builds and are superseded by this current release summary.
+Latest durable release, installation and acceptance facts are in `docs/status.md`, `docs/release-installation.md` and `docs/mobile.md`. Normal installation and merged updates use the root T3.exe; Install.cmd is optional. Older artifacts remain unchanged. Dated records below describe earlier builds and are superseded by this current release summary.
 
 ## Historical one-click release and installation lifecycle (2026-10-12)
 

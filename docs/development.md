@@ -173,6 +173,20 @@ monotonic version/code. An exclusive build lock prevents concurrent version allo
 5.1 versioning check passed for increment/retry, existing metadata, identity retention, recovery bytes, manual version and
 changed-configuration rejection; the release scripts parsed under the same runtime.
 
+From 1.0.7, runtime materialization hoists shared Node packages to the server's `node_modules`; conflicting physical
+versions retain local overrides. Ordinary dependency depth no longer adds directory depth. The focused layout check
+installed the actual materialized graph through Windows PowerShell 5.1 in an isolated version slot and exercised SQLite,
+jsdom, sharp, QR, tsx, shared code and an in-memory HTTP app. Conflicting-version fixtures retained both resolutions;
+the longest Node relative path was 118 characters and the installed test path was 217. The final 1.0.7 payload's maximum
+relative file path is 142 characters. Packaging rejects paths above 145; installation uses a 12-character staging suffix
+and rejects excessive complete file/directory paths before modifying installation data.
+
+From 1.0.8, the optional `InstallRoot` parameter is defaulted inside the script body. Windows PowerShell 5.1 can bind
+an advanced script's `$PSScriptRoot` default as empty when invoked through `-File`, although invocation with `&` works.
+The focused runtime check covers both default in-place `-File` installation and an explicit destination, followed by
+the installed dependency/runtime exercise. The actual Demo root EXE merge/update to 1.0.8 also completed its backup,
+slot switch, startup and shortcut update while retaining identity, content counts, ports and the original main PID.
+
 ## 9. Repository layout
 
 ```text

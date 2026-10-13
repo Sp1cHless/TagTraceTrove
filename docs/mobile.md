@@ -421,7 +421,7 @@ WebView/PluginCall/Keystore or force-stop behaviour.
 
 ### Formal 1.0 mobile acceptance (2026-10-13)
 
-The user confirmed that mobile acceptance for the formal 1.0 release is complete. Current packaged release identity
+The user confirmed that mobile acceptance for the formal 1.0 release is complete. Packaged release identity at that confirmation
 is **1.0.5 / versionCode 105**, application ID `com.speechless666.t3.spike`; APK SHA256
 `2bf0d8a18baa8846aba726f9d5e96075f811749623caa1ffa299ba54ac0dde16`. The publication check verified its expected
 Release signer, non-debuggable flag and checksum. User acceptance is recorded separately from the earlier automated
@@ -456,7 +456,7 @@ build device evidence ticks a case.
 
 `spikes/001-android-webview-shell/RELEASE.md`:
 
-- Display name **T3**; versionName and versionCode come from root `release.json`, currently **1.0.5 / 105**;
+- Display name **T3**; versionName and versionCode come from root `release.json`, currently **1.0.8 / 108**;
   package name stays `com.speechless666.t3.spike` (an existing
   app identity, not the display name). Later updates must bump `versionCode` and
   use the same release private key.

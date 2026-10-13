@@ -174,6 +174,7 @@ try {
     $files = [ordered]@{}
     foreach ($file in Get-ChildItem -LiteralPath $desktop -Recurse -File -Force | Sort-Object FullName) {
         $relative = $file.FullName.Substring($desktop.Length + 1).Replace('\','/')
+        if ($relative.Length -gt 145) { throw "Release payload path is too long for ordinary Windows extraction: $relative" }
         $files[$relative] = (Get-FileHash -LiteralPath $file.FullName).Hash.ToLowerInvariant()
     }
     Write-T3Json (Join-Path $desktop 'release-manifest.json') @{ product = 'T3'; platform = 'win-x64'; version = $config.version; sourceSha256 = $fingerprint; files = $files }

@@ -6,6 +6,8 @@
 
 从 1.0.5 起，ZIP 内层目录固定为 **TagTraceTrove**；版本号只在下载文件名和外层发行目录中。默认就地安装在该解压目录内，不再自动复制到 AppData。也可通过 `-InstallRoot` 指向已有安装：
 
+从 1.0.8 起，`Install.cmd` 的默认安装路径在脚本开始运行后初始化，修复 Windows PowerShell 5.1 双击入口可能将该路径绑定为空字符串、报“路径的形式不合法”的问题。旧包遇到这一报错时，可在该目录执行 `Install.cmd -InstallRoot "实际的完整安装目录"`，或使用修正后的新包。
+
 | 目录 | 内容 |
 | --- | --- |
 | `versions\版本\` | 程序、内置资源和运行依赖 |
@@ -18,6 +20,8 @@
 **更新：**先等待手机待同步工作归零，再从电脑托盘退出要更新的实例。将新版 ZIP 解压到单独的外层版本目录，例如 `1.0.6\TagTraceTrove`；运行其中的 `Install.ps1 -InstallRoot D:\已有安装\TagTraceTrove -Start`。安装器会识别原有实例，校验文件，先备份其整个 `data`，写入内部 `versions\新版本`，最后切换入口。旧程序保留；实例名称、端口、资料和浏览器 origin 保留。
 
 外层版本目录是下载／解压用目录；原有库的安装位置固定。不要把 `data` 一起覆盖，也不用手工覆盖内部 `versions`。如果已将新版解压内容合并到原 `TagTraceTrove` 根目录，运行根目录 `Install.cmd` 或 `T3.exe` 也会完成上述备份和切换。压缩包不含资料和实例配置，解压合并保留它们；执行前仍须退出该实例。
+
+**Windows 路径长度：**从 1.0.7 起，发布包共用同一层 Node 依赖，仅为冲突版本保留局部嵌套；打包检查每条包内路径不超过 145 字符，安装使用较短的临时目录，并在修改资料前检查完整目标路径。首次安装建议选择较短的固定路径，例如 `D:\Apps\TagTraceTrove`。1.0.6 及更早包在深目录解压时可能出现“目标路径太长”；遇到该提示请取消，不要跳过文件后继续安装。已经部分合并的目录可以用修正后的新包重新完整合并，保留 `data`、`installation.json` 和内部 `versions`，然后运行 `Install.cmd`。
 
 如需自定义位置，在解压目录执行 `powershell -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1 -InstallRoot D:\Apps\T3 -Start`。后续更新使用同一个 `InstallRoot`。
 

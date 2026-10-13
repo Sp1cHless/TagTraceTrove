@@ -8,14 +8,20 @@
 
 ## 1. Delivered product surface
 
-### Independent installed libraries (current 1.0.5, 2026-10-13)
+### Independent installed libraries (current 1.0.8, 2026-10-13)
 
-The current Demo location is **`D:/Project/T3-1.0.4-windows-x64/TagTraceTrove`**, running Release **1.0.5**. The outer
+The current Demo location is **`D:/Project/T3-1.0.4-windows-x64/TagTraceTrove`**, running Release **1.0.8**. The outer
 directory keeps the user's original extraction name. The supplied 1.0.4 payload was moved into its `versions/1.0.4`
 slot; existing Demo data was copied and byte-verified before startup. The same library identity, content count and
 8785/8786 ports survived migration and a real extraction/merge update to 1.0.5. The former AppData installation was
 moved into this tree's `backups/previous-AppData-install-*`; it no longer exists at the old location. Main listeners
 kept their original PID. Evidence: this installation's `migration-check.json`.
+
+The later merge/update to 1.0.8 was launched through the installation root's **T3.exe**, which performed the data
+backup, version switch and startup automatically. The pre-update backup and running library agree on library ID,
+sync epoch and content counts (13 Entries, 4 Producers, 0 Collections). Demo retained 8785/8786 and its name; the
+desktop shortcut points to `versions/1.0.8/T3.exe`. Main 8765/8766 listeners retained PID 63408. Evidence:
+`.hermes/artifacts/demo-1.0.8-update.json`. Normal installation and merged updates use the root EXE; CMD is optional.
 
 From 1.0.5, Windows ZIP has a fixed `TagTraceTrove` content directory. Default installation is in the extracted tree;
 program slots, data and backups remain within that installation. New-package `Install.ps1 -InstallRoot <existing root>`
@@ -53,9 +59,9 @@ Everything in the current scope is implemented, tested and accepted on the deskt
 ## 2. Android / offline device status
 
 The Android shell (Capacitor WebView over the same web bundle) has a deep history of measured device acceptance. The
-**current formal release is 1.0.5**, Android versionCode **105**, with the same application ID and Release signer.
+**current packaged formal release is 1.0.8**, Android versionCode **108**, with the same application ID and Release signer.
 On 2026-10-13 the user confirmed that mobile acceptance for the 1.0 formal release is complete. This records user
-acceptance; the older per-build measured device results below remain their original historical records.
+acceptance before the subsequent 1.0.8 packaging; the older per-build measured device results below remain their original historical records.
 Before the formal release line, the offline-parity line was
 **v49 (`0.0.49-c3-offline-parity`)**, built through a diagnostic series up to **r25**.
 
@@ -110,9 +116,23 @@ No minification or unrelated runtime behavior changed.
 | 1.0.1 | `T3-1.0.1.apk` | Formal release line. APK SHA256 `1a5cd46fed16cd504fb53a0312cbbef80c534953e3b5431715d7a19f5e523ebb`; installed on the device. |
 | 1.0.2 | `T3-1.0.2.apk` | Gallery filter-bar mobile layout: a row's × stays on its first line (long Facet/tag names ellipsise), the Authors row is one line, the head's label and toggle share a line. APK SHA256 `0f8dc3c04d700b2d78ca0e82826a657bfd14cc4c30d5d6445bf37d248c72fb3d`, signer `62916b23…fbb13`; cover-installed over 1.0.1 with data preserved and device-verified (`mobile.md` §8). |
 | 1.0.3 | `T3-1.0.3.apk` | Same bar, every row on one line: the rating row's three selects divide the line (a native select no longer sizes to its longest option), the Facet row's tag input shares its line, and a wrapped row's × aligns with the first line. APK SHA256 `0dad307638715bd521d0123f3d610a0190f00cfd1847e5d2ca28e6831338104a`, signer `62916b23…fbb13`; cover-installed over 1.0.2 with data preserved and device-verified (`mobile.md` §8). |
-| 1.0.5 | `T3-1.0.5.apk` | Current formal artifact, Android code 105. APK SHA256 `2bf0d8a18baa8846aba726f9d5e96075f811749623caa1ffa299ba54ac0dde16`; unchanged Release signer and non-debuggable identity verified. Mobile acceptance for the 1.0 release confirmed by the user on 2026-10-13 (`mobile.md` §8). |
+| 1.0.5 | `T3-1.0.5.apk` | Earlier formal artifact, Android code 105. APK SHA256 `2bf0d8a18baa8846aba726f9d5e96075f811749623caa1ffa299ba54ac0dde16`; unchanged Release signer and non-debuggable identity verified. Mobile acceptance for the 1.0 release confirmed by the user on 2026-10-13 (`mobile.md` §8). |
+| 1.0.7 | `T3-1.0.7.apk` | Earlier formal artifact, Android code 107. APK SHA256 `7229f788ba3e38fa9931d6a54c2f6bb3fa099d823ed5c9a0dfba2f861075b13d`; formal pipeline verified the unchanged signer and non-debuggable identity. |
+| 1.0.8 | `T3-1.0.8.apk` | Current packaged formal artifact, Android code 108. APK SHA256 `b59ecd88b52adc2108d9717f7866bd175245c32f69a998c47f2fbff41e011d72`; formal pipeline verified the unchanged signer and non-debuggable identity. |
 
-Current Windows ZIP: `T3-1.0.5-windows-x64.zip`, SHA256
+Current Windows ZIP: `T3-1.0.8-windows-x64.zip`, SHA256
+`b174209bbfef091ed3e0ac53b23186cbec7db3bb3a475dea82bb7f969d5797fe`. The default Windows PowerShell 5.1
+installation path is initialized after parameter binding; the focused runtime check exercised both direct `-File`
+default installation and explicit destination installation. The actual merged EXE update is recorded above.
+The 1.0.8 formal pipeline completed its frozen-input, signature, identity, path-budget and checksum steps.
+
+Earlier Windows ZIP: `T3-1.0.7-windows-x64.zip`, SHA256
+`a754db3ee4700fc55dcb5e1b062e67657763be4048e0f3a21454e965aed8159b`. Its dependency layout fixes the 1.0.6 Explorer
+path-length failure; all payload-relative file paths are at most 142 characters, giving a longest planned Demo staging
+file path of 219. Isolated installation/runtime and incompatible-version checks are recorded in `development.md` §8.
+The 1.0.7 formal pipeline completed its frozen-input, signature, identity, path-budget and checksum steps.
+
+Historical Windows ZIP: `T3-1.0.5-windows-x64.zip`, SHA256
 `1d7f7a43d4b8973bf2e75c78fec4ddac6490ed5344cef13355c52a09c4022ec4`. The 2026-10-13 focused publication check
 verified all six published checksums, the APK identity/signature/non-debuggable flag, fixed ZIP directory and the
 absence of personal-data/signing paths. Runtime inputs matched the package's source fingerprint using the packaging
@@ -120,7 +140,7 @@ script's Windows PowerShell 5.1, before the subsequent documentation-only correc
 See `release-installation.md` for the correction to the unchanged 1.0.5 bundled installation guide.
 
 The signer certificate has been identical across the v43–v49 chain; those builds used the **debug keystore**. A
-dedicated release key now exists (§2b). The 1.0.1–1.0.5 line is signed with that release key, so the two chains cannot
+dedicated release key now exists (§2b). The 1.0.1–1.0.8 line is signed with that release key, so the two chains cannot
 upgrade into each other in place.
 
 ## 4. Not a core-plan gap

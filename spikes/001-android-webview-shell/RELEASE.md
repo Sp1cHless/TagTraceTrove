@@ -1,6 +1,6 @@
 # Android 正式版
 
-当前正式配置：显示名称 **T3**，版本从仓库根目录 `release.json` 读取，目前为 `versionName 1.0.5`，`versionCode 105`。
+当前正式配置：显示名称 **T3**，版本从仓库根目录 `release.json` 读取，目前为 `versionName 1.0.8`，`versionCode 108`。
 包名保持 `com.speechless666.t3.spike`，这是已存在的应用身份，不是显示名称。
 后续正式更新必须增加 versionCode，并使用同一 Release 私钥。
 

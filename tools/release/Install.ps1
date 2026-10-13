@@ -1,11 +1,21 @@
 [CmdletBinding()]
-param([string]$InstallRoot = $PSScriptRoot, [string]$LegacyRoot, [switch]$Start, [switch]$NoShortcut,
+param([string]$InstallRoot, [string]$LegacyRoot, [switch]$Start, [switch]$NoShortcut,
     [int]$Port, [int]$TlsPort, [string]$InstanceName, [int]$BootstrapPid)
 . (Join-Path $PSScriptRoot 'lifecycle.ps1')
+# Windows PowerShell 5.1 can evaluate advanced-script parameter defaults
+# before PSScriptRoot is populated when invoked with -File (Install.cmd).
+if ([string]::IsNullOrWhiteSpace($InstallRoot)) { $InstallRoot = $PSScriptRoot }
 $source = Get-T3FullPath $PSScriptRoot
 $root = Get-T3FullPath $InstallRoot
 if ($root -ne $source -and ($root.StartsWith($source + '\', [StringComparison]::OrdinalIgnoreCase) -or $source.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase))) { throw 'The release source and installation must be separate directories, or exactly the same directory.' }
 $manifest = Read-T3Manifest $source
+$stagingPrefix = Join-Path $root 'versions/.staging-xxxxxxxxxxxx'
+foreach ($file in $manifest.files.PSObject.Properties) {
+    $candidate = Join-Path $stagingPrefix $file.Name
+    if ($candidate.Length -gt 259 -or ([IO.Path]::GetDirectoryName($candidate)).Length -gt 247) {
+        throw 'The installation path is too long for Windows file operations. Choose a shorter installation directory; the existing library has not been changed.'
+    }
+}
 $statePath = Join-Path $root 'installation.json'
 if ($root -ne $source -and (Test-Path -LiteralPath $root) -and -not (Test-Path -LiteralPath $statePath) -and @(Get-ChildItem -LiteralPath $root -Force).Count -gt 0) { throw 'Destination is not a T3-managed installation; choose an empty directory.' }
 New-Item -ItemType Directory -Force -Path $root | Out-Null
@@ -51,7 +61,7 @@ try {
         if ((Get-FileHash -LiteralPath (Join-Path $destination 'release-manifest.json')).Hash -ne $manifestHash) { throw 'This version already exists with different bytes. Increase the release version.' }
         $null = Read-T3Manifest $destination
     } else {
-        $stage = Assert-T3Child (Join-Path $root ('versions/.staging-' + [guid]::NewGuid().ToString('N'))) $root
+        $stage = Assert-T3Child (Join-Path $root ('versions/.staging-' + [guid]::NewGuid().ToString('N').Substring(0,12))) $root
         New-Item -ItemType Directory -Force -Path $stage | Out-Null
         Copy-T3Payload $source $stage $manifest
         $null = Read-T3Manifest $stage
