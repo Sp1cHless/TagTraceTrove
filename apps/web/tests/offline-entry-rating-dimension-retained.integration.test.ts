@@ -37,12 +37,12 @@ async function fixture(){
   const summary=createProducerRatingSlot(db,{producerId:author.id,name:'Quality'}),self=createProducerRatingSlot(db,{producerId:author.id,name:'Quality',kind:'author_self'});
   for(const entry of [work,peer])setEntryRating(db,{entryId:entry.id,slotId:slot.id,stars:4});
   setEntryRating(db,{entryId:other.id,slotId:foreign.id,stars:3});setProducerRating(db,{producerId:author.id,slotId:summary.id,stars:3.5});setProducerRating(db,{producerId:author.id,slotId:self.id,stars:5});
-  const app=createApiApp(db,{dataDir:root,assetRoot:join(root,'assets')});let disconnected=false,loseReplay=false,loseAck=false;
+  const app=createApiApp(db,{dataDir:root,assetRoot:join(root,'assets')});let disconnected=false,loseReplay=false,loseAck=false,exceptReplay:string|undefined;
   const calls:string[]=[],bodies:string[]=[];
   const online=createGalleryApi(createApiClient({baseUrl:'http://isolated/api',fetchImplementation:async(input,init)=>{
     const url=new URL(String(input));calls.push(`${init?.method??'GET'} ${url.pathname}`);if(disconnected)throw new TypeError('Known offline');
     if(url.pathname==='/api/sync/replay')bodies.push(String(init?.body));const response=await app.request(url.pathname+url.search,init);
-    if(loseReplay && url.pathname==='/api/sync/replay' && response.ok){loseReplay=false;throw new TypeError('SQL response lost');}
+    if(loseReplay && url.pathname==='/api/sync/replay' && response.ok && JSON.parse(String(init?.body)).opId!==exceptReplay){loseReplay=false;throw new TypeError('SQL response lost');}
     if(loseAck && url.pathname.includes('/ack') && response.ok){loseAck=false;throw new TypeError('ACK response lost');}return response;
   }}));
   const indexedDB=new IDBFactory(),databaseName=randomUUID();let store=createIndexedDbOfflineStore({indexedDB,databaseName});
@@ -50,7 +50,7 @@ async function fixture(){
   return {db,root,work,peer,other,author,slot,keep,foreign,summary,self,api,online,calls,bodies,get store(){return store;},
     async offline(){await store.writeGeneration(1,JSON.stringify(await online.fetchSyncSnapshot()));await store.writeMeta('activeGeneration','1');await api.getSyncCapabilities({replay:false});await api.preferOfflineSnapshot!();disconnected=true;calls.length=0;},
     async deleteMeta(key:string){const db=await new Promise<IDBDatabase>((resolve,reject)=>{const request=indexedDB.open(databaseName);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});try{await new Promise<void>((resolve,reject)=>{const tx=db.transaction('meta','readwrite');tx.objectStore('meta').delete(key);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});}finally{db.close();}},
-    reconnect(){disconnected=false;},loseResponse(){loseReplay=true;},loseAcknowledgement(){loseAck=true;},
+    reconnect(){disconnected=false;},loseResponse(except?:string){loseReplay=true;exceptReplay=except;},loseAcknowledgement(){loseAck=true;},
     cold(){store.close();store=createIndexedDbOfflineStore({indexedDB,databaseName});return createOfflineAwareGalleryApi(online,store,{clientId:'entry-rating-phone',randomUUID});},
     close(){store.close();db.close();rmSync(root,{recursive:true,force:true});}
   };
@@ -61,7 +61,7 @@ it('connected different dimension successor keeps bounded exact originals throug
    if(saved){await f.offline();f.reconnect();await f.api.getSyncCapabilities({replay:false});}
    f.calls.length=0;f.loseResponse();await f.api.deleteEntryRatingSlot(f.work.id,f.slot.id);
    const first=(await f.store.list())[0]!,fingerprint=operationFingerprint(first);
-   const cold=f.cold();await cold.getSyncCapabilities({replay:false});await cold.deleteEntryRatingSlot(f.peer.id,f.keep.id);
+   const cold=f.cold();await cold.getSyncCapabilities({replay:false});f.loseResponse(first.opId);await cold.deleteEntryRatingSlot(f.peer.id,f.keep.id);
    const rows=await f.store.list();expect(rows).toHaveLength(2);expect(operationFingerprint(rows[0]!)).toBe(fingerprint);
    expect(rows[1]!.baseVersion).toBe(first.baseVersion+1);expect(rows[1]!.baseValues).toEqual({slots:first.payload.slots});
    expect(rows[1]!.opId).not.toBe(first.opId);expect(rows[1]!.payload.slots).toEqual([]);
@@ -129,7 +129,7 @@ it('finite valid-checksum semantic owners values epochs and bounded foreign jour
  }
  for(const variant of ['foreignJournal','higherOwner','wrongType','epoch']){
   const f=await fixture();try{
-   await f.api.deleteEntryRatingSlot(f.work.id,f.slot.id);const original=(await f.store.list())[0]!;
+   f.loseResponse();await f.api.deleteEntryRatingSlot(f.work.id,f.slot.id);const original=(await f.store.list())[0]!;
    const online={...f.online,getEntryRatingLayoutContext:async(entryId:number,opId?:string)=>{
     const context=await f.online.getEntryRatingLayoutContext!(entryId,opId);
     if(opId && variant==='foreignJournal')context.predecessor!.opId=randomUUID();if(variant==='higherOwner')context.syncVersion+=1;if(variant==='wrongType')context.entryType='Film';if(variant==='epoch')context.syncEpoch='foreign';return context;

@@ -8,14 +8,21 @@ param(
     [string]$OpenSslDirectory,
     [string]$JavaHome,
     [string]$AndroidSdk,
-    [string]$BrowserDirectory
+    [string]$BrowserDirectory,
+    [switch]$KeepVersion
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'lifecycle.ps1')
+. (Join-Path $PSScriptRoot 'version.ps1')
 $repo = Get-T3FullPath (Join-Path $PSScriptRoot '../..')
-$config = Get-Content -LiteralPath (Join-Path $repo 'release.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-if ($config.version -notmatch '^\d+\.\d+\.\d+$' -or $config.androidVersionCode -lt 100) { throw 'Invalid release.json version.' }
+$releaseRoot = Assert-T3Child (Join-Path $repo '.releases') $repo
+New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
+$releaseLock = [IO.File]::Open((Join-Path $releaseRoot '.release.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+try {
+$configPath = Join-Path $repo 'release.json'
+$versionPlan = Get-T3ReleaseVersionPlan $configPath $releaseRoot -KeepVersion:$KeepVersion
+$config = $versionPlan.Config
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $repo ('.releases/' + $config.version) }
 $output = Assert-T3Child $OutputDirectory $repo
 if (Test-Path -LiteralPath $output) { throw 'Release destination already exists. Choose a new directory or increase release.json version.' }
@@ -49,6 +56,10 @@ if (-not $AndroidSdk) { $AndroidSdk = Join-Path $repo 'spikes/001-android-webvie
 foreach ($required in @($NodePath, (Join-Path $PythonBase 'python.exe'), $PythonPackages, (Join-Path $OpenSslDirectory 'openssl.exe'), (Join-Path $JavaHome 'bin/java.exe'), (Join-Path $AndroidSdk 'build-tools/36.0.0/aapt.exe'))) {
     if (-not (Test-Path -LiteralPath $required)) { throw "Required build tool not found: $required" }
 }
+if (-not $KeepVersion) {
+    Save-T3ReleaseVersionPlan $configPath $releaseRoot $versionPlan
+}
+Write-Host "Building T3 $($config.version), Android versionCode $($config.androidVersionCode)"
 function Invoke-T3Tool([string]$Command, [string[]]$Arguments, [string]$Directory) {
     Push-Location $Directory
     try { & $Command @Arguments; if ($LASTEXITCODE -ne 0) { throw "Build command failed: $Command (exit $LASTEXITCODE)" } } finally { Pop-Location }
@@ -176,5 +187,6 @@ try {
     Write-Host "Release ready: $output"
 } finally {
     $env:PATH = $originalPath; $env:VITE_T3_BUILD_ID = $originalBuildId; $env:JAVA_HOME = $originalJava; $env:ANDROID_HOME = $originalSdk; $env:PLAYWRIGHT_BROWSERS_PATH = $originalBrowsers
-    if (-not $success) { [IO.File]::WriteAllText((Join-Path $output 'RELEASE-FAILED.txt'), 'Incomplete release. Do not distribute. Use a fresh output directory after fixing the error.') }
+    if (-not $success) { [IO.File]::WriteAllText((Join-Path $output 'RELEASE-FAILED.txt'), 'Incomplete release. Do not distribute. Fix the error and rerun Release.bat; automatic versioning selects a new release.') }
 }
+} finally { $releaseLock.Dispose() }

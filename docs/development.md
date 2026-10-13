@@ -165,6 +165,14 @@ programs, backs it up before updates and retains it during ordinary uninstall. R
 See `release-installation.md` for prerequisites and Windows/Android lifecycle instructions; broader clean-machine GUI
 acceptance is still separate from the isolated lifecycle/runtime check.
 
+The release entry automatically increments the patch version and Android code, preserving the app and signer identity.
+Prior release metadata establishes their minimums; occupied version directories are skipped. Configuration is saved after
+dependency checks, with its byte-identical recovery copy under `.releases`. Failed builds retain their allocated version,
+so a normal retry advances again. `-KeepVersion` supports a manually prepared new major/minor release, still requiring
+monotonic version/code. An exclusive build lock prevents concurrent version allocation. The focused Windows PowerShell
+5.1 versioning check passed for increment/retry, existing metadata, identity retention, recovery bytes, manual version and
+changed-configuration rejection; the release scripts parsed under the same runtime.
+
 ## 9. Repository layout
 
 ```text

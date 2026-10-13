@@ -1,6 +1,6 @@
 {
-  "version": "1.0.5",
-  "androidVersionCode": 105,
-  "androidApplicationId": "com.speechless666.t3.spike",
-  "androidSignerSha256": "62916b230436fdff08764004af8acbaf47b225b6f961b137c2479f714acfbb13"
+    "version":  "1.0.6",
+    "androidVersionCode":  106,
+    "androidApplicationId":  "com.speechless666.t3.spike",
+    "androidSignerSha256":  "62916b230436fdff08764004af8acbaf47b225b6f961b137c2479f714acfbb13"
 }

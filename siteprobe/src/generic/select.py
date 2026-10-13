@@ -45,7 +45,7 @@ from datetime import date, timedelta
 from typing import Any, Iterable
 from urllib.parse import parse_qs, urljoin, urlparse
 
-from .document import Document, DocumentBag
+from .document import Document, DocumentBag, MissingDocumentError
 from .htmltree import Element, select_all, select_one
 from .text_normalization import decode_entities, to_simplified
 from .dates import extract_date
@@ -554,12 +554,25 @@ def resolve(selector: Any, bag: DocumentBag, *, context: dict[str, Any] | None =
     if not isinstance(selector, dict):
         raise SelectorError(f"selector must be an object, got {type(selector).__name__}")
     context = dict(context or {})
-    value = _resolve_once(selector, bag, context)
-    if _is_empty(value):
-        for alternative in _as_list(selector.get("fallback")):
-            value = _resolve_once(alternative, bag, context)
-            if not _is_empty(value):
-                break
+    missing: MissingDocumentError | None = None
+    value = None
+    for choice in [selector, *_as_list(selector.get("fallback"))]:
+        try:
+            value = _resolve_once(choice, bag, context)
+        except MissingDocumentError as error:
+            # Optional sources (e.g. JSON-LD) need not exist on every work page.
+            # Only their absence is recoverable here, not malformed rules or JSON.
+            if missing is None:
+                missing = error
+            notes = context.get("_fallback_notes")
+            if isinstance(notes, list):
+                notes.append(error.args[0])
+            continue
+        if not _is_empty(value):
+            return value
+    if missing is not None:
+        # No rule recovered the field: retain the missing-source diagnostic.
+        raise missing
     return value
 
 

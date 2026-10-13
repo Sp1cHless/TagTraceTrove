@@ -50,6 +50,7 @@ import {
   galleryPartitionRequestSchema,
   syncGalleryPartitionContextSchema,
   syncEntryRatingLayoutContextSchema,
+  syncEntryRatingLayoutSettlementSchema,
   galleryOrderResponseSchema,
   gallerySummarySchema,
   setGalleryOrderRequestSchema,
@@ -1509,6 +1510,28 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
       if(!predecessor)return context.json(errorPayload('NOT_FOUND','Entry rating layout own journal not found'),404);
     }
     return context.json(syncEntryRatingLayoutContextSchema.parse({...getSyncIdentity(database),entryId,...owner,slots,...(predecessor ? {predecessor} : {})}));
+  });
+
+  app.get('/api/rating-layouts/:layoutUid/operations/:opId', (context) => {
+    const layoutUid = z.string().uuid().parse(context.req.param('layoutUid'));
+    const opId = z.string().uuid().parse(context.req.param('opId'));
+    const proof = database.prepare(`SELECT receipt.result_json AS resultJson, change.seq AS serverSeq,
+      change.resource_version AS resourceVersion, change.record_json AS recordJson
+      FROM sync_operation_receipts AS receipt JOIN sync_changes AS change ON change.seq=receipt.server_seq
+      WHERE receipt.op_id=? AND change.entity_kind='rating_layout' AND change.entity_uid=? AND change.change_kind='update'`)
+      .get(opId, layoutUid) as { resultJson: string; serverSeq: number; resourceVersion: number; recordJson: string } | undefined;
+    if (proof) {
+      const receipt = JSON.parse(proof.resultJson);
+      const record = JSON.parse(proof.recordJson);
+      if (receipt.status === 'applied' && receipt.opId === opId && receipt.resourceVersion === proof.resourceVersion
+        && receipt.serverSeq === proof.serverSeq && record.syncUid === layoutUid
+        && record.syncVersion === proof.resourceVersion && record.subjectKind === 'entry') {
+        return context.json(syncEntryRatingLayoutSettlementSchema.parse({ ...getSyncIdentity(database),
+          predecessor: { opId, entityUid: layoutUid, resourceVersion: proof.resourceVersion,
+            serverSeq: proof.serverSeq, subjectKind: 'entry', entryType: record.entryType } }));
+      }
+    }
+    return context.json(errorPayload('NOT_FOUND', 'Entry rating layout own journal not found'), 404);
   });
 
   app.delete('/api/entries/:entryId/rating-slots/:slotId', (context) => {

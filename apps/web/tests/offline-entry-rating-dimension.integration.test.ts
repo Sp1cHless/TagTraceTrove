@@ -100,9 +100,50 @@ it('connected no-copy and old-copy delete uses bounded original UUID command and
    const original=(await f.store.list())[0]!;expect(original).toBeDefined();expect(original.operationKind).toBe('rating-layout.slots.set');
    expect(f.calls.filter(row=>row.includes('/snapshot')||row.includes('/delta')||row.startsWith('DELETE '))).toEqual([]);
    const cold=f.cold();await cold.getSyncCapabilities({replay:false});await cold.replayOfflineOperations!();expect(new Set(f.bodies).size).toBe(1);
-   if(!saved)expect(await f.store.list()).toHaveLength(1);else expect(await f.store.list()).toEqual([]);
+   expect(await f.store.list()).toEqual([]);
+   if(!saved){expect(await f.store.readMeta('activeGeneration')).toBeNull();expect(f.calls.some(row=>row.includes('/snapshot')||row.includes('/delta')||row.includes('/ack'))).toBe(false);}
   }finally{f.close();}
  }
+});
+it('no-copy rating deletion settles an online success immediately and reports zero pending work',async()=>{
+ const f=await fixture();try{
+  const state={mode:'online' as const,lastFallbackAt:null,pendingCount:0};
+  const api=createOfflineAwareGalleryApi(f.online,f.store,{clientId:'entry-rating-phone',randomUUID,state});
+  await api.deleteEntryRatingSlot(f.work.id,f.slot.id);
+  expect(await f.store.list()).toEqual([]);expect(state.pendingCount).toBe(0);
+  expect(f.db.prepare('SELECT count(*) FROM rating_slots WHERE id=?').pluck().get(f.slot.id)).toBe(0);
+  expect(f.db.prepare('SELECT count(*) FROM sync_operation_receipts').pluck().get()).toBe(1);
+  expect(await f.store.readMeta('activeGeneration')).toBeNull();
+  expect(f.calls.some(row=>row.includes('/snapshot')||row.includes('/delta')||row.includes('/ack'))).toBe(false);
+ }finally{f.close();}
+});
+it('no-copy rating deletion recovers a legacy original after later online changes without overwriting them',async()=>{
+ const f=await fixture();try{
+  f.loseResponse();await f.api.deleteEntryRatingSlot(f.work.id,f.slot.id);const original=(await f.store.list())[0]!;
+  const added=await f.online.createEntryRatingSlot(f.work.id,'Later online dimension');
+  const cold=f.cold();await cold.getSyncCapabilities({replay:false});await cold.flushOfflineOutbox!();
+  expect(await f.store.list()).toEqual([]);expect(f.db.prepare('SELECT name FROM rating_slots WHERE id=?').pluck().get(added.id)).toBe('Later online dimension');
+  expect(new Set(f.bodies).size).toBe(1);expect(JSON.parse(f.bodies[0]!).opId).toBe(original.opId);
+  expect(f.calls.some(row=>row.includes('/snapshot')||row.includes('/delta')||row.includes('/ack'))).toBe(false);
+ }finally{f.close();}
+});
+it.each(['missing','foreign-owner','wrong-class','wrong-version','foreign-receipt','lost-journal'] as const)('no-copy rating deletion retains its original on %s proof and recovers on a valid retry',async fault=>{
+ const f=await fixture();try{
+  f.loseResponse();await f.api.deleteEntryRatingSlot(f.work.id,f.slot.id);const original=(await f.store.list())[0]!,fingerprint=operationFingerprint(original);
+  const online={...f.online,replaySyncOperation:async(operation:Parameters<NonNullable<typeof f.online.replaySyncOperation>>[0])=>{
+   const result=await f.online.replaySyncOperation!(operation);return fault==='foreign-receipt'?{...result,opId:randomUUID()}:result;
+  },getEntryRatingLayoutSettlement:async(layoutUid:string,opId:string)=>{
+   if(fault==='lost-journal')throw new TypeError('Journal response lost');
+   const proof=await f.online.getEntryRatingLayoutSettlement!(layoutUid,opId);const row=proof.predecessor;
+   if(fault==='missing')proof.predecessor=undefined as unknown as typeof row;if(fault==='foreign-owner')row.entityUid=randomUUID();
+   if(fault==='wrong-version')row.resourceVersion+=1;if(fault==='wrong-class')Object.assign(row,{subjectKind:'producer'});return proof;
+  }};
+  const cold=createOfflineAwareGalleryApi(online,f.store,{clientId:'entry-rating-phone',randomUUID});
+  await cold.getSyncCapabilities({replay:false});await cold.flushOfflineOutbox!();
+  expect(await f.store.list()).toHaveLength(1);expect(operationFingerprint((await f.store.list())[0]!)).toBe(fingerprint);
+  const retry=f.cold();await retry.getSyncCapabilities({replay:false});await retry.flushOfflineOutbox!();expect(await f.store.list()).toEqual([]);
+  expect(f.db.prepare('SELECT count(*) FROM sync_operation_receipts').pluck().get()).toBe(1);
+ }finally{f.close();}
 });
 it('pending dimension creation is a real same-owner predecessor while unsupported pending new type refuses',async()=>{
  const f=await fixture();try{await f.offline();const slot=await f.api.createEntryRatingSlot(f.work.id,'Pending dimension');await f.api.deleteEntryRatingSlot(f.peer.id,slot.id);const rows=await f.store.list();expect(rows).toHaveLength(2);expect(rows[1]!.entityUid).toBe(rows[0]!.entityUid);expect(rows[1]!.baseVersion).toBe(rows[0]!.baseVersion+1);

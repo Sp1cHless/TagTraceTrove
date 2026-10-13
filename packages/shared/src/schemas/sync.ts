@@ -812,6 +812,10 @@ export const syncEntryRatingLayoutContextSchema = z.strictObject({
   predecessor: z.strictObject({opId:z.string().uuid(),entityUid:syncUidSchema,resourceVersion:z.number().int().positive(),serverSeq:z.number().int().positive(),subjectKind:z.literal('entry'),entryType:z.string().min(1)}).optional(),
 });
 export type SyncEntryRatingLayoutContext = z.infer<typeof syncEntryRatingLayoutContextSchema>;
+export const syncEntryRatingLayoutSettlementSchema = syncEntryRatingLayoutContextSchema
+  .pick({ libraryId: true, syncEpoch: true })
+  .extend({ predecessor: syncEntryRatingLayoutContextSchema.shape.predecessor.unwrap() });
+export type SyncEntryRatingLayoutSettlement = z.infer<typeof syncEntryRatingLayoutSettlementSchema>;
 
 const syncRatingLayoutSlotsOperationSchema = z.strictObject({
   ...syncRatingLayoutReplayBaseShape,

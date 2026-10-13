@@ -4511,6 +4511,41 @@ export function createOfflineAwareGalleryApi(
     });
   }
 
+  async function settleUncachedRatingDeletion(
+    stored: PendingSyncOperation,
+    receipt: { opId: string; resourceVersion: number; serverSeq: number },
+  ): Promise<void> {
+    if (!hasOutbox(store) || !online.getEntryRatingLayoutSettlement) throw new Error('Entry rating layout needs own journal support');
+    const operation = transportOperation(stored);
+    if (operation.operationKind !== 'rating-layout.slots.set' || operation.payload.deletedSlotUids?.length !== 1
+      || operation.clientId !== clientId || receipt.opId !== operation.opId
+      || receipt.resourceVersion !== operation.baseVersion + ratingLayoutVersionDelta(operation)
+      || !Number.isSafeInteger(receipt.serverSeq) || receipt.serverSeq <= 0) {
+      throw new Error('Entry rating layout receipt identity/revision mismatch');
+    }
+    const proof = await online.getEntryRatingLayoutSettlement(operation.entityUid, operation.opId);
+    if (proof.libraryId !== operation.libraryId || proof.syncEpoch !== operation.syncEpoch) {
+      throw new Error('Foreign Entry rating layout identity');
+    }
+    // The exact retry receipt and its immutable journal prove this command was
+    // committed, even after later online edits. With no saved copy there is no
+    // local projection to refresh and no snapshot cursor to acknowledge.
+    const journal = proof.predecessor;
+    if (!journal || journal.opId !== operation.opId || journal.entityUid !== operation.entityUid
+      || journal.serverSeq !== receipt.serverSeq || journal.resourceVersion !== receipt.resourceVersion
+      || journal.subjectKind !== 'entry' || typeof journal.entryType !== 'string') {
+      throw new Error('Entry rating layout own receipt/journal disagrees');
+    }
+    const current = (await store.list()).find(row => row.opId === stored.opId);
+    if (current && operationFingerprint(current) !== operationFingerprint(stored)) {
+      throw new Error('Entry rating layout original changed during settlement');
+    }
+    await store.removeApplied([stored.opId]);
+    await options.nativeTransfers?.reconcile();
+    invalidateOfflineLibrary();
+    await setReplayStateFromStore();
+  }
+
   async function replayPendingOperations(reconcileConnected = false,localPasses=4): Promise<void> {
     if (replayPromise !== null) return replayPromise;
     replayPromise = (async () => {
@@ -4924,6 +4959,9 @@ export function createOfflineAwareGalleryApi(
               if (result.entityId === undefined && operation.payload.parentCreateOpId !== undefined) throw new Error('Author receipt has no Producer identity');
               if (result.entityId !== undefined) appliedProducerIds.set(operation.payload.producerUid, result.entityId);
             }
+            if (operation.operationKind === 'rating-layout.slots.set' && operation.payload.deletedSlotUids?.length === 1) {
+              causalReceipts.set(operation.opId, result);
+            }
             appliedReceipts.set(operation.opId, {entityId:result.entityId, resourceVersion:result.resourceVersion, serverSeq:result.serverSeq});
             appliedOperations.push(operation);
             maxAppliedServerSeq = Math.max(maxAppliedServerSeq, result.serverSeq);
@@ -5039,8 +5077,12 @@ export function createOfflineAwareGalleryApi(
         if (appliedOperations.length > 0 || appliedMedia.length > 0) {
           if (!activeBeforeReplay && appliedMedia.length === 0
             && appliedOperations.every(operation => operation.operationKind === 'entry.authors.convert-to-multi' || operation.operationKind === 'gallery.partition.set' || (operation.operationKind === 'rating-layout.slots.set' && operation.payload.deletedSlotUids?.length === 1))) {
-            // No-copy commands retain exact originals; command receipts alone
-            // cannot install a library or authorize snapshot/ACK cleanup.
+            for (const operation of appliedOperations) {
+              if (operation.operationKind === 'rating-layout.slots.set') {
+                await settleUncachedRatingDeletion(operations.find(row => row.opId === operation.opId)!, causalReceipts.get(operation.opId)!);
+              }
+            }
+            // Other no-copy commands still require their own settlement proof.
             setMode('online');
             return;
           }
@@ -7321,6 +7363,7 @@ export function createOfflineAwareGalleryApi(
           const result=await online.replaySyncOperation(transportOperation(op));
           if(result.opId!==op.opId)throw new Error('Entry rating layout receipt identity mismatch');
           if(result.status==='applied' && (result.resourceVersion!==op.baseVersion+1 || result.serverSeq<=0))throw new Error('Entry rating layout receipt revision mismatch');
+          if(result.status==='applied' && !active)await settleUncachedRatingDeletion(op,result);
           if(result.status!=='applied')await store.update(op.opId,{status:result.status==='resnapshot-required'?'pending':result.status,lastError:result.status==='failed'?result.detail:'Entry rating layout needs reconciliation'});
         } catch(cause) {if(!isOfflineTransportError(cause))throw cause;}
       };

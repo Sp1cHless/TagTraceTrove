@@ -57,7 +57,9 @@ USB 可选入口：发行目录 `Install-Android.cmd -AdbPath D:\platform-tools\
 
 ## 维护者：一键打包
 
-修改根目录 `release.json` 的 `version` 和递增的 `androidVersionCode`，保留 package ID 与正式 signer SHA256。双击 **Release.bat**，或执行 `powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/release.ps1`。
+双击 **Release.bat**，或执行 `powershell -NoProfile -ExecutionPolicy Bypass -File tools/release/release.ps1`。默认自动将补丁版本加一、Android `versionCode` 加一，并写回根目录 `release.json`；例如 `1.0.5 / 105` → `1.0.6 / 106`。会参考既有发行记录确保版本及 Android code 单调增加，跳过已占用的版本目录；package ID 与正式 signer SHA256 保留。构建依赖检查通过后才保存新版本，原配置的恢复副本保存在 `.releases/release-config.previous.json`。
+
+需要手动指定大版本或小版本时，先设置 `release.json` 的版本及更大的 Android code，再运行 `Release.bat -KeepVersion`。该模式要求两个值均高于既有发行记录。构建失败不会回退已经分配的版本；修复后直接重跑，默认自动选择下一个版本。成功后应将更新后的 `release.json` 一并提交，并使用与产物一致的 Git 标签。
 
 构建电脑需要：已安装并兼容的项目 Node 依赖、.NET 10 SDK、JDK 21、Android SDK/build-tools 36.0.0、现有 Release 签名私钥、Python 3.11 及 SiteProbe 的 browser/media 依赖、Windows x64 OpenSSL 3（含配套 DLL）。这些是构建依赖，不是用户安装要求。脚本优先检测当前项目运行环境；可用 `-NodePath`、`-PythonBase`、`-PythonPackages`、`-OpenSslDirectory`、`-JavaHome`、`-AndroidSdk` 指定路径。首次打包可能联网获取 .NET 自包含运行时、Node 版本对应的第三方授权说明和 Playwright Chromium；`-NodeLicenseFile` 可指定 Node 安装包自带的 LICENSE，`-BrowserDirectory` 可使用与已安装 Playwright 版本匹配的预下载浏览器目录。
 
@@ -65,4 +67,4 @@ USB 可选入口：发行目录 `Install-Android.cmd -AdbPath D:\platform-tools\
 
 桌面和 APK 使用同一次 Web 构建；发布清单记录输入源码指纹、版本、APK 签名及文件哈希。构建期间输入改变则拒绝发布。缺少签名或签名变化会失败，不创建新私钥、不退回 debug。签名备份见 `spikes/001-android-webview-shell/RELEASE.md`。
 
-输出目录已存在时拒绝覆盖。失败目录有 `RELEASE-FAILED.txt`，不得分发；修复后指定新的 `-OutputDirectory`（位于仓库内）重跑。脚本只生成可分发文件，不上传、不创建 GitHub Release、不安装当前电脑/手机，也不操作正式资料库。发布前仍需维护者确认最终版本的用户验收。
+自动选版不会覆盖既有目录；显式指定的 `-OutputDirectory`（位于仓库内）已经存在时仍拒绝覆盖。发布入口使用独占构建锁，避免同时打包修改同一份版本配置。失败目录有 `RELEASE-FAILED.txt`，不得分发；修复后直接重跑 **Release.bat** 即可自动使用新版本。脚本只生成可分发文件，不上传、不创建 GitHub Release、不安装当前电脑/手机，也不操作正式资料库。发布前仍需维护者确认最终版本的用户验收。

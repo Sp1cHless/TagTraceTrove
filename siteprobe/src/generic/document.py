@@ -21,6 +21,10 @@ from .htmltree import Element, parse_html
 DEFAULT_JSON_WRAPPER = r"^\s*(?:var\s+\w+\s*=\s*)?(.*?)\s*;?\s*$"
 
 
+class MissingDocumentError(KeyError):
+    """A named source is absent, distinct from a malformed selector or payload."""
+
+
 @dataclass
 class Document:
     """One raw document plus the format hints the template declared for it."""
@@ -80,7 +84,8 @@ class DocumentBag:
     def require(self, name: str) -> Document:
         document = self.documents.get(name)
         if document is None:
-            raise KeyError(f"template references document {name!r}, which the fetcher did not provide")
+            raise MissingDocumentError(
+                f"template references document {name!r}, which the fetcher did not provide")
         return document
 
     def names(self) -> list[str]:

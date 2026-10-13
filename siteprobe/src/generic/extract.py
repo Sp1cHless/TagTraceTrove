@@ -92,14 +92,17 @@ def extract_work(template: SiteTemplate, item: RawItem) -> dict[str, Any]:
     context = extract_context(template, item)
 
     values: dict[str, Any] = {}
+    fallback_notes: list[str] = []
     for name, rule in template.work_fields.items():
+        notes: list[str] = []
         try:
-            values[name] = resolve(rule, bag, context=context)
+            values[name] = resolve(rule, bag, context={**context, "_fallback_notes": notes})
         except (SelectorError, KeyError, ValueError) as error:
             # A site redesign must degrade to a missing field, never abort a run
             # that already downloaded hundreds of pages.
             values[name] = None
             context.setdefault("_errors", {})[name] = str(error)
+        fallback_notes.extend(f"{name}: {note}" for note in notes)
 
     for name, value in template.work_constants.items():
         values.setdefault(name, value)
@@ -161,6 +164,7 @@ def extract_work(template: SiteTemplate, item: RawItem) -> dict[str, Any]:
             record[str(name)] = values[name]
 
     record["diagnostics"] = diagnostics(values, record, item)
+    record["diagnostics"]["warnings"].extend(fallback_notes)
     # An absent key is what the importer's `optional` fields mean; an explicit
     # `null` only works where the schema also says `nullable`, which differs from
     # site to site. Omitting is therefore both correct everywhere and cleaner.

@@ -31,6 +31,7 @@ import {
   galleryPartitionRequestSchema,
   syncGalleryPartitionContextSchema,
   syncEntryRatingLayoutContextSchema,
+  syncEntryRatingLayoutSettlementSchema,
   galleryOrderResponseSchema,
   gallerySummarySchema,
   setGalleryOrderRequestSchema,
@@ -552,6 +553,7 @@ export interface GalleryApi {
   setAuthorGalleryAnchor(authorId: number, galleryType: string): Promise<void>;
   /** Removes one rating dimension from its Gallery — every subject of that partition loses it. */
   getEntryRatingLayoutContext?(entryId: number, predecessorOpId?: string): Promise<import('@t3/shared').SyncEntryRatingLayoutContext>;
+  getEntryRatingLayoutSettlement?(layoutUid: string, opId: string): Promise<import('@t3/shared').SyncEntryRatingLayoutSettlement>;
   deleteEntryRatingSlot(entryId: number, slotId: number): Promise<void>;
   deleteAuthorRatingSlot(authorId: number, slotId: number): Promise<void>;
   deleteFacet(facetId: number): Promise<void>;
@@ -1267,6 +1269,9 @@ export function createGalleryApi(
     },
     async getEntryRatingLayoutContext(entryId, predecessorOpId) {
       return syncEntryRatingLayoutContextSchema.parse(await client.request(`entries/${entryId}/rating-layout-context${predecessorOpId ? `?predecessorOpId=${encodeURIComponent(predecessorOpId)}` : ''}`));
+    },
+    async getEntryRatingLayoutSettlement(layoutUid, opId) {
+      return syncEntryRatingLayoutSettlementSchema.parse(await client.request(`rating-layouts/${encodeURIComponent(layoutUid)}/operations/${encodeURIComponent(opId)}`));
     },
     async deleteEntryRatingSlot(entryId, slotId) {
       await client.request(`entries/${entryId}/rating-slots/${slotId}`, { method: 'DELETE' });
