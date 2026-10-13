@@ -104,7 +104,7 @@ are strict as well: see `import-and-source.md` §5.
 ```json
 {
   "error": {
-    "code": "VALIDATION_ERROR | NOT_FOUND | CONFLICT | INTERNAL_ERROR",
+    "code": "UNAUTHORIZED | FORBIDDEN | VALIDATION_ERROR | NOT_FOUND | CONFLICT | INTERNAL_ERROR",
     "message": "Human-readable summary",
     "details": {}
   }

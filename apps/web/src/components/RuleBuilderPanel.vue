@@ -14,6 +14,7 @@
  * the ordinary run, and its export goes to the import review.
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { copyText } from '../clipboard.js';
 
 import type { GalleryApi } from '../api/gallery.js';
 import type { ImportPreview, SiteprobeSite } from '@t3/shared';
@@ -412,7 +413,7 @@ async function copyDiagnostics(): Promise<void> {
     ...buildLines.value.slice(-12).map((line) => `  ${line}`),
   ];
   try {
-    await navigator.clipboard.writeText(lines.join(String.fromCharCode(10)));
+    await copyText(lines.join(String.fromCharCode(10)));
   } catch {
     // The clipboard can refuse; the lines stay on screen to copy by hand.
   }

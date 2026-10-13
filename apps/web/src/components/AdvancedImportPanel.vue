@@ -19,6 +19,7 @@
  *   "no" runs again to read everything.
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { copyText } from '../clipboard.js';
 
 import type { GalleryApi } from '../api/gallery.js';
 import { describeFindings, type ImportPreview, type SiteprobeSite, type SiteprobeTarget } from '@t3/shared';
@@ -440,7 +441,7 @@ async function copyDiagnostics(): Promise<void> {
     `log:     ${errorLogPath.value ?? '(none)'}`,
   ];
   try {
-    await navigator.clipboard.writeText(lines.join(String.fromCharCode(10)));
+    await copyText(lines.join(String.fromCharCode(10)));
     diagnosticsCopied.value = true;
   } catch {
     error.value = t('entry.copyDiagnostics');

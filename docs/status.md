@@ -59,7 +59,7 @@ Everything in the current scope is implemented, tested and accepted on the deskt
 ## 2. Android / offline device status
 
 The Android shell (Capacitor WebView over the same web bundle) has a deep history of measured device acceptance. The
-**current packaged formal release is 1.0.8**, Android versionCode **108**, with the same application ID and Release signer.
+**current packaged formal release is 1.0.10**, Android versionCode **110**, with the same application ID and Release signer.
 On 2026-10-13 the user confirmed that mobile acceptance for the 1.0 formal release is complete. This records user
 acceptance before the subsequent 1.0.8 packaging; the older per-build measured device results below remain their original historical records.
 Before the formal release line, the offline-parity line was
@@ -118,9 +118,16 @@ No minification or unrelated runtime behavior changed.
 | 1.0.3 | `T3-1.0.3.apk` | Same bar, every row on one line: the rating row's three selects divide the line (a native select no longer sizes to its longest option), the Facet row's tag input shares its line, and a wrapped row's × aligns with the first line. APK SHA256 `0dad307638715bd521d0123f3d610a0190f00cfd1847e5d2ca28e6831338104a`, signer `62916b23…fbb13`; cover-installed over 1.0.2 with data preserved and device-verified (`mobile.md` §8). |
 | 1.0.5 | `T3-1.0.5.apk` | Earlier formal artifact, Android code 105. APK SHA256 `2bf0d8a18baa8846aba726f9d5e96075f811749623caa1ffa299ba54ac0dde16`; unchanged Release signer and non-debuggable identity verified. Mobile acceptance for the 1.0 release confirmed by the user on 2026-10-13 (`mobile.md` §8). |
 | 1.0.7 | `T3-1.0.7.apk` | Earlier formal artifact, Android code 107. APK SHA256 `7229f788ba3e38fa9931d6a54c2f6bb3fa099d823ed5c9a0dfba2f861075b13d`; formal pipeline verified the unchanged signer and non-debuggable identity. |
-| 1.0.8 | `T3-1.0.8.apk` | Current packaged formal artifact, Android code 108. APK SHA256 `b59ecd88b52adc2108d9717f7866bd175245c32f69a998c47f2fbff41e011d72`; formal pipeline verified the unchanged signer and non-debuggable identity. |
+| 1.0.8 | `T3-1.0.8.apk` | Earlier packaged formal artifact, Android code 108. APK SHA256 `b59ecd88b52adc2108d9717f7866bd175245c32f69a998c47f2fbff41e011d72`; formal pipeline verified the unchanged signer and non-debuggable identity. |
+| 1.0.10 | `T3-1.0.10.apk` | Current packaged formal artifact, Android code 110. APK SHA256 `6456814df7b6ac052c3a1a6a57245af86828c02b9eab222484fad51f17e3da95`; unchanged signer, application ID and non-debuggable identity verified. Chromium 90 build target, JS/CSS capability fallbacks and unpaired diagnostic access passed focused tests and four frozen-package browser simulations (`mobile.md`). |
 
-Current Windows ZIP: `T3-1.0.8-windows-x64.zip`, SHA256
+Current Windows ZIP: `T3-1.0.10-windows-x64.zip`, SHA256
+`ad3dba40d62428bea699e14f3496e8c78526c370bf37eccdee90b0bd92c9e44b`.
+The 1.0.10 formal pipeline completed its frozen-input, signature, identity, path-budget and checksum steps;
+the focused package check verified six published checksums and all 18 APK Web files. The Demo installation
+above remains on its measured 1.0.8 state.
+
+Earlier Windows ZIP: `T3-1.0.8-windows-x64.zip`, SHA256
 `b174209bbfef091ed3e0ac53b23186cbec7db3bb3a475dea82bb7f969d5797fe`. The default Windows PowerShell 5.1
 installation path is initialized after parameter binding; the focused runtime check exercised both direct `-File`
 default installation and explicit destination installation. The actual merged EXE update is recorded above.
@@ -140,7 +147,7 @@ script's Windows PowerShell 5.1, before the subsequent documentation-only correc
 See `release-installation.md` for the correction to the unchanged 1.0.5 bundled installation guide.
 
 The signer certificate has been identical across the v43–v49 chain; those builds used the **debug keystore**. A
-dedicated release key now exists (§2b). The 1.0.1–1.0.8 line is signed with that release key, so the two chains cannot
+dedicated release key now exists (§2b). The 1.0.1–1.0.10 line is signed with that release key, so the two chains cannot
 upgrade into each other in place.
 
 ## 4. Not a core-plan gap

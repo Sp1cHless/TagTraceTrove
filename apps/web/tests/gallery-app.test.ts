@@ -5587,6 +5587,14 @@ describe('Facet filter bar', () => {
     expect(wrapper.get('[data-testid="pairing-gate"]').text()).toContain('Pair to your desktop library');
     await wrapper.get('[data-testid="pairing-gate-scan"]').trigger('click');
     expect(calls).toContainEqual(['T3PairedTransport', 'pair']);
+    const serverFetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Pair again' } }), { status: 401, headers: { 'Content-Type': 'application/json' } }));
+    await wrapper.get('[data-testid="settings-button"]').trigger('click');
+    await wrapper.get('[data-testid="advanced-entry"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="pairing-gate"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="system-report"]').element).toHaveProperty('value', expect.stringContaining('user agent:'));
+    expect(wrapper.get('[data-testid="system-report"]').element).toHaveProperty('value', expect.stringContaining('browser compatibility:'));
+    serverFetch.mockRestore();
     wrapper.unmount();
     meta.remove();
     delete (window as unknown as { Capacitor?: unknown }).Capacitor;

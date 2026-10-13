@@ -165,6 +165,14 @@ programs, backs it up before updates and retains it during ordinary uninstall. R
 See `release-installation.md` for prerequisites and Windows/Android lifecycle instructions; broader clean-machine GUI
 acceptance is still separate from the isolated lifecycle/runtime check.
 
+The 1.0.10 pipeline's frozen source fingerprint covers the Web compatibility build helper and
+dependency manifest, Android `prepare-web.mjs` and Capacitor configuration in addition to the
+existing Web/server/shared/native/release sources. The same Web build feeds both packages.
+The completed pipeline verified versionCode 110, unchanged application ID/Release signer,
+non-debuggable APK, frozen inputs and path budget. The focused package check compared all
+18 Android Web files and six publication checksums and exercised four browser capability
+scenarios (`mobile.md`, browser compatibility section).
+
 The release entry automatically increments the patch version and Android code, preserving the app and signer identity.
 Prior release metadata establishes their minimums; occupied version directories are skipped. Configuration is saved after
 dependency checks, with its byte-identical recovery copy under `.releases`. Failed builds retain their allocated version,

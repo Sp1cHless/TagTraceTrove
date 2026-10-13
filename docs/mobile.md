@@ -106,7 +106,38 @@ from the import flows above, the goal is full read/write.
 
 The shell bundles the built web UI inside the APK (`web-dist`), so a phone can
 cold-launch the UI without a remote page load. `prepare-web.mjs` prepares
-`web-dist`. Native Java (`android/app/src/main/java/com/speechless666/t3/spike/`):
+`web-dist`.
+
+### Browser compatibility and first-install diagnostics (1.0.10, 2026-10-13)
+
+The Web and Service Worker JavaScript target Chromium 90; CSS targets the same engine so
+mobile media queries retain the older `min-width` / `max-width` syntax. `core-js` supplies
+`structuredClone`, Array `.at()` and `Object.hasOwn` before application startup. The CSS build
+adds `vh` fallbacks, viewport-based fallbacks for width container queries, and readable theme
+colours behind feature checks while retaining modern colours on capable engines. `:has` remains
+an optional visual enhancement. Existing observer and storage-capability guards remain in use.
+
+An engine reporting Chrome/Chromium below 90, or lacking IndexedDB, gets a standalone bilingual
+recovery page with an update/storage explanation and local diagnostics. It does not start the
+library UI or automatically open pairing. The screen itself uses plain ES5 and can copy through
+the native clipboard without needing the application bundle.
+
+An unpaired shell can open Advanced directly into System diagnostics. Entering System preserves
+captured page errors; reports include user agent, viewport, native/polyfilled JS support and
+CSS/storage/clipboard capabilities. Copy actions share the Web Clipboard → native clipboard →
+document copy fallback; selectable report text remains available. `UNAUTHORIZED` and `FORBIDDEN`
+retain their human-readable messages, and the first-install pairing page suppresses redundant API errors.
+
+Measured with the frozen 1.0.10 APK on desktop Chromium: current and simulated older-capability
+360×800 contexts both rendered a 336px content panel, entered diagnostics, preserved an injected
+page error and copied the report through a simulated native bridge. With native clone/at/hasOwn
+removed, cloning retained cycles, Blob bytes, typed arrays and undefined own properties. Simulated
+Chrome 80 and absent IndexedDB both rendered/could copy standalone diagnostics without a pairing
+call. Evidence: `.hermes/artifacts/browser-compatibility-1.0.10.json`; focused tests passed 8 checks.
+
+### Native shell components
+
+Native Java lives in `android/app/src/main/java/com/speechless666/t3/spike/`:
 
 - `MainActivity` — WebView host + sub-resource interception
 - `PinnedLanTransport` — pinned-TLS HTTP transport to the desktop
@@ -456,7 +487,7 @@ build device evidence ticks a case.
 
 `spikes/001-android-webview-shell/RELEASE.md`:
 
-- Display name **T3**; versionName and versionCode come from root `release.json`, currently **1.0.8 / 108**;
+- Display name **T3**; versionName and versionCode come from root `release.json`, currently **1.0.10 / 110**;
   package name stays `com.speechless666.t3.spike` (an existing
   app identity, not the display name). Later updates must bump `versionCode` and
   use the same release private key.
@@ -485,9 +516,12 @@ and produces Windows and Android artifacts from one frozen Web build. The underl
 3. In `android/`: `./gradlew.bat assembleRelease --console=plain`
    (output `android/app/build/outputs/apk/release/app-release.apk`).
 
-Packaged-asset verification: **15 packaged Web files** must be byte-identical to
-the prepared `web-dist`, with the expected build marker present and the previous
-one absent; `aapt` confirms package/version/minSdk 24/targetSdk 36 and the
+1.0.10 packaged-asset verification measured **18 packaged Web files**: 16 prepared `web-dist`
+files plus the two Capacitor-generated Cordova bridge files. All match the copied Android assets;
+prepared files match their APK bytes, and shared assets match Windows (Android-specific index/SW
+bootstrap excluded). All six published checksums passed. APK SHA256
+`6456814df7b6ac052c3a1a6a57245af86828c02b9eab222484fad51f17e3da95`;
+`aapt` confirms package/version/minSdk 24/targetSdk 36 and the
 permission set (`INTERNET`, `CAMERA`, `WAKE_LOCK`, `ACCESS_NETWORK_STATE` +
 package receiver); `apksigner` confirms v2 signing and a signer identical to the
 prior release.

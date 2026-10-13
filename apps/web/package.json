@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@t3/shared": "workspace:*",
+    "core-js": "^3.50.0",
     "vue": "^3.5.42"
   },
   "devDependencies": {
@@ -17,6 +18,7 @@
     "@vue/test-utils": "^2.5.0",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^30.0.1",
+    "postcss": "^8.5.30",
     "vite": "^8.2.2",
     "vue-tsc": "^3.3.11"
   }

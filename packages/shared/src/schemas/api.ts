@@ -1266,6 +1266,8 @@ export const mutationSuccessResponseSchema = z.strictObject({
 });
 
 export const apiErrorCodeSchema = z.enum([
+  'UNAUTHORIZED',
+  'FORBIDDEN',
   'VALIDATION_ERROR',
   'NOT_FOUND',
   'CONFLICT',

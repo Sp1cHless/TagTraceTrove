@@ -34,6 +34,18 @@ public class PairedTransportPlugin extends Plugin {
         getActivity().runOnUiThread(() -> ((MainActivity)getActivity()).showPairingDialog());
         call.resolve();
     }
+    @PluginMethod public void copyText(PluginCall call) {
+        String document = getBridge().getAppUrl();
+        String text = call.getString("text");
+        if (document == null || !(document.startsWith("https://localhost/") || document.equals("https://localhost")) || text == null) { call.reject("Untrusted clipboard request"); return; }
+        getActivity().runOnUiThread(() -> {
+            try {
+                android.content.ClipboardManager clipboard = (android.content.ClipboardManager)getContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("T3", text));
+                call.resolve();
+            } catch (Exception e) { call.reject("Clipboard unavailable"); }
+        });
+    }
     @PluginMethod public void status(PluginCall call) {
         // The bundled page's very first call: proof the document rendered at all.
         if (getActivity() instanceof MainActivity) ((MainActivity)getActivity()).markPageBooted();

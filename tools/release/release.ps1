@@ -80,6 +80,9 @@ function Get-T3InputFingerprint {
             $file.FullName.Substring($repo.Length) + ':' + (Get-FileHash -LiteralPath $file.FullName).Hash
         }
     }
+    $lines += foreach ($relative in @('apps/web/browser-build-compat.ts', 'apps/web/package.json', 'spikes/001-android-webview-shell/prepare-web.mjs', 'spikes/001-android-webview-shell/capacitor.config.json')) {
+        $relative + ':' + (Get-FileHash -LiteralPath (Join-Path $repo $relative)).Hash
+    }
     $lines += foreach ($file in Get-ChildItem -LiteralPath (Join-Path $repo 'siteprobe') -File | Sort-Object Name) {
         if (($file.Extension -eq '.py' -and $file.Name -notmatch '^(_|test_|verify_|compare_)') -or $file.Extension -eq '.bat' -or $file.Name -in @('README.md', 'pyproject.toml')) { $file.Name + ':' + (Get-FileHash -LiteralPath $file.FullName).Hash }
     }

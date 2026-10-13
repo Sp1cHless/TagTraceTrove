@@ -56,6 +56,8 @@ import { supportedLocales, useI18n, type Locale } from './i18n.js';
 import { createMemorySnapshotStore, readActiveSnapshot, type SnapshotStore } from './offline/snapshot-store.js';
 import type { OfflineApiState } from './offline/offline-api.js';
 import { isOfflineTransportError } from './api/transport-error.js';
+import { browserCompatibilityReport } from './browser-compat.js';
+import { copyText } from './clipboard.js';
 import { randomUuid } from './offline/random-id.js';
 import { localCollectionId } from './offline/offline-api.js';
 
@@ -160,6 +162,7 @@ async function refreshOfflineDiagnostics(): Promise<void> {
   catch { pendingAck = 'unreadable'; }
   offlineDiagnosticsText.value = JSON.stringify({
     diagnosticBuild: DIAGNOSTIC_BUILD,
+    browserCompatibility: browserCompatibilityReport(),
     capturedAt: new Date().toISOString(),
     mode: props.offlineState?.mode ?? null,
     connectionPhase: props.offlineState?.connectionPhase ?? null,
@@ -240,7 +243,7 @@ async function toggleOfflineDiagnostics(): Promise<void> {
 
 async function copyOfflineDiagnostics(): Promise<void> {
   await refreshOfflineDiagnostics();
-  await navigator.clipboard.writeText(offlineDiagnosticsText.value);
+  await copyText(offlineDiagnosticsText.value);
 }
 
 const navigationMemory = createNavigationMemory();
@@ -3865,8 +3868,8 @@ onUnmounted(() => {
         <button v-if="pendingEntryMedia" data-testid="retry-entry-media" type="button" :disabled="submitting" @click="retryEntryMedia">
         {{ t('media.retryForEntry', { id: pendingEntryMedia.entryId }) }}
       </button>
-      <p v-if="error" class="error-message" role="alert">{{ error }}</p>
-        <section v-if="nativePairingRequired" class="pairing-gate" data-testid="pairing-gate">
+      <p v-if="error && !nativePairingRequired" class="error-message" role="alert">{{ error }}</p>
+        <section v-if="nativePairingRequired && !advancedView" class="pairing-gate" data-testid="pairing-gate">
           <h2>{{ t('pairing.gateTitle') }}</h2>
           <p class="muted">{{ t('pairing.gateBody') }}</p>
           <ol>
@@ -3890,8 +3893,9 @@ onUnmounted(() => {
           v-else-if="advancedView"
           :api="api"
           :store="offlineStore"
+          :initial-tab="nativePairingRequired ? 'system' : 'tags'"
           :offline-copy-revision="props.offlineState?.offlineCopyRevision"
-          :online="props.offlineState?.mode !== 'offline' && props.offlineState?.connectionPhase !== 'no-copy'"
+          :online="!nativePairingRequired && props.offlineState?.mode !== 'offline' && props.offlineState?.connectionPhase !== 'no-copy'"
           @back="closeAdvanced"
           @authors-changed="refreshAuthors"
           @updated="reloadVisibleSurfaces"

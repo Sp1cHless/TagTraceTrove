@@ -2,6 +2,9 @@ import { resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import vue from '@vitejs/plugin-vue';
 import { build, defineConfig, type Plugin } from 'vite';
+import { browserCssCompatibility } from './browser-build-compat.js';
+
+const browserTarget = 'chrome90';
 
 function serviceWorkerPlugin(): Plugin {
   return {
@@ -26,6 +29,7 @@ function serviceWorkerPlugin(): Plugin {
               __T3_PRECACHE_URLS__: JSON.stringify(precacheUrls),
             },
             build: {
+              target: browserTarget,
               emptyOutDir: false,
               lib: {
                 entry: resolve(__dirname, 'src/sw/service-worker.ts'),
@@ -44,4 +48,6 @@ function serviceWorkerPlugin(): Plugin {
 
 export default defineConfig({
   plugins: [vue(), serviceWorkerPlugin()],
+  build: { target: browserTarget, cssTarget: browserTarget },
+  css: { postcss: { plugins: [browserCssCompatibility()] } },
 });

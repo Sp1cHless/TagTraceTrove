@@ -35,7 +35,8 @@ const pairingBootstrap = String.raw`
           try { result = await native('request', { path: url.pathname + url.search, method: request.method, contentType: request.headers.get('content-type'), body }); }
           catch (error) {
             if (error.code === 'NETWORK_UNAVAILABLE') throw new TypeError('Native network unavailable');
-            return new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Pairing rejected. Re-pair from Settings; offline work is preserved.' } }), { status: 401, headers: { 'content-type': 'application/json' } });
+            const chinese = (navigator.language || '').toLowerCase().startsWith('zh');
+            return new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: chinese ? '请先配对桌面资料库，或在设置中重新配对；离线副本和待同步改动会保留。' : 'Pair to your desktop library, or re-pair from Settings. Offline work is preserved.' } }), { status: 401, headers: { 'content-type': 'application/json' } });
           }
           if (request.signal.aborted) throw new DOMException('Aborted', 'AbortError');
           const bytes = Uint8Array.from(atob(result.body), char => char.charCodeAt(0));
@@ -44,7 +45,8 @@ const pairingBootstrap = String.raw`
           return response;
         };
         window.addEventListener('DOMContentLoaded', () => {
-          native('status', {}).then(status => { if (!status.paired) return native('pair', {}); }).catch(() => native('pair', {}));
+          const unsupported = document.documentElement.getAttribute('data-t3-unsupported-browser') === '1';
+          native('status', {}).then(status => { if (!unsupported && !status.paired) return native('pair', {}); }).catch(() => { if (!unsupported) return native('pair', {}); });
         });
       })();
     </script>`;

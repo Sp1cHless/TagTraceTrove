@@ -10,6 +10,7 @@ import { entryStackLayerStyle, entryStackLayers } from './entry-media-stack.js';
 import { collectDroppedFiles } from './dropped-files.js';
 import { useI18n, type MessageKey } from './i18n.js';
 import { showNsfw } from './stores/preferences.js';
+import { copyText } from './clipboard.js';
 
 export interface ManualEntryDraftRating {
   slotId: number;
@@ -684,7 +685,7 @@ async function copyDiagnostics(): Promise<void> {
     'message  ' + (linkMessage.value ?? ''),
   ];
   try {
-    await navigator.clipboard.writeText(lines.join(String.fromCharCode(10)));
+    await copyText(lines.join(String.fromCharCode(10)));
     mediaNotice.value = t('entry.diagnosticsCopied');
   } catch {
     // A clipboard the browser refuses is not worth an error of its own; the log path stays visible.

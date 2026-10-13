@@ -1,3 +1,4 @@
+import './browser-compat.js';
 import { createApp, reactive, watch } from 'vue';
 import GalleryApp from './GalleryApp.vue';
 import { createDefaultGalleryApi } from './api/gallery.js';
@@ -21,6 +22,7 @@ import './styles/lxgw-wenkai.css';
 // From the first moment: the System page can only show what was captured while the app ran.
 installClientErrorCapture();
 
+if (document.documentElement.dataset.t3UnsupportedBrowser !== '1') {
 const { t } = useI18n();
 const offlineStore = createIndexedDbOfflineStore();
 const offlineState = reactive<OfflineApiState>({
@@ -140,4 +142,5 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   } else {
     void navigator.serviceWorker.register('/sw.js');
   }
+}
 }

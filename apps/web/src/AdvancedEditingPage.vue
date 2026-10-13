@@ -40,8 +40,10 @@ import {
   type StagedRestore,
 } from './system-api.js';
 import { clientErrors, clearClientErrors } from './client-errors.js';
+import { browserCompatibilityReport } from './browser-compat.js';
+import { copyText } from './clipboard.js';
 
-const props = defineProps<{ api: GalleryApi; store: SnapshotStore; online: boolean; offlineCopyRevision?: string | null }>();
+const props = defineProps<{ api: GalleryApi; store: SnapshotStore; online: boolean; offlineCopyRevision?: string | null; initialTab?: Tab }>();
 const emit = defineEmits<{
   back: [];
   'authors-changed': [];
@@ -87,7 +89,7 @@ const templatesLoaded = ref(false);
 // The preview sketches the whole card: the gallery's shared rating slots and
 // a generic Content block below the Section → Facet layout.
 const templateRatingSlots = ref<Record<string, Array<{ id: number; name: string; sortOrder: number }>>>({});
-const tab = ref<Tab>('tags');
+const tab = ref<Tab>(props.initialTab ?? 'tags');
 const error = ref<string | null>(null);
 
 // ---------------------------------------------------------------------------
@@ -703,6 +705,7 @@ const reportText = computed(() => {
   lines.push(`--- page ---`);
   lines.push(`user agent: ${navigator.userAgent}`);
   lines.push(`viewport: ${globalThis.innerWidth}x${globalThis.innerHeight} @${globalThis.devicePixelRatio}x`);
+  lines.push(`browser compatibility: ${JSON.stringify(browserCompatibilityReport())}`);
   return lines.join('\n');
 });
 
@@ -724,7 +727,7 @@ async function loadSystem(): Promise<void> {
 async function copyReport(): Promise<void> {
   systemError.value = '';
   try {
-    await navigator.clipboard.writeText(reportText.value);
+    await copyText(reportText.value);
     systemNotice.value = t('system.copied');
   } catch (cause) {
     systemError.value = cause instanceof Error ? cause.message : String(cause);
@@ -810,10 +813,9 @@ const restoreInput = ref<HTMLInputElement | null>(null);
 
 watch(tab, (value) => {
   if (value === 'system' && diagnostics.value === null) {
-    clearClientErrors();
     void loadSystem();
   }
-});
+}, { immediate: true });
 
 watch(tab, (value) => {
   if (value === 'templates' && !templatesLoaded.value) {
