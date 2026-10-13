@@ -22,6 +22,17 @@ about present-day source (`theme.css`, `EntryCard.vue`, `HomePage.vue`, `icons.t
 `GalleryApp.vue`, `i18n.ts`) were verified against the working tree when this file was
 written; where the implementation has moved past an older brief, both are noted.
 
+**Implementation status (read this first).** The frontend is **built**: every page and
+component this board describes exists in `apps/web/src/` (`GalleryApp.vue` plus
+`HomePage.vue`, `AuthorPage.vue`, `CollectionsPage.vue`, `SearchPage.vue`, `RandomPage.vue`,
+`RecentViewPage.vue`, `ViewLaterPage.vue`, `AdvancedEditingPage.vue`, `AddEntryPage.vue`,
+`AddAuthorPage.vue`, and the `components/` tree). Several sections below are the **original
+design/implementation guides** (Home, icons, sort controls); where a guide and the shipped
+code differ, a `Shipped:` note records the divergence, and any remaining "order"/"must"
+wording is the **historical specification, already carried out** — not an open task. The one
+item explicitly **not built** is §2.5's optional image-background layer. For what is
+implemented overall, see `docs/status.md`.
+
 All file paths are relative to `apps/web/` unless stated otherwise. Line counts are
 approximate snapshots for sizing review only — never a stable API.
 
@@ -106,6 +117,14 @@ shared cards and desktop features. Mobile detail lives in the mobile handoff doc
 - `EntryCard` media uses `LazyCardImage` (see [§5](#5-shared-components--cards)).
 - Settings, detail toolbars, the Facet filter, Advanced editing, Add Entry/Author and
   pagination are all adapted to narrow screens and 44px touch targets.
+- A Facet-filter row never wraps: the row is `nowrap` and its controls wrap inside
+  their own box, so the row’s × keeps its place on the first line and a long Facet,
+  Author or tag name is ellipsised instead of pushing the button down. A rating row’s
+  selects carry `flex: 1 1 0` so they divide the line rather than sizing to their
+  longest option (a native select does that on its own, which is what used to push the
+  star picker onto a second line), and a row that does wrap aligns its × with the first
+  line. The Facets, Authors and rating rows each read as one line, and the bar’s head
+  puts its small label on the toggle’s line with the toggle compact at the right edge.
 - Final mobile scope is every existing **non-import** function; site-probe folder/batch
   import stay desktop-only.
 - Chrome is the primary real-device browser, but user-agent / Chrome-only adaptation is
@@ -336,7 +355,7 @@ files most relevant to desktop visual work.
 | `apps/web/src/components/EntryCard.vue` ★ | ~79 | The single work card + media stack |
 | `apps/web/src/AdvancedEditingPage.vue` ★ | ~1955 | Dictionaries, author merge, uncategorized tags, templates, author aliases |
 | `apps/web/src/AddEntryPage.vue` ★ | ~2206 | Manual creation, folder import, batch import |
-| `apps/web/src/components/FacetFilterBar.vue` ★ | ~1097 | Facet/Author/Rating/Usage filtering and sorting |
+| `apps/web/src/components/FacetFilterBar.vue` ★ | ~1151 | Facet/Author/Rating/Usage filtering and sorting |
 | `apps/web/src/CollectionsPage.vue` ★ | ~1219 | Entry/Author Collections and one level of subfolders |
 | `apps/web/src/RandomPage.vue` ★ | ~440 | Works / Authors / Tags random recommendation |
 | `apps/web/src/ViewLaterPage.vue` ★ | ~444 | SQLite-shared Entry/Author View later; independent pagination; one-time merge of legacy localStorage |
@@ -585,8 +604,8 @@ The durable requirement, independent of routing mechanism:
 /entries/:entryId     Entry detail
 ```
 
-The old behaviour ` / → first Gallery ` or ` / → legacy empty Gallery ` must go. Gallery
-must be entered explicitly. In this codebase there is no router path table; Home is the
+The old behaviour (` / → first Gallery ` or ` / → legacy empty Gallery `) was removed:
+Gallery is entered explicitly. In this codebase there is no router path table; Home is the
 GalleryApp fallback view (`isHomeView`, `showHome()`), with no first-Gallery redirect.
 Note: path strings above are conceptual — always read the real routing mechanism rather
 than copying example paths.
@@ -647,14 +666,15 @@ Must **never** happen again: `Back → random first Gallery`, or
   "Now holding **248** entries", "You have **12** galleries", `Recently viewed "XXX"` —
   data reads as part of a welcome, not a report.
 
-### 6.12 Implementation order and tests
+### 6.12 Build order (historical — already carried out) and test checklist
 
-Order: (1) audit the routing (root route, first-gallery redirect, legacy empty Gallery,
-the source of Back-to-empty-Gallery) before touching UI; (2) static HomePage (hero,
-ambient/recent/gallery placeholders); (3) fix the root route and test Back/Forward first;
-(4) connect data (entryCount, galleryCount, recentViews, galleryPreview); (5) add ambient
-rotation (Vue `<Transition>` + 5.2s timer); (6) wire the empty Home onboarding; (7) only
-after confirming no route/test depends on it, remove the legacy empty Gallery.
+This is the order in which Home was built; it is kept because the reasoning still explains the
+current behaviour, not as an open to-do list. (1) audit the routing (root route, first-gallery
+redirect, legacy empty Gallery, the source of Back-to-empty-Gallery) before touching UI;
+(2) static HomePage (hero, ambient/recent/gallery placeholders); (3) fix the root route and test
+Back/Forward first; (4) connect data (entryCount, galleryCount, recentViews, galleryPreview);
+(5) add ambient rotation (Vue `<Transition>` + 5.2s timer); (6) wire the empty Home onboarding;
+(7) remove the legacy empty Gallery once no route/test depends on it.
 
 Test checklist:
 
@@ -666,7 +686,7 @@ Test checklist:
   simplifies/stops rotation; recent card uses the existing route; CTA uses the existing
   create handler.
 
-### 6.13 Final acceptance criteria
+### 6.13 Acceptance criteria (the shipped Home meets these)
 
 1. The first thing seen on opening the Web is Home.
 2. Home does not depend on a "first Gallery" existing.

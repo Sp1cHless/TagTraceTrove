@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-10T08:37:28.882Z" hostname="LAPTOP-70QV4MNN" time="51.342">
-  <properties/>
-  <testcase name="profileEditDeleteColdRetention" classname="com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest" time="19.308"/>
-  <testcase name="directoryHoldEntryProgressColdExactRetry" classname="com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest" time="16.031"/>
-  <testcase name="collectionHoldEntryProgressColdExactRetry" classname="com.speechless666.t3.spike.NativeAuthorDeleteTimelineJvmTest" time="16.003"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

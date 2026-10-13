@@ -1,9 +1,0 @@
-# Quick import / Author-list final gate budget
-
-Do not execute source identity/build gates before sole writer stops and full checkpoint is independently verified. Current APK versionCode 42; candidate 43 (recheck floor before patch). Intended identity `0.0.43-c3-quick-duration-author-filter`, artifact `T3-v43-offline-quick-duration-author-filter.apk`; planned, not yet produced.
-
-1. Verify each reported source/test SHA against complete live bytes. Read focused RED/GREEN evidence and isolated browser fixture instructions. No polling/waiting or second writer while production worker active.
-2. One bounded review of the actual two callers: duration optional propagation / unknown compatibility / UI single-submit; Author current self-only anchor/visible-options query parity; actual narrow browser rendering and no tests touching official endpoints. Preserve distinction of defect RED, existing first-GREEN, fixture failures.
-3. Parent default + isolated integration + native regression commands; actual shared/server/web typechecks/full ESLint/diff. Use explicit Node22 and JDK21; native isolated Gradle init with absolute paths, T3_TEST_REPO root. Tests only disposable fixtures, no service/default DB probe.
-4. Back up complete bytes before marker/Gradle/test patches; preserve mixed endings and unique anchors, reject source drift. Bump only once all scoped feature gates complete. Re-run identity-dependent tests/typecheck, Web build, prepare-web, Capacitor copy, assembleDebug; keep original debug key. Copy exact APK bytes and run existing verifier with explicit candidate code/marker and v42 as previous signer.
-5. Freeze source + APK/Web manifest, update current/release docs/finite deferred device list and attach verified APK. Do not deploy, install, restart backend or require phone testing / uninstall / Clear / full media download. No old completed features re-audited or historical phone list reopened.

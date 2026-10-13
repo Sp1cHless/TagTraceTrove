@@ -788,22 +788,17 @@ dependency order unchanged across cold reopen.
 
 ---
 
-## 9. Change-feed status & remaining gaps
+## 9. Change feed (server) — status
 
 Migration `031_sync_change_feed_ack.sql` adds a paged, identity/epoch/protocol-
 bound server change-feed, tombstones, and a persisted bounded served/ack cursor.
 A served bound is recorded before acknowledging; journal entries and tombstones
 are **never pruned by acknowledgement**.
 
-The Web API layer can request and validate a page but **deliberately does not
-apply it or send an ack**: not all snapshot entities have complete journal
-records (some are null/partial), so an empty feed does not establish that a full
-snapshot is unchanged. Offline Update therefore still verifies and installs an
-authoritative full snapshot.
-
-Incremental client materialization needs **complete snapshot/journal parity plus
-atomic local cursor activation** before the durable ack can safely advance. That
-is the remaining change-feed gap.
+The Web API layer can request and validate a page but **deliberately does not apply it or send an
+ack**: not all snapshot entities have complete journal records (some are null/partial), so an empty
+feed does not establish that a full snapshot is unchanged. Offline Update therefore verifies and
+installs an authoritative full snapshot.
 
 `DELTA-01`-class contract: the current server advertises a real
 `completeSnapshotDelta`; the first Download is full, later Updates delta with no
@@ -834,41 +829,23 @@ generation/update time unchanged.
 
 ---
 
-## 10. Known intentional gaps
+## 10. Scope boundaries (by design)
 
-These are **not** claimed done and are **not** core-plan gaps unless separately
-authorized:
+These are deliberate boundaries of the offline model, not missing coverage:
 
-- **Existing-media replacement is online-only** (plan §25.5). Empty-cover fill
-  and preview append are not replacement. The v49 lane-10 staged `replace: true`
-  cover swap exists at the interface/planner level and the UI gesture is
-  delete-then-add; a single-step direct cover swap is interface-only. Do not
-  confuse "not done" with C0–C3 being incomplete.
-- **Destructive and bulk operations remain online-only**: destructive
-  Entry/Author/Collection/Directory delete, merge (except the bounded offline
-  merge op), taxonomy, complex templates/layout beyond the listed layout ops,
-  new Gallery/type remainder, and Import/Source-maintenance batches.
-- **Per-field “keep local / re-baseline” conflict merge editor** is not a
-  delivered capability; there is a visible conflict, keep-original-work and
-  explicit discard.
-- **Pure-browser trusted HTTPS PWA** is an optional path, not a required second
-  client. If delivered it needs separate Chrome/SW/certificate acceptance; a
-  native APK acceptance is never a PWA pass.
-- **No boot auto-start, resident foreground service, infinite background
-  survival, or post-force-stop execution.** The finite WorkManager extension does
-  not introduce these.
-- **Whole-library DB+assets power-loss/crash atomicity** requires platform-
-  specific validation and is distinct from the pending-work single-IDB-transaction
-  restore.
-- **Stable release signing** is undecided: v38–v49 APKs use the debug keystore
-  (same certificate as v36); release requires a release-key strategy.
-- **Formal deployment** is separately authorized; the offline work never
-  touched formal `apps/server/.data/library.db` or assets.
-- **Device acceptance** is a separate gate from automated/source completion:
-  grouped Android device work (real camera scan, WebView media, Keystore across
-  restart/cert change, OS kill/force-stop, cold launch, compound edits, real
-  multi-tab) remains UNVERIFIED except for explicitly recorded passes. See
-  `docs/mobile.md` §8 for the device history.
+- **Existing-media replacement is online-only.** Empty-cover fill and preview append are not
+  replacement. The v49 lane-10 staged `replace: true` cover swap exists at the interface/planner
+  level; the UI gesture is delete-then-add.
+- **Destructive and bulk operations are online-only**: destructive
+  Entry/Author/Collection/Directory delete, merge (except the bounded offline merge op), taxonomy,
+  complex templates/layout beyond the listed layout ops, new Gallery/type remainder, and
+  Import/Source-maintenance batches.
+- **Conflict handling is visible, not auto-merged**: a per-field "keep local / re-baseline" editor
+  is not part of the model; the user sees the conflict with keep-original-work and explicit discard.
+- **The client is the native APK.** A pure-browser trusted-HTTPS PWA is not a required second
+  client.
+- **No boot auto-start, resident foreground service, infinite background survival, or
+  post-force-stop execution.** The finite WorkManager extension does not introduce them.
 
 ### Evidence locations
 

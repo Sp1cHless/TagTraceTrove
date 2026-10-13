@@ -1125,6 +1125,14 @@ function applyUsage(usage: { viewCount: number; likeCount: number; lastViewedAt:
   const entry = activeEntry.value;
   if (!entry) return;
   entry.usage = usage;
+  // A card in the grid carries its own copy of the counts, so the same numbers
+  // are written there too: a Like has to show on the card without a reload.
+  const card = entries.value.find((candidate) => candidate.id === entry.id);
+  if (card !== undefined) {
+    card.viewCount = usage.viewCount;
+    card.likeCount = usage.likeCount;
+    card.lastViewedAt = usage.lastViewedAt;
+  }
 }
 
 const mediaIndex = ref(0);

@@ -1369,10 +1369,17 @@ describe('GalleryApp', () => {
     });
 
     await flushPromises();
+    // The report lives at the bottom of the Advanced page's Offline library tab.
+    await wrapper.get('[data-testid="settings-button"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="advanced-entry"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="advanced-tab-offline"]').trigger('click');
+    await flushPromises();
     await wrapper.get('[data-testid="offline-diagnostics-toggle"]').trigger('click');
     await flushPromises();
     const report = wrapper.get('[data-testid="offline-diagnostics"]').text();
-    expect(report).toContain('0.0.49-c3-offline-parity');
+    expect(report).toMatch(/"diagnosticBuild":\s*"[^"]+"/u);
     expect(report).toMatch(/"snapshotReadyAtMs":\s*\d+/u);
     expect(report).toMatch(/"galleriesReadyAtMs":\s*\d+/u);
     expect(report).toContain('"offlineAuthorCreate": "1"');
@@ -1424,8 +1431,6 @@ describe('GalleryApp', () => {
     });
     expect(wrapper.find('[data-testid="offline-mode-banner"]').exists()).toBe(true);
     expect(wrapper.get('[data-testid="offline-conflict-count"]').text()).toContain('1 offline edit');
-    await wrapper.get('[data-testid="offline-discard-blocked"]').trigger('click');
-    expect(api.discardBlockedOfflineOperations).toHaveBeenCalledTimes(1);
     await wrapper.setProps({
       offlineState: {
         mode: 'online', lastFallbackAt: null, pendingCount: 2,
@@ -1435,6 +1440,29 @@ describe('GalleryApp', () => {
     expect(wrapper.get('[data-testid="offline-pending-count"]').text()).toContain('2 offline edit');
     expect(wrapper.get('[data-testid="offline-conflict-count"]').text()).toContain('1 offline edit');
     expect(wrapper.get('[data-testid="offline-failed-count"]').text()).toContain('failed validation');
+  });
+
+  it('discards blocked offline edits from the Advanced page diagnostics', async () => {
+    const api = createMemoryApi();
+    api.discardBlockedOfflineOperations = vi.fn().mockResolvedValue(undefined);
+    const wrapper = mount(GalleryApp, {
+      props: {
+        api,
+        offlineState: {
+          mode: 'online', lastFallbackAt: null, pendingCount: 1,
+          conflictCount: 1, lastReplayError: 'conflict',
+        },
+      },
+    });
+    await flushPromises();
+    await wrapper.get('[data-testid="settings-button"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="advanced-entry"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="advanced-tab-offline"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="offline-discard-blocked"]').trigger('click');
+    expect(api.discardBlockedOfflineOperations).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the offline copy on the Advanced function page and out of the Settings sheet', async () => {
@@ -4756,6 +4784,15 @@ describe('Facet filter bar', () => {
     const grid = wrapper.get('[data-testid="entry-list"]');
     expect(grid.text()).toContain('Endfield');
     expect(grid.text()).not.toContain('Hades II');
+
+    // The row's × is the row's own last child, beside a box holding the
+    // controls — that structure is what keeps the × on the first line whatever
+    // the Facet name's length is.
+    const removeButton = wrapper.get('[data-testid="remove-filter-row"]');
+    const row = removeButton.element.parentElement as HTMLElement;
+    expect(row.classList.contains('filter-row')).toBe(true);
+    expect(wrapper.get('[data-testid="facet-picker-chosen"]').element.closest('.filter-row__content')?.parentElement).toBe(row);
+    expect(row.lastElementChild).toBe(removeButton.element);
 
     // Removing ONE chip relaxes the row to the remaining tag (Sci-fi), so
     // Hades II (which has no Sci-fi) must still be excluded…
@@ -8354,16 +8391,30 @@ describe('Entry media strip, expand mode, and adding images', () => {
 
   it.each([false,true])('disables uncertain or pending preview deletion before click with a reason and preserves add controls (pending=%s)', async pending => {
     const api=createMemoryApi();withEntryMedia(api,{coverRef:'/cover.png',previewRefs:['blob:preview#t3-upload=original']});
-    Object.assign(api,{getEntryMediaRemovalBlockReason:async()=> 'Native upload attempted or uncertain; use foreground Update before deleting'});
+    Object.assign(api,{getEntryMediaRemovalBlockReason:async()=> pending ? 'no-server-row' : 'native-uncertain'});
     if(pending){const getEntry=api.getEntry;api.getEntry=async id=>({...await getEntry(id),id:-1});}
     const setOrder=vi.fn();api.setEntryMediaOrder=setOrder;
     const wrapper=mount(GalleryApp,{props:{api}});await flushPromises();await openDetail(wrapper,1);
     await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');await flushPromises();
     await wrapper.get('[data-testid="media-edit-toggle"]').trigger('click');await flushPromises();
     expect(wrapper.get('[data-testid="media-delete"]').attributes('disabled')).toBeDefined();
-    expect(wrapper.text()).toContain(pending ? 'This Entry has no server row yet' : 'Native upload attempted or uncertain');
+    // Each code gets its own sentence: a work with no server row is not an
+    // uncertain upload, and the two must not be conflated.
+    expect(wrapper.text()).toContain(pending ? 'no server row yet' : 'background uploader’s state is unknown');
     expect(wrapper.find('[data-testid="media-add-slot"]').exists()).toBe(true);
     await wrapper.get('[data-testid="media-delete"]').trigger('click');expect(setOrder).not.toHaveBeenCalled();
+  });
+
+  // The API answers with a code and the page owns the wording; a caller that
+  // answers with its own sentence still has to read correctly.
+  it('shows a caller-supplied media block reason as it came', async () => {
+    const api=createMemoryApi();withEntryMedia(api,{coverRef:'/cover.png',previewRefs:['blob:preview#t3-upload=original']});
+    Object.assign(api,{getEntryMediaRemovalBlockReason:async()=> 'The server refused this cover'});
+    const wrapper=mount(GalleryApp,{props:{api}});await flushPromises();await openDetail(wrapper,1);
+    await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');await flushPromises();
+    await wrapper.get('[data-testid="media-edit-toggle"]').trigger('click');await flushPromises();
+    expect(wrapper.text()).toContain('The server refused this cover');
+    wrapper.unmount();
   });
 
   it('deletes and reorders by handing the whole list to one command', async () => {

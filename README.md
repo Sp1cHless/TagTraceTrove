@@ -1,146 +1,192 @@
-# T³ — Tag · Trace · Trove
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/banner-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/readme/banner-light.svg">
+    <img alt="T³ — TagTraceTrove · Tag · Trace · Trove" src="assets/readme/banner-light.svg" width="1000">
+  </picture>
+</p>
 
-> A local-first personal index for the things you find on the web: works, media, creators, links —
-> kept as **your own** data, readable and editable forever, independent of the sites that produced it.
+<p align="center">
+  <strong>简体中文</strong> &nbsp;|&nbsp; <a href="README.en.md">English</a>
+</p>
 
-**T³** turns scattered bookmarks and screenshots into a real library: fast daily browsing, tag-first navigation,
-and a database you own. Nothing is sent anywhere. No account, no cloud, no lock-in.
+> 你是否也因为网站的关闭而丢失了收藏的全部作品，甚至不记得自己丢失了什么？
+>
+> 你是否总觉得网站自己的收藏夹过于笼统，没法精细地分类不同的作品？
+>
+> 你是否没法对看过的作品留下精确的标签和评价，甚至不得不用记事本额外写下自己的感想？
+>
+> 你是否尝试过用 Notion 等个人数据库工具搭建自己的资源库，但总觉得操作繁琐、导入困难，最后不得不放弃？
 
-`中文说明 → [README.zh-CN.md](README.zh-CN.md)`
+我也曾面临这些一模一样的问题。由此，**T³（TagTraceTrove）**诞生了。
+
+**T³ 是一个本地优先的个人收藏索引，用来记录、整理和查找你感兴趣的作品与作者。**
+
+你可以把漫画、视频、插画等作品收进自己的资料库，为每件作品保存封面、预览图、作者、标签、评分、笔记和来源链接。
+想找某类作品时，按标签和评分筛选；想继续关注某位作者时，打开作者页浏览其作品。
+
+- **自由整理收藏。** T³ 拥有极为自由的标签、合集、评分和筛选系统，任何你已经在网站中拥有的收藏夹内容，都值得导入到 T³ 进行精细化管理。
+- **链接直接导入。** 内置了通用适配器，可以学习大多数网站的信息布局并导入你想要的内容。
+- **电脑、手机一起用。** T³ 拥有与桌面端相连的 Android App——那当然，不能躺在床上看绝对是失败的！App 支持离线编辑，重新连接桌面端后自动上传。
+
+总之，目前的 T³ 已经几乎实现了我想要的一切，我也希望它能够实现你想要的。
 
 ---
 
-## ✨ What it does
+## ✨ 主要功能
 
-| | |
+### 🏷️ 自由定义标签，按组合条件找作品
+
+你可以给不同类型的作品设置不同的标签维度：漫画按系列、角色、题材整理，视频按类型、语言整理，还可以加入自己在意的画风、氛围等标签。
+相关维度可以放进同一个板块，作品详情里的标签布局也由你调整。
+
+找作品时，把标签、作者和评分条件组合起来，就能逐步缩小范围。例如，找某位作者的某个系列，再筛出「剧情」评分高于 3 星的作品。
+想直接找名字，可以全局搜索作品、作者或标签。
+
+### ⭐ 多项评分，把喜欢的理由记下来
+
+评分项目可以自己命名，每项支持 0.5–5 星、半星步进。「画面」「剧情」「个人喜好」可以分别打分，笔记里还能写下具体感想。
+不同类型的作品使用各自的评分项目，方便按你自己的标准比较和筛选。
+
+除了单件作品，你还可以给作者本人和作者的作品整体评分。作品尚未逐一评分时，排序可以参考作者的作品整体评分，先把更感兴趣的内容放在前面。
+
+### 📁 多个合集，按自己的习惯归类
+
+把「值得重看」「某个主题」「准备推荐给朋友」分别建成合集，同一件作品可以同时加入多个合集。
+作品合集支持一层子文件夹；作者也可以加入专门的作者合集，方便集中关注。
+
+合集中的作品还可以批量添加同一个标签，适合把一批导入的收藏继续细分整理。
+
+### 🌐 用链接导入作品，批量搬入已有收藏
+
+内置的 **SiteProbe** 可以从支持的页面提取标题、封面、预览、作者、标签和来源链接。
+已有站点规则可以直接使用；新站点可以通过规则构建器，在浏览器里按引导标注作品信息，生成以后能反复使用的适配器。
+列表适配器支持的作者页、收藏夹和作品列表，也可以批量读取。
+
+导入前可以预览作品，调整标签归类、确认作者并按作者评分。重复导入会识别库中已有作品；一批内容太多时，可以存成临时合集，留着慢慢复核。
+
+### 👤 集中整理作者和名下作品
+
+作者页汇集其关联作品，并提供作者自己的标签、评分和笔记。你可以按系列把名下作品放进文件夹，一件合作作品也可以关联多位作者。
+同一作者在不同网站使用不同名字时，可以设置别名组，把这些名字和作品统一到一份作者资料里。
+
+### 🖼️ 看封面和预览，找回想看的内容
+
+不同类型的作品分别展示在画廊里，封面卡片方便快速浏览，打开后可以查看已保存的预览图和详细资料，并通过来源链接回到原页面。
+「稍后查看」可以保存作品和作者，「最近观看」可以找回最近打开过来源链接的作品；还可以按浏览次数、点赞次数排序，或随机翻一翻自己的收藏。
+
+### 📱 躺在床上也能整理，离线编辑自动同步
+
+Android App 与电脑端连接同一份资料库。保存离线副本和所需图片后，即使电脑暂时关机或手机离开家里的网络，也能浏览收藏、搜索和筛选、查看已缓存的图片。
+
+离线时可以修改作品信息、添加标签、给作品评分、整理合集，也可以创建带图的新作品。
+重新连接桌面端后，App 会自动上传离线编辑，并更新手机上的资料副本。
+
+### 🔒 作品资料留在本地，整库备份一起带走
+
+作品信息、作者、标签、评价，以及收录的封面和预览图都保存在你的电脑上。即使原网站关闭，已经保存的资料仍可查看，帮你记住自己究竟收藏过什么。
+一件作品可以记录多个来源链接，之后找到其他来源时可以继续补充。
+
+应用内提供资料库与图片一起备份、一起恢复的入口，正式版更新前也会自动备份个人资料。
+
+### 🌗 按自己的偏好调整界面
+
+支持明暗主题、六套配色和简体中文 / English 界面。SFW / NSFW 开关可以控制敏感内容的显示，画廊和合集也可以分别设置敏感内容标记。
+
+## 🚀 快速开始
+
+### 下载正式发行包
+
+到 [Releases 页面](https://github.com/Sp1cHless/TagTraceTrove/releases)选择正式版本：
+
+| 文件 | 用途 |
 | --- | --- |
-| 🖼️ **Gallery-first browsing** | Every kind of work lives in its own Gallery. Covers show as depth-stacked cards; no tables, no rows of text. |
-| 🏷️ **Tag-first, but structured** | Tags live in **Sections → Facets**, so a tag means the same thing everywhere. Entry tags and Author tags stay in separate vocabularies. |
-| 🔎 **Real search & filters** | Global search across works / tags / authors, plus per-Gallery facet filters that *narrow* as you add tags. |
-| 👤 **Authors, done properly** | Author pages, per-author works, Directories (fictional folders, without touching the works), alias groups for the same person across sites, and a one-tap "convert to multiple author". |
-| ⭐ **Ratings with two sides** | A work's own dimensions *and* the author's own rating, plus the author's works-summary — so a film and its actor don't share one meaningless score. |
-| 📁 **Collections** | Lightweight folders for works or authors, one nesting level, with their own NSFW switch. |
-| 🕘 **Usage that stays out of the way** | Views, likes and last-viewed are **sort-only**. They never become a filter you have to think about. |
-| 🌐 **Import from the web** | Point T³ at a site export and it becomes Entries, Authors, tags and source links — in one transaction, with a review step. |
-| 🕷️ **Built-in site crawler** | **SiteProbe** learns a site's layout in your browser, then keeps it updated by itself. Turn any URL into an Entry. |
-| 📵 **Works offline (phone)** | An Android app shares the same library: browse, edit, create, add images and merge with no connection, then syncs when you're back. |
-| 🌗 **Light / dark, six accents** | Six colour presets, hand-written CSS, no UI framework in sight. |
-| 🈶 **Bilingual** | Full English / 简体中文 interface, starting locale follows your device. |
-| 🔒 **Local ownership** | SQLite on your machine, assets in a folder you can copy, backups and restore built in. |
+| `T3-版本-windows-x64.zip` | Windows 10/11 x64 电脑端，包含运行依赖 |
+| `T3-版本.apk` | Android 7.0 及以上手机端 |
+| `SHA256SUMS.txt` | 用于核对下载文件的 SHA256 校验值 |
 
-## 🧱 The idea
+对于非安卓用户，手机端只支持用网页打开。
 
-Most tools ask you to organize the way *they* want. T³ asks for almost nothing up front and then gets out of the way:
+电脑端通过 Chrome、Edge、Firefox 等现代浏览器使用。首次使用手机端时，需要让手机和运行 T³ 的电脑处于同一局域网。
 
-- **Daily use first.** Clicking should beat configuring. Common actions never open a dialog.
-- **Fast tagging over perfect metadata.** A rough tag you'll actually add beats a schema you won't.
-- **Source is optional, never identity.** A work is your record, not a URL. The site can vanish; your entry stays.
-- **Local ownership.** Your library is a file and a folder. Back it up by copying it.
-- **Complexity must be earned.** Features arrive when real use calls for them, not before.
+### Windows：首次安装与日常启动
 
-## 🚀 Getting started
+1. 下载 Windows ZIP，解压到你准备长期保存资料的位置，例如 `D:\Apps\`。包内的文件夹名为 **TagTraceTrove**。将其从包含版本号的文件夹里拿出来。
+2. 打开 `TagTraceTrove`，双击 **T3.exe** 或 **Install.cmd**。安装器会在这个目录内安装程序、创建桌面快捷方式，并打开应用。
+3. 之后双击 **T3** 快捷方式，即可继续使用。
 
-### Requirements
+正式包已包含运行依赖，解压后即可安装。T³ 启动后驻留在系统托盘，主库默认地址为 `http://127.0.0.1:8765`。
+关闭浏览器后，T³ 仍会运行；需要停止服务时，右键托盘中的 T³ 图标并退出。
 
-- **Windows 10/11** for the tray launcher (the server itself is portable)
-- **Node.js 22 LTS** and **pnpm 10** (only for the first build / source runs)
-- A modern browser (Chrome/Edge/Firefox). For the phone app: an Android device.
-
-### Run it (source)
-
-```bash
-pnpm install
-pnpm build              # build server + web once
-pnpm start:server       # serve the app at http://127.0.0.1:8765
-```
-
-Open `http://127.0.0.1:8765`. Development with hot reload:
-
-```bash
-pnpm dev:server                    # API on :8765
-pnpm --filter @t3/web dev          # web UI on :5173
-```
-
-### Run it (packaged, no terminal)
-
-From the repo root, double-click **`T3.exe`** — a tray launcher that starts the server hidden, opens your browser and
-lives in the system tray until you exit. The first launch builds the web UI automatically. `T3.bat` does the same thing
-in a console window (close it to stop).
-
-Then use the tray's **Allow phone access (LAN)** toggle to let your phone connect on the same network.
-
-### Your data
-
-Everything lives under `apps/server/.data/` by default:
+从 1.0.5 起，安装位置就是你选择的 `TagTraceTrove` 目录。请保留整个目录，程序和个人资料分别放在其中：
 
 ```text
-.data/library.db      the SQLite library
-.data/assets/         covers, previews, thumbnails
-.data/backups/        whole-library backups
-.data/templates/      per-Gallery template files
+TagTraceTrove/
+  Start.cmd                 日常启动入口
+  Uninstall.cmd             卸载入口
+  installation.json         当前版本和安装信息
+  versions/                 各版本程序与运行依赖
+  data/                     作品资料、图片、模板、设置、配对与站点规则等
+  backups/pre-update-*/     更新前的完整个人资料备份
 ```
 
-`pnpm db:backup` / `pnpm db:restore <dir>` (or the in-app System page) snapshot and restore the library and its assets
-together. It's just files — copy the folder and you're done.
+### Android：安装、配对与离线使用
 
-## 📱 The phone app
+1. 下载正式版 **T3-版本.apk**，在手机上打开，按 Android 提示允许安装。
+2. 启动电脑端 T³，让手机和电脑连接同一可信局域网。
+3. 在电脑端打开 **设置 → Connect to APP**，创建配对二维码；在手机 App 中扫描二维码，或使用面板提供的复制粘贴方式配对。
+4. 配对后即可在手机上使用资料库。在 **进阶功能 → 离线资料库** 中首次下载副本，并选择需要缓存的图片。
 
-The Android app is the same UI in a WebView shell, paired to your desktop over the local network with an encrypted,
-certificate-pinned connection. It carries a full **offline library**: browse, edit existing works, create new ones with
-images, add tags and authors — all without a connection — and it replays everything the moment it's back on the network.
+离线资料下载完成后，手机可以在电脑关机或暂时断开连接时浏览、编辑。
+重新连上运行中的电脑端后，离线编辑会自动上传，已保存的副本也会自动更新。
+若配对面板提示手机连接已关闭，先在电脑端的系统设置中开启允许手机连接；配对操作说明见应用内手册。
 
-Build it from source (needs the Android SDK + JDK 21). See `docs/mobile.md` for the build/packaging chain and the
-device-acceptance history.
+## 🔄 更新正式版
 
-## 🕷️ Importing from websites
+### Windows
 
-Two doors, both inside T³:
+1. 先让手机连接旧版电脑端，等待待同步工作归零。
+2. 从电脑托盘退出要更新的 T³ 实例。
+3. 下载新版 Windows ZIP，解压到原安装目录的上一级，让包内的 **TagTraceTrove** 与原文件夹合并；出现同名程序文件提示时，选择替换。不要先删除原文件夹
+4. 在原 `TagTraceTrove` 目录中运行 **Install.cmd**。安装器会校验新版文件，先备份整个 `data`，再安装到 `versions/新版本` 并切换启动入口，完成后打开应用。
 
-1. **SiteProbe** — a bundled tool that opens a real browser, lets you click the parts of a page you care about, and
-   learns a rule set for that site. Feed it a work URL, an author page or a folder listing.
-2. **Import commit** — a reviewed, transactional commit that turns a crawl's output into Entries, Producers, Content and
-   source links, with a per-author rating step and no guessing of unmapped fields.
+发行包不含你的 `data` 和 `installation.json`，合并解压会保留它们。更新也会保留原有实例名称、端口、配对资料和桌面快捷方式；更新前备份位于 `backups/pre-update-*`。
 
-Importing is idempotent: re-running over a site skips what you already have (and remembers each site's work IDs and
-update cursors for you).
+如果希望把新版包解压到单独的位置，在**新版包的 TagTraceTrove 目录**打开终端，执行下面的命令，并把路径替换成原安装位置：
 
-## 🧰 Everyday commands
-
-```bash
-pnpm test              # unit / component tests
-pnpm test:integration  # real-SQL integration tests
-pnpm typecheck         # TypeScript, all packages
-pnpm lint              # ESLint
-pnpm db:probe          # verify the schema + core scenarios
-pnpm db:doctor         # read-only integrity check
-pnpm db:backup         # snapshot library + assets
-pnpm import:cursor ... # crawl-cursor status/filter/list/set
-pnpm merge:authors     # collapse duplicate author spellings
+```powershell
+.\Install.cmd -InstallRoot "D:\Apps\TagTraceTrove"
 ```
 
-## 🗂️ Repository layout
+这个命令会更新指定的原有安装。直接在另一个新目录里运行安装入口，会在那里创建独立安装。
 
-```text
-apps/server/     local API, SQLite, repositories, import, sync
-apps/web/        Vue 3 frontend (no UI framework, hand-written CSS)
-packages/shared/ Zod contracts shared by both
-siteprobe/       the bundled Python crawler/builder tool
-tools/           tray launcher (C#) and the font subsetter
-spikes/          the Android WebView shell + device probes
-docs/            architecture, API, database, offline, mobile, UI, SiteProbe
-```
+### Android
 
-## 📚 Documentation
+先连接电脑端并等待待同步工作归零，再下载新版正式 APK，直接打开并选择更新，覆盖已有正式版。
+正常更新会保留配对、离线副本和个人资料；重新连接电脑端后继续自动同步。
 
-Start at **[`docs/architecture.md`](docs/architecture.md)** for the data model, or **[`docs/status.md`](docs/status.md)**
-for what's implemented right now. `docs/roadmap.md` holds the forward-looking work list.
+如果你使用的是早期测试 APK，签名可能与正式版不同，请先按[正式版安装说明](docs/release-installation.md#普通用户android)中的测试版迁移流程处理。
+正式版日常更新使用覆盖安装，保留手机上的资料。
 
-## 🧭 Status
+## 💾 备份与卸载
 
-**In active development — a personal project, built for real daily use.** The desktop app, import pipeline and the
-offline-capable Android app all work today; the packaging/update flow and a handful of offline conveniences are the
-current frontier (see `docs/status.md`).
+手动备份和恢复入口在 **进阶功能 → 系统**。也可以先从托盘退出 T³，再把整个安装目录复制到备份位置，保留资料、站点规则、配对信息和更新备份。
+安装目录可能包含网站登录会话，请放在自己的可信存储中。浏览器的显示偏好保存在浏览器本地。
 
-## 📄 License
+Windows 卸载时，先退出 T³，再运行该安装目录中的 **Uninstall.cmd**。默认移除安装的程序版本和桌面快捷方式，保留个人资料与更新备份，之后重新安装可以继续使用。
+彻底删除资料、恢复更新前状态，以及独立演示库的使用方法，见[发布、安装、更新与卸载](docs/release-installation.md)。
 
-Personal project. See the repository for details.
+Android 卸载通过手机系统设置完成。卸载或清除 App 数据会删除手机上的离线副本和未同步编辑，请先完成同步；电脑端资料仍会保留。
+
+## 📚 文档
+
+应用内提供中英文操作手册，可从手册入口打开；默认主库的[中文手册](http://127.0.0.1:8765/manual/zh.html)可在电脑端运行后访问。
+
+- [发布、安装、更新与卸载](docs/release-installation.md)：正式发行版的完整使用说明。
+- [当前功能与验收记录](docs/status.md)：已经实现和确认的状态。
+- [后续计划](docs/roadmap.md)：未来希望加入的功能。
+- [架构说明](docs/architecture.md)：作品、作者、标签、评分和合集的详细设计。
+
+## 📄 许可
+
+个人项目，详情见仓库。

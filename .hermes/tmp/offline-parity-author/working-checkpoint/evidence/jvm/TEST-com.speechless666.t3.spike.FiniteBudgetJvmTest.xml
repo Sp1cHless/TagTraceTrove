@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.speechless666.t3.spike.FiniteBudgetJvmTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-09T08:53:17.821Z" hostname="LAPTOP-70QV4MNN" time="36.694">
-  <properties/>
-  <testcase name="createTwoImagesBudgetRetainsProgressThenColdExactRetryAndTypedAck" classname="com.speechless666.t3.spike.FiniteBudgetJvmTest" time="20.275"/>
-  <testcase name="finiteBudgetPersistsFirstCommitThenColdWorkManagerRetryAndTypedAck" classname="com.speechless666.t3.spike.FiniteBudgetJvmTest" time="16.419"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

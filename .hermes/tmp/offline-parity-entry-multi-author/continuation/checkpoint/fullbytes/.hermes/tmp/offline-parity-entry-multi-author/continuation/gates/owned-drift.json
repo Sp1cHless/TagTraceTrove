@@ -1,8 +1,0 @@
-{
-  "freshBeforeCount": 691,
-  "changes": [
-    "apps/web/tests/offline-entry-multi-author.integration.test.ts"
-  ],
-  "productionChanged": false,
-  "oldTestsChanged": false
-}

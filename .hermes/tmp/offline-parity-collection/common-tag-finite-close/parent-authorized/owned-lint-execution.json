@@ -1,9 +1,0 @@
-{
-  "argv": [
-    "C:/Users/hzy/AppData/Local/hermes/node/node.exe",
-    "node_modules/eslint/bin/eslint.js",
-    "apps/web/src/offline/pending-work-restore.ts",
-    "apps/web/tests/offline-collection-common-tag.integration.test.ts"
-  ],
-  "exitCode": 0
-}

@@ -1,1 +1,0 @@
-{"command": ["C:/Users/hzy/AppData/Local/hermes/node/node.exe", "node_modules\\typescript\\bin\\tsc", "-p", "apps/server/tsconfig.json", "--noEmit"], "exit": 0}

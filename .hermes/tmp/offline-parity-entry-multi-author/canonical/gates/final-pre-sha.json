@@ -1,8 +1,0 @@
-{
-  "packages/shared/src/schemas/sync.ts": "ddb1cfa5262177c3184d519fa54726f8549287b9b50ea73a87d218db2deaebb4",
-  "packages/shared/src/schemas/native-mutation-contract.ts": "d6f318e0d7d8e71bf4d64b39bc820ed5356de6cc9305e30cc18b86c5fb1c2f2a",
-  "apps/server/src/sync/replay-service.ts": "c74b4bf2521cdef2e1186d2d6fe26e29029909696ecf2edd709f85c7a787d447",
-  "apps/server/src/sync/sync-service.ts": "44c2b7384790862f3d8ab208cb2ec1d8e695af95960333a085a6d55f3649331d",
-  "apps/server/src/repositories/entry-multi-author-repository.ts": "c7590c8f7b36c710baff13c235067526f26f1ad481fa5ae86cac0486f080054e",
-  "apps/server/tests/integration/entry-multi-author-sync.integration.test.ts": "c454b72d1f37ad3697ad5123f38f8f7e7dade7f1a778abb50be4d0aa7d0287a7"
-}

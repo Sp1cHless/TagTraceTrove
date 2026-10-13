@@ -68,6 +68,26 @@ describe('foreground media preload recovery', () => {
     expect(secondFetcher).toHaveBeenCalledWith('https://t3.local/api/assets/entries/1/preview.webp', { cache: 'no-cache' });
   });
 
+  it('restarts against a newer snapshot generation instead of returning a partial result', async () => {
+    const ctx = setup(); await install(ctx.store);
+    await saveMediaPreloadChoice(ctx.store, 'thumbnails');
+    let release!: (response: Response) => void;
+    const fetcher = vi.fn(() => fetcher.mock.calls.length === 1
+      ? new Promise<Response>((resolve) => { release = resolve; })
+      : Promise.resolve(new Response('current thumbnail')));
+    const running = startMediaPreload({ ...ctx, fetcher });
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+
+    await ctx.store.writeGeneration(2, JSON.stringify(snapshot));
+    await ctx.store.writeMeta('activeGeneration', '2');
+    const joinedAfterUpdate = startMediaPreload({ ...ctx, fetcher });
+    release(new Response('obsolete thumbnail'));
+
+    await expect(running).resolves.toEqual({ cached: 2, failed: 0, skipped: 0 });
+    await expect(joinedAfterUpdate).resolves.toEqual({ cached: 2, failed: 0, skipped: 0 });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
   it('does not download originals unless selected explicitly', async () => {
     const ctx = setup(); await install(ctx.store);
     const fetcher = vi.fn(async () => new Response('image'));

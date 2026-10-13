@@ -1,5 +1,0 @@
-{
-  "survivingFixtureProcesses": [],
-  "fixtureClose": "Java AutoCloseable requests close and waits for child; fixture finally closes TLS/temp SQLite and removes allocated directory",
-  "processScan": "psutil actual Windows process cmdlines"
-}

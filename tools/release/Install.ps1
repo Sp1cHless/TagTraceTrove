@@ -1,0 +1,78 @@
+[CmdletBinding()]
+param([string]$InstallRoot = $PSScriptRoot, [string]$LegacyRoot, [switch]$Start, [switch]$NoShortcut,
+    [int]$Port, [int]$TlsPort, [string]$InstanceName, [int]$BootstrapPid)
+. (Join-Path $PSScriptRoot 'lifecycle.ps1')
+$source = Get-T3FullPath $PSScriptRoot
+$root = Get-T3FullPath $InstallRoot
+if ($root -ne $source -and ($root.StartsWith($source + '\', [StringComparison]::OrdinalIgnoreCase) -or $source.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase))) { throw 'The release source and installation must be separate directories, or exactly the same directory.' }
+$manifest = Read-T3Manifest $source
+$statePath = Join-Path $root 'installation.json'
+if ($root -ne $source -and (Test-Path -LiteralPath $root) -and -not (Test-Path -LiteralPath $statePath) -and @(Get-ChildItem -LiteralPath $root -Force).Count -gt 0) { throw 'Destination is not a T3-managed installation; choose an empty directory.' }
+New-Item -ItemType Directory -Force -Path $root | Out-Null
+$lock = [IO.File]::Open((Join-Path $root '.maintenance.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+try {
+    if ($BootstrapPid -and $root -ne $source) { throw 'Bootstrap process exemption is only allowed for installing in place.' }
+    Assert-T3Stopped $root $BootstrapPid
+    $state = if (Test-Path -LiteralPath $statePath) { Get-Content -LiteralPath $statePath -Raw -Encoding UTF8 | ConvertFrom-Json } else { $null }
+    if ($state -and $state.product -ne 'T3') { throw 'Invalid installation identity.' }
+    if ($state -and [version]$manifest.version -lt [version]$state.version) { throw 'Downgrade refused. Restore a backup with its matching version instead.' }
+    $savedPort = if ($state -and $state.PSObject.Properties['port']) { [int]$state.port } else { 8765 }
+    $savedTlsPort = if ($state -and $state.PSObject.Properties['tlsPort']) { [int]$state.tlsPort } else { 8766 }
+    $savedName = if ($state -and $state.PSObject.Properties['instanceName']) { [string]$state.instanceName } else { '' }
+    if (-not $PSBoundParameters.ContainsKey('Port')) { $Port = $savedPort }
+    if (-not $PSBoundParameters.ContainsKey('TlsPort')) { $TlsPort = $savedTlsPort }
+    if (-not $PSBoundParameters.ContainsKey('InstanceName')) { $InstanceName = $savedName }
+    if ($Port -lt 1024 -or $Port -gt 65535 -or $TlsPort -lt 1024 -or $TlsPort -gt 65535 -or $Port -eq $TlsPort) { throw 'Choose two distinct ports between 1024 and 65535.' }
+    if ($InstanceName -and $InstanceName -notmatch '^[\p{L}\p{N} _-]{1,24}$') { throw 'InstanceName must contain 1-24 letters, digits, spaces, underscores or hyphens.' }
+    if ($state -and ($Port -ne $savedPort -or $TlsPort -ne $savedTlsPort -or $InstanceName -cne $savedName)) { throw 'Existing instance name and ports are fixed. Use a separate installation root for a new instance.' }
+    $displayName = if ($InstanceName) { 'T3 ' + $InstanceName } else { 'T3' }
+    $shortcutName = $displayName + '.lnk'
+    if (-not $state) { Write-T3Json $statePath @{ product = 'T3'; version = '0.0.0'; currentDirectory = $null; dataDirectory = (Join-Path $root 'data'); port = $Port; tlsPort = $TlsPort; instanceName = $InstanceName; shortcutName = $shortcutName } }
+    $data = Assert-T3Child (Join-Path $root 'data') $root
+    $backup = $null
+    if (Test-Path -LiteralPath $data) {
+        Assert-T3Tree $data $root
+        $backup = Assert-T3Child (Join-Path $root ('backups/pre-update-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0,8))) $root
+        Copy-Item -LiteralPath $data -Destination $backup -Recurse
+        Write-Host "Full user-data backup: $backup"
+    } elseif ($LegacyRoot) {
+        $legacy = Get-T3FullPath $LegacyRoot
+        Assert-T3Stopped $legacy
+        if (-not (Test-Path -LiteralPath (Join-Path $legacy 'apps/server/src/http/server-cli.ts'))) { throw 'LegacyRoot must point to the old T3 folder.' }
+        $legacyData = Assert-T3Child (Join-Path $legacy 'apps/server/.data') $legacy
+        if (-not (Test-Path -LiteralPath $legacyData)) { throw 'Legacy default data directory is missing. Custom data paths must be migrated separately.' }
+        Assert-T3Tree $legacyData $legacy
+        Copy-Item -LiteralPath $legacyData -Destination $data -Recurse
+        Write-Host 'Copied the legacy data folder; the original remains unchanged.'
+    }
+    $destination = Assert-T3Child (Join-Path $root ('versions/' + $manifest.version)) $root
+    $manifestHash = (Get-FileHash -LiteralPath (Join-Path $source 'release-manifest.json')).Hash
+    if (Test-Path -LiteralPath $destination) {
+        if ((Get-FileHash -LiteralPath (Join-Path $destination 'release-manifest.json')).Hash -ne $manifestHash) { throw 'This version already exists with different bytes. Increase the release version.' }
+        $null = Read-T3Manifest $destination
+    } else {
+        $stage = Assert-T3Child (Join-Path $root ('versions/.staging-' + [guid]::NewGuid().ToString('N'))) $root
+        New-Item -ItemType Directory -Force -Path $stage | Out-Null
+        Copy-T3Payload $source $stage $manifest
+        $null = Read-T3Manifest $stage
+        Move-Item -LiteralPath $stage -Destination $destination
+    }
+    Write-T3Json (Join-Path $destination 'installed.json') @{ dataDirectory = $data; installRoot = $root; port = $Port; tlsPort = $TlsPort; displayName = $displayName }
+    # Only switch the current version after copy, integrity check and backup succeed.
+    Write-T3Json $statePath @{ product = 'T3'; version = $manifest.version; currentDirectory = $destination; dataDirectory = $data; previousDirectory = $(if ($state) { $state.currentDirectory } else { $null }); preUpdateBackup = $backup; port = $Port; tlsPort = $TlsPort; instanceName = $InstanceName; shortcutName = $shortcutName }
+    if (-not $NoShortcut) {
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) $shortcutName))
+        $shortcut.TargetPath = Join-Path $destination 'T3.exe'
+        $shortcut.WorkingDirectory = $destination
+        $shortcut.Save()
+    }
+    Copy-Item -LiteralPath (Join-Path $destination 'Uninstall.cmd') -Destination $root -Force
+    Copy-Item -LiteralPath (Join-Path $destination 'Uninstall.ps1') -Destination $root -Force
+    Copy-Item -LiteralPath (Join-Path $destination 'lifecycle.ps1') -Destination $root -Force
+    # Stable per-instance entry: upgrades update installation.json, not the user's bookmark.
+    Copy-Item -LiteralPath (Join-Path $destination 'Start.ps1') -Destination $root -Force
+    Copy-Item -LiteralPath (Join-Path $destination 'Start.cmd') -Destination $root -Force
+    Write-Host "Installed T3 $($manifest.version). Data: $data"
+} finally { $lock.Dispose() }
+if ($Start) { Start-Process -FilePath (Join-Path $destination 'T3.exe') -WorkingDirectory $destination -WindowStyle Hidden }

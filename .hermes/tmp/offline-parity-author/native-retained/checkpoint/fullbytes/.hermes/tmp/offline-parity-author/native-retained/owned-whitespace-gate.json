@@ -1,8 +1,0 @@
-{
-  "files": [
-    "spikes/001-android-webview-shell/android/app/src/test/java/com/speechless666/t3/spike/NativeAuthorDeleteTimelineJvmTest.java",
-    "apps/server/tests/fixtures/native-author-delete-timeline.mts",
-    ".hermes/artifacts/offline-parity-author-native-retained.md"
-  ],
-  "trailingWhitespace": []
-}

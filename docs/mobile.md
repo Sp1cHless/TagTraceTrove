@@ -399,32 +399,50 @@ WebView/PluginCall/Keystore or force-stop behaviour.
   banner removed; a 12-second idle observation kept generation/update time
   unchanged; bottom diagnostic and real clipboard write verified through the
   app’s own WebView.
+- **1.0.2 (2026-10-13)** — the Gallery filter bar on the phone, verified on
+  `com.speechless666.t3.spike` 1.0.2 (versionCode 102) cover-installed over 1.0.1
+  with pairing, offline copy and pending work preserved: a filter row never wraps,
+  so its × stays on the row’s first line and a long Facet or tag name is
+  ellipsised instead of pushing the button down; the Authors row reads as one line
+  (`作者` / picker / ×, left to right); and the bar’s head puts the small label on
+  the toggle’s own line with the toggle compact at the right edge. Same build: a
+  Like now writes its counts to the grid card as well as the open work, so the
+  card’s badge appears without a reload. APK SHA256
+  `0f8dc3c04d700b2d78ca0e82826a657bfd14cc4c30d5d6445bf37d248c72fb3d`.
+- **1.0.3 (2026-10-13)** — the same bar with **one line per row**, verified on
+  `com.speechless666.t3.spike` 1.0.3 (versionCode 103) cover-installed over 1.0.2 with
+  pairing, offline copy and pending work preserved: a rating row’s three selects now
+  divide the line between them (`评分项` / `大于` / `3 星` / ×, left to right — a native
+  select sizes itself to its longest option, which is what pushed the star picker onto a
+  second line), a chosen Facet shares its line with the tag input (`Series` / input / ×),
+  and a row that does wrap keeps its × on the first line instead of centring it between
+  the two. APK SHA256
+  `0dad307638715bd521d0123f3d610a0190f00cfd1847e5d2ca28e6831338104a`.
 
-### Pending / UNVERIFIED
+### Formal 1.0 mobile acceptance (2026-10-13)
 
-- Physical touch, IME, actual WebView, Keystore across restart/certificate
-  change, `PluginCall`, force-stop, and different vendors’ battery policies.
-- The r25 note: exhaustive gesture matrix and native background lifecycle are
-  still unverified.
-- The v42+ grouped device checks were deferred by the user (not re-requested).
-- Android instrumentation Java compiles but was **not executed**; the native
-  evidence is JVM per-class forks (Robolectric), which is not a device proof.
-- Old C0–C3 / v38–v40 device registrars are not reopened.
+The user confirmed that mobile acceptance for the formal 1.0 release is complete. Current packaged release identity
+is **1.0.5 / versionCode 105**, application ID `com.speechless666.t3.spike`; APK SHA256
+`2bf0d8a18baa8846aba726f9d5e96075f811749623caa1ffa299ba54ac0dde16`. The publication check verified its expected
+Release signer, non-debuggable flag and checksum. User acceptance is recorded separately from the earlier automated
+installation logs and screenshots; it does not add new command measurements or an Android instrumentation run.
 
 ### Checklist pointers
 
-- `docs/offline-device-test-guide.md` — plain-language operator manual (click /
-  expected / what counts as broken); section numbers map to the numbered cases
-  below.
-- `docs/offline-validation-checklist.md` — the formal C0–C3 case register
-  (`SHELL`, `PAIR`, `READ`, `EDIT`, `CREATE`, `MEDIA`, `DELTA`, `RESTORE`, `BG`,
-  `SAFE`, `PRIV`); every UNVERIFIED item needs this-round real-device evidence,
-  BLOCKED when a fault cannot be produced.
-- `docs/v49-device-acceptance-checklist.md` — the current v49 board (P/A/B/C
-  cells; B6–B23 map to the r-chain fixes).
-- `docs/app-online-ui-latency-study.md` — the v46 transport study.
-- `spikes/001-android-webview-shell/README.md` — per-APK automated/packaging
-  evidence and the frozen device results.
+The four acceptance documents this board consolidated are retired; they are archived
+byte-identically under `.hermes/archive/docs-pre-consolidation/docs/`:
+
+- `offline-device-test-guide.md` — plain-language operator manual (click / expected / what counts
+  as broken).
+- `offline-validation-checklist.md` — the formal C0–C3 case register (`SHELL`, `PAIR`, `READ`,
+  `EDIT`, `CREATE`, `MEDIA`, `DELTA`, `RESTORE`, `BG`, `SAFE`, `PRIV`).
+- `v49-device-acceptance-checklist.md` — the v49 board (P/A/B/C cells; B6–B23 map to the r-chain
+  fixes).
+- `app-online-ui-latency-study.md` — the v46 transport study.
+
+Still live: `spikes/001-android-webview-shell/README.md` — per-APK automated/packaging evidence and
+the frozen device results; `spikes/001-android-webview-shell/RELEASE.md` — release key/build
+instructions.
 
 Result-record rule: source/automation completion, narrow source review, APK
 integrity and real-device acceptance are **different statuses**; only current-
@@ -438,8 +456,8 @@ build device evidence ticks a case.
 
 `spikes/001-android-webview-shell/RELEASE.md`:
 
-- Display name **T3**; `versionName 1.0.0`, `versionCode 100` for the release
-  configuration; package name stays `com.speechless666.t3.spike` (an existing
+- Display name **T3**; versionName and versionCode come from root `release.json`, currently **1.0.5 / 105**;
+  package name stays `com.speechless666.t3.spike` (an existing
   app identity, not the display name). Later updates must bump `versionCode` and
   use the same release private key.
 - Release is non-debuggable; WebView debugging follows Capacitor’s debuggable
@@ -450,14 +468,19 @@ build device evidence ticks a case.
   makes the release build **fail explicitly** — it never falls back to a debug
   key or an unsigned package.
 - **The debug test chain (v36–v49) uses the Android debug certificate** (signer
-  `1035333c…fdf41` across v43–v49). The release certificate differs, so a debug
-  install cannot be covered by a release install; do not resolve this by
-  uninstalling/clearing data.
+  `1035333c…fdf41` across v43–v49). The release certificate differs, so a release build cannot
+  upgrade a debug install in place (nor the reverse). The migration is explicit: connect to the
+  original desktop library and confirm pending work is **zero**, then uninstall the old test build
+  and install the release build, then re-pair and re-download the offline copy — never uninstall
+  while unsynced work remains. See `docs/release-installation.md`.
 
 ### Build steps
 
+Formal distribution uses root `Release.bat` / `tools/release/release.ps1`, which takes its version from `release.json`
+and produces Windows and Android artifacts from one frozen Web build. The underlying Android build steps are:
+
 1. Build `apps/web` with the project-compatible Node
-   (`VITE_T3_BUILD_ID` may be `1.0.0` for a release).
+   (`VITE_T3_BUILD_ID` matches the version in `release.json`).
 2. Run `prepare-web.mjs`, then Capacitor `copy android`.
 3. In `android/`: `./gradlew.bat assembleRelease --console=plain`
    (output `android/app/build/outputs/apk/release/app-release.apk`).

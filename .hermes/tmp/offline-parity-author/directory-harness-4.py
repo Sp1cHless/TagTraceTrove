@@ -1,2 +1,0 @@
-from guard import edit
-edit('apps/web/tests/offline-author-parity.integration.test.ts','expect(after.payload.entries).toEqual(before.payload.entries);',"expect(after.payload.entries.map(({syncVersion,updatedAt,...row})=>row)).toEqual(before.payload.entries.map(({syncVersion,updatedAt,...row})=>row));for(const entry of after.payload.entries)expect(entry.syncVersion).toBe(before.payload.entries.find(row=>row.id===entry.id)!.syncVersion!+1);")

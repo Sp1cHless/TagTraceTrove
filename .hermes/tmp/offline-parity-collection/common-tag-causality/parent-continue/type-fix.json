@@ -1,7 +1,0 @@
-{
-  "path": "D:\\Project\\TagTraceTrove\\apps\\web\\src\\offline\\collection-common-tag.ts",
-  "before": "1615679db2233f5a0b43c750bb9a6b06716197e5e1c086e6059695cc47722f39",
-  "after": "d0a0d681104c2191c89223aec26f87adfd3e642bb2baeb93ae8ef9405f89aaad",
-  "anchorCount": 1,
-  "reason": "Actual vue-tsc TS2345: unknown journal record must be narrowed to object before Reflect.get; no cast or relaxed identity proof"
-}

@@ -1,2 +1,0 @@
-from guard import edit
-edit('apps/web/tests/offline-author-parity.integration.test.ts',"expect(after.payload.collectionMembers).toEqual(before.payload.collectionMembers.filter(row=>!('producerId' in row)||row.producerId!==f.author.id));", "expect(after.payload.collectionMembers.map(({sortOrder,...row})=>row)).toEqual(before.payload.collectionMembers.filter(row=>!('producerId' in row)||row.producerId!==f.author.id).map(({sortOrder,...row})=>row));")

@@ -513,108 +513,115 @@ function onBarPointerDown(event: PointerEvent): void {
     </p>
 
     <div v-for="(row, rowIndex) in rows" :key="rowIndex" class="filter-row">
-      <!-- Facet / dimension picker (combobox with free input). -->
-      <div class="filter-combobox filter-combobox--facet">
-        <button
-          v-if="row.mode === 'tag' && row.facetId === undefined"
-          class="facet-select-button"
-          type="button"
-          data-testid="facet-picker-button"
-          @click="
-            closeAllDropdowns();
-            row.facetOpen = !row.facetOpen;
-          "
-        >
-          {{ t('filter.facetPlaceholder') }} ▾
-        </button>
-        <button
-          v-else
-          class="facet-select-button facet-select-button--chosen t3-library-text"
-          type="button"
-          data-testid="facet-picker-chosen"
-          :title="rowHint(row)"
-          @click="
-            closeAllDropdowns();
-            row.facetOpen = !row.facetOpen;
-          "
-        >
-          {{ rowLabel(row) }} ▾
-        </button>
-        <div v-if="row.facetOpen" class="filter-dropdown" data-testid="facet-dropdown">
-          <input
-            v-model="row.facetQuery"
-            class="filter-input filter-dropdown__search"
-            type="text"
-            :placeholder="t('filter.facetSearchPlaceholder')"
-          >
+      <!-- The row's own controls wrap inside this box, so its × stays on the
+           row's first line: a long Facet or tag name is ellipsised instead of
+           pushing the button onto a line of its own. -->
+      <div class="filter-row__content">
+        <!-- Facet / dimension picker (combobox with free input). -->
+        <div class="filter-combobox filter-combobox--facet">
           <button
-            v-for="choice in filteredFacetChoices(row.facetQuery)"
-            :key="choice.key"
-            class="filter-option"
-            :class="{ 'filter-option--disabled': choice.disabled }"
+            v-if="row.mode === 'tag' && row.facetId === undefined"
+            class="facet-select-button"
             type="button"
-            :disabled="choice.disabled"
-            @click="chooseFacet(row, choice)"
+            data-testid="facet-picker-button"
+            @click="
+              closeAllDropdowns();
+              row.facetOpen = !row.facetOpen;
+            "
           >
-            <span class="filter-option__label t3-library-text">{{ choice.label }}</span>
-            <span v-if="choice.disabled" class="filter-option__hint">{{ t('filter.alreadyUsed') }}</span>
+            <span class="facet-select-button__label">{{ t('filter.facetPlaceholder') }}</span>
+            <span class="facet-select-button__caret" aria-hidden="true">▾</span>
           </button>
-          <p v-if="filteredFacetChoices(row.facetQuery).length === 0" class="filter-dropdown__empty">
-            {{ t('filter.noMatches') }}
-          </p>
+          <button
+            v-else
+            class="facet-select-button facet-select-button--chosen t3-library-text"
+            type="button"
+            data-testid="facet-picker-chosen"
+            :title="rowHint(row)"
+            @click="
+              closeAllDropdowns();
+              row.facetOpen = !row.facetOpen;
+            "
+          >
+            <span class="facet-select-button__label">{{ rowLabel(row) }}</span>
+            <span class="facet-select-button__caret" aria-hidden="true">▾</span>
+          </button>
+          <div v-if="row.facetOpen" class="filter-dropdown" data-testid="facet-dropdown">
+            <input
+              v-model="row.facetQuery"
+              class="filter-input filter-dropdown__search"
+              type="text"
+              :placeholder="t('filter.facetSearchPlaceholder')"
+            >
+            <button
+              v-for="choice in filteredFacetChoices(row.facetQuery)"
+              :key="choice.key"
+              class="filter-option"
+              :class="{ 'filter-option--disabled': choice.disabled }"
+              type="button"
+              :disabled="choice.disabled"
+              @click="chooseFacet(row, choice)"
+            >
+              <span class="filter-option__label t3-library-text">{{ choice.label }}</span>
+              <span v-if="choice.disabled" class="filter-option__hint">{{ t('filter.alreadyUsed') }}</span>
+            </button>
+            <p v-if="filteredFacetChoices(row.facetQuery).length === 0" class="filter-dropdown__empty">
+              {{ t('filter.noMatches') }}
+            </p>
+          </div>
         </div>
-      </div>
 
-      <!-- Chosen tags/authors as removable chips. -->
-      <span
-        v-for="id in row.mode === 'author' ? row.authorIds : row.tagIds"
-        :key="id"
-        class="filter-tag-chip"
-        data-testid="filter-tag-chip"
-      >
-        <span class="t3-library-text">{{ chipName(row, id) }}</span>
-        <button
-          class="filter-tag-chip__remove"
-          type="button"
-          :aria-label="t('filter.removeTag', { name: chipName(row, id) })"
-          @click="removeItem(row, id)"
+        <!-- Chosen tags/authors as removable chips. -->
+        <span
+          v-for="id in row.mode === 'author' ? row.authorIds : row.tagIds"
+          :key="id"
+          class="filter-tag-chip"
+          data-testid="filter-tag-chip"
         >
-          ×
-        </button>
-      </span>
-
-      <!-- Item picker: tags of the chosen Facet, or Authors. -->
-      <div
-        v-if="row.mode === 'author' || (row.mode === 'tag' && row.facetId !== undefined)"
-        class="filter-combobox filter-combobox--tags"
-      >
-        <input
-          :ref="(element) => setItemInput(rowIndex, element)"
-          v-model="row.itemQuery"
-          class="filter-input filter-combobox__input"
-          type="text"
-          data-testid="tag-picker-input"
-          :placeholder="row.mode === 'author' ? t('filter.authorPlaceholder') : t('filter.tagPlaceholder')"
-          @focus="
-            closeAllDropdowns();
-            row.facetOpen = false;
-            row.itemOpen = true;
-          "
-          @keydown.esc="row.itemOpen = false"
-        >
-        <div v-if="row.itemOpen" class="filter-dropdown" data-testid="tag-dropdown">
+          <span class="filter-tag-chip__name t3-library-text">{{ chipName(row, id) }}</span>
           <button
-            v-for="option in filteredItemOptions(row)"
-            :key="option.id"
-            class="filter-option t3-library-text"
+            class="filter-tag-chip__remove"
             type="button"
-            @click="addItem(row, option)"
+            :aria-label="t('filter.removeTag', { name: chipName(row, id) })"
+            @click="removeItem(row, id)"
           >
-            {{ option.name }}
+            ×
           </button>
-          <p v-if="filteredItemOptions(row).length === 0" class="filter-dropdown__empty">
-            {{ t('filter.noMatches') }}
-          </p>
+        </span>
+
+        <!-- Item picker: tags of the chosen Facet, or Authors. -->
+        <div
+          v-if="row.mode === 'author' || (row.mode === 'tag' && row.facetId !== undefined)"
+          class="filter-combobox filter-combobox--tags"
+        >
+          <input
+            :ref="(element) => setItemInput(rowIndex, element)"
+            v-model="row.itemQuery"
+            class="filter-input filter-combobox__input"
+            type="text"
+            data-testid="tag-picker-input"
+            :placeholder="row.mode === 'author' ? t('filter.authorPlaceholder') : t('filter.tagPlaceholder')"
+            @focus="
+              closeAllDropdowns();
+              row.facetOpen = false;
+              row.itemOpen = true;
+            "
+            @keydown.esc="row.itemOpen = false"
+          >
+          <div v-if="row.itemOpen" class="filter-dropdown" data-testid="tag-dropdown">
+            <button
+              v-for="option in filteredItemOptions(row)"
+              :key="option.id"
+              class="filter-option t3-library-text"
+              type="button"
+              @click="addItem(row, option)"
+            >
+              {{ option.name }}
+            </button>
+            <p v-if="filteredItemOptions(row).length === 0" class="filter-dropdown__empty">
+              {{ t('filter.noMatches') }}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -630,39 +637,41 @@ function onBarPointerDown(event: PointerEvent): void {
     </div>
 
     <div v-for="(ratingRow, ratingIndex) in ratingRows" :key="`rating-${ratingIndex}`" class="filter-row">
-      <select
-        class="filter-select t3-library-text"
-        data-testid="rating-slot-select"
-        :value="ratingRow.slotId ?? ''"
-        @change="chooseRatingSlot(ratingRow, $event)"
-      >
-        <option value="" disabled>{{ t('filter.ratingSlotPlaceholder') }}</option>
-        <option v-for="slot in props.options.ratingSlots" :key="slot.id" :value="slot.id">
-          {{ slotLabel(slot) }}
-        </option>
-      </select>
-      <select
-        class="filter-select"
-        data-testid="rating-operator-select"
-        :value="ratingRow.operator"
-        @change="chooseRatingOperator(ratingRow, $event)"
-      >
-        <option value="eq">{{ t('filter.ratingEquals') }}</option>
-        <option value="gt">{{ t('filter.ratingGreaterThan') }}</option>
-        <option value="lt">{{ t('filter.ratingLessThan') }}</option>
-        <option value="unrated">{{ t('filter.ratingUnrated') }}</option>
-      </select>
-      <select
-        v-if="ratingRow.operator !== 'unrated'"
-        class="filter-select"
-        data-testid="rating-stars-select"
-        :value="ratingRow.stars"
-        @change="chooseRatingStars(ratingRow, $event)"
-      >
-        <option v-for="value in starValues" :key="value" :value="value">
-          {{ t('filter.ratingStars', { stars: value }) }}
-        </option>
-      </select>
+      <div class="filter-row__content">
+        <select
+          class="filter-select filter-select--slot t3-library-text"
+          data-testid="rating-slot-select"
+          :value="ratingRow.slotId ?? ''"
+          @change="chooseRatingSlot(ratingRow, $event)"
+        >
+          <option value="" disabled>{{ t('filter.ratingSlotPlaceholder') }}</option>
+          <option v-for="slot in props.options.ratingSlots" :key="slot.id" :value="slot.id">
+            {{ slotLabel(slot) }}
+          </option>
+        </select>
+        <select
+          class="filter-select filter-select--operator"
+          data-testid="rating-operator-select"
+          :value="ratingRow.operator"
+          @change="chooseRatingOperator(ratingRow, $event)"
+        >
+          <option value="eq">{{ t('filter.ratingEquals') }}</option>
+          <option value="gt">{{ t('filter.ratingGreaterThan') }}</option>
+          <option value="lt">{{ t('filter.ratingLessThan') }}</option>
+          <option value="unrated">{{ t('filter.ratingUnrated') }}</option>
+        </select>
+        <select
+          v-if="ratingRow.operator !== 'unrated'"
+          class="filter-select filter-select--stars"
+          data-testid="rating-stars-select"
+          :value="ratingRow.stars"
+          @change="chooseRatingStars(ratingRow, $event)"
+        >
+          <option v-for="value in starValues" :key="value" :value="value">
+            {{ t('filter.ratingStars', { stars: value }) }}
+          </option>
+        </select>
+      </div>
       <button
         class="filter-row__remove"
         type="button"
@@ -814,9 +823,20 @@ function onBarPointerDown(event: PointerEvent): void {
 
 .filter-row {
   display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+/* A row's controls live in this box so they wrap among themselves while the
+   row's × keeps its place at the row's right edge. */
+.filter-row__content {
+  display: flex;
+  flex: 0 1 auto;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.45rem;
+  min-width: 0;
 }
 
 .filter-combobox {
@@ -900,6 +920,8 @@ function onBarPointerDown(event: PointerEvent): void {
   min-height: var(--control-min-height);
   align-items: center;
   gap: 0.4rem;
+  max-width: 100%;
+  min-width: 0;
   padding: 0.35rem 0.7rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
@@ -928,6 +950,20 @@ function onBarPointerDown(event: PointerEvent): void {
   color: var(--text-primary);
   background: var(--tag-background);
   border-color: var(--tag-border);
+}
+
+/* A Facet or Section name is whatever the person named it, so the label gives
+   way — shortened with an ellipsis — instead of widening the row; the caret
+   stays with it. */
+.facet-select-button__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.facet-select-button__caret {
+  flex: 0 0 auto;
 }
 
 .filter-combobox__input {
@@ -988,6 +1024,8 @@ function onBarPointerDown(event: PointerEvent): void {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  max-width: 100%;
+  min-width: 0;
   padding: 0.3rem 0.6rem;
   border: 1px solid var(--tag-border);
   border-radius: 0.6rem;
@@ -995,6 +1033,13 @@ function onBarPointerDown(event: PointerEvent): void {
   background: var(--tag-background);
   font-size: 0.8rem;
   font-weight: 600;
+}
+
+.filter-tag-chip__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .filter-tag-chip__remove {
@@ -1017,6 +1062,7 @@ function onBarPointerDown(event: PointerEvent): void {
 }
 
 .filter-row__remove {
+  flex: 0 0 auto;
   width: 1.6rem;
   height: 1.6rem;
   padding: 0;
@@ -1072,16 +1118,29 @@ function onBarPointerDown(event: PointerEvent): void {
 
 @media (max-width: 44rem) {
   .facet-filter-bar { min-width: 0; padding: 0.65rem; overflow-x: clip; }
-  .facet-filter-bar__head { align-items: flex-start; flex-wrap: wrap; }
-  .facet-filter-bar__head-actions { flex: 1 1 auto; justify-content: flex-end; flex-wrap: wrap; }
+  /* The label sits on the toggle's own line, and the toggle keeps its width at
+     the right edge instead of stretching across the whole row. */
+  .facet-filter-bar__head { align-items: center; flex-wrap: wrap; }
+  .facet-filter-bar__head-actions { flex: 0 0 auto; justify-content: flex-end; flex-wrap: wrap; }
+  .facet-filter-bar__head-actions .filter-action { flex: 0 1 auto; }
   .mobile-filter-toggle { display: inline-flex; align-items: center; min-height: 44px; }
   .facet-filter-bar__body { display: none; }
   .facet-filter-bar__body--open { display: grid; }
-  .filter-row { align-items: stretch; }
-  .filter-combobox { min-width: 0; flex: 1 1 100%; }
+  /* One line per row: the Facet or Author control shares the line with its
+     picker rather than taking a row of its own. */
+  .filter-row { align-items: flex-start; }
+  .filter-row__content { flex: 1 1 auto; }
+  .filter-combobox--facet { flex: 0 1 auto; min-width: 0; }
+  .filter-combobox--tags { flex: 1 1 5rem; min-width: 0; }
+  /* A rating row's three selects divide the line between them (a native select
+     otherwise sizes itself to its longest option, which is what pushed the star
+     picker onto a second line); the tighter padding leaves room for the labels
+     next to each select's own arrow. */
+  .filter-row .filter-select { flex: 1 1 0; width: auto; min-width: 0; padding: 0.3rem 0.35rem; font-size: 0.78rem; }
+  .filter-row .filter-select--slot { flex-grow: 1.5; }
   .filter-combobox__input,
-  .filter-input,
-  .filter-select { width: 100%; min-width: 0; min-height: 44px; }
+  .filter-input { width: 100%; min-width: 0; min-height: 44px; }
+  .filter-select { min-height: 44px; }
   .filter-dropdown { width: min(22rem, calc(100vw - 3.2rem)); min-width: 0; max-width: 100%; }
   .facet-select-button,
   .filter-action { min-height: 44px; }
@@ -1090,8 +1149,8 @@ function onBarPointerDown(event: PointerEvent): void {
   .filter-add-actions,
   .filter-sort-actions,
   .rating-sort-control { min-width: 0; width: 100%; }
-  .rating-sort-control .filter-select { max-width: 100%; }
-  .filter-action { flex: 1 1 auto; }
+  .rating-sort-control .filter-select { width: 100%; max-width: 100%; }
+  .filter-add-actions .filter-action { flex: 1 1 auto; }
   .rating-sort-control { align-items: stretch; flex-direction: column; }
 }
 </style>

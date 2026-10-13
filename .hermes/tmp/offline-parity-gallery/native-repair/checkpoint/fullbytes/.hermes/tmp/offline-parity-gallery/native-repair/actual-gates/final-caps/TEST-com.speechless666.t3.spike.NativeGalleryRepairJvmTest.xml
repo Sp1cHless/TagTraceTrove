@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.speechless666.t3.spike.NativeGalleryRepairJvmTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-10T08:34:41.473Z" hostname="LAPTOP-70QV4MNN" time="131.819">
-  <properties/>
-  <testcase name="g3" classname="com.speechless666.t3.spike.NativeGalleryRepairJvmTest" time="131.819"/>
-  <system-out><![CDATA[CAP_CELLS 8 false/absent zero businessPOST then actualSQL recovered
-]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

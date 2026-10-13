@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.speechless666.t3.spike.NativeStagingInterleavingsJvmTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-09T08:53:59.402Z" hostname="LAPTOP-70QV4MNN" time="3.985">
-  <properties/>
-  <testcase name="newGenerationSealAndActivationSurviveLateOldSeal" classname="com.speechless666.t3.spike.NativeStagingInterleavingsJvmTest" time="3.85"/>
-  <testcase name="cancelBeforeLateChunkAndSealRejectsBothAndNeverResurrects" classname="com.speechless666.t3.spike.NativeStagingInterleavingsJvmTest" time="0.066"/>
-  <testcase name="chunkBeforeCancelThenLateSealCannotPublishCapturedOriginal" classname="com.speechless666.t3.spike.NativeStagingInterleavingsJvmTest" time="0.069"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

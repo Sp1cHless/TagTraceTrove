@@ -16,9 +16,9 @@
 > `siteprobe-t3-integration-plan.md`, `siteprobe-integration-handoff.md`,
 > `siteprobe-generic-adapter-hardening-execution-plan.md`, `generic-site-probe-plan.md`,
 > `b-advanced-import-plan.md`, `UI.md`, `siteprobe-execution-log.md`, and
-> `relation-source-maintenance-offline-plan.md`. Those retired source documents are archived
-> byte-identically under `.hermes/archive/docs-pre-consolidation/docs/` (the one exception is
-> `docs/siteprobe/siteprobe-execution-log.md`, which is retained in place as the running record).
+> `relation-source-maintenance-offline-plan.md`. All of those retired source documents — including
+> the append-only `siteprobe-execution-log.md` — are archived byte-identically under
+> `.hermes/archive/docs-pre-consolidation/docs/`. The log's durable conclusions are kept in §13.
 
 ---
 
@@ -36,6 +36,8 @@
 10. [Data root, settings, environment quirks](#10-data-root-settings-environment-quirks)
 11. [Test, fixture and gate strategy](#11-test-fixture-and-gate-strategy)
 12. [Durable findings & rules index](#12-durable-findings--rules-index)
+13. [Phase history, acceptance, and consciously-stopped limits](#13-phase-history-acceptance-and-consciously-stopped-limits)
+14. [Generic-adapter hardening (2026-10-11) — the current runtime architecture](#14-generic-adapter-hardening-2026-10-11--the-current-runtime-architecture)
 
 ---
 
@@ -543,6 +545,34 @@ failure is field-specific and returns to that field's hypotheses (no whole-site 
 generated site.json == existing generic runtime extraction`. Otherwise the Builder is just
 another system and is not "done".
 
+**Verdicts.** A hypothesis becomes a rule only by reading the *right* value on a page the
+annotation never saw. Three verdicts are kept, and the third is deliberate:
+
+- `keep` — read the right value on every sample that has an expectation;
+- `prune` — read a wrong value, or nothing;
+- `unproven` — **only the annotated page can check it** (neither supported nor refuted). Kept, but
+  explicitly flagged as unproven — never silently promoted to a rule the samples agreed on.
+
+The annotated page is **excluded from its own verdicts**: a field once read `keep` because it
+"matched" the annotation itself (that is the annotation, not corroboration). Validation needs **no
+network** — the samples are recorded sessions, so rules are resolved in documents already on disk
+(the whole reason `capture.json` exists).
+
+**The adapter document contract is `capture_to_bag`.** Resolving a rule needs the runtime's own
+`DocumentBag`, so the Builder rebuilds one from a capture — and that rebuild *is* the definition of
+what a generated adapter must expose:
+
+```text
+page        the markup itself
+jsonld      the page's JSON-LD block, as JSON
+network:N   each recorded response body
+inline:N    a script body, iff it parses as JSON
+```
+
+The `json` channel reads JSON documents, so anything not exposed under one of those names cannot
+be read by any rule. A non-JSON script is skipped — the same reason a positional literal gets no
+rule at all.
+
 ### 5.2 Candidate Harvester
 
 The Harvester's first duty is **recall**, not field decision: `capture → normalize → deduplicate →
@@ -852,6 +882,18 @@ the block that contains the cards. Related hard cases the Builder hit and fixed 
   also truncate a value.
 - **Merge image variants**: the same image at several sizes/paths is one candidate with several
   sources (e.g. `/image/original/.../thumbnail-05.jpg` and `/image/thumbnail/.../thumbnail-05.jpg`).
+  The merge key (`picture_key`) is **equality of the path-segment sequence** after stripping
+  resize tokens (`thumb/` insertions, `250px-` prefixes, `-300x400` suffixes, adjacent duplicate
+  segments) — **equality, never substring**. Substring would fuse `…/book/1/cover.jpg` with
+  `…/book/2/cover.png`; the safe failure is leaving a duplicate for the human to pick, the unsafe
+  one is fusing two works' covers. URLs differing only by fragment/tracking params also merge.
+- **Page-level uniqueness (`unique`)** — a listing field whose per-row rule cannot tell which of
+  several same-class links is the work (hitomi's work link, date link and tag links share one
+  class; row structure cannot separate them) is read by asking the **whole page**: the listing
+  reader reads *all* candidates per row, discards any value another row also carries, then applies
+  `filter`/`group`. The predicate (`select.first_unique`) is **shared** by the reader and the
+  generator. `unique` is offered **only for link rules** (`attr == "href"`) — text is naturally
+  unique and an image address identifies nothing.
 
 ### 6.7 Positional and derived pictures
 
@@ -1060,7 +1102,8 @@ emitted one.
 
 Source maintenance is a distinct T³ workflow (not SiteProbe crawling): it repairs a **derived
 Source projection** whose upstream page has died. It is grouped with the Relation/Tag input work
-and the mobile-offline work in `relation-source-maintenance-offline-plan.md`; only the "B" half
+and the mobile-offline work in the retired `relation-source-maintenance-offline-plan.md`
+(archived under `.hermes/archive/docs-pre-consolidation/docs/`); only the "B" half
 belongs to this board.
 
 ### 8.1 Product semantics and immutable boundary
@@ -1870,3 +1913,207 @@ advances by "all ids the listing showed", so a run that fetched nothing still ad
 undated entry never passes a dated cursor — normal for a site with no dates, conservative for one
 with dates. The library-side cursor (`site_crawl_sources`) is kept but is no longer the trimming
 authority.
+
+---
+
+## 13. Phase history, acceptance, and consciously-stopped limits
+
+The tool was built in numbered phases, each with its own acceptance gate. That work was recorded
+in an append-only running log (`docs/siteprobe/siteprobe-execution-log.md`); the log has been
+retired as development churn, and this section keeps its durable conclusions. Everything below is
+either already stated in the sections above or is the phase's verdict.
+
+### 13.1 Phase 1 — Library PoC (2026-09-19)
+
+Environment on which the PoC was measured: Python 3.11.6, playwright 1.63.0, curl-cffi 0.16.3,
+Pillow 12.3.0. Four acceptance decisions:
+
+| Decision | Verdict |
+| --- | --- |
+| Browser capture | **Playwright with `channel="chrome"`**, used **only as the Builder's discovery tool — never in the runtime**. *(This was the Phase-1 decision; the 2026-10-11 hardening later let the runtime honor a rule that declares browser/api acquisition — see §14.5.)* |
+| Picker / selector strategy | Deferred to Phase 4 (JSON/CLI annotation first). |
+| DOM rule learner | **No external library** — built on the existing selector vocabulary. |
+| Adaptive matching | **Not done** — the evaluated library (Scrapling) lacked it in that version, and it would introduce an unexplainable primary rule. |
+
+**The most important finding:** the site that looked hardest (iwara — judged a "JS shell needing a
+browser or an API rule") needed **no browser at runtime**. The browser capture merely revealed
+`api.iwara.tv`; the data came straight from that JSON API over `curl_cffi` with chrome
+impersonation, no browser and no cookie.
+
+### 13.2 Phase 2 — Candidate Harvester v1
+
+- `capture.json` is the Harvester's **single input** — so a run is replayable, debuggable after the
+  fact, and fixture-able. Input is never a live page.
+- Five channels: `markup`, `jsonld`, `inline`, `network`, `media`. `inline` is a **string-literal
+  scan only** — compressed framework state hides values behind positional arguments, which needs a
+  JavaScript evaluator; every degradation is recorded in `notes`, so the recall given up is
+  visible, not silent.
+- Six content-neutral fixtures: `static_work`, `jsonld_work`, `hydrated_work`, `api_work`,
+  `repeated_listing`, `pagination`.
+- Ranking scores by **distinct channel count, not source count** — a value repeated three times in
+  one channel is *templated*, not corroborated (this moved the real cover from rank 479 to 1).
+  Media needed its own signals because lazy-load sites declare no size.
+
+### 13.3 Phase 3 — Normalize / Deduplicate / Ranking
+
+- **Images and text must not share one score scale.** The Phase-2 target "iwara cover must reach
+  top-5 overall" was the **wrong form** of the question: the cover ranked **4 / 29 within images**.
+  A multi-channel text value will always beat a picture on a single mixed leaderboard, but they do
+  not compete for the same field. The CLI now groups by type (`strongest image` / `url` / `text` /
+  `number`). Chasing the mixed "top-5" would have meant piling special cases onto a non-problem.
+- Ranking signals added (all from the plan): field-name keys over API parameters, shallow values,
+  "the response is about this page's subject", and penalties for list members
+  (`results`/`related`/`comments`, index > 0), site chrome, and unkeyed literals. `capture.json`
+  gained `Document.source_url` so the subject test is possible.
+- Image-variant merge by `picture_key` **equality** (see §6.6); NFKC text comparison with the
+  display value preserved; entity decoding applied to the JSON channel **only**; URL dedupe by
+  `comparison_url`.
+
+### 13.4 Phase 4 — Annotation UI
+
+The hard constraint (**T³ will be the operation window; nothing may require the user to move files
+by hand**) changed the delivery form: a local service on loopback serves the annotation page and
+receives the result, instead of "generate a self-contained HTML and download the result back".
+`/media` takes a **candidate id, not a URL**, so the endpoint cannot become an arbitrary fetcher.
+An annotation produces an **executable rule**, not a field name; and a rule is a **hypothesis**, so
+it records `matches: N` (a rule that matches every `a` on the page reads the first one). The
+generated adapter must expose the page's JSON-LD as a **`jsonld` JSON document**, or the JSON-LD
+rule cannot run. Collection candidates: any selector that reads several values becomes a
+collection candidate (`list: true`).
+
+### 13.5 Phase 6 — Runtime Round-trip
+
+- A generated adapter is **configuration, not a second system**: the declarative reader lives in
+  the **runtime** (`src/generic/declarative.py`), so a generated adapter never imports the Builder.
+  The registry falls back to `site.json` when a site has **no `fetch.py`** — a `fetch.py` that
+  exists but fails to import is still a loud error; the fallback covers **absence, not breakage**.
+- Generated adapters live in `local/` (git-ignored): **two files, no Python** (`site.json` +
+  `adapter.json`).
+- The whole chain was proven on real manwa works with no file moving, and the learned title rule
+  (`h1.detail-main-info-title`) matched what the Phase-1 PoC had independently measured.
+- A generated adapter **satisfies what it needs to run, not the full human-written adapter
+  contract** (its `naming` / `manifest` / listing sections are not generated — recorded, not
+  hidden).
+
+### 13.6 Phase 7 — Listing builder, and its four lessons
+
+1. **Page-level uniqueness** is a primitive in its own right (`unique`; §6.6) — cross-row
+   uniqueness is a page property a per-row rule cannot express.
+2. **Numbering takes the last number in the address**, with an end anchor — early attempts took a
+   date or issue number out of the title segment.
+3. **Cards must be visible and nameable** — the representative card is not always the first
+   (§5.6), so the choosing page lists the cards and accepts `--card-of=N`.
+4. **A listing's date may be absent** (the work page supplies it) and **a search page is far more
+   permissive than an author page** — neither blocks rule learning.
+
+### 13.7 Consciously-stopped limits
+
+- **Login-state result sets are a real boundary.** Measured on 18comic: the same address returned
+  31 works in the tool's fresh session and 43 signed in — not scroll, not a `page` parameter, not
+  sharding, but the session. This is Level D (custom mechanism/auth) and is served by a
+  hand-written adapter. The tool generalizes only the **session** (`--profile`); it never touches
+  credentials.
+- **`--attach` is infeasible on this machine** (Windows Chrome single-instance hands the URL to an
+  already-running Chrome). It stays in `capture.py`, off by default, and fails with one clear line
+  rather than a silent 60-second wait. Per-site fingerprint tuning / block-page detection /
+  CAPTCHA solving are explicitly **out of scope** for `src/generic`.
+- **No adaptive auto-substitution of a live adapter** — a maintenance suggestion must land back on
+  a deterministic selector; the health check only reports, it never writes.
+- **The single mixed image/text leaderboard** is not needed (§13.3).
+
+### 13.8 An acceptance principle established en route
+
+The verification method itself was corrected once: from "the tests pass" to **"open every door
+once"** (§11.2) — after 275 green tests coexisted with bugs a person found in a minute of clicking.
+A clean suite is not acceptance; every user-visible door must be walked.
+
+---
+
+## 14. Generic-adapter hardening (2026-10-11) — the current runtime architecture
+
+This is the **newest architectural layer**, and where any earlier record disagrees with it, **the
+newer date governs** (§14.5). Its one-sentence outcome: **the Builder and the runtime converge on
+the same Core** for acquisition, identity, transforms and images, so a common site difference can be
+expressed as a user's declarative rule instead of a SiteProbe source change.
+
+**Goal:** reduce how often a new site requires editing SiteProbe source. A site's domain, API
+address and selectors may live only in user-created rules and case data — **never as a per-domain
+branch in Core**. The plan is a *stabilization* layer inside the existing architecture: it does not
+replace the distribution model, Provider matching, the data model, or the user-verification rules.
+
+It was authorized in two batches — Stage A (minimal), then Stages B–F at once. Stage A is already
+detailed in §5.5 (the probe gate); this section is the index of the whole update.
+
+### 14.1 The staged plan (A → F)
+
+| Stage | Unified | Durable entry points |
+| --- | --- | --- |
+| **A** Error classification + minimal run contract | `diagnostics.py` (finding contract, codes, `redact_url`, `Budget`, `StageResult`, `ProbeReport`, `blocking_findings`), `probe.py` (bounded `runtime_probe`, five stages), install-time probe gate — full detail in §5.5 |
+| **B** Acquisition & document sources | `acquisition.py` (`AcquisitionPlan` / `plan_for` / `PageRead` / `HttpSession` / `BrowserSession` / `session` / `read_page`); the browser read engine **moved from `builder/capture.py` into Core**, `capture_browser` is now a thin adapter (same signature/defaults); `declarative.py` reads a listing's pages in **one session** (one Chrome per listing run, not per page); `read_work` honors `work.acquisition`; `template.work_acquisition` added |
+| **C** Work & listing identity | `identity.py` (`extract` / `work_id` / `narrowing` / `candidates` / `ambiguous` / `absolute`); **both** `template.TargetRule.match` and `builder/listing.target_rule_for_id` call it; query-id and relative-href (`base`) resolution supported |
+| **D** Transforms & images | run-level **frozen clock** in `select.py` (`freeze_clock` / `frozen_clock`) used by `_relative_date`, frozen once at `runner.run` start; `COVER_FETCH_FAILED` distinct from `WORK_FIELD_EMPTY` / `COVER_URL_EMPTY`; image responses validated by `media.detect_extension` magic bytes (a 200 HTML challenge page is never written as `.jpg`) |
+| **E** T³ display & import parsing | `packages/shared/src/siteprobe/findings.ts` (`describeFindings` / `primaryFinding` / `findingAdvice`); `AdvancedImportPanel.vue` shows stage-ordered findings + advice; parsing still goes through the existing `loadSiteProbeExport` — **no second importer** |
+| **F** Compatibility, doctor, regression cases | `doctor.py` (read-only `diagnose` + explicit `upgrade`) and CLI `siteprobe/doctor.py`; `siteprobe/fixtures/adapter_contract/` (`opaque_id_relative_date`, `multivalue_tags`) |
+
+New machine entry from Stage A: `integration probe <url> [--building work|listing]`, emitting
+`event: "probe"` (`siteprobeProbeEventSchema`). `RunResult` gains `findings`/`cards`; the
+`result`/`review`/`error` events carry an always-present `findings` array (old callers that ignore
+it are unaffected; `error.code` keeps its original enum).
+
+### 14.2 Completion definition (what "done" means)
+
+1. common HTTP HTML, browser-rendered pages, and replayable JSON requests are all expressible by
+   configuration;
+2. one rule has the **same document source, identity interpretation and field transforms** in the
+   Builder and the runtime;
+3. a listing's work id **reuses the work target rule first**, and ambiguity is never resolved
+   silently into a "success";
+4. a **required-field** failure is reported clearly at install/run; a missing **optional** field is
+   allowed and its impact stated;
+5. T³ can show **which stage** failed (acquisition / listing / work / media / import);
+6. old rules stay readable; upgrade has a diff preview and a recovery copy;
+7. each fixed generic phenomenon has a minimal, selectively replayable case.
+
+**Not promised:** not every site is declaratively adaptable. Binary indexes, image reordering,
+dynamic signatures and the like remain custom plugins — and must **report the capability gap rather
+than fake an empty-list success**.
+
+### 14.3 Decisions carried
+
+- **Python Core never hard-depends on a running T³.** The standard export is the boundary; TS
+  parsing stays in T³; a standalone CLI marks the import stage `unverified`.
+- **Explicit acquisition intent is never silently changed** — an explicit `browser` rule never
+  silently downgrades to HTTP, an explicit HTTP rule never opens a login window, and `api` means
+  "execute a declared request recipe", not "auto-scan the site's interface".
+- **Identity changes are explicit** — never silently case-fold or rename an existing `source_id` or
+  export directory.
+- **Upgrade is explicit** — preview the diff, save a byte-identical recovery copy, atomically
+  replace only the named file, preserve unknown fields; `doctor` is read-only and never touches the
+  network or the user's files.
+- **Diagnostics redact** sensitive URL query values and never print cookies / Authorization /
+  browser storage.
+
+### 14.4 Verified outcome of the hardening
+
+Regression on the same tree: siteprobe Python suite **433 passed**;
+`verify_against_recordings.py` **327 comparisons / 0 mismatches**; `integration.py sites` lists 12
+sites all with a target; 5 real URLs all `resolve`d. This is automation, not real-device/site
+acceptance.
+
+### 14.5 Date precedence — the conflicts, resolved
+
+Where an older record contradicts this section, **the newer (2026-10-11) statement wins**:
+
+| Older statement | Newer (governing) |
+| --- | --- |
+| Phase 1 (§13.1): the browser is a **Builder-only discovery tool, never in the runtime**. | The runtime **shares** the acquisition layer and **honors a rule that declares browser/api acquisition** (§14.1 Stage B). HTTP stays the default; what survives from Phase 1 is that a browser is *not required by default* and that many "JS shell" sites resolve over HTTP/API. |
+| `network:N` is a response **arrival order** (earlier §5.2 / the opening of §7.6). | A network document is named by its **request shape** (`network:api.iwara.tv/video/{id}`), measured from the site's own requests; the old name is kept as an alias (§7.6). |
+| Work target and listing card infer identity **independently**, with looser rules. | **One shared** `identity.extract`, called by both (§14.1 Stage C). |
+| Acquisition is a bare string (`acquisition: "browser"`) with no plan. | An internal `AcquisitionPlan` (mode / session / recipe / wait condition / budget) that the old string still feeds into (§14.1 Stage B). |
+| Relative dates converted ad-hoc per call. | One **run-frozen clock** so a page cannot drift across midnight mid-run (§14.1 Stage D). |
+
+Earlier sections already reflect the newer rules where they were updated (§5.5 probe gate, §7.6
+request-shape document naming, §12.3 module map); §13.1's Phase-1 table is the historical decision
+record and is to be read through this table.
+
+

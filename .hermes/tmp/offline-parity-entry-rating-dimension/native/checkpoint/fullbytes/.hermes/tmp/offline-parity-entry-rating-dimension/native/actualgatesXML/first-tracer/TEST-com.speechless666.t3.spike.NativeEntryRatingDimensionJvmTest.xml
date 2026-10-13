@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-10T09:23:44.083Z" hostname="LAPTOP-70QV4MNN" time="20.34">
-  <properties/>
-  <testcase name="g1" classname="com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest" time="20.34"/>
-  <system-out><![CDATA[REAL_SQL shared Entry layout delete cascade2 Author2/Film preserved onejournal onereceipt exactbody; raw native retained NOT ACK authority
-]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

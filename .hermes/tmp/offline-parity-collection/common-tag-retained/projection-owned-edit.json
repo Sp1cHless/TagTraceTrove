@@ -1,7 +1,0 @@
-{
-  "path": "apps/web/src/offline/collection-common-tag.ts",
-  "beforeSHA": "8bcf1d3cd181ed6546675ad5b5b54190b940d77b429b655d27d2a4723496a36b",
-  "afterSHA": "c7eb21d06426a7a81ba1ada5a4e1fc5e44b1a1d6baeb560157711647b5a6ad95",
-  "old": "  if(!entryTags.some(value=>value.entryId===entry.id && value.tagId===tag!.id))entryTags.push({entryId:entry.id,tagId:tag.id,facetId:facet.id});",
-  "new": "  const index=entryTags.findIndex(value=>value.entryId===entry.id && value.tagId===tag!.id);\n  const assignment={entryId:entry.id,tagId:tag.id,facetId:facet.id};\n  if(index<0)entryTags.push(assignment);else entryTags[index]=assignment;"
-}

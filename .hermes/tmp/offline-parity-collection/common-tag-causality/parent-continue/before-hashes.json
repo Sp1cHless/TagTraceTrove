@@ -1,7 +1,0 @@
-{
-  "apps/web/src/offline/collection-common-tag.ts": "1615679db2233f5a0b43c750bb9a6b06716197e5e1c086e6059695cc47722f39",
-  "apps/web/src/offline/offline-api.ts": "c50dd8d26aea2bee49a43d2a307686e2c6ef1580cab961a7c54c3333e34afa3a",
-  "apps/web/src/offline/pending-work-restore.ts": "3be3a965fb4ec1b2ede862e8ae65d6801409461b0654416366716d510fe5546c",
-  "apps/web/src/offline/indexeddb-snapshot-store.ts": "da5194c02a5d3caea5e050f97ead73671ced08df1bc6ddedf774d2190df77d37",
-  "apps/web/tests/offline-collection-common-tag.integration.test.ts": "900f3a6024cc0fa893f43b83f1164b8c4ee7ce4c484f451f48bb11b99eeda009"
-}

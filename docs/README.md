@@ -3,9 +3,13 @@
 The documentation is organized into a small set of **board documents**, each owning one area, plus the manual plan.
 Everything a receiver needs lives in these files.
 
+**State rule:** the board documents express the **latest completed, accepted state only** — no pending,
+unverified or unfinished items. Intermediate state lives in the single git-ignored `WORKLOG.md` at the repository root
+(see `AGENTS.md` for the rule); the forward-looking user plan is `roadmap.md`.
+
 | Document | Board |
 | --- | --- |
-| [`status.md`](status.md) | Current implementation boundary, delivered surfaces, remaining work. **Read this first.** |
+| [`status.md`](status.md) | Current implemented state: delivered surfaces + Android/offline status. **Read this first.** |
 | [`architecture.md`](architecture.md) | Product/data model: Entry/Producer, Section→Facet layouts, Content, Ratings, Collections, Gallery/Author projections, search, partitions, navigation shell, i18n. |
 | [`database.md`](database.md) | SQLite boundary, the full migration inventory, test strategy, backup/restore, data-safety invariants. |
 | [`http-api.md`](http-api.md) | HTTP routes + the shared Zod contract boundary (families, query encoding, errors). |
@@ -15,15 +19,15 @@ Everything a receiver needs lives in these files.
 | [`ui-design.md`](ui-design.md) | Frontend board: design system, UX rules, shared cards, Home page, icons, sort controls, ARIA/motion/i18n, audit dispositions. |
 | [`siteprobe.md`](siteprobe.md) | The bundled SiteProbe crawler/builder: adapter contract, Builder pipeline, learned-rule semantics, generic limits, T³ integration. |
 | [`development.md`](development.md) | Runtime stack, commands, running modes, the tray launcher and packaging, Node pitfalls, verification discipline, repo layout. |
+| [`release-installation.md`](release-installation.md) | Release script, Windows/Android installation, safe updates, retained data and uninstall. |
 | [`roadmap.md`](roadmap.md) | **Forward-looking work only** — the manual plan. |
 
 Other artifacts in this folder:
 
-- [`siteprobe/siteprobe-execution-log.md`](siteprobe/siteprobe-execution-log.md) — the SiteProbe running execution log
-  (kept in place by explicit instruction; corrections are appended, never overwritten).
 - [`adr/README.md`](adr/README.md) — Architecture Decision Records placeholder.
 
-Retired status logs and design/plan documents are archived byte-identically under
+Retired status logs and design/plan documents — including the SiteProbe running execution log,
+whose durable conclusions now live in `siteprobe.md` §13 — are archived byte-identically under
 `.hermes/archive/docs-pre-consolidation/`.
 
 ## User-facing manual

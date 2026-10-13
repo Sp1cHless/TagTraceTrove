@@ -1,7 +1,0 @@
-{
-  "before": "65a9ab61cd8ee90bb5cdd44a79468686f7bed5aa6ad1766a9118dbd59784ac71",
-  "after": "9b7b948a65214f9478e6351a00ee54d931c86d29b22f8b2d48d666740ee5c133",
-  "anchorCount": 2,
-  "reason": "actual GalleryApi method is getEntry; unreachable assertion type-harness correction, not production change",
-  "lineEndingsPreserved": true
-}

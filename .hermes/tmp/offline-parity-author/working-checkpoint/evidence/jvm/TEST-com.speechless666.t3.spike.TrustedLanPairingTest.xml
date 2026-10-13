@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.speechless666.t3.spike.TrustedLanPairingTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-09T08:58:37.430Z" hostname="LAPTOP-70QV4MNN" time="0.005">
-  <properties/>
-  <testcase name="acceptsExplicitPrivateIpv4WithOptionalPort" classname="com.speechless666.t3.spike.TrustedLanPairingTest" time="0.004"/>
-  <testcase name="requiresNonemptyLibraryIdentity" classname="com.speechless666.t3.spike.TrustedLanPairingTest" time="0.001"/>
-  <testcase name="rejectsUnsafeOrAmbiguousEndpoints" classname="com.speechless666.t3.spike.TrustedLanPairingTest" time="0.0"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

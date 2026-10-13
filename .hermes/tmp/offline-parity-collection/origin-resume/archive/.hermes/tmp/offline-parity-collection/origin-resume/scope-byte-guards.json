@@ -1,9 +1,0 @@
-{
-  "offlineApiOutsideCollectionRegionsByteEqual": true,
-  "changedRegions": [
-    "Collection causal receipt predecessor validation",
-    "Collection delete singleflight and projected origin resolution"
-  ],
-  "sharedDependenciesUnchanged": true,
-  "ownedExpectedShaMatch": true
-}

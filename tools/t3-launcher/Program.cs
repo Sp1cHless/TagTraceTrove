@@ -14,15 +14,18 @@ namespace T3Launcher;
 /// </summary>
 internal static class Program
 {
-    private const string MutexName = "T3Launcher_TagTraceTrove_SingleInstance";
-    private const int Port = 8765;
+    private static string MutexName = "T3Launcher_TagTraceTrove_SingleInstance";
+    private static int Port = 8765;
+    private static int TlsPort = 8766;
+    private static string DisplayName = "T3";
+    private static string? ManagedDataDirectory;
     private static readonly string RepoRoot =
         AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
     private static readonly string ServerDir = Path.Combine(RepoRoot, "apps", "server");
-    private static readonly string TsxCmd = Path.Combine(ServerDir, "node_modules", ".bin", "tsx.cmd");
+    private static readonly string TsxEntry = Path.Combine(ServerDir, "node_modules", "tsx", "dist", "cli.mjs");
     private static readonly string WebIndex = Path.Combine(RepoRoot, "apps", "web", "dist", "index.html");
     private static readonly string ServerLog = Path.Combine(RepoRoot, "t3-server.log");
-    private static readonly string LocalUrl = $"http://127.0.0.1:{Port}";
+    private static string LocalUrl => $"http://127.0.0.1:{Port}";
 
     private static NotifyIcon? _tray;
     private static ToolStripMenuItem? _lanToggleItem;
@@ -41,7 +44,65 @@ internal static class Program
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
-        if (!File.Exists(TsxCmd) || !Directory.Exists(ServerDir))
+        // A distribution's first launch installs it; installed versions share a
+        // separate data directory so replacing program files cannot replace a library.
+        string installMarker = Path.Combine(RepoRoot, "installed.json");
+        if (File.Exists(Path.Combine(RepoRoot, "release-manifest.json")) && !File.Exists(installMarker))
+        {
+            string statePath = Path.Combine(RepoRoot, "installation.json");
+            if (File.Exists(statePath))
+            {
+                using var state = System.Text.Json.JsonDocument.Parse(File.ReadAllText(statePath));
+                using var release = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot, "release-manifest.json")));
+                string current = Path.GetFullPath(state.RootElement.GetProperty("currentDirectory").GetString()!);
+                if (state.RootElement.GetProperty("product").GetString() != "T3"
+                    || !current.StartsWith(Path.Combine(RepoRoot, "versions") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    MessageBox.Show("Invalid installation record.", "T3");
+                    return;
+                }
+                if (state.RootElement.GetProperty("version").GetString() == release.RootElement.GetProperty("version").GetString()
+                    && File.Exists(Path.Combine(current, "T3.exe")))
+                {
+                    var launch = new ProcessStartInfo(Path.Combine(current, "T3.exe")) { UseShellExecute = false, WorkingDirectory = current, CreateNoWindow = true };
+                    foreach (string argument in args) launch.ArgumentList.Add(argument);
+                    Process.Start(launch);
+                    return;
+                }
+            }
+            var setup = new ProcessStartInfo("powershell.exe")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            foreach (string value in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                Path.Combine(RepoRoot, "Install.ps1"), "-InstallRoot", RepoRoot, "-BootstrapPid", Environment.ProcessId.ToString(), "-Start" }) setup.ArgumentList.Add(value);
+            using var installer = Process.Start(setup);
+            installer?.WaitForExit();
+            if (installer == null || installer.ExitCode != 0)
+                MessageBox.Show("Installation failed. Run Install.cmd to see the error.", "T3");
+            return;
+        }
+        if (File.Exists(installMarker))
+        {
+            try { ReadInstalledProfile(installMarker); }
+            catch (Exception error)
+            {
+                MessageBox.Show("Invalid installation profile: " + error.Message, "T3", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+        }
+
+        if (args.Contains("--exit", StringComparer.OrdinalIgnoreCase))
+        {
+            if (EventWaitHandle.TryOpenExisting(MutexName + "_Exit", out var signal))
+            {
+                using (signal) { signal.Set(); }
+            }
+            return;
+        }
+
+        if (!File.Exists(TsxEntry) || !Directory.Exists(ServerDir))
         {
             MessageBox.Show(
                 "T3 files were not found next to this executable." + Environment.NewLine
@@ -52,19 +113,32 @@ internal static class Program
             return;
         }
 
-        if (IsPortOpen())
-        {
-            // The server is already running (tray instance or not): just open the UI.
-            OpenBrowser();
-            return;
-        }
-
         using var mutex = new Mutex(true, MutexName, out bool isFirstInstance);
         if (!isFirstInstance)
         {
             OpenBrowser();
             return;
         }
+        if (IsPortOpen())
+        {
+            // A managed installation must never silently open another library's listener.
+            if (ManagedDataDirectory != null)
+                MessageBox.Show($"Port {Port} is already in use. This library was not started.", DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            else OpenBrowser();
+            return;
+        }
+        if (ManagedDataDirectory != null && IsPortOpen(TlsPort))
+        {
+            MessageBox.Show($"Phone port {TlsPort} is already in use. This library was not started.", DisplayName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        // Each installed library has its own exit signal and owned process tree.
+        using var dispatcher = new Control();
+        _ = dispatcher.Handle;
+        using var exitSignal = new EventWaitHandle(false, EventResetMode.AutoReset, MutexName + "_Exit");
+        var exitWait = ThreadPool.RegisterWaitForSingleObject(exitSignal,
+            (_, _) => dispatcher.BeginInvoke(new Action(Application.Exit)), null, Timeout.Infinite, true);
 
         _tray = BuildTray();
         Application.ApplicationExit += (_, _) => StopServer();
@@ -104,6 +178,33 @@ internal static class Program
         }
 
         Application.Run();
+        exitWait.Unregister(null);
+    }
+
+    private static void ReadInstalledProfile(string marker)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(marker));
+        var profile = document.RootElement;
+        string root = Path.GetFullPath(profile.GetProperty("installRoot").GetString()!).TrimEnd(Path.DirectorySeparatorChar);
+        string data = Path.GetFullPath(profile.GetProperty("dataDirectory").GetString()!).TrimEnd(Path.DirectorySeparatorChar);
+        if (!RepoRoot.StartsWith(Path.Combine(root, "versions") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            || !data.Equals(Path.Combine(root, "data"), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Program and data must belong to this installation.");
+        for (string? path = data; path != null; path = Path.GetDirectoryName(path))
+            if (Directory.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException("Redirected data directories are not supported.");
+        Port = profile.TryGetProperty("port", out var port) ? port.GetInt32() : 8765;
+        TlsPort = profile.TryGetProperty("tlsPort", out var tlsPort) ? tlsPort.GetInt32() : 8766;
+        if (Port is < 1024 or > 65535 || TlsPort is < 1024 or > 65535 || Port == TlsPort)
+            throw new InvalidOperationException("Invalid instance ports.");
+        DisplayName = profile.TryGetProperty("displayName", out var name) ? name.GetString()! : "T3";
+        if (string.IsNullOrWhiteSpace(DisplayName) || DisplayName.Length > 28)
+            throw new InvalidOperationException("Invalid instance name.");
+        ManagedDataDirectory = data;
+        Environment.SetEnvironmentVariable("T3_DATA_DIR", data);
+        string identity = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(data.ToUpperInvariant())));
+        MutexName = "T3Launcher_TagTraceTrove_" + identity;
     }
 
     /// <summary>The icon compiled into this executable, which is T3's own artwork.</summary>
@@ -159,7 +260,7 @@ internal static class Program
             // The launcher's own artwork (the same one the exe carries), so the tray and the
             // taskbar cannot drift apart. Falls back to the system icon if it cannot be read.
             Icon = LauncherIcon() ?? SystemIcons.Application,
-            Text = "T3 - starting",
+            Text = DisplayName + " - starting",
             ContextMenuStrip = menu,
             Visible = true,
         };
@@ -225,7 +326,7 @@ internal static class Program
         }
         if (_tray != null)
         {
-            _tray.Text = _lanEnabled ? "T3 - LAN access enabled" : "T3 - localhost only";
+            _tray.Text = DisplayName + (_lanEnabled ? " - LAN access enabled" : " - localhost only");
         }
         RefreshMobileAddressMenu();
     }
@@ -361,15 +462,38 @@ internal static class Program
     {
         var start = new ProcessStartInfo
         {
-            FileName = "cmd.exe",
-            Arguments = "/c \"" + TsxCmd + "\" src\\http\\server-cli.ts",
+            FileName = _nodeExecutable!,
             WorkingDirectory = ServerDir,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
+        start.ArgumentList.Add(TsxEntry);
+        start.ArgumentList.Add("src/http/server-cli.ts");
+        start.Environment["T3_PORT"] = Port.ToString();
+        start.Environment["T3_TLS_PORT"] = TlsPort.ToString();
+        if (ManagedDataDirectory != null)
+        {
+            start.Environment["T3_DATA_DIR"] = ManagedDataDirectory;
+            start.Environment["T3_DB_NAME"] = "library.db";
+            start.Environment["T3_PAIRING_CONFIG_DIR"] = Path.Combine(ManagedDataDirectory, "private-authorization");
+            start.Environment["SITEPROBE_HOME"] = Path.Combine(ManagedDataDirectory, "siteprobe");
+            start.Environment["T3_SITEPROBE_TOOL"] = Path.Combine(RepoRoot, "siteprobe");
+            start.Environment["T3_STATIC_ROOT"] = Path.Combine(RepoRoot, "apps", "web", "dist");
+            start.Environment.Remove("T3_PAIRED_HOST");
+        }
         LauncherPolicy.PrependExecutableDirectory(start, _nodeExecutable!);
+        string openssl = Path.Combine(RepoRoot, "tools", "openssl");
+        if (Directory.Exists(openssl))
+        {
+            start.Environment["PATH"] = openssl + Path.PathSeparator + start.Environment["PATH"];
+            start.Environment["OPENSSL_CONF"] = Path.Combine(openssl, "openssl.cnf");
+        }
+        string python = Path.Combine(RepoRoot, "siteprobe", ".venv", "Scripts", "python.exe");
+        if (File.Exists(python)) start.Environment["SITEPROBE_PYTHON"] = python;
+        string browsers = Path.Combine(RepoRoot, "tools", "playwright");
+        if (Directory.Exists(browsers)) start.Environment["PLAYWRIGHT_BROWSERS_PATH"] = browsers;
         bool allowMobile = LauncherPolicy.AutoAllowMobileConnection(
             LauncherPolicy.SystemSettingsPath(ServerDir, Environment.GetEnvironmentVariable("T3_DATA_DIR")));
         if (!allowMobile)
@@ -429,12 +553,12 @@ internal static class Program
         return IsPortOpen();
     }
 
-    private static bool IsPortOpen()
+    private static bool IsPortOpen(int? requestedPort = null)
     {
         try
         {
             using var client = new TcpClient();
-            var task = client.ConnectAsync("127.0.0.1", Port);
+            var task = client.ConnectAsync("127.0.0.1", requestedPort ?? Port);
             return task.Wait(400) && client.Connected;
         }
         catch
@@ -472,7 +596,7 @@ internal static class Program
     private static void Notify(string text)
     {
         if (_tray == null) { return; }
-        _tray.BalloonTipTitle = "T3";
+        _tray.BalloonTipTitle = DisplayName;
         _tray.BalloonTipText = text;
         _tray.ShowBalloonTip(4000);
     }

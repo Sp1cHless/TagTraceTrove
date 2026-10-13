@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-10T09:30:09.111Z" hostname="LAPTOP-70QV4MNN" time="115.599">
-  <properties/>
-  <testcase name="g2" classname="com.speechless666.t3.spike.NativeEntryRatingDimensionJvmTest" time="115.599"/>
-  <system-out><![CDATA[CAP_CELLS 6 absent/false zeroPOST original retained recovery actualSQL; legacy optionalabsence NOT enriched and deletecap NOT universal
-]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

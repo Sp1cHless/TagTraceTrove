@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.speechless666.t3.spike.AppliedReceiptJvmTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-09T08:51:04.838Z" hostname="LAPTOP-70QV4MNN" time="2.354">
-  <properties/>
-  <testcase name="uuidDomainMatchesSharedUuidIncludingNilAndMax" classname="com.speechless666.t3.spike.AppliedReceiptJvmTest" time="2.324"/>
-  <testcase name="optionalApiIdIsGenericSafePositiveIntegerWithoutCoercion" classname="com.speechless666.t3.spike.AppliedReceiptJvmTest" time="0.03"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

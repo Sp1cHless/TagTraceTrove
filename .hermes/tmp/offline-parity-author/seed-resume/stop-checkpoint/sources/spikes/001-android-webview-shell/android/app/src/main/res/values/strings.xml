@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">T3 C0 Spike</string>
-    <string name="title_activity_main">T3 C0 Spike</string>
-    <string name="package_name">com.speechless666.t3.spike</string>
-    <string name="custom_url_scheme">com.speechless666.t3.spike</string>
-</resources>

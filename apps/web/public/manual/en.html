@@ -522,11 +522,9 @@ need the desktop server. The UI marks these <b>not available under offline</b> r
 persistence status (checked and requested automatically), and a <b>copyable full report</b> (cached capability flags, snapshot
 header and ACK, local intentions, media/outbox errors, native-transfer status). Paste that report when reporting a problem.</p>
 
-<h3>Pending work (export / restore)</h3>
-<p>Normally this is <b>transparent</b> — it syncs automatically on reconnect. Exporting/restoring a pending-work file is a diagnostic
-escape hatch for cases like moving to a new device: the export is a <b>private JSON</b> (not your library — just queued edits and
-staged images, capped at 96 MiB), and a restore writes back into the <b>pending queue only</b>. It never replaces your library and
-never sends anything.</p>
+<h3>Pending work</h3>
+<p>Pending work (queued edits and staged images) is <b>transparent</b>: it syncs automatically on reconnect, and there is
+no manual export/restore control in the UI.</p>
 <div class="note"><b>Cleanup only after landing</b>A queued operation is removed locally only once it is proven applied on the server
 (a newer snapshot covering its receipt). Cancelling a queued operation never quietly destroys data.</div>
 

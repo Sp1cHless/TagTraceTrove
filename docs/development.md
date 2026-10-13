@@ -96,10 +96,11 @@ allow localhost and loopback origins only by default.
 
 ### Critical launcher rules (hard-won)
 
-- ⚠ Both packaged entries start the server via the workspace-local **`tsx.cmd`**, NEVER `npm exec … pnpm start:server` —
+- The tray launcher starts the selected Node executable directly with the local **`tsx/dist/cli.mjs`** argument; `T3.bat`
+  uses the local `tsx.cmd`. Neither uses `npm exec … pnpm start:server` —
   the npm-exec chain hangs when double-clicked from Explorer (no TTY) and survives window close as orphan node processes;
   this was the real "connection refused" cause on 2026-09-03.
-- **Node runtime selection**: before starting `tsx.cmd`, both packaged entries probe project-local, Hermes, and PATH Node
+- **Node runtime selection**: before starting the server, both entries probe project-local, Hermes, and PATH Node
   runtimes by opening an in-memory `better-sqlite3` database, then give the compatible runtime PATH precedence — this
   prevents Explorer's newer system Node from loading an incompatible native module.
 - `T3.bat` writes `netstat` to a temporary file before applying one `/c:` `findstr` pattern; piping directly into a
@@ -157,9 +158,12 @@ the server yourself.
 
 ## 8. Build & release chain (offline/Android)
 
-The Android app and the desktop share the same web bundle. Preparation chain and identity checks (versionCode, marker,
-signer, packaged-web byte comparison) are documented in `mobile.md`. Release-signing decision (a stable release keystore
-vs. the current debug keystore) is an open roadmap item.
+The Android app and desktop share one Web build through `Release.bat` / `tools/release/release.ps1`.
+`release.json` owns the version and Android versionCode/signing identity. Windows ZIP includes the self-contained
+launcher and portable Node/Python/Chromium/OpenSSL dependencies. Installation keeps data separate from versioned
+programs, backs it up before updates and retains it during ordinary uninstall. Release key configuration is implemented.
+See `release-installation.md` for prerequisites and Windows/Android lifecycle instructions; broader clean-machine GUI
+acceptance is still separate from the isolated lifecycle/runtime check.
 
 ## 9. Repository layout
 

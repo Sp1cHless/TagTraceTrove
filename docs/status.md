@@ -1,10 +1,42 @@
-# T³ current status — implementation boundary and remaining work
+# T³ current status — implemented state
 
-> The live boundary a receiver reads first. Detailed boards: `architecture.md`, `database.md`, `http-api.md`,
-> `import-and-source.md`, `offline-sync.md`, `mobile.md`, `ui-design.md`, `siteprobe.md`, `development.md`.
-> Forward-looking work only lives in `roadmap.md`.
+> The live boundary a receiver reads first, stated as the **latest completed, accepted state only**.
+> Detailed boards: `architecture.md`, `database.md`, `http-api.md`, `import-and-source.md`,
+> `offline-sync.md`, `mobile.md`, `ui-design.md`, `siteprobe.md`, `development.md`.
+> The forward-looking user plan is `roadmap.md`; intermediate/not-yet-accepted state is kept in the
+> git-ignored `WORKLOG.md` (never part of this document).
 
 ## 1. Delivered product surface
+
+### Independent installed libraries (current 1.0.5, 2026-10-13)
+
+The current Demo location is **`D:/Project/T3-1.0.4-windows-x64/TagTraceTrove`**, running Release **1.0.5**. The outer
+directory keeps the user's original extraction name. The supplied 1.0.4 payload was moved into its `versions/1.0.4`
+slot; existing Demo data was copied and byte-verified before startup. The same library identity, content count and
+8785/8786 ports survived migration and a real extraction/merge update to 1.0.5. The former AppData installation was
+moved into this tree's `backups/previous-AppData-install-*`; it no longer exists at the old location. Main listeners
+kept their original PID. Evidence: this installation's `migration-check.json`.
+
+From 1.0.5, Windows ZIP has a fixed `TagTraceTrove` content directory. Default installation is in the extracted tree;
+program slots, data and backups remain within that installation. New-package `Install.ps1 -InstallRoot <existing root>`
+performs a backup and switches slots. A root-level EXE also installs an extracted/merged newer payload into its own
+tree; reopening the same root hands off to the current program without repeating installation or creating a backup.
+The package/bootstrap/update path above passed the focused migration check on the user's Windows computer.
+
+The Release installer supports stable per-installation HTTP/TLS ports and named shortcuts. Managed launchers bind
+data, pairing files, SiteProbe home and static resources to their own installation; their single-instance mutex and
+exit signal derive from the data path. Reopening an instance reuses only that instance; occupied foreign ports are
+rejected. Updates inherit the instance identity and ports and create a full backup within that installation.
+
+Before the migration above, installed and checked `T3 Demo` at `%LOCALAPPDATA%/T3-Demo`, HTTP 8785 / TLS 8786, using the actual 1.0.4 Release
+executable and packaged runtime. Blank initial Entry query, independent pairing/shortcut, repeated launch, stop,
+same-version reinstall with retained data/backup, and restart identity passed. Existing main listeners on 8765/8766
+retained their original PID throughout. That location has since been retired as described above. Evidence: the preserved installation's `isolation-check.json`.
+Instructions are in `release-installation.md`.
+
+1.0.4 artifact identity: Android code 104, unchanged application ID/Release signer, non-debuggable build. APK SHA256
+`ee4b238659ee2cc8f8fe78426df1779d8c2107888b2caa5c8959a29e0d3b1105`; Windows ZIP SHA256
+`0674848a826389e4c86841cb9dfeb9f5908408362e46b2213443ba0d86ee7d19`. The measured instance behavior above is Windows.
 
 Everything in the current scope is implemented, tested and accepted on the desktop/server side:
 
@@ -15,13 +47,17 @@ Everything in the current scope is implemented, tested and accepted on the deskt
 - Shared server + web packages: `apps/server`, `apps/web`, `packages/shared`, plus the `siteprobe` Python tool and the
   C# tray launcher `T3.exe`.
 - Offline library / sync / replay: read-only snapshot, capability-gated offline mutations, an outbox with causal
-  ordering, idempotent replay, media replay, and the desktop System page. Full detail and the remaining gaps are in
+  ordering, idempotent replay, media replay, and the desktop System page. Full detail is in
   `offline-sync.md`.
 
 ## 2. Android / offline device status
 
 The Android shell (Capacitor WebView over the same web bundle) has a deep history of measured device acceptance. The
-latest packaged line is **v49 (`0.0.49-c3-offline-parity`)**, built through a diagnostic series up to **r25**.
+**current formal release is 1.0.5**, Android versionCode **105**, with the same application ID and Release signer.
+On 2026-10-13 the user confirmed that mobile acceptance for the 1.0 formal release is complete. This records user
+acceptance; the older per-build measured device results below remain their original historical records.
+Before the formal release line, the offline-parity line was
+**v49 (`0.0.49-c3-offline-parity`)**, built through a diagnostic series up to **r25**.
 
 - **r25 (2026-10-12)** — USB testing exposed three settlement defects (full-snapshot fallback lacked a reacquired durable
   ACK for tag-layout apply; older accepted cover uploads were incorrectly required to survive later cover replacements;
@@ -41,8 +77,8 @@ latest packaged line is **v49 (`0.0.49-c3-offline-parity`)**, built through a di
 - **r16–r20** — offline tag/layout chains (B10 `stable Facet identity is missing` + six isolated failures repaired),
   local final-state (editable drafts vs immutable submissions, `local-final-state.ts`), retained-media and cache fixes.
 
-See `mobile.md` §8 for the full recorded device-pass table and the checklists, and `offline-sync.md` §9–10 for the
-settlement fixes and remaining gaps.
+See `mobile.md` §8 for the full recorded device-pass table, and `offline-sync.md` §9 for the
+settlement fixes and §10 for the by-design scope boundaries.
 
 ## 2b. Android 1.0.0 release configuration (2026-10-12)
 
@@ -59,8 +95,6 @@ No minification or unrelated runtime behavior changed.
 - Focused release build/identity verification passed: signature, label/version, absence of the debuggable flag, and all
   15 packaged Web files. Manifest `.hermes/artifacts/android-release-1.0.0.json`; key lifecycle / build instructions
   `spikes/001-android-webview-shell/RELEASE.md`.
-- **Not installed or published.** The formal APK cannot directly replace the old debug-signed r25. Existing phone data
-  remains intact. A complete desktop/APK release pipeline and migration/device acceptance remain separate work.
 
 ## 3. Historical release artifacts (frozen build evidence)
 
@@ -72,31 +106,31 @@ No minification or unrelated runtime behavior changed.
 | v46 | `0.0.46-c3-transport-latency` | Native transport latency (openEntry 581 ms → ~130 ms); symptom 2 not reproduced. |
 | v47 | icons + boot screen | Two source drawings → all sizes; inline boot screen; starting language follows device. |
 | v48 | `0.0.48-c3-cjk-ui-text` | LXGW WenKai app font (Han-only `unicode-range`), Chinese copy pass. |
-| v49 | `0.0.49-c3-offline-parity` | Offline parity lanes 01–12; current line, diagnostic up to r25. |
+| v49 | `0.0.49-c3-offline-parity` | Offline parity lanes 01–12; the prior line, superseded by the 1.0.0 release, diagnostic up to r25. |
+| 1.0.1 | `T3-1.0.1.apk` | Formal release line. APK SHA256 `1a5cd46fed16cd504fb53a0312cbbef80c534953e3b5431715d7a19f5e523ebb`; installed on the device. |
+| 1.0.2 | `T3-1.0.2.apk` | Gallery filter-bar mobile layout: a row's × stays on its first line (long Facet/tag names ellipsise), the Authors row is one line, the head's label and toggle share a line. APK SHA256 `0f8dc3c04d700b2d78ca0e82826a657bfd14cc4c30d5d6445bf37d248c72fb3d`, signer `62916b23…fbb13`; cover-installed over 1.0.1 with data preserved and device-verified (`mobile.md` §8). |
+| 1.0.3 | `T3-1.0.3.apk` | Same bar, every row on one line: the rating row's three selects divide the line (a native select no longer sizes to its longest option), the Facet row's tag input shares its line, and a wrapped row's × aligns with the first line. APK SHA256 `0dad307638715bd521d0123f3d610a0190f00cfd1847e5d2ca28e6831338104a`, signer `62916b23…fbb13`; cover-installed over 1.0.2 with data preserved and device-verified (`mobile.md` §8). |
+| 1.0.5 | `T3-1.0.5.apk` | Current formal artifact, Android code 105. APK SHA256 `2bf0d8a18baa8846aba726f9d5e96075f811749623caa1ffa299ba54ac0dde16`; unchanged Release signer and non-debuggable identity verified. Mobile acceptance for the 1.0 release confirmed by the user on 2026-10-13 (`mobile.md` §8). |
 
-The signer certificate has been identical across the v43–v49 chain and those builds used the **debug keystore**. A
-dedicated release key now exists (§2b), so the remaining decision is the migration/rollback path from a debug-signed
-install to the release-signed 1.0.0 (the two cannot replace each other in place).
+Current Windows ZIP: `T3-1.0.5-windows-x64.zip`, SHA256
+`1d7f7a43d4b8973bf2e75c78fec4ddac6490ed5344cef13355c52a09c4022ec4`. The 2026-10-13 focused publication check
+verified all six published checksums, the APK identity/signature/non-debuggable flag, fixed ZIP directory and the
+absence of personal-data/signing paths. Runtime inputs matched the package's source fingerprint using the packaging
+script's Windows PowerShell 5.1, before the subsequent documentation-only correction of the uninstall path.
+See `release-installation.md` for the correction to the unchanged 1.0.5 bundled installation guide.
 
-## 4. Remaining implementation / release work
+The signer certificate has been identical across the v43–v49 chain; those builds used the **debug keystore**. A
+dedicated release key now exists (§2b). The 1.0.1–1.0.5 line is signed with that release key, so the two chains cannot
+upgrade into each other in place.
 
-- Offline: exhaustive gestures / background lifecycle still unverified; the change-feed ack is deliberately withheld until
-  complete snapshot/journal parity; incremental client materialization and atomic local cursor activation remain TODO.
-- Offline: some pending vocabularies (new Tag / Facet creation) remain unfinished; several delete/merge operations stay
-  online-only by design.
-- Release: the 1.0.0 signed APK exists but is neither installed nor published; a full desktop/APK release pipeline and the
-  debug→release signing migration path remain.
-- Formal deployment needs separate authorization and a safe backup/migration/assets integration (never operate the
-  formal library by default).
-
-## 5. Not a core-plan gap
+## 4. Not a core-plan gap
 
 Existing-media replacement (including occupied-cover offline replacement), new Gallery/type, destructive subject
 delete/merge, taxonomy/templates, and Import/Source batch are **online-only** by design and are not counted as missing
 offline coverage. A fine-grained local conflict editor, an optional pure-browser PWA, a resident/auto-start service, and
 continuing tasks after force-stop are neither delivered nor required defaults.
 
-## 6. Working agreements that still govern changes
+## 5. Working agreements that still govern changes
 
 - One writer per file; targeted patches only; full-byte backups with SHA guards for large/whole-file transformations.
 - Never touch the formal `apps/server/.data/library.db` or `assets/` without explicit authorization.

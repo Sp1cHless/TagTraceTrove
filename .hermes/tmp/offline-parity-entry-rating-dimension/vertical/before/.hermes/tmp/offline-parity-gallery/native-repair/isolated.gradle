@@ -1,8 +1,0 @@
-def isolatedRoot = new File(System.getenv('T3_NATIVE_TEST_OUTPUT')).canonicalFile
-gradle.beforeProject { p -> p.layout.buildDirectory.set(new File(isolatedRoot, p.path == ':' ? 'root' : p.path.substring(1).replace(':','_'))) }
-gradle.projectsEvaluated { gradle.rootProject.allprojects { p ->
- def actual=p.layout.buildDirectory.get().asFile.canonicalFile
- if(!actual.toPath().startsWith(isolatedRoot.toPath()))throw new GradleException('Non-isolated '+p.path)
- println('ISOLATED_OUTPUT '+p.path+' '+actual)
- p.tasks.withType(Test).configureEach { maxParallelForks=1; forkEvery=1 }
-} }

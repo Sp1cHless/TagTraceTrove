@@ -19,6 +19,7 @@ coverage/
 .DS_Store
 # Import-commit scratch database (holds a library copy during CLI commits)
 /.tmp-commit/
+/.releases/
 # T3 tray launcher (repo-root copy + build artifacts)
 /T3.exe
 /T3.runtimeconfig.json
@@ -28,3 +29,15 @@ tools/t3-launcher/obj/
 tools/t3-launcher/dist/
 tools/t3-launcher/**/bin/
 tools/t3-launcher/**/obj/
+# AI agent workspaces — tool/agent scratch, not project source. Kept locally only.
+/.hermes/
+/.zcode/
+# Intermediate / not-yet-accepted state (single file; never uploaded). See AGENTS.md.
+/WORKLOG.md
+# Python caches
+__pycache__/
+.pytest_cache/
+# Server-side temporary verification data directories
+/apps/server/.tmp-*/
+# Windows stray file from a mistyped shell redirect (`>nul`)
+/nul

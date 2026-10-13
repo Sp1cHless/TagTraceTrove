@@ -72,28 +72,34 @@ export async function startMediaPreload(options: {
       || !Array.isArray(candidate.selectedRefs)
       || !candidate.selectedRefs.every((ref) => typeof ref === 'string')) return null;
     const choice = candidate as Choice;
-    const active = await readActiveSnapshot(options.store);
-    if (!active) return null;
     const token = revision;
-    const { snapshot } = active;
-    const generation = await options.store.readMeta(ACTIVE_GENERATION_KEY);
-    // The generation pointer is the whole test: switching library, clearing the
-    // copy and saving a fresh one all move it, while rebuilding the snapshot here
-    // would re-parse the entire library for every media reference — which is what
-    // made the walk crawl through thousands of images before caching any.
-    const isCurrent = async () => revision === token
-      && await options.store.readMeta(KEY) === raw
-      && await options.store.readMeta(ACTIVE_GENERATION_KEY) === generation;
-    const refs = choice.mode === 'metadata' ? [] : choice.mode === 'thumbnails'
-      ? snapshot.payload.mediaRefs
-      : (choice.selectedRefs ?? []).filter((ref) => snapshot.payload.mediaRefs.includes(ref));
-    if (!await isCurrent()) return null;
-    return cacheSnapshotMedia(refs, {
-      assetUrl: options.assetUrl, cacheStorage: options.cacheStorage,
-      ...(options.fetcher ? { fetcher: options.fetcher } : {}),
-      originals: choice.mode === 'selected-originals', isCurrent, concurrency: 1,
-      ...(options.onProgress ? { onProgress: options.onProgress } : {}),
-    });
+    const choiceIsCurrent = async (): Promise<boolean> => revision === token
+      && await options.store.readMeta(KEY) === raw;
+    while (await choiceIsCurrent()) {
+      const active = await readActiveSnapshot(options.store);
+      if (!active) return null;
+      const { snapshot } = active;
+      const generation = String(active.generationId);
+      // The generation pointer is the whole per-reference test: rebuilding the
+      // snapshot here would re-parse the entire library for every media item.
+      const isCurrent = async () => await choiceIsCurrent()
+        && await options.store.readMeta(ACTIVE_GENERATION_KEY) === generation;
+      const refs = choice.mode === 'metadata' ? [] : choice.mode === 'thumbnails'
+        ? snapshot.payload.mediaRefs
+        : (choice.selectedRefs ?? []).filter((ref) => snapshot.payload.mediaRefs.includes(ref));
+      if (!await isCurrent()) continue;
+      const result = await cacheSnapshotMedia(refs, {
+        assetUrl: options.assetUrl, cacheStorage: options.cacheStorage,
+        ...(options.fetcher ? { fetcher: options.fetcher } : {}),
+        originals: choice.mode === 'selected-originals', isCurrent, concurrency: 1,
+        ...(options.onProgress ? { onProgress: options.onProgress } : {}),
+      });
+      if (await isCurrent()) return result;
+      // Reconnect can install a newer generation while this task is walking the
+      // cache. Keep the same user choice and restart against that generation;
+      // already written bytes are skipped. A changed/cleared choice still exits.
+    }
+    return null;
   };
   const task = work();
   running = task;

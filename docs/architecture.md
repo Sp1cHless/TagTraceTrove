@@ -136,8 +136,9 @@ Each repository owns one concern; routes and the UI never touch SQLite directly.
   assignments without deleting the vocabulary Tag, aggregates per-type Tag usage, filters Entry summaries, applies one
   Entry's tag→Facet placement to every other Entry of the same type (`applyEntryTagLayout`), serves the Gallery facet
   filter, and owns the bounded Entry-summary query used for Gallery pages, ID-backed lists, Entry Tag results, Recently
-  viewed, random samples, and ranked Entry search pages. Legacy full-list readers remain during the composite-page
-  migration.
+  viewed, random samples, and ranked Entry search pages. The full-array Entry list/browse readers
+  are retired — every one of those surfaces uses the bounded query; only the Producer full-list
+  route remains (editor autocomplete).
 - `search-ranking.ts` — the shared lightweight relevance layer for global search: normalized exact/prefix/substring
   ordering plus bounded edit-distance matching without SQL wildcard interpretation.
 - `suggestion-repository.ts` — the separate Relation autocomplete read model. Applies strict normalized full-query
@@ -220,7 +221,7 @@ create, update, or delete a separate Gallery record.
 
 - Sidebar Gallery order is a stored, library-wide revision (`036_gallery_order.sql` + `037_gallery_order_sync.sql`);
   it is a library-wide order vector, not a Gallery row.
-- The first server-scaling vertical slice is active for Gallery browsing: deterministic date/title sorts and all existing
+- Gallery browsing is fully server-paged: deterministic date/title sorts and all existing
   Facet/Author/Rating/Usage filters call `POST /api/entries/query`; SQLite returns only the measured card page plus the
   filtered total.
 - `PagedCardGrid` has a controlled mode that renders an already-bounded page without slicing it, emits page/page-size

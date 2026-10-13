@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.speechless666.t3.spike.NativeGalleryRepairJvmTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-10T08:27:07.602Z" hostname="LAPTOP-70QV4MNN" time="19.15">
-  <properties/>
-  <testcase name="g4" classname="com.speechless666.t3.spike.NativeGalleryRepairJvmTest" time="19.15"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

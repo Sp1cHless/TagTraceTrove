@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.speechless666.t3.spike.DurationAuthorPlanJvmTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-09T08:53:12.807Z" hostname="LAPTOP-70QV4MNN" time="4.133">
-  <properties/>
-  <testcase name="coldLedgerRetainsExactOriginalAndRejectsCapabilityStrippedPlan" classname="com.speechless666.t3.spike.DurationAuthorPlanJvmTest" time="4.078"/>
-  <testcase name="dynamicFlagsMatchForegroundOrderAndLegacyAbsence" classname="com.speechless666.t3.spike.DurationAuthorPlanJvmTest" time="0.029"/>
-  <testcase name="extensionCreateCannotUseLegacyUnplannedBypass" classname="com.speechless666.t3.spike.DurationAuthorPlanJvmTest" time="0.026"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

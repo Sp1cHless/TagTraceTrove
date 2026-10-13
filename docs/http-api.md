@@ -28,7 +28,7 @@ route-local DTOs. `packages/shared/src/schemas/suggestions.ts` holds the Relatio
 
 ### Contract families
 
-- **Entry**: create, partial update, record, complete detail, legacy full-list/tag-filtered summaries, and bounded SQL pages.
+- **Entry**: create, partial update, record, complete detail, and bounded SQL pages. (The full-array Entry list and tag-filtered summary contracts are retired.)
 - **Layout**: create Section/Facet, rename/reorder groups, and ordered layout responses.
 - **Entry Tags**: assign, move, list assignment, per-type usage counts, and include/exclude filters.
 - **Entry Content**: create, partial update, record, and complete-list reorder.
@@ -67,7 +67,8 @@ filter body and adds optional source constraints: `entryType`, `entryIds`, `incl
   generic sort. Upload-date nulls retain the old Gallery behavior (last under descending, first under ascending). Title
   ordering is deterministic SQLite `NOCASE` ordering with `id` tie-breaks.
 
-The old full-array endpoints remain compatible for consumers not yet converted. Random works use one bounded server sample
+The full-array Entry browse/filter routes are retired; every list surface uses the bounded query. Only the legacy
+full Producer list remains, for editor autocomplete. Random works use one bounded server sample
 and keep that returned set in the page state; `source-order` lets ID-backed lists avoid loading every Gallery. Entry search
 preserves the established ranked search implementation on the server and slices only the requested result page before
 crossing the HTTP boundary.

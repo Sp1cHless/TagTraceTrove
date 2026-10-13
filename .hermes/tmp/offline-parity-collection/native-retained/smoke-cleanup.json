@@ -1,7 +1,0 @@
-{
-  "removed": [
-    "C:\\Users\\hzy\\AppData\\Local\\Temp\\t3-db-test-WmHo7d",
-    "C:\\Users\\hzy\\AppData\\Local\\Temp\\t3-c03-TBzUmH"
-  ],
-  "priorHarnessError": "WinError32: sqlite Python context manager commits but does not close; process exit released read-only inspection handle. Identified smoke DB by timestamp and exact seeded rows."
-}
