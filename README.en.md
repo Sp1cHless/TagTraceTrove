@@ -16,6 +16,8 @@
 >
 > Have you struggled to add precise tags and reviews to works you've seen, even resorting to a separate text file to record your thoughts?
 >
+> Do you get lost in complicated English tags from sites around the world and the many kana or romanized names Japanese authors use, and wish you could unify all that information?
+>
 > Have you tried building your own library in a personal database tool like Notion, only to give up because organizing and importing everything felt too cumbersome?
 
 I've faced these exact same problems. That's how **T³ (TagTraceTrove)** came to be.
@@ -42,6 +44,22 @@ Group related categories into sections and arrange the tag layout on work pages 
 
 Combine tags, authors, and rating conditions to narrow down your collection. For example, find a particular author's series, then show only works with a "Story" rating above 3 stars.
 To find something by name, use global search for works, authors, or tags.
+
+### 🔤 Unify tags and author names
+
+In Advanced functions, you can manually map tags from other languages to Chinese, unify synonymous tags across languages and spellings, and merge several tags into one.
+For example, map `school life` to "校园生活" so information from different sources uses the Chinese tags you're familiar with.
+
+An author's different names can also be unified under one name, bringing their works together. Once you set up aliases, those recorded spellings resolve to the same author when you import works or select an author.
+This is especially useful for Japanese authors who use kana, kanji, and romanized names: works collected across websites can all link to one author profile.
+
+### 🧩 Share a tag layout template across a whole gallery
+
+Works in the same gallery share a tag layout template. Adjust sections and tag categories in any work's editor and save them as a template. Use "Apply tag layout" to sync tag locations to other works in that gallery.
+The Gallery templates page in Advanced functions lets you review each gallery's template and tag layout in one place.
+
+For example, move the "青春" (Youth) tag from the "分类" (Categories) section to "内容" (Content) in one work, then apply its tag layout. Other works in that gallery that already have "青春" will use the new location too.
+Organize it once to keep tag placement consistent throughout the gallery.
 
 ### ⭐ Rate several aspects and record what you liked
 
