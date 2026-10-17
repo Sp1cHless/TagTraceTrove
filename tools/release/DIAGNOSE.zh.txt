@@ -1,0 +1,15 @@
+T3 电脑端启动诊断（无需先打开 EXE）
+
+1. 把 Diagnose.cmd 和 Diagnose.ps1 放到 T3.exe 所在的文件夹。
+2. 双击 Diagnose.cmd。无需管理员权限；不需要先运行 T3.exe 或安装 .NET。
+3. 窗口会显示 Checking 和当前阶段。Verifying every release file hash 阶段会检查包内全部文件，慢盘可能需要较久，请保留窗口。等待 REPORT SAVED 后，按显示的完整路径找报告：通常在同目录，不能写入时会改存桌面或临时目录。
+4. 把生成的 T3-startup-diagnostics-日期时间.txt 发回，并说明双击 EXE 时是否有弹窗、托盘是否有图标。
+
+诊断会检查 Windows 版本/位数、临时目录写权限、安装记录、解压文件缺失、关键文件哈希、内置 Node 和原生模块、端口占用、Windows 崩溃/安全记录与已有日志。还会调用原包 lifecycle.ps1 中的只读安装检查函数，核对全部文件的哈希、重解析路径、安装路径长度与 WMI/进程状态，并报告第一条检查失败原因。只加载函数，不运行 Install.ps1，不写快捷方式。
+它不启动 T3、安装器或资料库服务，不读取资料库内容和配对密钥。依赖测试只使用内存中的临时数据库。
+它不自动解除 Windows 拦截、不改防火墙、不安装依赖、不清空资料、不重装应用。报告可能包含本机路径和已有日志，请发给处理本次反馈的人。
+
+如果 Diagnose.cmd 也无法运行，请保留系统提示。此时需要根据 Windows 的拦截/执行限制处理，而不是从应用内找日志。
+
+可选：在诊断文件所在目录的终端运行：
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Diagnose.ps1 -Root "D:\实际的T3目录"

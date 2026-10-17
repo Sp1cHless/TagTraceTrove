@@ -56,6 +56,8 @@ interface FilterRow {
 const props = defineProps<{
   options: FacetFilterOptions;
   modelValue: GalleryFacetFilters;
+  /** Render a disabled shell while options arrive; it reserves the default bar's space. */
+  loading?: boolean;
   /** Author page mode: hide the Authors row (the author is fixed already). */
   hideAuthors?: boolean;
 }>();
@@ -472,13 +474,15 @@ function onBarPointerDown(event: PointerEvent): void {
 </script>
 
 <template>
-  <div
+  <fieldset
     class="facet-filter-bar"
     data-testid="facet-filter-bar"
+    :disabled="loading"
+    :aria-busy="loading === true"
     @pointerdown="onBarPointerDown"
   >
     <div class="facet-filter-bar__head">
-      <span class="facet-filter-bar__label">{{ t('filter.label') }}</span>
+      <span class="facet-filter-bar__label" :role="loading ? 'status' : undefined">{{ t(loading ? 'gallery.loading' : 'filter.label') }}</span>
       <div class="facet-filter-bar__head-actions">
         <button
           class="filter-action mobile-filter-toggle"
@@ -705,7 +709,7 @@ function onBarPointerDown(event: PointerEvent): void {
           + {{ t('filter.authors') }}
         </button>
         <button
-          v-if="props.options.ratingSlots.length > 0"
+          v-if="loading || props.options.ratingSlots.length > 0"
           class="filter-action"
           type="button"
           data-testid="add-rating-filter"
@@ -729,7 +733,7 @@ function onBarPointerDown(event: PointerEvent): void {
             <option value="likes">{{ t('filter.usageLikes') }} ↓</option>
           </select>
         </label>
-        <label v-if="props.options.ratingSlots.length > 0" class="rating-sort-control">
+        <label v-if="loading || props.options.ratingSlots.length > 0" class="rating-sort-control">
           <span class="filter-note">{{ t('filter.sortByRating') }}</span>
           <select
             class="filter-select t3-library-text"
@@ -746,11 +750,13 @@ function onBarPointerDown(event: PointerEvent): void {
       </div>
     </div>
     </div>
-  </div>
+  </fieldset>
 </template>
 
 <style scoped>
 .facet-filter-bar {
+  margin: 0;
+  min-width: 0;
   display: grid;
   gap: 0.5rem;
   padding: 0.7rem 0.75rem;

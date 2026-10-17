@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { entryCardMediaRef, entryStackLayerStyle, entryStackLayers } from '../entry-media-stack.js';
 import { useI18n } from '../i18n.js';
+import CardCoverFallback from './CardCoverFallback.vue';
 import LazyCardImage from './LazyCardImage.vue';
 
 /**
@@ -14,6 +15,8 @@ export interface EntryCardEntry {
   type: string;
   coverRef: string | null;
   previewRefs: readonly string[];
+  /** What the cover slot shows when there is no image; the server picks it per work. */
+  coverText?: string | null | undefined;
 }
 
 const props = defineProps<{
@@ -51,7 +54,7 @@ interface GalleryApiLike {
           decoding="async"
         />
         <span v-if="entryStackLayers(entry).length === 0" class="entry-placeholder t3-library-text" aria-hidden="true">
-          {{ entry.title.slice(0, 1).toUpperCase() }}
+          <CardCoverFallback :title="entry.title" :text="entry.coverText" />
         </span>
       </div>
       <span class="entry-meta">

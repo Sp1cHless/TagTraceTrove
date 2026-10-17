@@ -279,10 +279,10 @@ substring matches, followed by the equivalent alias classes, context usage, tota
 - Entry Tag aliases use only the Entry vocabulary; Producer Tag aliases exclude the `authors` partition; Author identity
   suggestions use only that partition and include Authors with no linked works.
 - `includeNsfw=false` puts Tag suggestions inside the same visibility boundary as everything else: a tag whose every
-  assignment sits in an NSFW Gallery (or, for the Producer vocabulary, on an Author whose works are all in NSFW
+  assignment sits in a hideable Gallery (or, for the Producer vocabulary, on an Author whose works are all in hideable
   Galleries) is not offered. A tag nothing carries is never offered at all, in either mode.
-- Clients pass `false` for a subject whose own partition is SFW (the Entry editor uses its Gallery, the Author editor the
-  Author's derived state) and the Show NSFW switch only where no single subject is being edited.
+- Clients pass `false` for a subject whose own partition is not hideable (the Entry editor uses its Gallery, the Author editor the
+  Author's derived state) and the **Show hideable galleries** switch only where no single subject is being edited.
 - Responses are strict lightweight `{ id, name, matchedAlias?, sameContextUsageCount, totalUsageCount }[]` capped at 20.
   No migration or write is involved.
 
@@ -300,6 +300,12 @@ name resolution — the Advanced editing page lists placeholders with a one-clic
 `POST /api/taxonomy-aliases` upserts a single row and rejects an empty canonical for hand entry;
 `POST /api/taxonomy-aliases/import` bulk-imports parsed dictionary rows (placeholders allowed) and never downgrades an
 already-filled mapping to a placeholder.
+
+The current Tags page asks for `includeTags=1` and reads a catalog derived from the Entry tag vocabulary plus these
+stored mappings. Tags created by new works therefore appear immediately as unmapped; translating them inserts an alias
+mapping rather than requiring a site dictionary file first. The visible groups are unmapped and mapped, independent of
+the historical partition labels. A catalog row carries `tagId`; its delete-tag action removes that library tag after
+confirmation. A stored alias row instead offers removal of the mapping. Author identity aliases remain on Authors.
 
 **Unassigned Entry tag cleanup.** `GET /api/tags/unassigned` returns one group per Entry type that still has tags sitting
 in the type's unnamed default Facet ("未分类"). Each group carries the type's named Facets (the valid move targets) and

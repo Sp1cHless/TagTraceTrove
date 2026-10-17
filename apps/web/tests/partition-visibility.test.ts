@@ -52,7 +52,7 @@ beforeEach(() => {
 });
 
 describe('whole-Gallery partition visibility outside Gallery pages', () => {
-  it('hides NSFW Gallery tabs and entries from Recently viewed', async () => {
+  it('hides hideable Gallery tabs and entries from Recently viewed', async () => {
     const wrapper = mount(RecentViewPage, { props: { api: apiStub({}) } });
     await flushPromises();
 
@@ -62,7 +62,7 @@ describe('whole-Gallery partition visibility outside Gallery pages', () => {
     expect(wrapper.text()).not.toContain('Adult Work');
   });
 
-  it('hides NSFW works and their Gallery tab from View later', async () => {
+  it('hides hideable works and their Gallery tab from View later', async () => {
     viewLaterIds.value = [1, 2];
     const wrapper = mount(ViewLaterPage, { props: { api: apiStub({}) } });
     await flushPromises();
@@ -74,7 +74,7 @@ describe('whole-Gallery partition visibility outside Gallery pages', () => {
     expect(wrapper.text()).not.toContain('Adult Work');
   });
 
-  it('reveals the NSFW View later tab and its works as soon as Show NSFW is turned on', async () => {
+  it('reveals the hideable View later tab and its works as soon as show-hideable is turned on', async () => {
     viewLaterIds.value = [1, 2];
     const wrapper = mount(ViewLaterPage, { props: { api: apiStub({}) } });
     await flushPromises();
@@ -90,7 +90,7 @@ describe('whole-Gallery partition visibility outside Gallery pages', () => {
     expect(wrapper.text()).toContain('Adult Work');
   });
 
-  it('hides entries from NSFW Galleries inside an SFW Collection', async () => {
+  it('hides entries from hideable Galleries inside a visible Collection', async () => {
     const collection: CollectionRecordDto = {
       id: 10,
       kind: 'entry',
@@ -121,7 +121,7 @@ describe('whole-Gallery partition visibility outside Gallery pages', () => {
     expect(wrapper.text()).not.toContain('Adult Work');
   });
 
-  it('closes an active NSFW Collection when Show NSFW is turned off', async () => {
+  it('closes an active hideable Collection when show-hideable is turned off', async () => {
     showNsfw.value = true;
     const collection: CollectionRecordDto = {
       id: 11,
@@ -149,7 +149,7 @@ describe('whole-Gallery partition visibility outside Gallery pages', () => {
     expect(wrapper.text()).not.toContain('Private shelf');
   });
 
-  it('clears an already dealt NSFW work when Show NSFW is turned off', async () => {
+  it('clears an already dealt hideable work when show-hideable is turned off', async () => {
     showNsfw.value = true;
     const wrapper = mount(RandomPage, { props: { api: apiStub({
       listFacetFilterOptions: async () => ({ entryType: 'safe', facets: [], allTags: [], authors: [], ratingSlots: [] }),
@@ -166,7 +166,7 @@ describe('whole-Gallery partition visibility outside Gallery pages', () => {
     expect(wrapper.text()).not.toContain('Adult Work');
   });
 
-  it('ignores an NSFW random result from an older in-flight deal', async () => {
+  it('ignores a hideable random result from an older in-flight deal', async () => {
     showNsfw.value = true;
     let resolveAdult: ((page: { items: GalleryEntrySummary[]; total: number; page: number; pageSize: number }) => void) | undefined;
     const pendingAdult = new Promise<{ items: GalleryEntrySummary[]; total: number; page: number; pageSize: number }>((resolve) => { resolveAdult = resolve; });
@@ -189,7 +189,7 @@ describe('whole-Gallery partition visibility outside Gallery pages', () => {
     expect(wrapper.text()).not.toContain('Adult Work');
   });
 
-  it('removes NSFW Authors from Random pick', async () => {
+  it('removes hideable Authors from Random pick', async () => {
     const authors: GalleryAuthorSummary[] = [
       { id: 1, name: 'Safe Author', covers: [], galleryType: 'safe', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: false },
       { id: 2, name: 'Adult Author', covers: [], galleryType: 'adult', viewCount: 0, likeCount: 0, lastViewedAt: null, nsfw: true },

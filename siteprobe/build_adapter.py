@@ -29,7 +29,7 @@ from src.builder.capture import Capture, captured_nothing, capture_browser, capt
 from src.generic import unknown_url
 from src.builder.harvest import Harvest, harvest, joined_value
 from src.builder.learn import apply_to, draft_site_json, learn_for_runtime, load_session
-from src.builder.roundtrip import (compare, format_probe_report, install, probe_draft,
+from src.builder.roundtrip import (compare_latest, format_probe_report, install, probe_draft,
                                    unnameable_targets)
 from src.builder.session_server import Session, serve
 from src.generic import diagnostics as diag
@@ -81,11 +81,13 @@ def one_sample(url: str, label: str, *, browser: bool, references: list[Path],
     # The capture itself prints nothing, and it is the longest quiet stretch there is: a browser has
     # to start, the page has up to 45 s to load, then it settles and scrolls. Saying what is happening
     # is what keeps "working" from reading as "stuck".
-    print(f"    capturing {url}"
-          + (" with a headless browser; this can take up to a minute" if browser else " ..."),
+    print(f"[READ] 第 {index + 1}/{total} 个作品：{url}"
+          + ("（正在读取网页，重试或手动验证会显示提示）" if browser else " ..."),
           flush=True)
     capture = capture_browser(url, profile=profile, login=login) if browser else capture_plain(url)
     if captured_nothing(capture):
+        for note in capture.notes:
+            print(f"    note: {note}")
         print(f"[ERROR] {url}: the page could not be read ({capture.status or 'no response'}).")
         print("        Check the address, or open the site in a browser first and try again.")
         return None
@@ -117,7 +119,7 @@ def one_sample(url: str, label: str, *, browser: bool, references: list[Path],
     print(f"    opening the page ({mode}); submit it to continue")
 
     position = position_for(index, total)
-    serve(Session(harvest=result, directory=root, mode=mode, applied=applied,
+    serve(Session(harvest=result, directory=root, mode=mode, applied=applied, capture=capture,
                   url=capture.final_url or capture.url,
                   position=position, last=index == total - 1))
     if not (root / "annotations.json").is_file():
@@ -163,9 +165,11 @@ def main(argv: list[str] | None = None) -> int:
                 # Nothing can be learned without a first page: saying so beats an annotation
                 # session over an empty harvest.
                 return 2
-            print(f"    [WARN] work{index + 1} could not be captured; continuing with "
-                  f"{len(directories)} sample(s)")
-            continue
+            print(f"[STOP] 第 {index + 1}/{len(targets)} 个作品读取失败，已停止适配；"
+                  f"前面 {len(directories)} 份选择记录已保留，不会跳过此作品继续安装。", flush=True)
+            for saved in directories:
+                print(f"    saved session: {saved}", flush=True)
+            return 2
         directories.append(directory)
 
     samples = [load_session(directory) for directory in directories]
@@ -210,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print()
     print("=== does the draft read what the runtime reads")
-    result = compare(samples[0], draft, directories[0])
+    result = compare_latest(samples, draft, directories[0])
     for item in result.comparisons:
         print(f"    {item.field:12} {item.verdict:10} "
               f"runtime={joined_value(item.runtime)[:40]}")
@@ -240,12 +244,12 @@ def main(argv: list[str] | None = None) -> int:
                   "would be invisible.")
             return 1
         # The live half the round trip cannot see: it compares against the recorded page, and the
-        # runtime that will be used fetches. One bounded probe of the first address, against the
+        # runtime that will be used fetches. One bounded probe of the latest address, against the
         # draft installed into a scratch home, so the real tree is untouched (plan §5-A.3). A
         # network failure is advisory; a data fault — a required field no page answered, a repeated
         # id — refuses the install rather than letting it import nothing later.
         if "--no-probe" not in arguments:
-            report = probe_draft(draft, targets[0], building="work")
+            report = probe_draft(draft, samples[-1].url, building="work")
             print()
             for line in format_probe_report(report):
                 print(line)
@@ -260,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
         target = install(draft, LEARNED_ROOT, source=str(directories[0]))
         print()
         print(f"=== installed {target}")
-        print(f"    try it:  python probe.py {targets[0]}")
+        print(f"    try it:  python probe.py {samples[-1].url}")
         print(f"    the export lands under export/{draft.get('export_group')}/")
         shadowed = json.loads((target / "learned.json").read_text(encoding="utf-8")).get("adapter_beside")
         if shadowed:

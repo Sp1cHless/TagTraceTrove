@@ -59,7 +59,8 @@ it('offline create-then-edit queues pending metadata and tag edits under the par
   expect(dto.title).toBe('Edited offline');
   await f.api.assignEntryTag(localId,{name:'Manga',facetId:f.facet.id});
   const rows=await f.store.list();
-  expect(rows.map(row=>row.operationKind)).toEqual(['entry.create','entry.update','entry.tag.create','entry.tags.set']);
+  expect(rows.map(row=>row.operationKind)).toEqual(['entry.create','entry.tag.create','entry.tags.set']);
+  expect(rows[0]!.payload.title).toBe('Edited offline');
   expect(rows.every(row=>row.payload.parentCreateOpId===undefined||row.payload.parentCreateOpId===rows[0]!.opId)).toBe(true);
   const cold=f.cold();await cold.preferOfflineSnapshot!();
   expect((await cold.getEntry(localId)).title).toBe('Edited offline');

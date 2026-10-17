@@ -33,7 +33,7 @@ export interface ProducerSummary {
   viewCount: number;
   likeCount: number;
   lastViewedAt: string | null;
-  /** Derived: any work of the Author sits in an NSFW Gallery. */
+  /** Derived: any work of the Author sits in a hideable Gallery. */
   nsfw: boolean;
 }
 

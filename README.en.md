@@ -49,6 +49,7 @@ To find something by name, use global search for works, authors, or tags.
 
 In Advanced functions, you can manually map tags from other languages to Chinese, unify synonymous tags across languages and spellings, and merge several tags into one.
 For example, map `school life` to "校园生活" so information from different sources uses the Chinese tags you're familiar with.
+The mapping catalog automatically lists existing library tags under Unmapped / Mapped. Tags brought in by new works appear directly, ready to organize.
 
 An author's different names can also be unified under one name, bringing their works together. Once you set up aliases, those recorded spellings resolve to the same author when you import works or select an author.
 This is especially useful for Japanese authors who use kana, kanji, and romanized names: works collected across websites can all link to one author profile.
@@ -81,6 +82,9 @@ The built-in **SiteProbe** can extract titles, covers, previews, authors, tags, 
 Use existing site rules directly, or create an adapter for a new site by following the rule builder's browser-based steps to identify work information. The resulting adapter can be reused for future imports.
 Author pages, bookmarks, and work lists supported by a listing adapter can also be read in batches.
 
+When annotating authors, tags, or characters, switch between One / Several to select members individually or pick a whole tag block and inspect its split values.
+Long descriptions show an abbreviated preview and full character count while retaining the complete text. Later corrections replace earlier selections field by field.
+
 Before importing, preview the works, adjust tag categories, confirm authors, and optionally rate each author's works overall. Repeat imports recognize works already in your library. If a batch is too large to review in one sitting, save it as a temporary collection and review it later.
 
 ### 👤 Keep author information and works together
@@ -91,6 +95,8 @@ If the same author uses different names on different websites, set up an alias g
 ### 🖼️ Browse covers and previews, and find what you wanted to see
 
 Each type of work has its own gallery. Cover cards make collections easy to browse, and opening a card shows saved preview images and details. Source links take you back to the original page.
+Each gallery can save a vertical grid or horizontal card layout. Horizontal cards place the cover on the left and a long title on the right, useful for papers and other works with lengthy titles.
+In online lists, works without images use descriptions or tags as text covers to help you recognize them.
 "View later" saves works and authors for another time, while "Recently viewed" helps you find works whose source links you've recently opened. Sort by views or likes, or shuffle your collection to rediscover something.
 
 ### 📱 Organize from bed, with offline editing that syncs automatically
@@ -114,6 +120,8 @@ Choose between light and dark themes, six color palettes, and Simplified Chinese
 ## 🚀 Getting started
 
 ### Download a release
+
+This page describes the current source features. The published release is **1.0.14**; consult each Release's notes for its packaged feature set. See [feature status](docs/status.md) for the source and release boundaries.
 
 Choose a release from the [Releases page](https://github.com/Sp1cHless/TagTraceTrove/releases):
 

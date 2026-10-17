@@ -3,20 +3,16 @@ import { describe, it, expect, vi } from 'vitest';
 import { createMemoryOfflineStore } from '../src/offline/memory-offline-store.js';
 import { createOfflineAwareGalleryApi } from '../src/offline/offline-api.js';
 import type { GalleryApi } from '../src/api/gallery.js';
-import type { SyncSnapshot } from '@t3/shared';
 import { indexedDB } from 'fake-indexeddb';
 import { createIndexedDbOfflineStore } from '../src/offline/indexeddb-snapshot-store.js';
 import { buildPendingWorkExport } from '../src/offline/pending-work-export.js';
 import { preparePendingWork } from '../src/offline/pending-work-restore.js';
 import { mediaQueueIdentity } from '../src/offline/media-outbox-store.js';
+import { LOCAL_FINAL_STATE_KEY, readLocalFinalState, emptyLocalFinalState } from '../src/offline/local-final-state.js';
 
-export const libraryId = '11111111-1111-4111-8111-111111111111';
-export const entryUid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-export function fixture(): SyncSnapshot {
- return {header:{libraryId,syncEpoch:'epoch',snapshotSeq:1,changeSeq:1,generatedAt:'2026-10-04',sqliteSchemaVersion:35,snapshotFormatVersion:2,counts:{entries:1,producers:0,entryContents:0,entryTags:0,collections:0},checksum:'stored'},payload:{entries:[{id:1,syncUid:entryUid,syncVersion:1,title:'Existing',type:'game',coverRef:null,previewRef:null,previewRefs:[],pageCount:null,uploadDate:null,createdAt:'2026-10-04',updatedAt:'2026-10-04'}],producers:[],entryProducers:[],tags:[],tagGroups:[],entryTags:[],producerTags:[],producerTagAssignments:[],entryContents:[],ratingSlots:[],entryRatingValues:[],producerRatingValues:[],collections:[],collectionMembers:[],authorDirectories:[],authorDirectoryEntries:[],entryUsage:[],viewLaterEntries:[],viewLaterProducers:[],gallerySettings:[],mediaRefs:[]}};
-}
+import { entryUid, fixture } from './fixtures/existing-entry-media.js';
 describe('Entry media order and deletion',()=>{
- it('queues one command and renders the reordered list before sync',async()=>{
+ it('persists the latest local selection and renders it before compiling a transport command',async()=>{
   const store=createMemoryOfflineStore();
   await store.writeGeneration(1,JSON.stringify(fixture()));await store.writeMeta('activeGeneration','1');
   await store.writeMeta('capability.offlineEntryMediaOrder','1');
@@ -28,25 +24,22 @@ describe('Entry media order and deletion',()=>{
   snapshot.payload.entries[0]!.coverRef='/api/assets/entries/1/cover.png';
   snapshot.payload.entries[0]!.previewRefs=['/api/assets/entries/1/preview.png','/api/assets/entries/1/preview-2.png'];
   await store.writeGeneration(1,JSON.stringify(snapshot));
-  // A client that never downloaded this copy, but queued against it: the write
-  // goes in as the op the server expects, and the copy shows the new order.
+  // Unsent media changes are local selections; replay compiles the final command.
   const queued=await api.setEntryMediaOrder!(1,['/api/assets/entries/1/preview.png','/api/assets/entries/1/cover.png']);
   expect(queued.coverRef).toBe('/api/assets/entries/1/preview.png');
   expect(queued.previewRefs).toEqual(['/api/assets/entries/1/cover.png']);
-  expect(await store.list()).toEqual([expect.objectContaining({
-   operationKind:'entry.media.set',
-   entityUid:entryUid,
-   baseVersion:1,
-   baseValues:{refs:['/api/assets/entries/1/cover.png','/api/assets/entries/1/preview.png','/api/assets/entries/1/preview-2.png']},
-   payload:{refs:['/api/assets/entries/1/preview.png','/api/assets/entries/1/cover.png']},
-  })]);
+  expect(await store.list()).toEqual([]);
+  const control=readLocalFinalState(await store.readMeta(LOCAL_FINAL_STATE_KEY));
+  expect(control.media).toHaveLength(1);
+  expect(control.media[0]!.baselineRefs).toEqual(['/api/assets/entries/1/cover.png','/api/assets/entries/1/preview.png','/api/assets/entries/1/preview-2.png']);
   // Deleting the remaining preview is the same door with a shorter list.
   const deleted=await api.setEntryMediaOrder!(1,['/api/assets/entries/1/preview.png']);
   expect(deleted.previewRefs).toEqual([]);
   expect(deleted.coverRef).toBe('/api/assets/entries/1/preview.png');
-  // The second wire envelope addresses the predecessor's renamed positions,
-  // while the local projection still renders the original cached picture.
-  expect((await store.list()).at(-1)).toMatchObject({operationKind:'entry.media.set',baseVersion:2,baseValues:{refs:['/api/assets/entries/1/cover.png','/api/assets/entries/1/preview.png']},payload:{refs:['/api/assets/entries/1/cover.png']}});
+  expect(await store.list()).toEqual([]);
+  const final=readLocalFinalState(await store.readMeta(LOCAL_FINAL_STATE_KEY)).media[0]!;
+  expect(final.baselineRefs).toEqual(control.media[0]!.baselineRefs);
+  expect(final.desired.map(key=>final.items.find(row=>row.key===key)?.ref)).toEqual(['/api/assets/entries/1/preview.png']);
  });
 });
 
@@ -55,8 +48,8 @@ describe('existing Entry media facade',()=>{
   const make=()=>adapter==='memory'?createMemoryOfflineStore():createIndexedDbOfflineStore({indexedDB,databaseName:`existing-restore-${crypto.randomUUID()}`});
   const source=make(),target=make();
   try {
-   for(const store of [source,target]){await store.writeGeneration(1,JSON.stringify(fixture()));await store.writeMeta('activeGeneration','1');await store.writeMeta('capability.existingEntryMedia','1');await store.writeMeta('capability.offlineMediaMultiplePreviews','1');await store.bindPendingWorkClient('device');}
-   const api=createOfflineAwareGalleryApi({} as GalleryApi,source);await api.preferOfflineSnapshot!();
+   for(const store of [source,target]){await store.writeGeneration(1,JSON.stringify(fixture()));await store.writeMeta('activeGeneration','1');await store.writeMeta('capability.existingEntryMedia','1');await store.writeMeta('capability.offlineMediaUpload','1');await store.writeMeta('capability.offlineMediaMultiplePreviews','1');await store.bindPendingWorkClient('device');}
+   const api=createOfflineAwareGalleryApi({} as GalleryApi,source,{clientId:'device'});await api.preferOfflineSnapshot!();
    await api.uploadEntryMedia(1,'preview',new File(['first'],'first.png',{type:'image/png'}) as unknown as globalThis.File);
    await api.uploadEntryMedia(1,'preview',new File(['second'],'second.png',{type:'image/png'}) as unknown as globalThis.File);
    const work=await preparePendingWork(JSON.stringify(await buildPendingWorkExport(source)));
@@ -70,7 +63,7 @@ describe('existing Entry media facade',()=>{
  it.each(['memory','idb'] as const)('atomic %s staging rejects snapshot or media-order changes and declares an occupied-cover replacement',async(adapter)=>{
   const store=adapter==='memory'?createMemoryOfflineStore():createIndexedDbOfflineStore({indexedDB,databaseName:`existing-race-${crypto.randomUUID()}`});
   try {
-   await store.writeGeneration(1,JSON.stringify(fixture()));await store.writeMeta('activeGeneration','1');await store.writeMeta('capability.existingEntryMedia','1');
+   await store.writeGeneration(1,JSON.stringify(fixture()));await store.writeMeta('activeGeneration','1');await store.writeMeta('capability.existingEntryMedia','1');await store.writeMeta('capability.offlineMediaUpload','1');
    const api=createOfflineAwareGalleryApi({} as GalleryApi,store);await api.preferOfflineSnapshot!();
    await api.uploadEntryMedia(1,'preview',new File(['first'],'image.png',{type:'image/png'}) as unknown as globalThis.File);
    const rows=await store.listMedia();const state=await store.captureSnapshot!();const upload={...rows[0]!,uploadId:crypto.randomUUID()};
@@ -78,7 +71,7 @@ describe('existing Entry media facade',()=>{
    await store.writeGeneration(1,JSON.stringify({...fixture(),header:{...fixture().header,syncEpoch:'rotated'}}));
    await expect(store.enqueueExistingEntryMedia!(upload,{snapshot:JSON.stringify(state.active!.snapshot),revision:state.revision,media:mediaQueueIdentity(rows),operations:'[]'})).rejects.toThrow(/changed/iu);
    expect(await store.listMedia()).toEqual(rows);
-   await store.removeMedia(rows[0]!.uploadId);const occupied=fixture();occupied.payload.entries[0]!.coverRef='/occupied';await store.writeGeneration(1,JSON.stringify(occupied));
+   await store.removeMedia(rows[0]!.uploadId);await store.writeMeta(LOCAL_FINAL_STATE_KEY,JSON.stringify(emptyLocalFinalState()));const occupied=fixture();occupied.payload.entries[0]!.coverRef='/occupied';await store.writeGeneration(1,JSON.stringify(occupied));
    // A settled cover is swapped by a declared replacement; only a *pending*
    // cover still needs foreground review first, so this one queues.
    await api.uploadEntryMedia(1,'cover',new File(['cover'],'image.png',{type:'image/png'}) as unknown as globalThis.File);
@@ -88,7 +81,7 @@ describe('existing Entry media facade',()=>{
   }finally{if('close' in store && typeof store.close==='function')store.close();}
  });
  it('durably queues a positive-ID upload without any create operation or network write',async()=>{
-  const store=createMemoryOfflineStore(); await store.writeGeneration(1,JSON.stringify(fixture())); await store.writeMeta('activeGeneration','1'); await store.writeMeta('capability.existingEntryMedia','1');
+  const store=createMemoryOfflineStore(); await store.writeGeneration(1,JSON.stringify(fixture())); await store.writeMeta('activeGeneration','1'); await store.writeMeta('capability.existingEntryMedia','1'); await store.writeMeta('capability.offlineMediaUpload','1');
   const upload=vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
   const api=createOfflineAwareGalleryApi({uploadEntryMedia:upload} as unknown as GalleryApi,store);
   await api.preferOfflineSnapshot?.();

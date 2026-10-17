@@ -26,15 +26,14 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from urllib.parse import quote
-from typing import Any
+from typing import Any, Iterable
 
 from ..generic.select import split_members
 from . import text as l10n
 from .harvest import COLLECTION_JOIN, Candidate, Harvest, joined_value, same_members
 
-# The fields the plan's §13.1 lists, and what shape each takes. A collection is
-# marked once and enlarged by the rule, never one element at a time —
-# "use all similar/repeated elements" is the button, not forty clicks.
+# The fields and their shapes. A collection candidate marks its whole group once;
+# selecting a single text candidate keeps that one member, including spaces in its name.
 #
 # `preview` is that same act applied to pictures: the field is many images, so it is
 # marked once as a group (the harvester offers one candidate per repeated image rule)
@@ -47,7 +46,7 @@ from .harvest import COLLECTION_JOIN, Candidate, Harvest, joined_value, same_mem
 # field here whose T³ side is not yet wired; the log records what T³ must add.
 FIELDS: tuple[tuple[str, str, str], ...] = (
     ("title", "scalar", "作品标题"),
-    ("creator", "scalar", "作者 / 创作者"),
+    ("creator", "multi", "作者 / 创作者"),
     ("date", "scalar", "日期"),
     ("description", "scalar", "简介"),
     ("cover", "image", "封面"),
@@ -56,6 +55,27 @@ FIELDS: tuple[tuple[str, str, str], ...] = (
     ("characters", "collection", "登场人物"),
     ("series", "collection", "作品系列"),
 )
+
+# The kinds that may hold several values. `collection` is always several; `multi` is one
+# *or* several, decided by the person per work — a paper has six authors and a doujin has
+# one, and the field is the same field. Which of the two it is decides only the default the
+# page opens on (see `default_mode`).
+MULTI_KINDS: tuple[str, ...] = ("collection", "multi")
+
+
+def can_be_several(kind: str) -> bool:
+    """Whether the page offers this field the one/many switch."""
+    return kind in MULTI_KINDS
+
+
+def default_mode(kind: str) -> str:
+    """The switch's position when the page opens.
+
+    A tag list is a list, so it opens on `many`; a creator usually is one name, so it opens
+    on `one` — and a work with six authors is one click away from saying so.
+    """
+    return "many" if kind == "collection" else "one"
+
 
 # How many members a field keeps, when the page offers more. A preview set is the case
 # this exists for: the entry shows a cover and the pictures behind it, the stack shows four
@@ -75,6 +95,9 @@ ACCEPTS: dict[str, tuple[str, ...]] = {
     "image": ("image", "url"),
     "images": ("images",),
     "collection": ("text", "collection"),
+    # One or several: a single name is picked as itself, and a page that writes the authors
+    # as one block offers that block too.
+    "multi": ("text", "number", "url", "collection"),
 }
 
 # What each field is asking for, in the words of the page rather than the schema's. Shown
@@ -97,7 +120,10 @@ USAGE_TIPS: tuple[str, ...] = (
 FIELD_HINTS: dict[str, str] = {
     # a work's page
     "title": "点页面上的作品标题",
-    "creator": "点作者 / 创作者的名字",
+    # The one field that is genuinely one-or-several, so the hint has to teach both: a page
+    # that shows one author per block has no group to point at, and a page that shows one
+    # name at a time is exactly where a person was left with a single imported author.
+    "creator": "点作者 / 创作者的名字；这个作品有多个作者时，切到「多个」把他们一个个点选进来",
     "date": "点发布日期",
     "description": "点简介正文（会作为条目正文导入）",
     "cover": "点封面图，或它在页面上的图片地址",
@@ -131,7 +157,7 @@ def fields_for(kind: str) -> list[tuple[str, str, str]]:
     return [field for field in FIELDS if field[1] == kind]
 
 
-def rule_for(candidate: Candidate) -> dict[str, Any] | None:
+def rule_for(candidate: Candidate, kind: str | None = None) -> dict[str, Any] | None:
     """The rule that would read this value again, from whichever source has one.
 
     A later source is preferred when it is a structured one: an API path survives a
@@ -154,6 +180,8 @@ def rule_for(candidate: Candidate) -> dict[str, Any] | None:
     # held the set's second picture while the confirm page proposed the first — the person accepted
     # the proposal, the two pages then disagreed, and the cover was pruned for good even though a
     # rule that read exactly the annotated picture was sitting right there.
+    if kind is not None and candidate.kind not in ACCEPTS.get(kind, ()):
+        return None
     ranked = sorted(candidate.sources,
                     key=lambda source: (_needs_a_recipe(source.rule),
                                         source.channel == "markup",
@@ -162,6 +190,8 @@ def rule_for(candidate: Candidate) -> dict[str, Any] | None:
     for source in ranked:
         rule = source.rule
         if not rule:
+            continue
+        if kind in ("scalar", "image") and rule.get("list"):
             continue
         if rule.get("conflict"):
             # Measured on the page it came from to read a different value at one of the
@@ -185,20 +215,187 @@ def _needs_a_recipe(rule: dict[str, Any] | None) -> int:
     return 1 if document.startswith("network:") else 0
 
 
+def picked_ids(picks: dict[str, Any] | None, field: str) -> list[str]:
+    """The candidates clicked for one field: one id, or the ids of several picks.
+
+    The page sends a bare id for a field answered with a single value, and a list when the
+    person used the switch's 「多个」 — the same payload, read the same way, so an older
+    annotation (which could only ever hold one) keeps loading unchanged.
+    """
+    value = (picks or {}).get(field)
+    if value is None or value == "":
+        return []
+    return [str(item) for item in (value if isinstance(value, (list, tuple)) else [value]) if str(item)]
+
+
+def _selectors_of(rule: dict[str, Any]) -> list[str]:
+    select = rule.get("select") or rule.get("selector")
+    return [str(item) for item in (select if isinstance(select, list) else [select]) if item]
+
+
+def _set_readings(candidate: Candidate) -> list[dict[str, Any]]:
+    """The rules this candidate already carries that read a whole *set*.
+
+    A candidate for one author's name carries the single-value rule that read it and, when
+    its selector matched the author's siblings too, the list rule that reads all of them.
+    That second rule is what an answer of several values needs — and it is already
+    measured, because the harvest counted what it matches on this page.
+    """
+    found: list[dict[str, Any]] = []
+    for source in candidate.sources:
+        rule = source.rule or {}
+        if not rule.get("list") or rule.get("conflict"):
+            continue
+        selectors = _selectors_of(rule)
+        if not selectors:
+            continue
+        found.append({**rule, "select": selectors[0], "list": True})
+    return found
+
+
+def _reads_the_set(rule: dict[str, Any], read: Any, wanted: list[str]) -> bool:
+    """Whether the rule reads every value the person picked — it may read more.
+
+    Reading it with the runtime that will execute it is the only way to know: the selector
+    a page needs is not always the one the candidate list showed. More is allowed on
+    purpose: a person naming three of a page's five authors means the other two as well,
+    and a rule that named exactly those three by position would not survive the next page.
+    """
+    value = read(rule)
+    if value is None or value == "":
+        return False
+    members = [str(member) for member in (value if isinstance(value, list) else [value])]
+    return all(any(member == name for member in members) for name in wanted)
+
+
+def rule_for_many(selected: list[Candidate], read: Any) -> dict[str, Any] | None:
+    """One rule for a field answered by clicking several values one at a time.
+
+    Some pages offer no group to click — every author sits in its own block, and the
+    annotation could only ever say one of them. Picking several says "this field's answer
+    is these", and what the field needs is one rule that reads the set.
+
+    Two ways, both checked against the page before they are offered: the picks may already
+    know a shared way of reading the set (the list rule the harvest measured on their
+    selector), or their own selectors may be unioned into one rule — a `select` list is
+    what the runtime uses for a set with no common parent.
+    """
+    if not selected or read is None:
+        return None
+    wanted = [candidate.value for candidate in selected]
+    readings = [_set_readings(candidate) for candidate in selected]
+    if any(not rules for rules in readings):
+        return None
+
+    # The same way of reading the set, offered by every pick: measured on each of them.
+    def key(rule: dict[str, Any]) -> tuple[str, str]:
+        return (str(rule.get("document") or ""), str(rule.get("select") or ""))
+
+    shared = readings[0]
+    for rules in readings[1:]:
+        offered = {key(rule) for rule in rules}
+        shared = [rule for rule in shared if key(rule) in offered]
+    for rule in shared:
+        if _reads_the_set(rule, read, wanted):
+            return rule
+
+    # Otherwise the picks' own selectors, unioned — which is how several separately-located
+    # items are read when they share no parent to name.
+    document = str(readings[0][0].get("document") or "")
+    union: list[str] = []
+    for rules in readings:
+        for rule in rules:
+            if str(rule.get("document") or "") != document:
+                return None
+            for selector in _selectors_of(rule):
+                if selector not in union:
+                    union.append(selector)
+    if len(union) < 2:
+        return None
+    combined: dict[str, Any] = {"from": "html", "document": document, "select": union, "list": True}
+    return combined if _reads_the_set(combined, read, wanted) else None
+
+
+def capture_reader(capture: Any) -> Any:
+    """Read one rule against one capture, with the runtime that will execute it.
+
+    Imported here rather than at the top: `learn` imports this module, and a rule is only
+    worth offering once it has been read the way the installed adapter will read it.
+    """
+    from .learn import read_rule       # noqa: PLC0415 - the import would be circular above
+
+    return lambda rule: read_rule(rule, capture)
+
+
+def validate_choices(annotation: dict[str, Any], harvest: Harvest,
+                     picks: dict[str, str] | None,
+                     fields: tuple[tuple[str, str, str], ...]) -> None:
+    """Reject provable shape mistakes, never choices based on their recommendation score."""
+    by_id = {candidate.candidate_id: candidate for candidate in harvest.candidates}
+    for field, kind, _label in fields:
+        value = annotation.get(field)
+        if value in (None, "", []):
+            continue
+        if kind in ("scalar", "image") and isinstance(value, (list, tuple, dict)):
+            raise ValueError(f"{field}: choose a single value, not a whole collection")
+        for selected in picked_ids(picks, field):
+            candidate = by_id.get(selected)
+            if candidate is None or rule_for(candidate, kind=kind) is None:
+                raise ValueError(f"{field}: the selected candidate has no rule compatible with this field")
+
+
+def normalise_selected_members(annotation: dict[str, Any], harvest: Harvest,
+                               picks: dict[str, str] | None,
+                               fields: tuple[tuple[str, str, str], ...] = FIELDS,
+                               multi: Iterable[str] = ()) -> dict[str, Any]:
+    """Explicit single-member clicks carry provenance; whitespace is part of the member.
+
+    A field answered in 「多个」 holds the values a person picked one at a time, so its
+    answer is a list however many they are — one author picked as a *set* means "the pages
+    that write their authors this way", while one author picked as a single value means the
+    work has one author. That difference is the switch, and it is why the count cannot
+    decide the shape.
+    """
+    many = tuple(multi)
+    result = dict(annotation)
+    by_id = {candidate.candidate_id: candidate for candidate in harvest.candidates}
+    for field, kind, _label in fields:
+        ids = picked_ids(picks, field)
+        candidate = by_id.get(ids[0]) if ids else None
+        value = result.get(field)
+        if not isinstance(value, str):
+            continue
+        if (kind == "collection" and candidate is not None and candidate.kind != "collection"
+                and value == candidate.value):
+            result[field] = [value]
+        elif kind == "multi" and field in many and ids:
+            result[field] = [value]
+    return result
+
+
 def hypotheses(annotation: dict[str, str], harvest: Harvest,
                picks: dict[str, str] | None = None,
                applied: dict[str, dict[str, Any]] | None = None,
-               fields: tuple[tuple[str, str, str], ...] = FIELDS) -> dict[str, Any]:
+               fields: tuple[tuple[str, str, str], ...] = FIELDS,
+               multi: Iterable[str] = (),
+               capture: Any = None) -> dict[str, Any]:
     """Turn `{field: value}` into the rule hypothesis for each field.
 
     A value with a `pick` takes its rule from the candidate that was clicked. A value
     confirmed in `confirm` mode has no pick — the tool proposed it — so its rule comes
     from what was applied, which is the same rule that read the value.
 
+    A field answered in 「多个」 is the exception, because several clicks are not one
+    click: `rule_for_many` builds the single rule that reads the set they name, and it is
+    checked against the page before it is recorded.
+
     One rule per field, and the value it currently reads, which is what the plan's
     Example 2 shows a person to confirm. A field with no rule at all is left out
     rather than guessed at.
     """
+    validate_choices(annotation, harvest, picks, fields)
+    many = tuple(multi)
+    read = capture_reader(capture) if capture is not None else None
     by_id = {candidate.candidate_id: candidate for candidate in harvest.candidates}
     # Keyed by the candidate's value, which is one line — a collection's members joined
     # — so a submitted list is looked up by the same line it was written as.
@@ -231,10 +428,36 @@ def hypotheses(annotation: dict[str, str], harvest: Harvest,
         value = annotation.get(field)
         if not value:
             continue
-        candidate = by_id.get((picks or {}).get(field, "")) \
+        ids = picked_ids(picks, field)
+        clicked = [by_id[item] for item in ids if item in by_id]
+        # Several clicks are one answer: the rule is derived from the set they name, not
+        # from whichever of them happened to be clicked last.
+        if field in many and clicked and read is not None:
+            rule = rule_for_many(clicked, read)
+            if rule is not None:
+                reads = read(rule)
+                members = [str(member) for member in (reads if isinstance(reads, list) else [reads])]
+                extra = [member for member in members
+                         if not any(member == str(picked.value) for picked in clicked)]
+                result[field] = {
+                    "value": value,
+                    "score": clicked[0].score,
+                    "rule": rule,
+                    "from": [source.channel for source in clicked[0].sources],
+                    "candidate_id": clicked[0].candidate_id,
+                    "members": members,
+                    **({"extra": extra} if extra else {}),
+                }
+                continue
+            # A pick that cannot be named as a set — one block the page wrote the members
+            # into — is still the value the person chose, and the field's own rules read it:
+            # that is the path every collection already had.
+        candidate = (by_id.get(ids[0]) if ids else None) \
             or candidate_for(field, value)
         proposal = (applied or {}).get(field) or {}
-        rule = proposal.get("rule") or (rule_for(candidate) if candidate else None)
+        # A new click replaces the proposal; it must not keep the rejected rule.
+        rule = ((rule_for(candidate, kind=_kind) if candidate else None) if field in (picks or {})
+                else proposal.get("rule") or (rule_for(candidate, kind=_kind) if candidate else None))
         if rule is None:
             continue
         result[field] = {
@@ -246,7 +469,9 @@ def hypotheses(annotation: dict[str, str], harvest: Harvest,
         }
         if candidate is not None and field in (picks or {}):
             result[field]["candidate_id"] = candidate.candidate_id
-        date_kind = proposal.get("date_kind") or (candidate.context.get("date_kind") if candidate else None)
+        date_kind = ((candidate.context.get("date_kind") if candidate else None)
+                     if field in (picks or {}) else proposal.get("date_kind")
+                     or (candidate.context.get("date_kind") if candidate else None))
         if date_kind and field in ("date", "date_added"):
             result[field]["date_kind"] = date_kind
     return result
@@ -262,13 +487,19 @@ class Annotation:
     # field: characters may live inside the tags, or only some works declare them.
     # Saying so is what keeps "read nothing here" from being read as a broken rule.
     absent: list[str] = field(default_factory=list)
-    picks: dict[str, str] = field(default_factory=dict)      # field -> candidate clicked
+    # field -> candidate clicked, or the candidate ids in the order they were clicked when
+    # the person answered with several (the switch's 「多个」).
+    picks: dict[str, Any] = field(default_factory=dict)
     verdicts: dict[str, str] = field(default_factory=dict)    # confirm mode: ok | bad
+    # The fields answered in 「多个」. A one-author answer and a one-of-many answer look the
+    # same in `picks` — one id — and mean different things, so the choice is recorded
+    # rather than inferred from the count.
+    multi: list[str] = field(default_factory=list)
     mode: str = "annotate"          # annotate | confirm | validate
 
     def to_json(self) -> dict[str, Any]:
         return {"url": self.url, "mode": self.mode, "fields": self.fields,
-                "picks": self.picks, "verdicts": self.verdicts,
+                "picks": self.picks, "multi": self.multi, "verdicts": self.verdicts,
                 "absent": self.absent}
 
     @classmethod
@@ -276,10 +507,20 @@ class Annotation:
         def text_map(key: str) -> dict[str, str]:
             return {str(k): str(v) for k, v in (payload.get(key) or {}).items()}
 
+        def picked_map(key: str) -> dict[str, Any]:
+            result: dict[str, Any] = {}
+            for name, value in (payload.get(key) or {}).items():
+                if isinstance(value, (list, tuple)):
+                    result[str(name)] = [str(item) for item in value]
+                else:
+                    result[str(name)] = str(value)
+            return result
+
         return cls(url=str(payload.get("url") or ""),
                    fields={str(k): kept_value(v)
                            for k, v in (payload.get("fields") or {}).items()},
-                   picks=text_map("picks"), verdicts=text_map("verdicts"),
+                   picks=picked_map("picks"), verdicts=text_map("verdicts"),
+                   multi=[str(name) for name in (payload.get("multi") or [])],
                    absent=[str(name) for name in (payload.get("absent") or [])],
                    mode=str(payload.get("mode") or "annotate"))
 
@@ -346,7 +587,12 @@ def page(harvest: Harvest, *, url: str, mode: str = "annotate",
         "save_url": f"/api/annotations?token={quoted}",
         "fields": [{"key": key, "kind": kind,
                     "label": l10n.field_label(language, key, label),
-                    "hint": l10n.field_hint(language, key, limit=FIELD_LIMITS.get(key))}
+                    "hint": l10n.field_hint(language, key, limit=FIELD_LIMITS.get(key)),
+                    # Which fields offer the one/many switch, and where it starts. Sent for
+                    # the same reason the join is: the page and the server must agree on
+                    # which answer is a single value and which is a set.
+                    "multi": can_be_several(kind),
+                    "mode": default_mode(kind)}
                    for key, kind, label in fields],
         # What a collection's members are joined with, sent rather than written into the
         # page: the two sides have to agree on it, and a page that guesses records one
@@ -374,10 +620,19 @@ def page(harvest: Harvest, *, url: str, mode: str = "annotate",
                 "value": candidate.value,
                 "display": candidate.display,
                 "date_kind": candidate.context.get("date_kind"),
+                # What this value becomes for a field that holds several: one clicked block is
+                # several values by the field's own separators (`pickDefaultCoverText`'s sibling
+                # — the very function the rule's `split` transform runs), so the page can show
+                # what will actually be imported instead of one item.
+                "split": (members if len(members := split_members(candidate.value)) > 1 else None),
+                # The page itself cut this value short: it is the page's summary, not the field.
+                "cut_short": bool(candidate.context.get("cut_short")),
                 "count": candidate.context.get("count"),
+                "members": (candidate.context.get("members") if candidate.kind == "collection" else None),
                 "score": candidate.score,
                 "sources": [source.to_json() for source in candidate.sources],
                 "has_rule": rule_for(candidate) is not None,
+                "usable_for": [kind for kind in ACCEPTS if rule_for(candidate, kind=kind) is not None],
                 # Built here, not by the page: the server is the side that knows the
                 # token, and a page assembling its own URLs is how every cover came to
                 # be requested without one and refused with a 403. A group of images shows
@@ -424,8 +679,30 @@ _TEMPLATE = r"""<!doctype html>
   .field { border:1px solid #2a2e35; border-radius:6px; padding:8px; margin-bottom:6px; }
   .field.sel { border-color:#4a9eff; }
   .field .name { font-weight:600; }
+  /* The name line, with the one/many switch at its right edge: it is a property of the field,
+     and a control on its own line made every multi-valued field taller than the panel shows
+     at once. Two buttons rather than a checkbox — both positions are words, not a state. */
+  .field .head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .field .val { color:#8fd694; word-break:break-all; font-size:12px; }
   .field .hint { color:#6b7480; font-size:12px; }
+  /* A value the page itself cut short: it has to look different from the preview this page
+     prints, or the two read the same and the difference is invisible. */
+  .hint.cut { color:#e0c07a; }
+  /* The one/many switch, on the fields whose answer can be either. Two buttons rather than a
+     checkbox: both positions are words a person reads, not a state to infer. */
+  .field .modes { display:flex; align-items:center; gap:4px; flex:none; }
+  .field .modes .ask { color:#6b7480; font-size:11px; }
+  .field .modes button { padding:0 6px; font-size:11px; line-height:1.5; }
+  /* What is chosen, one per line, each removable: the answer of a several-field is a list,
+     and a list has to be readable one member at a time. */
+  .field .chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+  .field .chip { display:inline-flex; align-items:center; gap:4px; max-width:100%;
+    padding:1px 4px 1px 8px; border:1px solid #2a2e35; border-radius:10px;
+    background:#1b1e24; font-size:11px; word-break:break-all; }
+  .field .chip .drop { padding:0 3px; border:0; background:transparent; color:#c9d3de;
+    font-size:12px; line-height:1; cursor:pointer; }
+  .field .chip .drop:hover { color:#ff8f8f; }
+  .field .chips .clear { padding:1px 8px; font-size:11px; }
   .bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
   input[type=search] { flex:1; min-width:180px; background:#1b1f25; color:#e6e6e6;
                        border:1px solid #2a2e35; border-radius:6px; padding:6px 8px; }
@@ -462,6 +739,8 @@ _TEMPLATE = r"""<!doctype html>
   @keyframes slide { from { transform:translateX(-100%); } to { transform:translateX(250%); } }
   .veil .headline { font-size:26px; font-weight:600; line-height:1.35; }
   .veil .detail { margin-top:12px; color:#8aa0b8; word-break:break-word; }
+  .veil .extra { margin-top:10px; max-width:36rem; color:#e0c07a; font-size:12px;
+    word-break:break-word; }
 </style></head><body>
 <header>
   <div class="url" id="url"></div>
@@ -489,6 +768,7 @@ _TEMPLATE = r"""<!doctype html>
     <div class="pulse"><i></i></div>
     <div class="headline" id="veilHead"></div>
     <div class="detail" id="veilDetail"></div>
+    <div class="extra" id="veilExtra"></div>
   </div>
 </div>
 <script>
@@ -503,6 +783,7 @@ const fill = (template, values) => template.replace(/\{(\w+)\}/g,
 // which reads as "there is still something to do down there".
 const veil = (headline, detail) => {
   const box = document.getElementById('veil');
+  document.getElementById('veilExtra').textContent = '';
   if (headline === null) { box.className = 'veil'; document.body.style.overflow = ''; return; }
   document.getElementById('veilHead').textContent = headline;
   document.getElementById('veilDetail').textContent = detail || '';
@@ -516,7 +797,8 @@ const veil = (headline, detail) => {
 // carried, the answer became `undefined` — so the buttons came back and the save
 // threw on `byId.get(undefined).value`.
 const values = {};                // field -> the value a person accepted
-const picked = {};                // field -> the candidate id, when one was clicked
+const picked = {};                // field -> the candidate id, or the ids clicked in order
+const modes = {};                 // field -> 'one' | 'many', for the fields that offer it
 const absent = new Set();         // fields this page simply does not carry
 let selectedField = null;
 let kindFilter = null;
@@ -525,7 +807,18 @@ const el = (tag, cls) => { const e = document.createElement(tag); if (cls) e.cla
 const byId = new Map(DATA.candidates.map(c => [c.id, c]));
 const join = DATA.join;
 const KIND = {};
-for (const field of DATA.fields) KIND[field.key] = field.kind;
+const MULTI = new Set();
+for (const field of DATA.fields) {
+  KIND[field.key] = field.kind;
+  if (field.multi) { MULTI.add(field.key); modes[field.key] = field.mode; }
+}
+// The ids clicked for one field, whether that is one click or several.
+const pickedIds = (key) => {
+  const value = picked[key];
+  if (value === undefined) return [];
+  return Array.isArray(value) ? value.slice() : [value];
+};
+const isMany = (key) => modes[key] === 'many';
 // A value written as one line. A collection is a list of its members; showing it as
 // anything shorter — five of sixteen tags, or the first 300 characters of a cast list
 // — is how a person came to accept a partial value and the rule that read all of it
@@ -549,18 +842,87 @@ const named = (key, value) => {
   // unknown, and a rule that read something else is exactly what a person has to see here.
   return names.every(Boolean) ? names.join(join) : null;
 };
+// A long value is drawn as a preview, and says so: the answer holds the whole text and that is
+// what the import writes. A person has to be able to tell that from a value the *page* cut short
+// (marked `cut_short`), because a "…" on its own reads either way — and reading the page's own
+// summary as "we captured it and are showing part of it" is exactly what happened here first.
+const PREVIEW_CHARS = 160;
+const isLong = (key, value) => !isImageField(key) && textOf(value).length > PREVIEW_CHARS;
+const previewOf = (value) => textOf(value).slice(0, PREVIEW_CHARS) + '…';
+const previewNote = (value) => fill(T.preview, { shown: PREVIEW_CHARS, total: textOf(value).length });
+// What a several-value answer is going to become. One clicked block is one member here and several
+// values by the field's own separators, and showing it as one item is how a person came to ask
+// whether the import would take it as one.
+const splitOf = (key) => {
+  if (!isMany(key)) return null;
+  const chosen = Array.isArray(values[key]) ? values[key] : (values[key] === undefined ? [] : [values[key]]);
+  if (chosen.length !== 1) return null;
+  const ids = pickedIds(key);
+  const source = ids.length === 1 ? byId.get(ids[0]) : null;
+  return source && Array.isArray(source.split) && source.split.length > 1 ? source.split : null;
+};
 // What a field's answer reads as: the name for images, the value itself otherwise.
 const answerText = (key, value) => counted(named(key, value) ?? textOf(value), value);
 // What a candidate means as a field's value: assigning a collection assigns its
 // members, which is what the rule reads and what the record carries — and a group of
 // images assigns the addresses of all of them, for the same reason. A field with a
 // declared limit keeps the first that many, which is the same `limit` its rule carries.
-const valueOf = (c) => {
-  const value = (c.kind === 'collection' || c.kind === 'images')
-    ? c.value.split(join) : c.value;
+const valueOf = (c, many) => {
+  let value;
+  if (c.kind === 'collection' || c.kind === 'images') {
+    value = Array.isArray(c.members) ? c.members.slice() : c.value.split(join);
+  } else if (many || KIND[selectedField] === 'collection') {
+    // One value of a set: the field's answer is the list, this is one of its members.
+    value = [c.value];
+  } else {
+    value = c.value;
+  }
   const cap = DATA.limits[selectedField];
   return Array.isArray(value) && cap ? value.slice(0, cap) : value;
 };
+
+// The switch decides what a click means, and the answer is reshaped with it: an author
+// picked as "these are the pages' authors" is a set, and the same author picked as "this
+// work's author" is one value. Keeping the first pick when narrowing to one, and keeping
+// what was there as the first member when widening, means nothing a person chose is lost
+// by flipping the switch.
+function setMode(key, mode) {
+  if (modes[key] === mode) return;
+  modes[key] = mode;
+  const current = values[key];
+  if (mode === 'one') {
+    const ids = pickedIds(key);
+    if (Array.isArray(current)) values[key] = current[0];
+    if (ids.length > 1) picked[key] = ids[0];
+  } else if (current !== undefined && !Array.isArray(current)) {
+    values[key] = [current];
+  }
+  render();
+}
+
+// In "several" a click is one member: the same value again takes it back out. One member is
+// kept as the value itself rather than as a one-item list, because the two mean different
+// things to the field: five picked names are five values, while one clicked block is a block
+// the field's own rules split into its members.
+function toggleChosen(key, c) {
+  const ids = pickedIds(key);
+  const members = Array.isArray(values[key]) ? values[key].slice()
+    : (values[key] === undefined ? [] : [values[key]]);
+  const at = ids.indexOf(c.id);
+  if (at >= 0) { ids.splice(at, 1); members.splice(at, 1); }
+  else { ids.push(c.id); members.push(...valueOf(c, true)); }
+  if (!ids.length) { delete picked[key]; delete values[key]; }
+  else { picked[key] = ids; values[key] = members.length === 1 ? members[0] : members; }
+}
+
+function dropChosen(key, index) {
+  const ids = pickedIds(key);
+  const members = Array.isArray(values[key]) ? values[key].slice() : [];
+  ids.splice(index, 1);
+  members.splice(index, 1);
+  if (!ids.length) { delete picked[key]; delete values[key]; }
+  else { picked[key] = ids; values[key] = members; }
+}
 
 function render() {
   document.getElementById('url').textContent =
@@ -578,20 +940,97 @@ function render() {
   fields.textContent = '';
   for (const field of DATA.fields) {
     const box = el('div', 'field' + (selectedField === field.key ? ' sel' : ''));
+    // The name line carries the one/many switch at its right edge: it is a property of the
+    // field, and a control on its own line made every multi-valued field taller than the
+    // panel could show at once.
+    const head = el('div', 'head');
     const name = el('div', 'name'); name.textContent = field.label + '  (' + field.key + ')';
-    box.appendChild(name);
+    head.appendChild(name);
+    if (MULTI.has(field.key)) {
+      const bar = el('div', 'modes');
+      const ask = el('span', 'ask'); ask.textContent = T.modeAsk;
+      bar.appendChild(ask);
+      for (const [value, label] of [['one', T.modeOne], ['many', T.modeMany]]) {
+        const button = el('button', 'mode' + (modes[field.key] === value ? ' on' : ''));
+        button.textContent = label;
+        // Using the field's own control selects the field: a click on the row no longer
+        // reaches it, and a person who sets the switch and then clicks a value means this
+        // field — not "no field selected".
+        button.onclick = (event) => {
+          event.stopPropagation();
+          selectedField = field.key;
+          setMode(field.key, value);
+        };
+        bar.appendChild(button);
+      }
+      head.appendChild(bar);
+    }
+    box.appendChild(head);
     // What the field is asking for, in the page's own words — the field names alone had a
     // person leave the work-id field unmarked on a real run, and a card with no id is dropped.
     if (field.hint) { const why = el('div', 'hint'); why.textContent = field.hint; box.appendChild(why); }
+    if (selectedField === field.key && (field.kind === 'scalar' || field.kind === 'image')) {
+      const why = el('div', 'hint'); why.textContent = T.singleValueHint; box.appendChild(why);
+    }
     const proposal = (DATA.applied || {})[field.key];
     const answered = Object.prototype.hasOwnProperty.call(values, field.key);
     const shown = el('div', answered ? 'val' : 'hint');
     if (absent.has(field.key)) shown.textContent = T.absentValue;
+    if (answered && isMany(field.key)) {
+      // The members are listed under the row, one by one; the line says how many. A single
+      // clicked block is the field's whole answer here, so it is one member on the list.
+      const chosen = Array.isArray(values[field.key]) ? values[field.key] : [values[field.key]];
+      const split = splitOf(field.key);
+      if (split) shown.textContent = fill(T.splitInto, { count: split.length });
+      else if (chosen.length) shown.textContent = fill(T.chosenCount, { count: chosen.length });
+      else shown.textContent = answerText(field.key, values[field.key]);
+    }
+    else if (answered && isLong(field.key, values[field.key])) {
+      shown.textContent = previewOf(values[field.key]);
+    }
     else if (answered) shown.textContent = answerText(field.key, values[field.key]);
     else if (proposal) shown.textContent = (proposal.value === null
       ? T.unreadable : answerText(field.key, proposal.value));
     else shown.textContent = T.unassigned;
     box.appendChild(shown);
+    if (answered && isLong(field.key, values[field.key])) {
+      const note = el('div', 'hint'); note.textContent = previewNote(values[field.key]);
+      box.appendChild(note);
+    }
+    const splitMembers = answered ? splitOf(field.key) : null;
+    const listed = splitMembers ?? (Array.isArray(values[field.key]) ? values[field.key] : null);
+    if (answered && isMany(field.key) && listed) {
+      const chips = el('div', 'chips');
+      listed.forEach((member, index) => {
+        const chip = el('span', 'chip');
+        chip.textContent = String(member);
+        // A member of a split block is not something the person picked one by one: the answer is
+        // the block, so there is nothing here to remove on its own: the Clear button removes it.
+        if (!splitMembers) {
+          const drop = el('button', 'drop'); drop.textContent = '×';
+          drop.onclick = (event) => {
+            event.stopPropagation();
+            selectedField = field.key;
+            dropChosen(field.key, index);
+            render();
+          };
+          chip.appendChild(drop);
+        }
+        chips.appendChild(chip);
+      });
+      const clear = el('button', 'clear'); clear.textContent = T.clearChosen;
+      clear.onclick = (event) => {
+        event.stopPropagation();
+        selectedField = field.key;
+        delete values[field.key]; delete picked[field.key]; render();
+      };
+      chips.appendChild(clear);
+      box.appendChild(chips);
+      if (splitMembers) {
+        const why = el('div', 'hint'); why.textContent = T.splitFrom;
+        box.appendChild(why);
+      }
+    }
     if (proposal && !answered) {
       const accept = el('button', 'ok'); accept.textContent = T.accept;
       accept.onclick = (event) => { event.stopPropagation();
@@ -652,6 +1091,7 @@ function render() {
     // No rule, no offer: the tool cannot learn from it, so showing it only invites a pick that
     // teaches nothing.
     if (!c.has_rule) return false;
+    if (selectedField && !c.usable_for.includes(KIND[selectedField])) return false;
     if (kindFilter && c.kind !== kindFilter) return false;
     if (!query) return true;
     return c.value.toLowerCase().includes(query)
@@ -692,10 +1132,22 @@ function render() {
       const code = el('code');
       code.textContent = c.value;
       value.appendChild(code);
+    } else if (textOf(c.value).length > PREVIEW_CHARS) {
+      value.textContent = previewOf(c.value);
     } else {
       value.textContent = c.date_kind ? c.display : c.value;
     }
     body.appendChild(value);
+    if (!c.thumb && textOf(c.value).length > PREVIEW_CHARS) {
+      const note = el('div', 'hint'); note.textContent = previewNote(c.value);
+      body.appendChild(note);
+    }
+    // The page wrote this value cut off, so it is the page's own summary of a longer text — not
+    // a preview of anything we hold, and choosing it imports exactly this much.
+    if (c.cut_short) {
+      const cut = el('div', 'hint cut'); cut.textContent = T.pageCut;
+      body.appendChild(cut);
+    }
     // Where the value came from is how a rule is diagnosed, not something a person
     // annotating a page needs to read past — so it is folded away, one line, closed by
     // default, and the row stays a value and a click.
@@ -717,8 +1169,20 @@ function render() {
       // choosing a field.
       if (event.target.closest('a, code, details')) return;
       if (!selectedField) { document.getElementById('status').textContent = T.needField; return; }
-      values[selectedField] = valueOf(c);
-      picked[selectedField] = c.id;
+      if (!c.usable_for.includes(KIND[selectedField])) {
+        document.getElementById('status').textContent = T.wrongShape; return;
+      }
+      const field = selectedField;
+      if (c.kind === 'collection' || c.kind === 'images') {
+        // A group is the whole answer in either mode: that is what a group means.
+        values[field] = valueOf(c, isMany(field));
+        picked[field] = c.id;
+      } else if (isMany(field)) {
+        toggleChosen(field, c);
+      } else {
+        values[field] = valueOf(c, false);
+        picked[field] = c.id;
+      }
       document.getElementById('status').textContent = '';
       // Choosing a picture ends the search that led to it: an address is not searchable, so a query
       // left in the box would filter the *next* field's values by a word about this one.
@@ -763,6 +1227,10 @@ document.getElementById('save').onclick = async () => {
         url: DATA.url, mode: DATA.mode,
         fields: values,
         picks: picked,
+        // Which answers are sets. One id and one-of-many ids look the same in `picks`, so
+        // the choice travels beside them rather than being guessed from the count.
+        multi: Object.keys(modes).filter(key => modes[key] === 'many'
+          && Object.prototype.hasOwnProperty.call(values, key)),
         absent: Array.from(absent),
       }),
     });
@@ -776,6 +1244,13 @@ document.getElementById('save').onclick = async () => {
          DATA.last ? T.savedLast
                    : fill(T.savedNext,
                           { fields: (result.fields || []).join(', ') || T.savedNothing }));
+    // A rule that reads more than the person picked is not a failure — picking three of a
+    // page's five authors means the other two as well — but it is not silent either: the
+    // answer becomes every author, and that is worth reading before the next page.
+    if ((result.extra || []).length) {
+      const note = document.getElementById('veilExtra');
+      note.textContent = fill(T.readsMore, { items: (result.extra || []).join(' · ') });
+    }
   } catch (error) {
     veil(null, '');
     status.textContent = fill(T.saveFailed, { error: String(error) });

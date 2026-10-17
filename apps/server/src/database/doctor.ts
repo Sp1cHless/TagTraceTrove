@@ -385,5 +385,14 @@ export function inspectDatabase(database: T3Database): DatabaseDoctorResult {
     for (const trigger of ['producers_directory_seed_immutable','author_directory_sets_sync_insert']) if (!syncTriggers.has(trigger)) issues.push(`missing required trigger: ${trigger}`);
     if (producerColumns.has('directory_set_seed_uid') && database.prepare(`SELECT 1 FROM producers p LEFT JOIN author_directory_sets s ON s.producer_id=p.id WHERE p.directory_set_seed_uid IS NOT NULL AND (s.sync_uid IS NULL OR s.sync_uid<>p.directory_set_seed_uid COLLATE NOCASE) LIMIT 1`).get()) issues.push('Directory seed binding mismatch');
   }
+  if (currentSchemaVersion >= 44) {
+    // A Gallery's layout rides on `gallery_settings`; a row without the column (an interrupted
+    // migration, or a hand-edited file) would make the reader answer 'vertical' for a Gallery the
+    // person set to horizontal, silently.
+    const settingColumns = new Set(
+      (database.pragma('table_info(gallery_settings)') as TableColumn[]).map((column) => column.name),
+    );
+    if (!settingColumns.has('card_layout')) issues.push('missing required column: gallery_settings.card_layout');
+  }
   return { ok: issues.length === 0, issues };
 }

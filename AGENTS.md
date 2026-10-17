@@ -28,6 +28,20 @@ Before UI work that depends on new database behavior:
 
 Tests must never touch `.data/library.db`. Use isolated in-memory databases for repository behavior and temporary file databases for WAL, backups, migration fixtures, and corruption/doctor tests.
 
+## Reading test failures
+
+`pnpm test` and `pnpm test:integration` are separate on purpose. Never run a bare `vitest run`: the default config
+loads `*.integration.test.ts` and the unit files into one pool that is tuned for neither.
+
+A pool's failure count is not the state of the code. Each integration file opens a real SQLite file, a jsdom window
+and a temp directory, so under a full parallel load the heavy ones miss their timing and fail on assertions nobody
+touched. Measured 2026-10-17: 22 failures across both documented suites, and **one** of them still failed when its
+file ran alone; the other 21 passed alone and also passed in a group of five.
+
+So before investigating or reporting failures, run `pnpm test:triage` — the same two suites, then each failing file
+on its own. Report only the files it marks `RED ALONE`. Do not open twenty pool failures one by one, and never
+present a pool's count as a problem with the code.
+
 Provider matching must always be user-directed. Common actions should avoid dialogs.
 
 ## Documentation state rule

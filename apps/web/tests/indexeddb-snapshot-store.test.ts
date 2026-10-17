@@ -339,7 +339,7 @@ describe('IndexedDB snapshot store', () => {
     try {
       expect(await reopened.list()).toEqual([operation]);
       const media = await reopened.listMedia();
-      expect(media.map((upload) => upload.ordinal)).toEqual([2, 1, 0]);
+      expect(media.map((upload) => upload.ordinal)).toEqual([0, 1, 2]);
       const ordered = media.sort((a, b) => a.ordinal - b.ordinal);
       expect(await Promise.all(ordered.map(async (upload) => [...new Uint8Array(await upload.blob.arrayBuffer())])))
         .toEqual([[1, 2], [3, 4], [5, 6]]);

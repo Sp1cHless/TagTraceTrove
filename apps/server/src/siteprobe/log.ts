@@ -1,5 +1,6 @@
 import { mkdir, readdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 /**
  * The error log a person can hand back.
@@ -44,7 +45,7 @@ function describe(error: unknown): string {
 export async function writeSiteprobeErrorLog(dataDir: string, input: SiteprobeLogInput): Promise<string> {
   const directory = join(dataDir, 'logs');
   await mkdir(directory, { recursive: true });
-  const path = join(directory, `siteprobe-${input.kind}-${stamp()}.log`);
+  const path = join(directory, `siteprobe-${input.kind}-${stamp()}-${randomUUID()}.log`);
   const lines = [
     `# T³ SiteProbe error log`,
     `time        ${new Date().toISOString()}`,

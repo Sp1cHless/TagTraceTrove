@@ -85,11 +85,14 @@ it('a cover changed after enqueue refuses the replacement as a visible failed ro
   expect(rows[0]!.lastError).toMatch(/media changed|conflict/i);
  }finally{f.close();}
 });
-it('a second queued cover while one replacement is pending stays refused',async()=>{
+it('a second unsubmitted cover replaces the earlier draft and keeps only the latest bytes',async()=>{
  const f=await fixture();try{
   await f.offline();
   await f.api.uploadEntryMedia(f.work.id,'cover',fileOf());
-  await expect(f.api.uploadEntryMedia(f.work.id,'cover',fileOf())).rejects.toThrow('cannot replace an occupied cover or reorder pending media');
+  const first=(await f.store.listMedia())[0]!;
+  await f.api.uploadEntryMedia(f.work.id,'cover',fileOf());
   expect(await f.store.listMedia()).toHaveLength(1);
+  const latest=(await f.store.listMedia())[0]!;expect(latest.uploadId).not.toBe(first.uploadId);
+  expect((await f.api.getEntry(f.work.id)).coverRef).toContain(latest.uploadId);
  }finally{f.close();}
 });

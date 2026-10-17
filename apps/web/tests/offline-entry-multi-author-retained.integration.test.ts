@@ -1,91 +1,91 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { IDBFactory } from 'fake-indexeddb';
-
-import { expect, it, vi } from 'vitest';
-vi.hoisted(async () => {
-  const { JSDOM } = await import('jsdom');
-  const window = new JSDOM('<!doctype html><html><body></body></html>', {url:'http://isolated/'}).window;
-  for (const key of ['window','document','Element','HTMLElement','SVGElement','Node','localStorage','sessionStorage','MutationObserver','navigator','getComputedStyle'])
-    Object.defineProperty(globalThis,key,{value:key === 'window' ? window : window[key as keyof typeof window],configurable:true});
-  Object.defineProperty(globalThis,'addEventListener',{value:window.addEventListener.bind(window),configurable:true});
-  Object.defineProperty(globalThis,'removeEventListener',{value:window.removeEventListener.bind(window),configurable:true});
-});
-import { createGalleryApi } from '../src/api/gallery.js';
-import { createApiClient } from '../src/api/client.js';
-import { createIndexedDbOfflineStore } from '../src/offline/indexeddb-snapshot-store.js';
-import { createOfflineAwareGalleryApi } from '../src/offline/offline-api.js';
-const serverModule = async(path:string) => {const target=`../../server/src/${path}.js`;return import(/* @vite-ignore */ target);};
-
-async function fixture(){
-  const {createMigratedMemoryDatabase}=await serverModule('database/testing');
-  const {createEntry}=await serverModule('repositories/entry-repository');
-  const {createProducer,linkEntryProducer}=await serverModule('repositories/producer-repository');
-  const {createEntryRatingSlot,createProducerRatingSlot,setEntryRating,setProducerRating}=await serverModule('repositories/rating-repository');
-  const {createAuthorDirectory}=await serverModule('repositories/author-directory-repository');
-  const {createCollection}=await serverModule('repositories/collection-repository');
-  const {assignProducerTag}=await serverModule('repositories/producer-tag-repository');
-  const {addViewLaterProducer}=await serverModule('repositories/view-later-repository');
-  const {createApiApp}=await serverModule('http/app');
-  const db=createMigratedMemoryDatabase(),root=mkdtempSync(join(tmpdir(),'t3-entry-multi-author-'));
-  try {
-  const work=createEntry(db,{title:'Rated work',type:'Comic'}),peer=createEntry(db,{title:'Rated peer',type:'Comic'}),other=createEntry(db,{title:'Other type',type:'Film'});
-  const author=createProducer(db,{name:'Preserved Author'}),contributor=createProducer(db,{name:'Single-work Contributor'});linkEntryProducer(db,work.id,author.id);linkEntryProducer(db,work.id,contributor.id);linkEntryProducer(db,peer.id,author.id);
-  const slot=createEntryRatingSlot(db,{entryId:work.id,name:'Quality'}),keep=createEntryRatingSlot(db,{entryId:work.id,name:'Keep'}),foreign=createEntryRatingSlot(db,{entryId:other.id,name:'Quality'});
-  const summary=createProducerRatingSlot(db,{producerId:author.id,name:'Quality'}),self=createProducerRatingSlot(db,{producerId:author.id,name:'Quality',kind:'author_self'});
-  for(const entry of [work,peer])setEntryRating(db,{entryId:entry.id,slotId:slot.id,stars:4});
-  setEntryRating(db,{entryId:other.id,slotId:foreign.id,stars:3});setProducerRating(db,{producerId:author.id,slotId:summary.id,stars:3.5});setProducerRating(db,{producerId:author.id,slotId:self.id,stars:5});
-  createAuthorDirectory(db,{producerId:contributor.id,title:'Pruned directory',entryIds:[work.id]});
-  createAuthorDirectory(db,{producerId:author.id,title:'Retained directory',entryIds:[work.id]});
-  const collection=createCollection(db,{kind:'producer',title:'Cascade collection'});
-  db.prepare('INSERT INTO collection_producers (collection_id,producer_id) VALUES (?,?)').run(collection.id,contributor.id);
-  assignProducerTag(db,{producerId:contributor.id,name:'Pruned unique tag'});addViewLaterProducer(db,contributor.id);setProducerRating(db,{producerId:contributor.id,slotId:summary.id,stars:2});
-  const app=createApiApp(db,{dataDir:root,assetRoot:join(root,'assets')});let disconnected=false,loseReplay=false,loseAck=false;
-  const calls:string[]=[],bodies:string[]=[];
-  const online=createGalleryApi(createApiClient({baseUrl:'http://isolated/api',fetchImplementation:async(input,init)=>{
-    const url=new URL(String(input));calls.push(`${init?.method??'GET'} ${url.pathname}`);if(disconnected)throw new TypeError('Known offline');
-    if(url.pathname==='/api/sync/replay')bodies.push(String(init?.body));const response=await app.request(url.pathname+url.search,init);
-    if(loseReplay && url.pathname==='/api/sync/replay' && response.ok){loseReplay=false;throw new TypeError('SQL response lost');}
-    if(loseAck && url.pathname.includes('/ack') && response.ok){loseAck=false;throw new TypeError('ACK response lost');}return response;
-  }}));
-  const indexedDB=new IDBFactory(),databaseName=randomUUID();let store=createIndexedDbOfflineStore({indexedDB,databaseName});
-  const replayState={mode:'online' as 'online'|'offline',lastFallbackAt:null as string|null,lastReplayError:null as string|null};
-  const api=createOfflineAwareGalleryApi(online,store,{clientId:'entry-multi-author-phone',randomUUID});
-  return {db,root,work,peer,other,author,contributor,slot,keep,foreign,summary,self,api,online,calls,bodies,get store(){return store;},
-    async offline(){await store.writeGeneration(1,JSON.stringify(await online.fetchSyncSnapshot()));await store.writeMeta('activeGeneration','1');await api.getSyncCapabilities({replay:false});await api.preferOfflineSnapshot!();disconnected=true;calls.length=0;},
-    async deleteMeta(key:string){const db=await new Promise<IDBDatabase>((resolve,reject)=>{const request=indexedDB.open(databaseName);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});try{await new Promise<void>((resolve,reject)=>{const tx=db.transaction('meta','readwrite');tx.objectStore('meta').delete(key);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});}finally{db.close();}},
-    reconnect(){disconnected=false;},loseResponse(){loseReplay=true;},loseAcknowledgement(){loseAck=true;},
-    get replayState(){return replayState;},cold(){store.close();store=createIndexedDbOfflineStore({indexedDB,databaseName});return createOfflineAwareGalleryApi(online,store,{clientId:'entry-multi-author-phone',randomUUID,state:replayState});},
-    close(){store.close();db.close();rmSync(root,{recursive:true,force:true});}
-  };
-  }catch(cause){db.close();rmSync(root,{recursive:true,force:true});throw cause;}
-}
-
-it('connected original settles only with trusted copy, persisted own proof and durable ACK after cold retries',async()=>{
- const f=await fixture();try{
-  await f.offline();f.reconnect();await f.api.getSyncCapabilities({replay:false});f.loseResponse();
-  await expect(f.api.convertEntryAuthors(f.work.id)).rejects.toThrow();const original=(await f.store.list())[0]!;const body=f.bodies[0];
-  const cold=f.cold();await cold.getSyncCapabilities({replay:false});f.loseAcknowledgement();await cold.flushOfflineOutbox!();
-  expect(await f.store.list()).toHaveLength(1);expect(await f.store.readMeta('conversionProof.'+original.opId)).not.toBeNull();
-  const retry=f.cold();await retry.getSyncCapabilities({replay:false});await retry.flushOfflineOutbox!();
-  expect(await f.store.list()).toEqual([]);expect(f.bodies.every(row=>row===body)).toBe(true);
- }finally{f.close();}
-});
-it('saved-copy independent Entry and Film layout preserve exact mixed originals through atomic export restore and settlement',async()=>{
- const f=await fixture();try{
-  await f.offline();await f.api.updateEntry(f.other.id,{title:'Mixed independent'});await f.api.deleteEntryRatingSlot(f.other.id,f.foreign.id);
-  await f.api.convertEntryAuthors(f.work.id);const originals=await f.store.list();expect(originals).toHaveLength(3);
-  const {buildPendingWorkExport}=await import('../src/offline/pending-work-export.js');const text=JSON.stringify(await buildPendingWorkExport(f.store));
-  for(const row of originals)await f.store.remove(row.opId);const cold=f.cold();await cold.preferOfflineSnapshot!();
-  await cold.previewPendingWorkRestore!(text);await cold.restorePendingWork!(text);expect(await f.store.list()).toEqual(originals);
-  const forged=JSON.parse(text);forged.operations.find((row:{operationKind:string})=>row.operationKind==='entry.authors.convert-to-multi').baseValues.authors[0].producerUid=randomUUID();
-  await expect(cold.restorePendingWork!(JSON.stringify(forged))).rejects.toThrow();expect(await f.store.list()).toEqual(originals);
-  f.reconnect();await cold.getSyncCapabilities({replay:false});await cold.flushOfflineOutbox!();expect(await f.store.list()).toEqual([]);
-  expect(f.db.prepare('SELECT title FROM entries WHERE id=?').pluck().get(f.other.id)).toBe('Mixed independent');
- }finally{f.close();}
-});
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { IDBFactory } from 'fake-indexeddb';
+
+import { expect, it, vi } from 'vitest';
+vi.hoisted(async () => {
+  const { JSDOM } = await import('jsdom');
+  const window = new JSDOM('<!doctype html><html><body></body></html>', {url:'http://isolated/'}).window;
+  for (const key of ['window','document','Element','HTMLElement','SVGElement','Node','localStorage','sessionStorage','MutationObserver','navigator','getComputedStyle'])
+    Object.defineProperty(globalThis,key,{value:key === 'window' ? window : window[key as keyof typeof window],configurable:true});
+  Object.defineProperty(globalThis,'addEventListener',{value:window.addEventListener.bind(window),configurable:true});
+  Object.defineProperty(globalThis,'removeEventListener',{value:window.removeEventListener.bind(window),configurable:true});
+});
+import { createGalleryApi } from '../src/api/gallery.js';
+import { createApiClient } from '../src/api/client.js';
+import { createIndexedDbOfflineStore } from '../src/offline/indexeddb-snapshot-store.js';
+import { createOfflineAwareGalleryApi } from '../src/offline/offline-api.js';
+const serverModule = async(path:string) => {const target=`../../server/src/${path}.js`;return import(/* @vite-ignore */ target);};
+
+async function fixture(){
+  const {createMigratedMemoryDatabase}=await serverModule('database/testing');
+  const {createEntry}=await serverModule('repositories/entry-repository');
+  const {createProducer,linkEntryProducer}=await serverModule('repositories/producer-repository');
+  const {createEntryRatingSlot,createProducerRatingSlot,setEntryRating,setProducerRating}=await serverModule('repositories/rating-repository');
+  const {createAuthorDirectory}=await serverModule('repositories/author-directory-repository');
+  const {createCollection}=await serverModule('repositories/collection-repository');
+  const {assignProducerTag}=await serverModule('repositories/producer-tag-repository');
+  const {addViewLaterProducer}=await serverModule('repositories/view-later-repository');
+  const {createApiApp}=await serverModule('http/app');
+  const db=createMigratedMemoryDatabase(),root=mkdtempSync(join(tmpdir(),'t3-entry-multi-author-'));
+  try {
+  const work=createEntry(db,{title:'Rated work',type:'Comic'}),peer=createEntry(db,{title:'Rated peer',type:'Comic'}),other=createEntry(db,{title:'Other type',type:'Film'});
+  const author=createProducer(db,{name:'Preserved Author'}),contributor=createProducer(db,{name:'Single-work Contributor'});linkEntryProducer(db,work.id,author.id);linkEntryProducer(db,work.id,contributor.id);linkEntryProducer(db,peer.id,author.id);
+  const slot=createEntryRatingSlot(db,{entryId:work.id,name:'Quality'}),keep=createEntryRatingSlot(db,{entryId:work.id,name:'Keep'}),foreign=createEntryRatingSlot(db,{entryId:other.id,name:'Quality'});
+  const summary=createProducerRatingSlot(db,{producerId:author.id,name:'Quality'}),self=createProducerRatingSlot(db,{producerId:author.id,name:'Quality',kind:'author_self'});
+  for(const entry of [work,peer])setEntryRating(db,{entryId:entry.id,slotId:slot.id,stars:4});
+  setEntryRating(db,{entryId:other.id,slotId:foreign.id,stars:3});setProducerRating(db,{producerId:author.id,slotId:summary.id,stars:3.5});setProducerRating(db,{producerId:author.id,slotId:self.id,stars:5});
+  createAuthorDirectory(db,{producerId:contributor.id,title:'Pruned directory',entryIds:[work.id]});
+  createAuthorDirectory(db,{producerId:author.id,title:'Retained directory',entryIds:[work.id]});
+  const collection=createCollection(db,{kind:'producer',title:'Cascade collection'});
+  db.prepare('INSERT INTO collection_producers (collection_id,producer_id) VALUES (?,?)').run(collection.id,contributor.id);
+  assignProducerTag(db,{producerId:contributor.id,name:'Pruned unique tag'});addViewLaterProducer(db,contributor.id);setProducerRating(db,{producerId:contributor.id,slotId:summary.id,stars:2});
+  const app=createApiApp(db,{dataDir:root,assetRoot:join(root,'assets')});let disconnected=false,loseReplay=false,loseAck=false;
+  const calls:string[]=[],bodies:string[]=[];
+  const online=createGalleryApi(createApiClient({baseUrl:'http://isolated/api',fetchImplementation:async(input,init)=>{
+    const url=new URL(String(input));calls.push(`${init?.method??'GET'} ${url.pathname}`);if(disconnected)throw new TypeError('Known offline');
+    if(url.pathname==='/api/sync/replay')bodies.push(String(init?.body));const response=await app.request(url.pathname+url.search,init);
+    if(loseReplay && url.pathname==='/api/sync/replay' && response.ok){loseReplay=false;throw new TypeError('SQL response lost');}
+    if(loseAck && url.pathname.includes('/ack') && response.ok){loseAck=false;throw new TypeError('ACK response lost');}return response;
+  }}));
+  const indexedDB=new IDBFactory(),databaseName=randomUUID();let store=createIndexedDbOfflineStore({indexedDB,databaseName});
+  const replayState={mode:'online' as 'online'|'offline',lastFallbackAt:null as string|null,lastReplayError:null as string|null};
+  const api=createOfflineAwareGalleryApi(online,store,{clientId:'entry-multi-author-phone',randomUUID});
+  return {db,root,work,peer,other,author,contributor,slot,keep,foreign,summary,self,api,online,calls,bodies,get store(){return store;},
+    async offline(){await store.writeGeneration(1,JSON.stringify(await online.fetchSyncSnapshot()));await store.writeMeta('activeGeneration','1');await api.getSyncCapabilities({replay:false});await api.preferOfflineSnapshot!();disconnected=true;calls.length=0;},
+    async deleteMeta(key:string){const db=await new Promise<IDBDatabase>((resolve,reject)=>{const request=indexedDB.open(databaseName);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});try{await new Promise<void>((resolve,reject)=>{const tx=db.transaction('meta','readwrite');tx.objectStore('meta').delete(key);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);});}finally{db.close();}},
+    reconnect(){disconnected=false;},loseResponse(){loseReplay=true;},loseAcknowledgement(){loseAck=true;},
+    get replayState(){return replayState;},cold(){store.close();store=createIndexedDbOfflineStore({indexedDB,databaseName});return createOfflineAwareGalleryApi(online,store,{clientId:'entry-multi-author-phone',randomUUID,state:replayState});},
+    close(){store.close();db.close();rmSync(root,{recursive:true,force:true});}
+  };
+  }catch(cause){db.close();rmSync(root,{recursive:true,force:true});throw cause;}
+}
+
+it('connected original settles only with trusted copy, persisted own proof and durable ACK after cold retries',async()=>{
+ const f=await fixture();try{
+  await f.offline();f.reconnect();await f.api.getSyncCapabilities({replay:false});f.loseResponse();
+  await expect(f.api.convertEntryAuthors(f.work.id)).rejects.toThrow();const original=(await f.store.list())[0]!;const body=f.bodies[0];
+  const cold=f.cold();await cold.getSyncCapabilities({replay:false});f.loseAcknowledgement();await cold.flushOfflineOutbox!();
+  expect(await f.store.list()).toHaveLength(1);expect(await f.store.readMeta('conversionProof.'+original.opId)).not.toBeNull();
+  const retry=f.cold();await retry.getSyncCapabilities({replay:false});await retry.flushOfflineOutbox!();
+  expect(await f.store.list()).toEqual([]);expect(f.bodies.every(row=>row===body)).toBe(true);
+ }finally{f.close();}
+});
+it('saved-copy independent Entry and Film layout preserve exact mixed originals through atomic export restore and settlement',async()=>{
+ const f=await fixture();try{
+  await f.offline();await f.api.updateEntry(f.other.id,{title:'Mixed independent'});await f.api.deleteEntryRatingSlot(f.other.id,f.foreign.id);
+  await f.api.convertEntryAuthors(f.work.id);const originals=await f.store.list();expect(originals).toHaveLength(3);
+  const {buildPendingWorkExport}=await import('../src/offline/pending-work-export.js');const text=JSON.stringify(await buildPendingWorkExport(f.store));
+  for(const row of originals)await f.store.remove(row.opId);const cold=f.cold();await cold.preferOfflineSnapshot!();
+  await cold.previewPendingWorkRestore!(text);await cold.restorePendingWork!(text);expect(await f.store.list()).toEqual(originals);
+  const forged=JSON.parse(text);forged.operations.find((row:{operationKind:string})=>row.operationKind==='entry.authors.convert-to-multi').baseValues.authors[0].producerUid=randomUUID();
+  await expect(cold.restorePendingWork!(JSON.stringify(forged))).rejects.toThrow();expect(await f.store.list()).toEqual(originals);
+  f.reconnect();await cold.getSyncCapabilities({replay:false});await cold.flushOfflineOutbox!();expect(await f.store.list()).toEqual([]);
+  expect(f.db.prepare('SELECT title FROM entries WHERE id=?').pluck().get(f.other.id)).toBe('Mixed independent');
+ }finally{f.close();}
+});
 
 it.each(['existing','credited'] as const)('ordinary saved-copy %s earliest NOCASE target reuses identity and prunes only contributors',async(mode)=>{
  const f=await fixture();try{
@@ -97,7 +97,7 @@ it.each(['existing','credited'] as const)('ordinary saved-copy %s earliest NOCAS
   expect(f.db.prepare('SELECT producer_id FROM entry_producers WHERE entry_id=?').pluck().all(f.work.id)).toEqual([target.id]);
  }finally{f.close();}
 });
-it('cold ANY/SFW/NSFW author filters options counts cards and directory facts equal actual SQL projection',async()=>{
+it('cold ANY/visible/hideable author filters options counts cards and directory facts equal actual SQL projection',async()=>{
  const f=await fixture();try{
   f.db.prepare('UPDATE entries SET type=? WHERE id=?').run('Film',f.peer.id);f.db.prepare('INSERT OR REPLACE INTO gallery_settings (entry_type,nsfw) VALUES (?,?)').run('Film',1);
   const {createProducer}=await serverModule('repositories/producer-repository');const target=createProducer(f.db,{name:'multiple author'});
@@ -107,7 +107,10 @@ it('cold ANY/SFW/NSFW author filters options counts cards and directory facts eq
   const {entryPageQueryRequestSchema}=await import('@t3/shared');
   for(const includeNsfw of [false,true])for(const entryType of [undefined,'Comic','Film'])for(const authorIds of [[],[f.author.id],[target.id]]){
    const query=entryPageQueryRequestSchema.parse({includeNsfw,entryType,authorIds,pageSize:30,sort:'title-asc'});
-   expect(await cold.queryEntryPage(query)).toEqual(await f.online.queryEntryPage(query));
+   const canonical=await f.online.queryEntryPage(query);
+   // Online text covers are an opt-in extension, outside the saved snapshot contract.
+   for(const row of canonical.items)delete row.coverText;
+   expect(await cold.queryEntryPage(query)).toEqual(canonical);
   }
   expect(await cold.listFacetFilterOptions('Comic')).toEqual(await f.online.listFacetFilterOptions('Comic'));
   const facts=(row:Awaited<ReturnType<typeof cold.getAuthor>>)=>({id:row.id,name:row.name,galleryType:row.galleryType,looseEntryCount:row.looseEntryCount,ratings:row.ratings,tags:row.tags,usage:row.usage,directories:row.directories.map(({id,title,entryCount,entries})=>({id,title,entryCount,entries}))});

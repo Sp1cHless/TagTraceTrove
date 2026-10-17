@@ -82,7 +82,7 @@ describe('collection Gallery scope migration', () => {
         currentVersion: 17,
       });
 
-      // Members and folder-level NSFW survive the backfill untouched.
+      // Members and the folder-level hideable flag survive the backfill untouched.
       expect(database.prepare('SELECT COUNT(*) FROM collection_entries').pluck().get()).toBe(6);
       expect(database.prepare('SELECT nsfw FROM collections WHERE id = ?').pluck().get(empty)).toBe(1);
       expect(database.prepare(

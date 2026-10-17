@@ -138,7 +138,7 @@ describe('offline sync service and routes', () => {
       snapshotFormatVersion: number;
       featureFlags: Record<string, boolean>;
     };
-    expect(capabilities.sqliteSchemaVersion).toBe(43);
+    expect(capabilities.sqliteSchemaVersion).toBe(44);
     expect(capabilities.snapshotFormatVersion).toBe(2);
     expect(capabilities.featureFlags).toMatchObject({
       offlineMutations: true,

@@ -270,7 +270,7 @@ async function sha256Hex(blob: Blob): Promise<string> {
   return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
 }
 
-function hasOutbox(store: OfflineStore): store is SnapshotStore & OutboxStore {
+function hasOutbox(store: OfflineStore): store is OfflineStore & OutboxStore {
   return typeof store.enqueue === 'function'
     && typeof store.list === 'function'
     && typeof store.remove === 'function';
@@ -1991,6 +1991,32 @@ export function createOfflineAwareGalleryApi(
     });
   }
 
+  async function localMediaItemRefs(intent:LocalMediaIntent,entryId:number,snapshot:SyncSnapshot,operations:PendingSyncOperation[]) {
+    const compiledOperation=intent.compiled && operations.find(row=>row.opId===intent.compiled!.opId);
+    // Renamed paths become usable only after receipt verification installed the
+    // matching snapshot. A merely queued command cannot authorize those paths.
+    const compiledApplied=compiledOperation && remainingProjectionOperations(snapshot,[compiledOperation]).length===0;
+    const compiledRefs=new Map(compiledApplied?intent.compiled!.refs.map(row=>[row.key,row.ref]):[]);
+    const refs=new Map<string,string>();
+    for(const item of intent.items){
+      let ref=compiledRefs.get(item.key);
+      if(ref===undefined && item.uploadId){
+        ref=stagedObjectUrls.get(item.uploadId);
+        if(ref===undefined){
+          const raw=await store.readMeta(`localMediaReceipt.${item.uploadId}`);
+          if(raw){
+            const receipt=JSON.parse(raw) as {entryUid:string;entityId:number;relativeRef:string};
+            if(receipt.entryUid!==intent.entryUid || receipt.entityId!==entryId || typeof receipt.relativeRef!=='string')throw new Error('Image receipt belongs to another work');
+            ref=receipt.relativeRef;
+          }
+        }
+      }
+      ref??=item.ref??undefined;
+      if(ref!==undefined)refs.set(item.key,ref);
+    }
+    return refs;
+  }
+
   async function localMediaContext(entryId:number) {
     if(!store.captureLocalFinalState || !store.editLocalFinalState)throw new Error('Local result storage is unavailable');
     const captured=await store.captureLocalFinalState();
@@ -2009,10 +2035,11 @@ export function createOfflineAwareGalleryApi(
       baselineCoverRef:saved?.coverRef??null,baselinePreviewRefs:[...(saved?.previewRefs??[])],items:[],desired:[],
     };
     const current=[...(visible.coverRef?[visible.coverRef]:[]),...visible.previewRefs];
+    const itemRefs=await localMediaItemRefs(intent,entry.id,active.snapshot,captured.operations);
     const selected:string[]=[];
     for(const ref of current){
       const image=captured.media.find(row=>ref.includes(`#t3-upload=${row.uploadId}`) || ref.includes(`.${row.uploadId}.`));
-      const existing=intent.items.find(item=>image?item.uploadId===image.uploadId:item.ref===ref);
+      const existing=intent.items.find(item=>image?item.uploadId===image.uploadId:itemRefs.get(item.key)===ref);
       const item:LocalMediaItem=existing??{key:image?`upload:${image.uploadId}`:randomUUID(),ref:image?null:ref,...(image?{uploadId:image.uploadId}:{})};
       if(!existing)intent.items.push(item);selected.push(item.key);
     }
@@ -2025,7 +2052,7 @@ export function createOfflineAwareGalleryApi(
     if(new Set(refs).size!==refs.length || refs.some(ref=>!context.current.includes(ref)))throw new Error('Select images from the current work');
     context.intent.desired=refs.map(ref=>context.selected[context.current.indexOf(ref)]!);
     context.intent.revision=randomUUID();
-    await store.editLocalFinalState!({kind:'media',intent:context.intent,...(context.previous?{expectedRevision:context.previous.revision}:{})},rebaseLocalDraftVersions);
+    await store.editLocalFinalState!({kind:'media',intent:context.intent,expectedRevision:context.previous?.revision??null},rebaseLocalDraftVersions);
     invalidateOfflineLibrary();setMode('offline');await setReplayStateFromStore();
     return (await loadOfflineLibrary())!.getEntry(context.entry.id);
   }
@@ -2046,7 +2073,7 @@ export function createOfflineAwareGalleryApi(
     const item:LocalMediaItem={key:`upload:${uploadId}`,ref:null,uploadId};context.intent.items.push(item);
     context.intent.desired=kind==='cover'?[item.key,...context.intent.desired.slice(context.visible.coverRef?1:0)]:[...context.intent.desired,item.key];
     context.intent.revision=randomUUID();
-    await store.editLocalFinalState!({kind:'media',intent:context.intent,upload,deferred,...(context.previous?{expectedRevision:context.previous.revision}:{})},rebaseLocalDraftVersions);
+    await store.editLocalFinalState!({kind:'media',intent:context.intent,upload,deferred,expectedRevision:context.previous?.revision??null},rebaseLocalDraftVersions);
     invalidateOfflineLibrary();setMode('offline');await setReplayStateFromStore();
     return (await loadOfflineLibrary())!.getEntry(context.entry.id);
   }
@@ -2185,10 +2212,11 @@ export function createOfflineAwareGalleryApi(
         if(intent.clientId!==clientId || intent.libraryId!==active.snapshot.header.libraryId || intent.syncEpoch!==active.snapshot.header.syncEpoch)continue;
         const entry=projected.payload.entries.find(row=>row.syncUid?.toLowerCase()===intent.entryUid.toLowerCase());
         if(!entry)continue;
+        const itemRefs=await localMediaItemRefs(intent,entry.id,active.snapshot,operations);
         const refs=intent.desired.map(key=>{
           const item=intent.items.find(row=>row.key===key);
           if(!item)throw new Error('Local image selection is incomplete');
-          return item.uploadId?stagedObjectUrls.get(item.uploadId)??item.ref:item.ref;
+          return itemRefs.get(key);
         }).filter((ref):ref is string=>ref!==null && ref!==undefined);
         entry.coverRef=refs[0]??null;entry.previewRefs=refs.slice(1);entry.previewRef=entry.previewRefs[0]??null;
       }
@@ -7580,6 +7608,21 @@ export function createOfflineAwareGalleryApi(
       const task=(partitionStaging.get(entryType)??Promise.resolve()).then(stage,stage);
       partitionStaging.set(entryType,task);
       try{await task;}finally{if(partitionStaging.get(entryType)===task)partitionStaging.delete(entryType);}
+    },
+    /*
+     * The card shape is a Gallery's own display choice, stored beside its hideable flag, and it is
+     * deliberately not part of the offline world: it is absent from the snapshot and from the
+     * mutation journal (a new key in either is a parse failure for an app whose web build is frozen
+     * in the APK), so there is nothing local to answer from and nothing to queue. Known-offline
+     * calls are refused locally; the page keeps the shape it is showing until it reconnects.
+     */
+    async listGalleryCardLayouts() {
+      if (mode === 'offline') throw new TypeError('Gallery card layout needs a server connection');
+      return online.listGalleryCardLayouts();
+    },
+    async setGalleryCardLayout(entryType,layout) {
+      if (mode === 'offline') throw new TypeError('Gallery card layout needs a server connection');
+      await online.setGalleryCardLayout(entryType,layout);
     },
     async setGalleryOrder(orderedTypes) {
       if (mode === 'offline') { await enqueueGalleryOrder(orderedTypes); return [...orderedTypes]; }

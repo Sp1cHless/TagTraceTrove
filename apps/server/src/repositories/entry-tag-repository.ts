@@ -1,5 +1,7 @@
 import {
   normalizeTag,
+  pickDefaultCoverText,
+  type CoverTextContentRow,
   type EntryListSort,
   type EntryPageQueryRequest,
   type EntryPageResponse,
@@ -108,6 +110,12 @@ export interface EntrySummary {
   uploadDate: string | null;
   pageCount: number | null;
   durationSeconds: number | null;
+  /**
+   * What the card shows in place of an image (`pickDefaultCoverText`). Only an Entry *page* fills
+   * it: it costs a second read of the Content and Tags of the works on screen, which the other
+   * callers of this projection — the probe and the export — have no use for.
+   */
+  coverText?: string | null;
   viewCount: number;
   likeCount: number;
   lastViewedAt: string | null;
@@ -865,6 +873,60 @@ function buildFacetFilterQuery(
   };
 }
 
+/**
+ * Fills each summary's `coverText` — what the card shows when the work has no image of its own.
+ *
+ * Two reads for the works on one page rather than a correlated subquery per row: a Gallery of
+ * thousands is paged, so the page is small, and only the works actually showing a placeholder are
+ * read at all — a Gallery whose works all have covers pays nothing. Reading it here keeps the rule
+ * itself in one place: `pickDefaultCoverText` in `@t3/shared`, which the app also runs over a
+ * queued work's local Content. Both orders are the order the work's own page shows the rows in, so
+ * the card quotes what a person would read first there.
+ */
+function attachCoverText(database: T3Database, entries: EntrySummary[]): EntrySummary[] {
+  const coverless = entries.filter((entry) => entry.coverRef === null && entry.previewRefs.length === 0);
+  if (coverless.length === 0) return entries;
+  const entryIds = coverless.map((entry) => entry.id);
+  const placeholders = entryIds.map(() => '?').join(', ');
+  const contents = database.prepare(`
+    SELECT entry_id AS entryId, content_type AS contentType, content
+    FROM entry_contents
+    WHERE entry_id IN (${placeholders}) AND trim(content) <> ''
+    ORDER BY entry_id, sort_order, id
+  `).all(...entryIds) as Array<CoverTextContentRow & { entryId: number }>;
+  const tags = database.prepare(`
+    SELECT assignment.entry_id AS entryId, tag.name AS name
+    FROM entry_tags AS assignment
+    JOIN tags AS tag ON tag.id = assignment.tag_id
+    JOIN tag_groups AS facet ON facet.id = assignment.facet_id
+    JOIN tag_groups AS section ON section.id = facet.parent_id
+    WHERE assignment.entry_id IN (${placeholders})
+    ORDER BY assignment.entry_id, section.sort_order, section.id,
+      facet.sort_order, facet.id, tag.normalized_name, tag.id
+  `).all(...entryIds) as Array<{ entryId: number; name: string }>;
+
+  const contentsByEntry = new Map<number, CoverTextContentRow[]>();
+  for (const row of contents) {
+    const rows = contentsByEntry.get(row.entryId) ?? [];
+    rows.push({ contentType: row.contentType, content: row.content });
+    contentsByEntry.set(row.entryId, rows);
+  }
+  const tagsByEntry = new Map<number, string[]>();
+  for (const row of tags) {
+    const names = tagsByEntry.get(row.entryId) ?? [];
+    names.push(row.name);
+    tagsByEntry.set(row.entryId, names);
+  }
+
+  return entries.map((entry) => ({
+    ...entry,
+    coverText: pickDefaultCoverText({
+      contents: contentsByEntry.get(entry.id) ?? [],
+      tags: tagsByEntry.get(entry.id) ?? [],
+    }),
+  }));
+}
+
 /** Executes filtering, deterministic sorting, counting and paging in SQLite. */
 export function queryEntryPage(
   database: T3Database,
@@ -876,7 +938,7 @@ export function queryEntryPage(
       .filter((entry) => !excludedTypes.has(entry.type));
     const offset = (input.page - 1) * input.pageSize;
     return {
-      items: ranked.slice(offset, offset + input.pageSize),
+      items: attachCoverText(database, ranked.slice(offset, offset + input.pageSize)),
       total: ranked.length,
       page: input.page,
       pageSize: input.pageSize,
@@ -896,7 +958,7 @@ export function queryEntryPage(
     ${query.orderSql}
     LIMIT ? OFFSET ?
   `).all(...query.itemParameters, input.pageSize, offset));
-  return { items, total, page: input.page, pageSize: input.pageSize };
+  return { items: attachCoverText(database, items), total, page: input.page, pageSize: input.pageSize };
 }
 
 /**
@@ -919,7 +981,7 @@ export function searchEntriesByTitle(
   return rankSearchResults(entries, query, (entry) => entry.title);
 }
 
-/** Ranked search over Entry Tags, optionally limited to SFW Gallery usage. */
+/** Ranked search over Entry Tags, optionally limited to visible Gallery usage. */
 export function searchEntryTags(
   database: T3Database,
   query: string,

@@ -23,7 +23,7 @@ export interface LocalEditCapture {
 export type LocalChange =
   | {kind:'operation';operation:PendingSyncOperation;editable:boolean}
   | {kind:'create';operation:PendingSyncOperation;media:StagedMediaUpload[]}
-  | {kind:'media';intent:LocalMediaIntent;upload?:StagedMediaUpload;deferred?:boolean;expectedRevision?:string}
+  | {kind:'media';intent:LocalMediaIntent;upload?:StagedMediaUpload;deferred?:boolean;expectedRevision?:string|null}
   | {kind:'delete';intent:LocalDeleteIntent}
   | {kind:'compile-media';entryUid:string;revision:string;operation:PendingSyncOperation;refs:Array<{key:string;ref:string}>;uploaded:string[]}
   | {kind:'compile-delete';entryUid:string;revision:string;operation:PendingSyncOperation}
@@ -108,10 +108,23 @@ function reduceOperation(rows:PendingSyncOperation[],state:LocalFinalState,incom
   if(!syncReplayRequestSchema.safeParse(wire(incoming)).success)throw new Error('Invalid local edit');
   const duplicate=rows.find(row=>row.opId===incoming.opId);
   if(duplicate){if(operationFingerprint(duplicate)!==operationFingerprint(incoming))throw new Error('An original request cannot be overwritten');return rows;}
+  const layoutSlotUids = incoming.operationKind === 'rating-layout.slots.set'
+    ? [...(Array.isArray(incoming.baseValues.slots) ? incoming.baseValues.slots : []),
+      ...(Array.isArray(incoming.payload.slots) ? incoming.payload.slots : [])]
+      .flatMap(slot => slot && typeof slot === 'object' && !Array.isArray(slot) && typeof slot.syncUid === 'string' ? [slot.syncUid] : [])
+    : [];
   let previousIndex=-1;
   if(editable && stateKinds.has(incoming.operationKind)) {
     for(let index=rows.length-1;index>=0;index--) {
       const row=rows[index]!;
+      // A rating observes its slot even though its revision owner is an Entry or Author.
+      // Keep the layout creator before that observer instead of merging it into a later edit.
+      if (key(row) !== key(incoming) && layoutSlotUids.some(uid => json([row.baseValues, row.payload]).includes(uid))) break;
+      // Facet creation observes its Section and advances the containing layout.
+      // Keep earlier layout edits before it, with later edits on the new version.
+      if (incoming.operationKind === 'entry.tag-layout.set' && row.operationKind === 'entry.facet.create'
+        && ((typeof incoming.payload.entryType === 'string' && incoming.payload.entryType === row.payload.entryType)
+          || (typeof row.payload.sectionUid === 'string' && json([incoming.baseValues.groups, incoming.payload.groups]).includes(row.payload.sectionUid)))) break;
       if(!canObserve(row,key(incoming)))continue;
       const draft=key(row)===key(incoming) && scope(row,incoming) && state.drafts.includes(row.opId) && row.status==='pending' && row.lastAttemptAt===null;
       if(draft && row.operationKind===incoming.operationKind && row.payload.slotUid===incoming.payload.slotUid && row.payload.entryUid===incoming.payload.entryUid && row.payload.producerUid===incoming.payload.producerUid){previousIndex=index;break;}
@@ -129,6 +142,7 @@ function reduceOperation(rows:PendingSyncOperation[],state:LocalFinalState,incom
   if(compatible && !rows.some(row=>row.opId!==previous.opId && json(row.payload).includes(previous.opId))) {
     const base={...incoming.baseValues,...previous.baseValues};
     let payload={...incoming.payload};
+    if(incoming.operationKind==='entry.tag-layout.set' && previous.payload.entryType!==undefined)payload.entryType=previous.payload.entryType;
     if(patchKinds.has(incoming.operationKind)) {
       payload={...previous.payload,...payload};
       for(const field of Object.keys(base))if(json(payload[field])===json(base[field])){delete payload[field];delete base[field];}
@@ -170,6 +184,16 @@ export function planLocalFinalState(snapshot:SyncSnapshot|null,operations:Pendin
   let rows=structuredClone(operations),images=media.map(row=>({...row}));
   const identity='operation' in change?change.operation:'intent' in change?change.intent:undefined;
   if(snapshot && identity && (identity.libraryId!==snapshot.header.libraryId || identity.syncEpoch!==snapshot.header.syncEpoch))throw new Error('Local edit belongs to another library');
+  if (change.kind === 'operation' || change.kind === 'media') {
+    const owner = change.kind === 'operation' ? change.operation : change.intent;
+    const keys = change.kind === 'operation'
+      ? [key(change.operation), ...referencedEntityKeys(syncReplayRequestSchema.parse(wire(change.operation))).map(value => value.toLowerCase())]
+      : [`entry:${change.intent.entryUid.toLowerCase()}`];
+    if (local.deleted.some(intent => intent.clientId === owner.clientId && intent.libraryId === owner.libraryId
+      && intent.syncEpoch === owner.syncEpoch && keys.includes(`entry:${intent.entryUid.toLowerCase()}`))) {
+      throw new Error('This work is marked for deletion; let its original work sync before editing');
+    }
+  }
   local.drafts=local.drafts.filter(id=>rows.some(row=>row.opId===id && row.status==='pending' && row.lastAttemptAt===null));
   local.mediaDrafts=local.mediaDrafts.filter(id=>images.some(row=>row.uploadId===id && row.status==='pending' && row.lastAttemptAt===null));
   if(change.kind==='operation')rows=reduceOperation(rows,local,change.operation,change.editable);
@@ -179,7 +203,7 @@ export function planLocalFinalState(snapshot:SyncSnapshot|null,operations:Pendin
   }
   if(change.kind==='media') {
     const old=local.media.find(row=>row.entryUid===change.intent.entryUid);
-    if(change.expectedRevision!==undefined && old?.revision!==change.expectedRevision)throw new Error('Local images changed; retry this edit');
+    if(change.expectedRevision!==undefined && (old?.revision??null)!==change.expectedRevision)throw new Error('Local images changed; retry this edit');
     if(change.intent.compiled && change.intent.compiled.opId!==old?.compiled?.opId)throw new Error('Local media submission changed');
     if(change.upload){if(images.some(row=>row.uploadId===change.upload!.uploadId))throw new Error('Duplicate image identity');images.push(change.upload);local.mediaDrafts.push(change.upload.uploadId);local.mediaOrder.push(change.upload.uploadId);if(change.deferred)local.deferredMedia.push(change.upload.uploadId);}
     const intent=structuredClone(change.intent);

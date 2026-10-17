@@ -14,7 +14,7 @@ it('043 preserves journal tombstone high water triggers and diagnoses missing sc
   db.prepare("INSERT INTO sync_tombstones(entity_kind,entity_uid,deleted_version,change_seq) VALUES('entry',?,2,10000)").run(uid);
   const triggers=db.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger' ORDER BY name").all();
   const tombstones=db.prepare('SELECT * FROM sync_tombstones').all();
-  expect(applyAllMigrations(db).applied).toEqual([43]);expect(db.prepare('SELECT * FROM sync_tombstones').all()).toEqual(tombstones);
+  expect(applyAllMigrations(db).applied).toEqual([43,44]);expect(db.prepare('SELECT * FROM sync_tombstones').all()).toEqual(tombstones);
   for(const trigger of triggers as Array<{name:string;sql:string}>)expect(db.prepare("SELECT sql FROM sqlite_master WHERE name=?").pluck().get(trigger.name)?.toString().replace(/\r\n?/gu,'\n')).toBe(trigger.sql.replace(/\r\n?/gu,'\n'));
   expect(db.prepare('SELECT count(*) FROM gallery_settings').pluck().get()).toBe(0);
   setGalleryPartition(db,'Comic',true);expect(db.prepare("SELECT seq FROM sync_changes WHERE entity_kind='gallery_partition'").pluck().get()).toBeGreaterThan(10000);

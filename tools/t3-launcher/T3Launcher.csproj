@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <Compile Remove="T3Launcher.ContractTests\**\*.cs" />
+    <Compile Include="..\release\WindowsPathPolicy.cs" Link="WindowsPathPolicy.cs" />
   </ItemGroup>
 
 </Project>

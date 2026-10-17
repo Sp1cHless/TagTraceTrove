@@ -259,7 +259,7 @@ async function loadSavedEntries(): Promise<GalleryEntrySummary[]> {
 onMounted(load);
 
 // The saved lists themselves are not partitioned, so the visible works depend
-// on the SFW/NSFW toggle: reload instead of filtering loaded rows by hand.
+// on the hideable toggle: reload instead of filtering loaded rows by hand.
 watch(showNsfw, () => {
   void load();
 });

@@ -31,18 +31,37 @@ public final class PairingState {
         if (!confirmed) throw new SecurityException("Explicit replacement confirmation required");
     }
     public static PairingState claim(String payload) throws Exception {
+        return claim(payload, null);
+    }
+    public static PairingState claim(String payload, PairingDiagnostics.Trace trace) throws Exception {
+        if (trace != null) trace.stage("qr_parse");
         JSONObject object = new JSONObject(payload); shape(object,"version","endpoint","libraryId","protocolMin","protocolMax","code","expiresAt","certificateSha256");
-        if (integer(object,"version") != 1 || integer(object,"protocolMin") > 1 || integer(object,"protocolMax") < 1 || integer(object,"expiresAt") <= System.currentTimeMillis()) throw new IllegalArgumentException("Expired or incompatible QR");
-        String code = text(object,"code"); if (!code.matches("[A-Za-z0-9_-]{43}")) throw new IllegalArgumentException("Invalid pairing code");
+        if (trace != null) trace.stage("qr_protocol");
+        if (integer(object,"version") != 1 || integer(object,"protocolMin") > 1 || integer(object,"protocolMax") < 1) throw new PairingDiagnostics.Failure("QR_INCOMPATIBLE");
+        if (trace != null) { trace.stage("qr_expiry"); trace.timing(integer(object,"expiresAt")); }
+        if (integer(object,"expiresAt") <= System.currentTimeMillis()) throw new PairingDiagnostics.Failure("QR_EXPIRED");
+        if (trace != null) trace.stage("qr_endpoint");
+        String code = text(object,"code"); if (!code.matches("[A-Za-z0-9_-]{43}")) throw new PairingDiagnostics.Failure("INVALID_QR");
         PinnedLanTransport transport = new PinnedLanTransport(text(object,"endpoint"),text(object,"certificateSha256"));
+        if (trace != null) trace.endpoint(transport.endpoint);
         String libraryId = text(object,"libraryId");
         JSONObject body = new JSONObject().put("code",code).put("libraryId",libraryId).put("protocolVersion",1).put("deviceName","Android T3");
-        PinnedLanTransport.Result result = transport.request("/api/pairing/claim","POST","application/json",body.toString().getBytes(StandardCharsets.UTF_8),null);
-        if (result.status != 201) throw new SecurityException("Pairing expired, consumed or rejected");
+        if (trace != null) trace.stage("claim_request");
+        PinnedLanTransport.Result result = transport.request("/api/pairing/claim","POST","application/json",body.toString().getBytes(StandardCharsets.UTF_8),null,trace,"claim");
+        if (result.status != 201) {
+            String reason = "CLAIM_HTTP_REJECTED";
+            try {
+                String reported = new JSONObject(new String(result.bytes,StandardCharsets.UTF_8)).getJSONObject("error").optString("pairingReason");
+                if (Arrays.asList("CLAIM_CODE_UNAVAILABLE", "CLAIM_LIBRARY_MISMATCH", "CLAIM_INVALID_REQUEST").contains(reported)) reason = reported;
+            } catch (Exception ignored) { }
+            throw new PairingDiagnostics.Failure(reason);
+        }
+        if (trace != null) trace.stage("claim_response");
         JSONObject response = new JSONObject(new String(result.bytes,StandardCharsets.UTF_8)); shape(response,"version","libraryId","deviceId","token");
-        if (integer(response,"version") != 1 || !libraryId.equals(text(response,"libraryId"))) throw new SecurityException("Library identity changed");
+        if (integer(response,"version") != 1 || !libraryId.equals(text(response,"libraryId"))) throw new PairingDiagnostics.Failure("LIBRARY_CHANGED");
         PairingState state = parse(new JSONObject().put("version",1).put("endpoint",transport.endpoint).put("certificateSha256",transport.pin).put("libraryId",libraryId).put("deviceId",text(response,"deviceId")).put("token",text(response,"token")).toString());
-        state.verify(); return state;
+        if (trace != null) trace.passed("claim_response");
+        state.verify(trace); return state;
     }
     /**
      * Confirms authorization and exact library identity against the server on a fresh
@@ -55,8 +74,15 @@ public final class PairingState {
      * the page's own capability probe confirms identity every few seconds.
      */
     public void verify() throws Exception {
+        verify(null);
+    }
+    private void verify(PairingDiagnostics.Trace trace) throws Exception {
+        if (trace != null) trace.stage("verify_request");
         if (!token.matches("[A-Za-z0-9_-]{43}") || !deviceId.matches("[a-fA-F0-9-]{36}")) throw new SecurityException("Invalid authorization");
-        PinnedLanTransport.Result result = transport.requestFreshConnection("/api/sync/capabilities","GET",null,null,token);
-        if (result.status != 200 || !libraryId.equals(new JSONObject(new String(result.bytes,StandardCharsets.UTF_8)).getString("libraryId"))) throw new SecurityException("Authorization or library identity changed");
+        PinnedLanTransport.Result result = transport.requestFreshConnection("/api/sync/capabilities","GET",null,null,token,trace,"verify");
+        if (result.status != 200) throw new PairingDiagnostics.Failure("VERIFY_HTTP_REJECTED");
+        if (trace != null) trace.stage("verify_response");
+        if (!libraryId.equals(new JSONObject(new String(result.bytes,StandardCharsets.UTF_8)).getString("libraryId"))) throw new PairingDiagnostics.Failure("LIBRARY_CHANGED");
+        if (trace != null) trace.passed("verify_response");
     }
 }

@@ -9,6 +9,40 @@ public readonly record struct LauncherOptions(bool LanEnabled, bool NoBrowser);
 
 public static class LauncherPolicy
 {
+    /// <summary>An initial 0.0.0/null record is a resumable installer state, not a path.</summary>
+    public static string? InstalledProgramToLaunch(string root, string stateJson, string releaseVersion)
+    {
+        using var state = System.Text.Json.JsonDocument.Parse(stateJson);
+        var record = state.RootElement;
+        if (record.GetProperty("product").GetString() != "T3") throw new InvalidOperationException("Invalid installation identity.");
+        string version = record.GetProperty("version").GetString() ?? throw new InvalidOperationException("Missing installation version.");
+        var directory = record.GetProperty("currentDirectory");
+        if (directory.ValueKind == System.Text.Json.JsonValueKind.Null && version == "0.0.0") return null;
+        if (directory.ValueKind != System.Text.Json.JsonValueKind.String || string.IsNullOrWhiteSpace(directory.GetString()))
+            throw new InvalidOperationException("Invalid installed program directory. Run Diagnose.cmd; keep existing data.");
+        string current = Path.GetFullPath(directory.GetString()!);
+        if (!current.StartsWith(Path.Combine(root, "versions") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Installed program is outside this installation.");
+        return version == releaseVersion && File.Exists(Path.Combine(current, "T3.exe")) ? current : null;
+    }
+
+    public static string? AppendStartupLog(string root, string message)
+    {
+        string key = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(root))).Substring(0, 16);
+        string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        foreach (string path in new[] { Path.Combine(root, "t3-startup.log"), Path.Combine(local, "T3", "diagnostics", $"startup-{key}.log"), Path.Combine(Path.GetTempPath(), $"T3-startup-{key}.log") })
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.AppendAllText(path, $"[{DateTimeOffset.Now:o}] {message}{Environment.NewLine}", new System.Text.UTF8Encoding(false));
+                return path;
+            }
+            catch { /* A startup error must still be visible when its directory is unwritable. */ }
+        }
+        return null;
+    }
+
     public static IReadOnlyList<string> NodeCandidates(
         string repoRoot,
         string localAppData,

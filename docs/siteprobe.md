@@ -520,22 +520,29 @@ declarative `site.json`/adapter package that runs on the existing deterministic 
 `build_adapter.py` (single-work), `build_listing.py` (listing/search), `learn.py`,
 `verify_adapter.py`, and the read-only `doctor.py`.
 
-### 5.1 The three-sample training flow
+### 5.1 Sample flow and latest-answer policy
+
+The interactive work builder uses `prefer_latest=True`. Each field keeps its latest explicit answer, selected rule,
+date meaning and One/Several mode; an earlier page's disagreement is advisory after that field has been corrected.
+Fields not reselected on a later page keep their previous answer. The draft records `rule_policy: latest_annotation`
+and its source sessions; both builder verification and `verify_adapter.py` compare each field against its own latest
+recorded page. Creator rules may map to runtime `author` or `authors`; both names participate in the same verification.
 
 **Example 1 — Discovery + Annotation.** URL → BrowserCapture → Candidate Harvester →
 Normalize/Deduplicate → candidate UI → the user marks which candidate is which field → rule
-hypotheses. The user marks scalars (title, creator, date, description, ...), media scalars
+hypotheses. The user marks scalars (title, date, description, ...), single-or-multiple creators, media scalars
 (cover), and collections (tags, characters/subjects, preview/media list, other repeated values).
-The UI must offer "Use this exact element" and "Use all similar/repeated elements" — a collection
-must not be hand-marked as many scalars. Each field stores multiple candidate sources (DOM
+Author/tag/character fields offer **One / Several**. Several mode accepts individual clicks or one collection/block;
+chips show the selected or split members. The derived rule is read by the real runtime against the recorded capture.
+If it reads a superset, the saved hypotheses and UI report its `extra` members; those additional members are imported
+too. Single mode preserves the selected element's positional rule. Each field stores multiple candidate sources (DOM
 selector, meta path, JSON-LD path, inline JSON path, network response + JSON path); do not lock a
 single rule at Example 1.
 
 **Example 2 — Confirmation / Pruning.** Automatically apply the hypotheses; the user only marks
 each field ✓ correct / ✗ incorrect (re-open candidates only for wrong items). Record
-hit/miss, value agreement, type agreement, collection cardinality, source stability. Prune rules
-that miss, hit the wrong element, only worked via an accidental `nth-child` on Example 1, point at
-boilerplate, or generalize a collection wrongly.
+hit/miss, value agreement, type agreement, collection cardinality, source stability. Reselecting a field replaces its
+earlier answer. Superset agreement applies only to fields explicitly answered in Several mode, not legacy scalar picks.
 
 **Example 3 — Blind Validation.** The third page is fully extracted by the generated rules with
 no re-picking; the user only does final acceptance. Only then generate the formal adapter. A
@@ -545,8 +552,8 @@ failure is field-specific and returns to that field's hypotheses (no whole-site 
 generated site.json == existing generic runtime extraction`. Otherwise the Builder is just
 another system and is not "done".
 
-**Verdicts.** A hypothesis becomes a rule only by reading the *right* value on a page the
-annotation never saw. Three verdicts are kept, and the third is deliberate:
+**Verdicts.** Cross-sample results describe the evidence for a hypothesis; they do not override a newer explicit
+annotation. Three verdicts are kept, and the third is deliberate:
 
 - `keep` — read the right value on every sample that has an expectation;
 - `prune` — read a wrong value, or nothing;
@@ -574,6 +581,10 @@ be read by any rule. A non-JSON script is skipped — the same reason a position
 rule at all.
 
 ### 5.2 Candidate Harvester
+
+Named-section headings can label long paragraphs as description candidates, including an abstract whose label is a
+sibling heading. Long blocks are bounded to 400–12,000 characters and a 100,000-character page budget. Candidates
+already truncated by the source retain `cut_short` metadata; a shortened UI preview never shortens the saved answer.
 
 The Harvester's first duty is **recall**, not field decision: `capture → normalize → deduplicate →
 type → relate sources → rank`. It must not decide "this is author/tag/title"; the user confirms
@@ -868,8 +879,11 @@ the block that contains the cards. Related hard cases the Builder hit and fixed 
 
 ### 6.6 Multi-value splitting and collection shapes
 
-- **Multi-value splitting**: tag/character-style fields strip spaces and commas (`split_csv`-like
-  behaviour) — "a collection must not be hand-marked as many scalars".
+- **Multi-value splitting**: comma-class separators (including CJK forms), semicolons, slashes and pipes take
+  precedence and preserve spaces inside multi-word members. Whitespace separates members only when no strong
+  separator exists. A leading list label such as `Keywords:` is removed from the first member. Annotation, learning
+  and runtime share `split_members`; selecting a whole block shows its split members while retaining the original
+  block as the recorded answer.
 - **A list field's members must be handled by one helper regardless of how the template produced
   them.** `_as_members` (renamed from `_as_category_list`) is shared by previews and categories:
   a single string must not be iterated character-by-character (a one-picture preview once became
@@ -878,8 +892,10 @@ the block that contains the cards. Related hard cases the Builder hit and fixed 
   `{from: json_list, path: tags, take: id, list: true}`. This is offered **beside** the
   individual-index reading (e.g. `tags[1].id`), never replacing it — a site whose field is one item
   of an array still works.
-- **Collection candidates must carry all members**, not the first five; the page (and rules) may
-  also truncate a value.
+- **Long text vs truncation**: labelled paragraphs and paragraphs within a named section can supply full descriptions.
+  UI previews abbreviate long text with an explicit character-count notice; annotations/rules retain the full value.
+  A source value already cut short by the website has its own warning and lower ranking. Selector indices are judged
+  against the value the indexed rule actually reads, not against unrelated matches of its selector.
 - **Merge image variants**: the same image at several sizes/paths is one candidate with several
   sources (e.g. `/image/original/.../thumbnail-05.jpg` and `/image/thumbnail/.../thumbnail-05.jpg`).
   The merge key (`picture_key`) is **equality of the path-segment sequence** after stripping
@@ -1049,9 +1065,10 @@ understand any site's search":
 
 ### 7.3 JS-rendered sites, anti-bot, semantic ambiguity, dates
 
-- **JS-rendered sites**: if the server HTML has no data, no template helps; that class needs a
-  headless browser and is out of generic scope. State it explicitly so a "doesn't work" site is
-  diagnosed correctly, not blamed on the template.
+- **JS-rendered sites**: the builder compares HTTP and rendered samples and selects browser acquisition when it
+  recovers annotated fields without losing the HTTP fields. A manually verified browser session retains its profile
+  in the generated adapter. System Edge/Chrome and matching bundled Chromium/Firefox builds are supported; security
+  or login gates remain user-directed browser steps rather than an automatic bypass.
 - **Anti-bot gates**: nonce-cookie pages are a known encountered problem (fixture set contains
   `60ti.com-nonce.html`, `kanman.com-nonce.html`); solving it belongs in the crawler/adapter.
 - **Semantic ambiguity across sites**: two sites' `tags` do not mean the same thing. A template can
@@ -1520,8 +1537,11 @@ Constraints and rules:
 
 - `resolve`'s miss is **200 + `matched:false`** (that is the clipboard flow's question; "none" is
   an answer).
-- Only **one run at a time** (409 + the running id) — two runs would fight over the same listing
-  dir and crawl state.
+- Only one **export writer** runs at a time; a builder waiting on annotation may coexist with an import using an
+  installed adapter. Builders serialize with builders, and sign-ins retain exclusive profile use. A conflict returns
+  409 with `error.details.runId` and `logPath`; UUID-suffixed logs record the request and blocking job independently.
+  Synchronous launch failures remove their provisional running record. Reopening the import panel recovers running
+  imports, selection jobs, sign-ins or builders, with a stop control independent of site/kind selection.
 - `preview-path` path guard: must be **absolute** and resolve inside `<home>/export/` (checked
   after resolve, `..` included); three escape attempts were measured and blocked with 400.
   `preserveRelativeMediaPaths` becomes `false`.
@@ -1827,7 +1847,7 @@ Before release, re-read the actual lockfile and LICENSE files; this list is not 
 - **Unknown fields are preserved** on upgrade; never silently delete.
 - **Identity changes are explicit** — never silently rename an already-exported work directory, and
   never case-fold an existing `source_id`.
-- **One run at a time** (two runs fight over the same listing dir and crawl state).
+- **One export writer at a time**; rule learning can coexist with an installed-adapter import (§9.2).
 - **`resolve`'s "no match" is a successful answer, not an error.**
 - **The menu cannot be hardcoded; T³ never parses site rules; common actions do not pop dialogs;
   provider matching is always user-initiated.**

@@ -3,7 +3,7 @@ import { conversionCascadeOwners } from './entry-multi-author.js';
 import { normalizeTag, pendingWorkFileSchema, syncReplayRequestSchema, syncSnapshotSchema, type SyncSnapshot, type SyncReplayRequest } from '@t3/shared';
 import { operationFingerprint, type PendingSyncOperation } from './outbox-store.js';
 import type { StagedMediaUpload } from './media-outbox-store.js';
-import type { LocalFinalState } from './local-final-state.js';
+import { readLocalFinalState, type LocalFinalState } from './local-final-state.js';
 import { randomUuid } from './random-id.js';
 
 export const MAX_RESTORE_FILE_BYTES = 96 * 1024 * 1024;
@@ -55,7 +55,7 @@ export async function preparePendingWork(text: string): Promise<PreparedPendingW
     const blob = new Blob([bytes], {type:metadata.mimeType});
     media.push({...metadata,blob});
   }
-  const local:LocalFinalState|undefined=result.data.localFinalState?{...structuredClone(result.data.localFinalState),derived:result.data.localFinalState.derived??[]}:undefined;
+  const local = result.data.localFinalState ? readLocalFinalState(JSON.stringify(result.data.localFinalState)) : undefined;
   if(local){
     // An exported deferred Blob has no submitted body. Restore it as a fresh
     // local copy so an older export can never rewrite a UUID submitted later.

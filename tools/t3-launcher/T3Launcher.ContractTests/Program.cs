@@ -2,6 +2,10 @@ using System.Diagnostics;
 using System.Net;
 using T3Launcher;
 
+if (args.Contains("--bootstrap-recovery")) { BootstrapRecoveryCheck.Run(); return; }
+if (args.Contains("--installation-progress")) { InstallationProgressCheck.Run(); return; }
+if (args.Length == 3 && args[0] == "--cloud-paths") { CloudPathCheck.Run(args[1], args[2]); return; }
+
 static void Assert(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);

@@ -66,6 +66,13 @@ const sessionSchema = z.object({ deviceId: z.string().uuid(), deviceName: z.stri
 const stateSchema = z.object({ version: z.literal(1), libraryId: z.string().min(1), certificateSha256: z.string().regex(/^[a-f0-9]{64}$/), sessions: z.array(sessionSchema), offers: z.array(z.object({ codeHash: z.string(), expiresAt: z.number().int() }).strict()) }).strict();
 const claimSchema = z.object({ code: z.string().regex(/^[A-Za-z0-9_-]{43}$/), libraryId: z.string(), protocolVersion: z.literal(1), deviceName: z.string().trim().min(1).max(100) }).strict();
 
+/** Fixed fields only: never print requests, QR codes, bearer tokens or arbitrary error messages. */
+function pairingDiagnostic(stage: string, reason: string, attemptId?: string, httpStatus?: number): void {
+  try { console.warn(`[T3 pairing] ${JSON.stringify({ at: new Date().toISOString(), stage, reason,
+    ...(attemptId ? { attemptId } : {}), ...(httpStatus === undefined ? {} : { httpStatus }) })}`); }
+  catch { /* Diagnostic output must never change authorization or consume an offer. */ }
+}
+
 export function privateHttpsHost(host: string): string {
   if (!/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(host)) throw new Error('Use an unambiguous private IPv4 address');
   const parts = host.split('.'); const octets = parts.map(Number);
@@ -184,35 +191,55 @@ async function startOwnedSecurePairingListener(options: SecurePairingOptions) {
   };
   save(state);
   const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
-  const unauthorized = () => json({ error: { code: 'UNAUTHORIZED', message: 'Pair this device again from the desktop' } }, 401);
+  const unauthorized = (reason?: string, attemptId?: string) => {
+    if (reason) pairingDiagnostic('request_rejected', reason, attemptId, 401);
+    return json({ error: { code: 'UNAUTHORIZED', message: 'Pair this device again from the desktop',
+      ...(reason?.startsWith('CLAIM_') ? { pairingReason: reason } : {}) } }, 401);
+  };
   const server = serve({ createServer, serverOptions: { key: readFileSync(keyPath), cert: certificate, minVersion: 'TLSv1.2' }, hostname: options.hostname, port: options.port ?? 0,
     fetch: async (request) => {
-      if (options.currentLibraryId && options.currentLibraryId() !== state.libraryId) return unauthorized();
-      // Native bearer-only transport. Browser Origin, cookies and preflight cannot gain authority.
-      if (request.headers.has('origin') || request.headers.has('cookie') || request.method === 'OPTIONS') return json({ error: { code: 'FORBIDDEN', message: 'Native transport only' } }, 403);
       const path = new URL(request.url).pathname;
-      if (path === '/api/pairing/claim' && request.method === 'POST') {
-        if (request.headers.get('content-type') !== 'application/json' || Number(request.headers.get('content-length') ?? 0) > 4096) return unauthorized();
+      const isClaim = path === '/api/pairing/claim' && request.method === 'POST';
+      const suppliedAttempt = request.headers.get('x-t3-pairing-attempt') ?? '';
+      const attemptId = /^[a-f0-9-]{36}$/i.test(suppliedAttempt) ? suppliedAttempt : randomUUID();
+      const isVerification = path === '/api/sync/capabilities' && suppliedAttempt === attemptId;
+      if (isClaim || isVerification) pairingDiagnostic(isClaim ? 'claim_received' : 'verify_received', 'REQUEST_RECEIVED', attemptId);
+      if (options.currentLibraryId && options.currentLibraryId() !== state.libraryId) return unauthorized(isClaim ? 'CLAIM_LIBRARY_MISMATCH' : isVerification ? 'LIBRARY_CHANGED' : undefined, attemptId);
+      // Native bearer-only transport. Browser Origin, cookies and preflight cannot gain authority.
+      if (request.headers.has('origin') || request.headers.has('cookie') || request.method === 'OPTIONS') {
+        if (isClaim || isVerification) pairingDiagnostic('request_rejected', 'NATIVE_TRANSPORT_REQUIRED', attemptId, 403);
+        return json({ error: { code: 'FORBIDDEN', message: 'Native transport only' } }, 403);
+      }
+      if (isClaim) {
+        if (request.headers.get('content-type') !== 'application/json' || Number(request.headers.get('content-length') ?? 0) > 4096) return unauthorized('CLAIM_INVALID_REQUEST', attemptId);
         let body: unknown;
-        try { const text = await request.text(); if (text.length > 4096) return unauthorized(); body = JSON.parse(text) as unknown; } catch { return unauthorized(); }
+        try { const text = await request.text(); if (text.length > 4096) return unauthorized('CLAIM_INVALID_REQUEST', attemptId); body = JSON.parse(text) as unknown; } catch { return unauthorized('CLAIM_INVALID_REQUEST', attemptId); }
         const parsed = claimSchema.safeParse(body);
-        if (!parsed.success || parsed.data.libraryId !== state.libraryId) return unauthorized();
+        if (!parsed.success) return unauthorized('CLAIM_INVALID_REQUEST', attemptId);
+        if (parsed.data.libraryId !== state.libraryId) return unauthorized('CLAIM_LIBRARY_MISMATCH', attemptId);
         // No await between claim check and durable consumption: exactly one concurrent winner.
         const codeHash = hash(parsed.data.code);
         const offer = state.offers.find(item => item.codeHash === codeHash && item.expiresAt > now());
-        if (!offer) return unauthorized();
+        if (!offer) return unauthorized('CLAIM_CODE_UNAVAILABLE', attemptId);
         const token = secret(); const deviceId = randomUUID();
-        save({ ...state, offers: state.offers.filter(item => item !== offer && item.expiresAt > now()),
-          sessions: [...state.sessions, { deviceId, deviceName: parsed.data.deviceName, tokenHash: hash(token), createdAt: now(), revoked: false }] });
+        try {
+          save({ ...state, offers: state.offers.filter(item => item !== offer && item.expiresAt > now()),
+            sessions: [...state.sessions, { deviceId, deviceName: parsed.data.deviceName, tokenHash: hash(token), createdAt: now(), revoked: false }] });
+        } catch {
+          pairingDiagnostic('claim_persist', 'AUTHORIZATION_SAVE_FAILED', attemptId, 500);
+          return json({ error: { code: 'PAIRING_STORAGE_FAILED', message: 'Desktop could not save authorization' } }, 500);
+        }
+        pairingDiagnostic('claim_accepted', 'AUTHORIZATION_ISSUED', attemptId, 201);
         return json({ version: 1, libraryId: state.libraryId, deviceId, token }, 201);
       }
       const authorization = request.headers.get('authorization') ?? '';
-      if (!/^Bearer [A-Za-z0-9_-]{43}$/.test(authorization)) return unauthorized();
+      if (!/^Bearer [A-Za-z0-9_-]{43}$/.test(authorization)) return unauthorized(isVerification ? 'AUTHORIZATION_MISSING' : undefined, attemptId);
       const tokenHash = Buffer.from(hash(authorization.slice(7)), 'hex');
-      if (!state.sessions.some(item => !item.revoked && timingSafeEqual(Buffer.from(item.tokenHash, 'hex'), tokenHash))) return unauthorized();
+      if (!state.sessions.some(item => !item.revoked && timingSafeEqual(Buffer.from(item.tokenHash, 'hex'), tokenHash))) return unauthorized(isVerification ? 'AUTHORIZATION_REVOKED_OR_UNKNOWN' : undefined, attemptId);
       // Desktop administrative routes are never forwarded by the LAN listener.
       if (path.startsWith('/api/pairing/') || !path.startsWith('/api/')) return json({ error: { code: 'FORBIDDEN', message: 'Unavailable on native transport' } }, 403);
       const response = await options.fetch(request);
+      if (isVerification) pairingDiagnostic('verify_response', response.ok ? 'AUTHORIZED' : 'API_REJECTED', attemptId, response.status);
       // No credential-bearing redirect, including same-origin resolver redirects: native resolves explicitly.
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get('location');
@@ -221,8 +248,12 @@ async function startOwnedSecurePairingListener(options: SecurePairingOptions) {
       return response;
     },
   });
+  server.on('tlsClientError', (error: Error & { code?: string }) => {
+    pairingDiagnostic('tls_handshake', error.code && /^[A-Z0-9_]{1,64}$/.test(error.code) ? error.code : 'TLS_HANDSHAKE_FAILED');
+  });
   if (!server.listening) await once(server, 'listening');
   const port = (server.address() as AddressInfo).port;
+  pairingDiagnostic('listener_ready', 'TLS_LISTENER_READY');
   return {
     certificate,
     testOrigin: `https://127.0.0.1:${port}`,
@@ -231,6 +262,7 @@ async function startOwnedSecurePairingListener(options: SecurePairingOptions) {
       if (options.currentLibraryId && options.currentLibraryId() !== state.libraryId) throw new Error('Library identity changed; restart and explicitly re-pair');
       const code = secret(); const expiresAt = now() + 120_000;
       save({ ...state, offers: [...state.offers.filter(item => item.expiresAt > now()).slice(-9), { codeHash: hash(code), expiresAt }] });
+      pairingDiagnostic('qr_issued', 'VALID_FOR_120_SECONDS');
       return { version: 1, endpoint: `https://${advertisedHost}:${port}`, libraryId: state.libraryId, protocolMin: 1, protocolMax: 1, code, expiresAt, certificateSha256 };
     },
     devices() { return state.sessions.map(({ deviceId, deviceName, createdAt, revoked }) => ({ deviceId, deviceName, createdAt, revoked })); },

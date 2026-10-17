@@ -21,6 +21,7 @@ import EntryStatsRow from './components/EntryStatsRow.vue';
 import AddEntryPage, { type ManualEntryDraft } from './AddEntryPage.vue';
 import SecurePairingSettings from './components/SecurePairingSettings.vue';
 import AdvancedEditingPage from './AdvancedEditingPage.vue';
+import { readNativePairingDiagnostics } from './pairing-diagnostics.js';
 import AuthorPage from './AuthorPage.vue';
 import RecentViewPage from './RecentViewPage.vue';
 import ViewLaterPage from './ViewLaterPage.vue';
@@ -45,10 +46,12 @@ import { entryCardMediaRef, entryStackLayerStyle, entryStackLayers } from './ent
 import { touchOnlyDevice } from './touch.js';
 import { accent, accentPresets, accentSwatchColors, rowsPerPage, rowsPerPageOptions, showNsfw } from './stores/preferences.js';
 import type { NavigationCounts } from '@t3/shared';
+import type { GalleryCardLayout } from '@t3/shared';
 import { useArmableAction } from './armable.js';
 import FacetFilterBar, { type GalleryFacetFilters } from './components/FacetFilterBar.vue';
 import SuggestionInput from './components/SuggestionInput.vue';
 import AppIcon from './components/AppIcon.vue';
+import CardCoverFallback from './components/CardCoverFallback.vue';
 import IconButton from './components/IconButton.vue';
 import LazyCardImage from './components/LazyCardImage.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
@@ -164,6 +167,7 @@ async function refreshOfflineDiagnostics(): Promise<void> {
     diagnosticBuild: DIAGNOSTIC_BUILD,
     browserCompatibility: browserCompatibilityReport(),
     capturedAt: new Date().toISOString(),
+    pairing: await readNativePairingDiagnostics(),
     mode: props.offlineState?.mode ?? null,
     connectionPhase: props.offlineState?.connectionPhase ?? null,
     lastLocalLoadMs: props.offlineState?.lastLocalLoadMs ?? null,
@@ -274,6 +278,16 @@ const facetFilters = ref<GalleryFacetFilters>({
   usageSort: null,
 });
 let galleryEntriesRequestSeq = 0;
+let galleryNavigationSeq = 0;
+const pendingGalleryType = ref<string | null>(null);
+const galleryFilterOptionsCache = new Map<string, FacetFilterOptions>();
+let galleryFilterRequestSeq = 0;
+const galleryFiltersLoading = ref(false);
+const galleryFilterRoot = ref<HTMLElement | null>(null);
+const galleryFilterReservedHeight = ref(0);
+const displayedGalleryFilterOptions = computed<FacetFilterOptions>(() => facetFilterOptions.value ?? {
+  entryType: activeType.value ?? '', facets: [], allTags: [], authors: [], ratingSlots: [],
+});
 type GallerySort = 'date-desc' | 'date-asc' | 'title-asc' | 'title-desc' | 'random';
 // Newest first by default: recent imports land at the top of the gallery.
 const gallerySort = ref<GallerySort>('date-desc');
@@ -370,6 +384,13 @@ const sortedEntries = computed(() => {
 });
 const activeEntry = ref<EntryDetailResponse | null>(null);
 const activeType = ref<string | null>(null);
+watch([galleryFiltersLoading, activeType], async ([waiting]) => {
+  if (!waiting) return;
+  await nextTick();
+  if (galleryFiltersLoading.value) {
+    galleryFilterReservedHeight.value = Math.ceil(galleryFilterRoot.value?.getBoundingClientRect().height ?? 0);
+  }
+}, { flush: 'post' });
 const editingEntry = ref(false);
 const entryTitleEditorOpen = ref(false);
 const entryTitleDraft = ref('');
@@ -403,8 +424,8 @@ function suggestEntryTags(query: string, excludeIds: number[], signal: AbortSign
     entryType: activeEntry.value?.type ?? undefined,
     facetId: tagEditorFacetId.value ?? undefined,
     // Isolation follows the WORK's Gallery, not the browser-wide switch: a work
-    // in an SFW Gallery may only be indexed by Tags the SFW side can show, even
-    // while NSFW Galleries are visible elsewhere.
+    // in a visible Gallery may only be indexed by Tags the visible side can show, even
+    // while hideable Galleries are shown elsewhere.
     includeNsfw: entryNsfwTypes.value.has(activeEntry.value?.type ?? '') ? 'true' : 'false',
   }, signal);
 }
@@ -441,6 +462,12 @@ const editingContentBody = ref('');
 const loading = ref(true);
 const submitting = ref(false);
 const error = ref<string | null>(null);
+// Action errors are transient; replacing/clearing one also cancels its old deadline.
+watch(error, (message, _previous, onCleanup) => {
+  if (message === null) return;
+  const timer = window.setTimeout(() => { error.value = null; }, 6_000);
+  onCleanup(() => window.clearTimeout(timer));
+}, { flush: 'sync' });
 const theme = ref<Theme>('light');
 // Destructive/heavy actions arm in place on the first click (the button
 // switches to its confirm copy) and run on the second — no native dialogs.
@@ -696,8 +723,8 @@ const sidebarHasNavigation = computed(() => (
 
 const authorSearchOrigin = ref<SearchOrigin | null>(null);
 
-// Whole-gallery partitions are stored server-side; the show-NSFW switch is a
-// local display preference. Everything NSFW hides while it is off.
+// Whole-gallery partitions are stored server-side; the show-hideable switch is a
+// local display preference. Everything hideable hides while it is off.
 const entryNsfwTypes = computed(() => (
   new Set(galleries.value.filter((gallery) => gallery.nsfw).map((gallery) => gallery.type))
 ));
@@ -711,6 +738,50 @@ async function toggleGalleryPartition(gallery: { type: string; nsfw: boolean }):
   try {
     await props.api.setGalleryPartition(gallery.type, !gallery.nsfw);
     await refreshGalleries();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : t('error.loadEntry');
+  }
+}
+
+/**
+ * The card shape of each Gallery — the wall, or the horizontal card a long title needs.
+ *
+ * Held per Gallery rather than as one app-wide switch, because that is what it is: a Gallery whose
+ * titles are sentences wants the wide card while its neighbour does not. Only Galleries that have
+ * a stored shape appear here; anything else is read as the wall, which is what every Gallery showed
+ * before the choice existed.
+ */
+const galleryCardLayouts = ref<Record<string, GalleryCardLayout>>({});
+
+const activeCardLayout = computed<'vertical' | 'horizontal'>(() => (
+  (activeType.value ? galleryCardLayouts.value[activeType.value] : undefined) ?? 'vertical'
+));
+
+/** Whether the Gallery on screen is one the person can hide (what the server still calls `nsfw`). */
+const activeGalleryNsfw = computed(() => (
+  activeType.value
+    ? (galleries.value.find((gallery) => gallery.type === activeType.value)?.nsfw ?? false)
+    : false
+));
+
+async function refreshGalleryCardLayouts(): Promise<void> {
+  try {
+    const layouts = await props.api.listGalleryCardLayouts();
+    galleryCardLayouts.value = Object.fromEntries(layouts.map((row) => [row.type, row.layout]));
+  } catch {
+    // The shapes are a display choice, and the Galleries themselves are already on screen: a page
+    // that failed to read them shows the wall rather than an error about a card shape.
+  }
+}
+
+async function toggleGalleryCardLayout(): Promise<void> {
+  const entryType = activeType.value;
+  if (!entryType) return;
+  const next: GalleryCardLayout = activeCardLayout.value === 'horizontal' ? 'vertical' : 'horizontal';
+  error.value = null;
+  try {
+    await props.api.setGalleryCardLayout(entryType, next);
+    galleryCardLayouts.value = { ...galleryCardLayouts.value, [entryType]: next };
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.loadEntry');
   }
@@ -869,6 +940,11 @@ const returnView = ref<ReturnTarget | null>(null);
 const pendingBatchReview = ref<typeof batchReview.value>(null);
 
 function leaveAllViews(keepEntry = false, preserveScrollHistory = false): void {
+  galleryNavigationSeq += 1;
+  pendingGalleryType.value = null;
+  galleryFilterRequestSeq += 1;
+  galleryFiltersLoading.value = false;
+  galleryFilterReservedHeight.value = 0;
   if (!preserveScrollHistory) {
     returnScrollPositions.length = 0;
     scrollRestoreGeneration += 1;
@@ -1411,12 +1487,17 @@ async function confirmRatingDelete(): Promise<void> {
   }
 }
 
+let deletingEntryId: number | null = null;
+let entryDetailRequestSeq = 0;
 async function deleteActiveEntry(): Promise<void> {
   const deletedEntry = activeEntry.value;
-  if (!deletedEntry) return;
+  if (!deletedEntry || deletingEntryId !== null) return;
   if (!arm('delete-entry')) return;
   disarm('delete-entry');
   error.value = null;
+  deletingEntryId = deletedEntry.id;
+  // A detail read started before deletion cannot restore the deleted card or report its 404.
+  entryDetailRequestSeq += 1;
   try {
     await props.api.deleteEntry(deletedEntry.id);
 
@@ -1461,6 +1542,8 @@ async function deleteActiveEntry(): Promise<void> {
     }
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('error.deleteEntry');
+  } finally {
+    deletingEntryId = null;
   }
 }
 // Layout template: rebuild this type's shared Section/Facet structure from
@@ -1605,10 +1688,17 @@ async function refreshGalleries(): Promise<void> {
  */
 async function refreshFacetFilterOptions(): Promise<void> {
   if (!activeType.value) return;
+  const entryType = activeType.value;
+  const request = ++galleryFilterRequestSeq;
   try {
-    facetFilterOptions.value = await props.api.listFacetFilterOptions(activeType.value);
+    const options = await props.api.listFacetFilterOptions(entryType);
+    if (request !== galleryFilterRequestSeq || activeType.value !== entryType) return;
+    galleryFilterOptionsCache.set(entryType, options);
+    facetFilterOptions.value = options;
   } catch {
     // A stale filter row is not worth an error of its own: selecting the Gallery again re-reads it.
+  } finally {
+    if (request === galleryFilterRequestSeq) galleryFiltersLoading.value = false;
   }
 }
 
@@ -1625,34 +1715,57 @@ async function selectGallery(
   keepEntry = false,
   preserveScrollHistory = false,
 ): Promise<void> {
-  leaveAllViews(keepEntry, preserveScrollHistory);
-  entries.value = [];
-  galleryResultTotal.value = 0;
-  facetFilterOptions.value = null;
-  activeType.value = entryType;
-  facetFilters.value = { conditions: [], authorIds: [], ratingConditions: [], ratingSort: null, usageConditions: [], usageSort: null };
-  galleryPage.value = navigationMemory.pages.get(`gallery:${entryType}`) ?? 1;
+  const navigation = ++galleryNavigationSeq;
+  pendingGalleryType.value = entryType;
+  const filters: GalleryFacetFilters = { conditions: [], authorIds: [], ratingConditions: [], ratingSort: null, usageConditions: [], usageSort: null };
+  const page = navigationMemory.pages.get(`gallery:${entryType}`) ?? 1;
+  type OptionsOutcome = { options: FacetFilterOptions; failure?: never } | { failure: unknown; options?: never };
+  let readyOptions: OptionsOutcome | null = null;
+  const optionsRequest = props.api.listFacetFilterOptions(entryType)
+    .then(options => { readyOptions = { options }; return readyOptions; })
+    .catch(failure => { readyOptions = { failure }; return readyOptions; });
   try {
-    const [, filterOptions] = await Promise.all([
-      loadGalleryEntries(),
-      props.api.listFacetFilterOptions(entryType),
-    ]);
-    if (activeType.value === entryType) facetFilterOptions.value = filterOptions;
+    const result = await queryGalleryEntries(entryType, filters, page);
+    if (navigation !== galleryNavigationSeq) return;
+    // Cards never wait for tag aggregation. A cached bar or a disabled shell
+    // reserves its space while the current Gallery's options arrive.
+    galleryEntriesRequestSeq += 1;
+    leaveAllViews(keepEntry, preserveScrollHistory);
+    activeType.value = entryType;
+    facetFilters.value = filters;
+    entries.value = result.items;
+    galleryResultTotal.value = result.total;
+    galleryPage.value = result.page;
+    facetFilterOptions.value = galleryFilterOptionsCache.get(entryType) ?? null;
+    galleryFiltersLoading.value = facetFilterOptions.value === null;
+    error.value = null;
+    const filterRequest = galleryFilterRequestSeq;
+    const applyOptions = (outcome: OptionsOutcome): void => {
+      if (filterRequest !== galleryFilterRequestSeq || activeType.value !== entryType) return;
+      galleryFiltersLoading.value = false;
+      if (outcome.options !== undefined) {
+        galleryFilterOptionsCache.set(entryType, outcome.options);
+        facetFilterOptions.value = outcome.options;
+      } else {
+        error.value = outcome.failure instanceof Error ? outcome.failure.message : t('gallery.filterError');
+      }
+    };
+    if (readyOptions !== null) applyOptions(readyOptions);
+    else void optionsRequest.then(applyOptions);
   } catch (cause) {
-    if (activeType.value === entryType) {
+    if (navigation === galleryNavigationSeq) {
       error.value = cause instanceof Error ? cause.message : t('error.loadEntries');
     }
+  } finally {
+    if (navigation === galleryNavigationSeq) pendingGalleryType.value = null;
   }
 }
 
-async function loadGalleryEntries(): Promise<void> {
-  if (!activeType.value) return;
-  const seq = ++galleryEntriesRequestSeq;
-  const { conditions, authorIds, ratingConditions, ratingSort, usageConditions, usageSort } = facetFilters.value;
+function queryGalleryEntries(entryType: string, filters: GalleryFacetFilters, page: number) {
+  const { conditions, authorIds, ratingConditions, ratingSort, usageConditions, usageSort } = filters;
   const activeConditions = conditions.filter((condition) => condition.tagIds.length > 0);
-
-  const result = await props.api.queryEntryPage({
-    entryType: activeType.value,
+  return props.api.queryEntryPage({
+    entryType,
     conditions: activeConditions,
     authorIds,
     ratingConditions,
@@ -1661,9 +1774,15 @@ async function loadGalleryEntries(): Promise<void> {
     usageSort,
     sort: gallerySort.value,
     ...(gallerySort.value === 'random' ? { randomSeed: galleryRandomSeed.value } : {}),
-    page: galleryPage.value,
+    page,
     pageSize: galleryPageSize.value,
   });
+}
+
+async function loadGalleryEntries(): Promise<void> {
+  if (!activeType.value) return;
+  const seq = ++galleryEntriesRequestSeq;
+  const result = await queryGalleryEntries(activeType.value, facetFilters.value, galleryPage.value);
   if (seq !== galleryEntriesRequestSeq) return; // superseded by a newer request
   entries.value = result.items;
   galleryResultTotal.value = result.total;
@@ -1906,6 +2025,8 @@ async function openEntryFromAuthor(payload: {
 }
 
 async function openEntry(entryId: number): Promise<void> {
+  if (entryId === deletingEntryId) return;
+  const requestSeq = ++entryDetailRequestSeq;
   error.value = null;
   try {
     const [detail, collectionOptions, memberIds] = await Promise.all([
@@ -1913,6 +2034,7 @@ async function openEntry(entryId: number): Promise<void> {
       props.api.listCollections('entry'),
       props.api.listCollectionsForEntry(entryId),
     ]);
+    if (requestSeq !== entryDetailRequestSeq || entryId === deletingEntryId) return;
     entryCollectionOptions.value = flattenCollectionOptions(
       collectionOptionsForGallery(collectionOptions, detail.type, memberIds),
     );
@@ -1933,6 +2055,7 @@ async function openEntry(entryId: number): Promise<void> {
         entries: refreshMedia(entryOrigin.value.tagResults.entries) } };
     }
   } catch (cause) {
+    if (requestSeq !== entryDetailRequestSeq || entryId === deletingEntryId) return;
     error.value = cause instanceof Error ? cause.message : t('error.loadEntry');
   }
 }
@@ -1942,6 +2065,8 @@ async function viewEntry(
   origin: EntryOrigin | null = null,
   scrollToTop = true,
 ): Promise<void> {
+  galleryNavigationSeq += 1;
+  pendingGalleryType.value = null;
   entryOrigin.value = origin;
   editingEntry.value = false;
   resetLayoutEditors();
@@ -2033,6 +2158,9 @@ async function discardBlockedOfflineEdits(): Promise<void> {
 }
 
 async function closeEntry(): Promise<void> {
+  galleryNavigationSeq += 1;
+  pendingGalleryType.value = null;
+  entryDetailRequestSeq += 1;
   if (entryOrigin.value) {
     if ('tagResults' in entryOrigin.value) {
       tagResults.value = entryOrigin.value.tagResults;
@@ -2880,7 +3008,7 @@ async function removeTag(tagId: number): Promise<void> {
 
 /**
  * Sidebar numbers come from one visibility-aware interface instead of the raw
- * list lengths, so SFW mode never advertises NSFW Authors or saved works. The
+ * list lengths, so with hideable content hidden it never advertises hideable Authors or saved works. The
  * list lengths remain the fallback for a client whose server has no counts route.
  */
 const navigationCounts = ref<NavigationCounts | null>(null);
@@ -2915,6 +3043,7 @@ const visibleViewLaterCount = computed(() => (
 
 let startupComplete = false;
 async function initialize(): Promise<void> {
+  galleryFilterOptionsCache.clear();
   try {
     // Home is the default view: nothing is selected until the user picks a
     // Gallery (homepage design guide §10 — no first-gallery fallback).
@@ -2927,6 +3056,9 @@ async function initialize(): Promise<void> {
     void refreshNavigationCounts();
     void refreshAuthors().catch(reportSupplementaryError);
     void initializeViewLater(props.api).catch(reportSupplementaryError);
+    // The Gallery's card shapes ride along with the Gallery list: they are read at the same moment
+    // for the same reason, and a failure to read them is reported nowhere (see the function).
+    void refreshGalleryCardLayouts();
     await refreshGalleries();
     startupMilestones.galleriesReadyAtMs ??= Math.round(performance.now());
   } catch (cause) {
@@ -3764,11 +3896,24 @@ onUnmounted(() => {
               type="button"
               class="gallery-link"
               :class="{ active: activeType === gallery.type }"
+              :aria-busy="pendingGalleryType === gallery.type"
               :data-gallery-type="gallery.type"
               @click="selectGallery(gallery.type)"
             >
-              <span>{{ gallery.type }}{{ gallery.nsfw ? ' 🔞' : '' }}</span>
-              <span class="count">{{ gallery.entryCount }}</span>
+              <span class="gallery-name">
+                {{ gallery.type }}
+                <!-- The mark a hideable Gallery carries, in the same dim ink every other marker on
+                     a row uses: it says "this one can be hidden", it is not a warning label. -->
+                <AppIcon
+                  v-if="gallery.nsfw"
+                  class="gallery-shield-mark"
+                  name="shelded"
+                  :size="16"
+                  data-testid="gallery-nsfw-mark"
+                />
+              </span>
+              <span v-if="pendingGalleryType === gallery.type" class="count" role="status">{{ t('gallery.loading') }}</span>
+              <span v-else class="count">{{ gallery.entryCount }}</span>
             </button>
             <!-- The exchange control's own arrows, the ones the Collections page moves folders with:
                  shown only while the list is being ordered, so the ordinary sidebar stays a menu. -->
@@ -3864,7 +4009,7 @@ onUnmounted(() => {
         </div>
       </aside>
 
-      <section class="content-panel">
+      <section class="content-panel" :aria-busy="pendingGalleryType !== null">
         <button v-if="pendingEntryMedia" data-testid="retry-entry-media" type="button" :disabled="submitting" @click="retryEntryMedia">
         {{ t('media.retryForEntry', { id: pendingEntryMedia.entryId }) }}
       </button>
@@ -3894,7 +4039,7 @@ onUnmounted(() => {
           :api="api"
           :store="offlineStore"
           :initial-tab="nativePairingRequired ? 'system' : 'tags'"
-          :offline-copy-revision="props.offlineState?.offlineCopyRevision"
+          :offline-copy-revision="props.offlineState?.offlineCopyRevision ?? null"
           :online="!nativePairingRequired && props.offlineState?.mode !== 'offline' && props.offlineState?.connectionPhase !== 'no-copy'"
           @back="closeAdvanced"
           @authors-changed="refreshAuthors"
@@ -3986,7 +4131,7 @@ onUnmounted(() => {
                     decoding="async"
                   />
                   <span v-if="entryStackLayers(entry).length === 0" class="entry-placeholder t3-library-text" aria-hidden="true">
-                    {{ entry.title.slice(0, 1).toUpperCase() }}
+                    <CardCoverFallback :title="entry.title" :text="entry.coverText" />
                   </span>
                   <span v-if="entry.likeCount > 0" class="entry-like-badge" data-testid="entry-like-badge">
                     👍 {{ entry.likeCount }}
@@ -4116,7 +4261,7 @@ onUnmounted(() => {
               >
                 <div class="entry-stack">
                   <span v-if="(entry.coverRef || entry.previewRef) === null" class="entry-placeholder t3-library-text" aria-hidden="true">
-                    {{ entry.title.slice(0, 1).toUpperCase() }}
+                    <CardCoverFallback :title="entry.title" :text="entry.coverText" />
                   </span>
                   <LazyCardImage
                     v-else
@@ -5239,14 +5384,23 @@ onUnmounted(() => {
               <h2 data-testid="active-gallery-title">{{ activeType }}</h2>
             </div>
             <div class="content-heading-actions">
-              <button
+              <IconButton
+                data-testid="gallery-card-layout-toggle"
+                icon="layoutshift"
+                :label="t(activeCardLayout === 'horizontal' ? 'gallery.cardLayoutVertical' : 'gallery.cardLayoutHorizontal')"
+                :active="activeCardLayout === 'horizontal'"
+                @click="toggleGalleryCardLayout"
+              />
+              <!-- The shield pair, the way it is said everywhere now: the icon is the state the
+                   click leads to, the label is the click. Same reading as the shape toggle beside
+                   it, and the same words as the mark in the sidebar. No tint for the state: the
+                   slash and the check already say it, and this concept stays quiet. -->
+              <IconButton
                 data-testid="gallery-partition-toggle"
-                class="secondary-button"
-                type="button"
-                @click="activeType && toggleGalleryPartition({ type: activeType, nsfw: galleries.find((g) => g.type === activeType)?.nsfw ?? false })"
-              >
-                {{ galleries.find((g) => g.type === activeType)?.nsfw ? t('gallery.sfwBadge') : t('gallery.nsfwBadge') }}
-              </button>
+                :icon="activeGalleryNsfw ? 'unshelded' : 'shelded'"
+                :label="t(activeGalleryNsfw ? 'gallery.unshieldAction' : 'gallery.shieldAction')"
+                @click="activeType && toggleGalleryPartition({ type: activeType, nsfw: activeGalleryNsfw })"
+              />
               <label class="sort-control">
                 <span>{{ t('gallery.sortLabel') }}</span>
                 <select v-model="gallerySort" data-testid="gallery-sort">
@@ -5266,12 +5420,15 @@ onUnmounted(() => {
               </span>
             </div>
           </div>
-          <div v-if="facetFilterOptions
-            && (facetFilterOptions.facets.length > 0 || facetFilterOptions.allTags.length > 0)"
+          <div v-if="galleryFiltersLoading || (facetFilterOptions
+            && (facetFilterOptions.facets.length > 0 || facetFilterOptions.allTags.length > 0))"
+            ref="galleryFilterRoot"
             class="gallery-filter-wrap"
+            :style="galleryFilterReservedHeight > 0 ? { minHeight: `${galleryFilterReservedHeight}px` } : undefined"
           >
             <FacetFilterBar
-              :options="facetFilterOptions"
+              :options="displayedGalleryFilterOptions"
+              :loading="galleryFiltersLoading"
               :model-value="facetFilters"
               @update:model-value="onFacetFiltersChange"
             />
@@ -5281,6 +5438,7 @@ onUnmounted(() => {
             :page-key="`gallery:${activeType}`"
             :total-items="galleryResultTotal"
             :external-page="galleryPage"
+            :layout="activeCardLayout"
             grid-testid="entry-list"
             @update:page="onGalleryPageChange"
             @update:page-size="onGalleryPageSizeChange"
@@ -5290,6 +5448,7 @@ onUnmounted(() => {
               v-for="entry in items"
               :key="entry.id"
               class="entry-card"
+              :class="{ 'is-horizontal': activeCardLayout === 'horizontal' }"
             >
               <button
                 type="button"
@@ -5309,7 +5468,7 @@ onUnmounted(() => {
                     decoding="async"
                   />
                   <span v-if="entryStackLayers(entry).length === 0" class="entry-placeholder t3-library-text" aria-hidden="true">
-                    {{ entry.title.slice(0, 1).toUpperCase() }}
+                    <CardCoverFallback :title="entry.title" :text="entry.coverText" />
                   </span>
                   <span v-if="entry.likeCount > 0" class="entry-like-badge" data-testid="entry-like-badge">
                     👍 {{ entry.likeCount }}
@@ -5662,6 +5821,10 @@ h2 { margin-bottom: 0; }
 }
 .gallery-link { display: flex; justify-content: space-between; width: 100%; padding: 0.65rem 0.75rem; border-color: transparent; border-radius: 0.65rem; color: var(--text-primary); background: transparent; text-align: left; }
 .gallery-link:hover, .gallery-link.active { color: var(--tag-text); background: var(--tag-background); border-color: var(--tag-border); }
+/* The name and its mark travel together; the mark sits just after the word rather than at the far
+   edge, which is where the count lives. */
+.gallery-name { display: inline-flex; align-items: center; gap: 0.3rem; min-width: 0; }
+.gallery-shield-mark { color: var(--text-muted); opacity: 0.65; }
 
 .create-form { display: grid; gap: 0.8rem; margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border-subtle); }
 .create-form label { display: grid; gap: 0.35rem; font-size: 0.8rem; font-weight: 700; }
@@ -5683,7 +5846,39 @@ h2 { margin-bottom: 0; }
 .entry-stack { position: relative; aspect-ratio: 4 / 3; overflow: hidden; isolation: isolate; background: var(--surface-muted); perspective: 28rem; perspective-origin: 50% 50%; transform-style: preserve-3d; }
 .entry-stack-image { position: absolute; display: block; box-sizing: border-box; border: 1px solid color-mix(in srgb, var(--border-subtle) 75%, transparent); border-radius: 0.15rem; box-shadow: 0 0.18rem 0.45rem rgb(15 23 42 / 16%); transform-style: preserve-3d; }
 .entry-stack-image:first-child { box-shadow: 0 0.28rem 0.7rem rgb(15 23 42 / 22%); }
-.entry-stack .entry-placeholder { height: 100%; }
+/* The cover slot's own box, exactly: a flow placeholder sized its letter by `min-height` instead,
+   and on a narrow card that box is taller than the cover it sits in, so the letter — and now the
+   work's text — centred against the wrong height and looked low. */
+.entry-stack .entry-placeholder { position: absolute; inset: 0; height: 100%; min-height: 0; }
+/* The horizontal card (a Gallery whose titles are long enough that a narrow card reads badly):
+   the cover becomes a portrait panel on the left, the title sits beside it and sets the card's
+   width. The height is what is anchored — a long title lengthens the row not at all.
+
+   The cover keeps the size it has on the wall and only its proportion flips, which is the point of
+   the shape: a wall card is about 1/6 of the content column (≈8rem) and its 4/3 panel is ≈6rem
+   tall, so the same panel turned upright is ≈6rem wide and ≈8rem tall. The rounded rectangle,
+   border and shadow are the wall card's own, reused rather than redrawn. */
+.entry-card.is-horizontal { width: fit-content; max-width: 100%; }
+.entry-card.is-horizontal .entry-card-main { display: flex; align-items: stretch; }
+.entry-card.is-horizontal .entry-stack { flex: 0 0 auto; width: 6.05rem; height: auto; aspect-ratio: 3 / 4; }
+.entry-card.is-horizontal .entry-meta { flex: 0 1 auto; min-width: 0; align-content: start; }
+.entry-card.is-horizontal .entry-meta strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+/* The fan of previews is drawn for a 4/3 box; in the portrait panel its widths are the ones that
+   overflow, so the spread is read against the panel's own height. */
+.entry-card.is-horizontal .entry-stack-image { max-width: 100%; }
+/* The page's invisible centre axis, with one card on each side of it. The left card starts at the
+   page's left edge; the right card starts at the axis, which is the left edge of its own column.
+   So both columns read the same way — a card grows to the right from where its column begins, as
+   far as its own title needs — and the axis shows as the second column's beginning. It is also the
+   limit: a card is never wider than its half of the page, which is what keeps a row at two and
+   what the clamp above is for when a title overruns. */
+.paged-grid[data-layout='horizontal'] .entry-card { justify-self: start; }
 .entry-media-viewer { position: relative; display: flex; align-items: center; gap: 0.4rem; margin: 1rem 0 1.25rem; max-width: 24rem; }
 /* Sizes to the picture, never to the column: a portrait keeps its own width
    (no letterbox bars) and the controls keep the picture's edges. */

@@ -12,7 +12,7 @@ import { nativeMutationContract } from '@t3/shared';
 import { createGalleryApi } from '../src/api/gallery.js';
 import { createApiClient } from '../src/api/client.js';
 import { createOfflineAwareGalleryApi,localCollectionId } from '../src/offline/offline-api.js';
-import { createIndexedDbOfflineStore } from '../src/offline/indexeddb-snapshot-store.js';
+import { createIndexedDbOfflineStore, type IndexedDbOfflineStore } from '../src/offline/indexeddb-snapshot-store.js';
 import { createMemoryOfflineStore } from '../src/offline/memory-offline-store.js';
 import { createNativeTransfers } from '../src/offline/native-background-transfer.js';
 import { operationFingerprint } from '../src/offline/outbox-store.js';
@@ -22,6 +22,10 @@ import { preparePendingWork } from '../src/offline/pending-work-restore.js';
 const serverModule=async(path:string)=>{const target=`../../server/src/${path}.js`;return import(/* @vite-ignore */target);};
 const PNG=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='),c=>c.charCodeAt(0));
 const image=()=>new File([new Uint8Array(PNG)],'local.png',{type:'image/png'});
+
+function hasNativeCapture(store: ReturnType<typeof createMemoryOfflineStore>): store is IndexedDbOfflineStore {
+  return 'captureNativeTransfers' in store && typeof store.captureNativeTransfers === 'function';
+}
 
 async function fixture(memory=false){
   const {createMigratedMemoryDatabase}=await serverModule('database/testing');
@@ -51,7 +55,7 @@ async function fixture(memory=false){
   return {db,work,a,b,state,calls,uploads,bodies,online,get api(){return api;},get store(){return store;},
     async offline(){await store.writeGeneration(1,JSON.stringify(await online.fetchSyncSnapshot()));await store.writeMeta('activeGeneration','1');await api.getSyncCapabilities({replay:false});await api.preferOfflineSnapshot!();disconnected=true;calls.length=0;uploads.length=0;bodies.length=0;},
     async queued(cover=false){const uid=randomUUID(),id=localCollectionId(uid);await api.enqueueOfflineEntryCreate!({title:'Created',type:'Comic',uploadDate:null,pageCount:null,ratings:[],viewLater:false,coverFile:cover?image():null,previewFile:null,previewFiles:[],syncUid:uid});return {id,uid};},
-    async cold(){if('close' in store){store.close();store=createIndexedDbOfflineStore({indexedDB,databaseName:name});api=makeApi();}await api.preferOfflineSnapshot!();},
+    async cold(){if('close' in store && typeof store.close==='function'){store.close();store=createIndexedDbOfflineStore({indexedDB,databaseName:name});api=makeApi();}await api.preferOfflineSnapshot!();},
     async reconnect(){disconnected=false;await api.getSyncCapabilities({replay:false});await api.flushOfflineOutbox!();},
     loseUpload(){loseUpload=true;},loseReplay(){loseReplay=true;},loseAck(){loseAck=true;},
     async covered(){await online.uploadEntryMedia(work.id,'cover',image());},
@@ -59,9 +63,9 @@ async function fixture(memory=false){
       const target=createIndexedDbOfflineStore({indexedDB,databaseName:randomUUID()});await target.writeGeneration(1,(await store.readGeneration(1))!);await target.writeMeta('activeGeneration','1');
       const targetApi=createOfflineAwareGalleryApi(online,target,{clientId:'final-state-phone',randomUUID,state});disconnected=false;await targetApi.getSyncCapabilities({replay:false});disconnected=true;
       await target.bindPendingWorkClient('final-state-phone');await target.restorePendingWork(await preparePendingWork(text),'final-state-phone',true);
-      if('close' in store)store.close();store=target;api=targetApi;await api.preferOfflineSnapshot!();calls.length=0;
+      if('close' in store && typeof store.close==='function')store.close();store=target;api=targetApi;await api.preferOfflineSnapshot!();calls.length=0;
     },
-    close(){if('close' in store)store.close();db.close();rmSync(root,{recursive:true,force:true});vi.unstubAllGlobals();},
+    close(){if('close' in store && typeof store.close==='function')store.close();db.close();rmSync(root,{recursive:true,force:true});vi.unstubAllGlobals();},
   };
 }
 const mediaRefs=async(f:Awaited<ReturnType<typeof fixture>>,id=f.work.id)=>{const entry=await f.api.getEntry(id);return [...(entry.coverRef?[entry.coverRef]:[]),...entry.previewRefs];};
@@ -245,12 +249,24 @@ it('shows deletion immediately for an uncertain create and completes it after th
 it('freezes native bodies at handoff, while foreground edits remain mutable until that boundary',async()=>{
   const f=await fixture();try{
     await f.offline();await f.api.updateEntry(f.work.id,{title:'Draft'});expect('captureNativeTransfers' in f.store).toBe(true);
-    if(!('captureNativeTransfers' in f.store))throw new Error('Missing native capture');
+    if(!hasNativeCapture(f.store))throw new Error('Missing native capture');
     let editing=true;const sent:string[]=[];
     const transfers=createNativeTransfers(f.store,{call:async(method,args)=>{if(method==='status')return {protocolVersion:1,planVersion:1,operationKinds:Object.keys(nativeMutationContract)};if(method==='stageOperation')sent.push(String(args.body));return {}; }},{isEditing:()=>editing});
     await transfers.handoff();expect(sent).toEqual([]);await f.api.updateEntry(f.work.id,{title:'Latest draft'});
     editing=false;await transfers.handoff();expect(sent).toHaveLength(1);const original=operationFingerprint((await f.store.list())[0]!);
     await f.api.updateEntry(f.work.id,{title:'After submission'});expect(await f.store.list()).toHaveLength(2);expect(operationFingerprint((await f.store.list())[0]!)).toBe(original);
+  }finally{f.close();}
+});
+
+it.each([false, true])('refuses edits after a local deletion without changing its durable intent (memory=%s)',async memory=>{
+  const f=await fixture(memory);try{
+    await f.offline();await f.api.deleteEntry(f.work.id);
+    const before=await f.store.captureLocalFinalState();
+    await expect(f.api.updateEntry(f.work.id,{title:'Resurrection'})).rejects.toThrow(/delet/iu);
+    await expect(f.api.likeEntry(f.work.id)).rejects.toThrow(/delet/iu);
+    expect(await f.store.captureLocalFinalState()).toEqual(before);
+    expect(f.calls).toEqual([]);
+    await settled(f);expect(f.db.prepare('SELECT count(*) FROM entries WHERE id=?').pluck().get(f.work.id)).toBe(0);
   }finally{f.close();}
 });
 

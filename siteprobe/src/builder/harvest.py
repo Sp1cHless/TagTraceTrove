@@ -104,6 +104,8 @@ MAX_JSON_DEPTH = 6
 MAX_JSON_VALUES = 3000
 MAX_STRING_SCAN = 400
 MAX_BLOCK_LENGTH = 400
+MAX_LABELLED_BLOCK_LENGTH = 12_000
+MAX_LABELLED_TEXT_BUDGET = 100_000
 MAX_BLOCKS = 200
 # A single character is a value: a volume number is "1". The punctuation-only test
 # below is what rejects noise, not a length floor, because a value that was dropped
@@ -281,6 +283,19 @@ def joined_value(value: Any) -> str:
     return COLLECTION_JOIN.join(members_of(value))
 
 
+def covers_members(read_value: Any, accepted: Any) -> bool:
+    """Whether what a rule read holds every member a person accepted — it may hold more.
+
+    A field answered in 「多个」 is a set the person named one value at a time: picking three of a
+    page's five authors means the other two as well, and the rule that reads all five is the answer
+    they chose. Reading *less* is the failure; `same_members` says whether they are the same.
+    """
+    wanted, offered = members_of(accepted), members_of(read_value)
+    if not wanted or not offered:
+        return False
+    return all(any(same_members(one, other) for other in offered) for one in wanted)
+
+
 def same_members(one: Any, other: Any) -> bool:
     """Whether two values hold the same members, in the same order.
 
@@ -445,10 +460,16 @@ class _Registry:
             return None
         if kind not in ("url", "number") and not is_a_value(normalized):
             return None
+        if kind == "collection" and identity is None and isinstance((context or {}).get("members"), list):
+            # Equal ordered members are one choice, regardless of the selector that
+            # found them. Do not collapse merely similar/superset groups or rely on
+            # the display delimiter: one member can itself contain that delimiter.
+            identity = "members:" + json.dumps(context["members"], ensure_ascii=False)
         key = (kind, identity or identity_value)
         existing = self._by_key.get(key)
         if existing is not None:
-            if not any(item.channel == source.channel and item.detail == source.detail
+            if not any(item.channel == source.channel and item.document == source.document
+                       and item.detail == source.detail and item.rule == source.rule
                        for item in existing.sources):
                 existing.sources.append(source)
             return existing
@@ -646,6 +667,22 @@ def _add_text(registry: _Registry, raw: str, source: Source, *,
                          Source(source.channel, source.document,
                                 f"{source.detail} (scoped group at {scoped['select']})", scoped),
                          context)
+            # A click on one member is not a click on the whole group. Keep a
+            # structural position rule beside the list rule, without fixing its text.
+            position_key = "positions:" + scoped['select']
+            positions = counts.get(position_key) if counts is not None else None
+            if positions is None:
+                positions = {id(member): index for index, member in enumerate(select_all(root, scoped['select']))}
+                if counts is not None:
+                    counts[position_key] = positions
+            position = positions.get(id(element))
+            if position is not None:
+                single = {key: value for key, value in scoped.items() if key != 'list'}
+                single['index'] = position
+                registry.add("text", text,
+                             Source(source.channel, source.document,
+                                    f"{source.detail} (member {position} at {scoped['select']})", single),
+                             context)
 
     rule = source.rule or {}
     selector = str(rule.get("select") or "")
@@ -726,8 +763,11 @@ def widening_rules(element: Element, rule: dict[str, Any], value: str, root: Ele
 
 
 def _rule_reads(root: Element, rule: dict[str, Any], selector: str, base: str,
-                counts: dict[str, Any] | None) -> set[str]:
+                counts: dict[str, Any] | None, index: int | None = None) -> set[str]:
     """Every value a rule over this selector reads, as identities.
+
+    `index` narrows the question to the element the rule itself names: an indexed rule reads
+    *one* element, so what its selector's other matches read says nothing about what it reads.
 
     One page may name the same block twice — a phone copy and a desktop copy — and then a
     rule reading either is right, which is why "how many elements" is the wrong question.
@@ -738,13 +778,16 @@ def _rule_reads(root: Element, rule: dict[str, Any], selector: str, base: str,
     series as the author.
     """
     attr = str(rule.get("attr") or "")
-    key = f"reads:{attr}:{selector}"
+    key = f"reads:{attr}:{index}:{selector}"
     if counts is not None and key in counts:
         return counts[key]
     try:
         matches = select_all(root, selector)
     except Exception:  # noqa: BLE001 - an unselectable rule reads nothing
         matches = []
+    if index is not None:
+        # The runtime reads nothing at an index outside its matches, so neither does this.
+        matches = matches[index:index + 1] if 0 <= index < len(matches) else []
     values = set()
     for element in matches:
         if not attr:
@@ -909,17 +952,47 @@ def harvest_markup(registry: _Registry, document: Document, base: str) -> None:
 
     # Prose: bounded, and attributed to the element it came from, so a description
     # is reachable without the candidate list becoming the page's full text.
+    long_text_budget = MAX_LABELLED_TEXT_BUDGET
     for selector in PROSE_BLOCKS:
         for element in select_all(root, selector)[:MAX_BLOCKS]:
             text = element.text()
-            if text and len(text) <= MAX_BLOCK_LENGTH:
+            chrome = in_site_chrome(element)
+            bounded_long = (MAX_BLOCK_LENGTH < len(text) <= MAX_LABELLED_BLOCK_LENGTH
+                            and len(text) <= long_text_budget and not chrome
+                            and (labelled_value_row(element, text) is not None
+                                 or section_heading_label(element) is not None))
+            if bounded_long:
+                long_text_budget -= len(text)
+            if text and (len(text) <= MAX_BLOCK_LENGTH or bounded_long):
+                own = element_selector(element)
+                rule: dict[str, Any] = {"from": "html", "document": document.name,
+                                        "select": own, "text": True,
+                                        "matches": selector_matches(root, own, counts)}
+                if bounded_long:
+                    # A long labelled block usually sits inside the block that names it, and its
+                    # selector also picks up nested blocks: PMC's abstract section wraps the
+                    # keywords block, so `#abstract1 p` matched two elements and the rule — judged
+                    # to read a different value at its other match — was never offered, leaving
+                    # the full abstract unpickable while the site's own summary (which ends in
+                    # "…") was the only thing on offer. Naming the block by its position in its
+                    # own selector is how one member of a repeated class is named everywhere else.
+                    index = position_within(root, own, element, counts)
+                    if index is not None:
+                        rule["index"] = index
                 _add_text(registry, text,
-                          Source("markup", document.name, f"{selector} text",
-                                 {"from": "html", "document": document.name,
-                                  "select": element_selector(element), "text": True,
-                                  "matches": selector_matches(root, element_selector(element), counts)}),
-                          chrome=in_site_chrome(element), root=root, element=element,
+                          Source("markup", document.name, f"{selector} text", rule),
+                          chrome=chrome, root=root, element=element,
                           counts=counts)
+                if bounded_long:
+                    # A second naming of the same block, because an id names one page: the two
+                    # samples then decide between them instead of the first page deciding alone.
+                    by_class = same_block_named_by_class(element, root, text, document.name, counts)
+                    if by_class is not None and by_class["select"] != own:
+                        _add_text(registry, text,
+                                  Source("markup", document.name,
+                                         f"{selector} text (by class)", by_class),
+                                  chrome=chrome, root=root, element=element,
+                                  counts=counts)
 
     for meta in select_all(root, "meta"):
         content = (meta.attr("content") or "").strip()
@@ -1196,7 +1269,8 @@ def offer_json_lists(registry: _Registry, channel: str, document: Document,
                             # `list` as well as `take`: the rule reads a list, and a collection
                             # field's shape check is what looks for that key.
                             {"from": "json_list", "document": document.name,
-                             "path": parent, "take": key, "list": True}))
+                             "path": parent, "take": key, "list": True}),
+                     context={"members": values, "count": len(values)})
 
 
 def _stands_alone(url: str, text: str) -> bool:
@@ -1340,6 +1414,25 @@ def anchor_for(value: str) -> str | None:
     return None
 
 
+def sibling_text_label(element: Element) -> str | None:
+    """A short literal label immediately before the value, e.g. `Maker: <span>…`."""
+    if element.parent is None:
+        return None
+    preceding: list[str] = []
+    for child in element.parent.children:
+        if child is element:
+            break
+        if isinstance(child, str):
+            preceding.append(child)
+        else:
+            preceding.clear()
+    label = page_text("".join(preceding))
+    if (label.endswith(LABEL_SEPARATORS) and len(label) <= MAX_ANCHOR
+            and is_a_value(label[:-1])):
+        return label
+    return None
+
+
 def sibling_label(element: Element | None) -> tuple[str, str] | None:
     """The label this page puts beside the value, and the selector of the row holding both.
 
@@ -1357,6 +1450,9 @@ def sibling_label(element: Element | None) -> tuple[str, str] | None:
     if element is None or element.parent is None:
         return None
     parent = element.parent
+    literal = sibling_text_label(element)
+    if literal is not None:
+        return literal, element_selector(parent)
     siblings = [child for child in parent.children if isinstance(child, Element)]
     if element not in siblings or siblings.index(element) == 0:
         return None
@@ -1389,6 +1485,103 @@ def label_pattern(label: str, value: str, row_text: str) -> str | None:
     return pattern
 
 
+#: How a page marks that it cut a value short of the text it summarizes.
+CUT_SHORT = ("…", "...")
+#: Below this, a trailing ellipsis is the value itself (`Loading...`), not a cut.
+CUT_SHORT_FLOOR = 40
+
+
+def same_block_named_by_class(element: Element, root: Element, text: str, document: str,
+                              counts: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The same block named by an ancestor's *class* instead of its id.
+
+    An id is a name for one page, and a site may number it per article style: PMC's abstract is
+    `#abstract1` on one paper and `#Abs1` on the next, so a rule naming it by id reads nothing on
+    the second. The class (`section.abstract`) is the same on both. Offered as a *second* source
+    beside the id's, so the two pages that decide which rule survives can compare them.
+    """
+    node = element.parent
+    while node is not None and node.tag not in ("body", "html"):
+        for name in str(node.attr("class") or "").split()[:2]:
+            candidate = f"{node.tag}.{name} {element.tag}"
+            try:
+                found = select_all(root, candidate)
+            except Exception:  # noqa: BLE001 - an unusable selector names nothing
+                continue
+            if not found or found[0].text().strip() != text.strip():
+                # It has to read *this* block first: a class that leads with another block would
+                # hand the field that block's text on the next page.
+                continue
+            rule: dict[str, Any] = {"from": "html", "document": document, "select": candidate,
+                                    "text": True,
+                                    "matches": selector_matches(root, candidate, counts)}
+            if len(found) > 1:
+                rule["index"] = 0
+            return rule
+        node = node.parent
+    return None
+
+
+def is_cut_short(value: str) -> bool:
+    """Whether the page wrote this value cut off, which makes it the page's summary."""
+    text = value.rstrip()
+    return len(text) > CUT_SHORT_FLOOR and text.endswith(CUT_SHORT)
+
+
+def position_within(root: Element, selector: str, element: Element,
+                    counts: dict[str, Any] | None) -> int | None:
+    """Where this element sits among the matches of its own selector, when that is several.
+
+    `None` when the selector already names it alone: an index that says nothing is noise a rule
+    does not need, and the position of a single match is not a fact about the page.
+    """
+    if not selector:
+        return None
+    key = f"positions:{selector}"
+    positions = counts.get(key) if counts is not None else None
+    if positions is None:
+        try:
+            matches = select_all(root, selector)
+        except Exception:  # noqa: BLE001 - an unselectable selector names nothing
+            return None
+        positions = {id(match): index for index, match in enumerate(matches)}
+        if counts is not None:
+            counts[key] = positions
+    if len(positions) <= 1:
+        return None
+    return positions.get(id(element))
+
+
+def section_heading_label(element: Element) -> str | None:
+    """The heading that names the section this element sits in, when one does.
+
+    A paper's abstract is a plain `<p>` — the label is a *heading beside* it, not text inside it:
+
+        <section class="abstract" id="abstract1"><h2>Abstract</h2>
+          <p>Acute respiratory distress syndrome …</p></section>
+
+    `labelled_value_row` looks for a row whose rule reads the value, and a section's rule cannot
+    (it reads the heading too), so a 1300-character abstract was refused as an unlabelled block —
+    leaving the field fillable only from the site's own summary (`meta description`, which on PMC
+    ends in "…"). This is the missing half: the section names the block, so the block is a field.
+
+    Only a nearby heading counts (the section wrapping it), and only a short value-shaped one, so
+    a page's own section titles are not mistaken for field labels.
+    """
+    node: Element | None = element
+    for _ in range(MAX_LABEL_DEPTH):
+        node = node.parent if node is not None else None
+        if node is None or node.tag in ("body", "html"):
+            return None
+        heading = select_one(node, ", ".join(HEADINGS))
+        if heading is None or heading is element:
+            continue
+        label = page_text(heading.text())
+        if label and len(label) <= MAX_ANCHOR and is_a_value(label):
+            return label
+    return None
+
+
 def labelled_value_row(element: Element, value: str) -> tuple[str, str, str] | None:
     """Find a nearby labelled row even when its value has nested markup.
 
@@ -1406,8 +1599,9 @@ def labelled_value_row(element: Element, value: str) -> tuple[str, str, str] | N
         if found is not None:
             label, selector = found
             siblings = [child for child in node.parent.children if isinstance(child, Element)]
-            previous = siblings[siblings.index(node) - 1]
-            peer_link = any(
+            index = siblings.index(node)
+            previous = siblings[index - 1] if index > 0 and sibling_text_label(node) is None else None
+            peer_link = previous is not None and any(
                 child.tag in {"a", "button", "input", "select", "textarea"}
                 for child in previous.iter()
             )
@@ -1618,7 +1812,6 @@ def build_collections(registry: _Registry, minimum: int = MIN_COLLECTION) -> Non
             context={"selector": selector,
                      "members": values,
                      "count": len(values)},
-            identity=f"collection:{document}:{selector}",
         )
 
 
@@ -1936,6 +2129,15 @@ def _flag_conflicting_rules(registry: _Registry, root: Element, base: str) -> No
 
     A rule with a `filter` is exempt: its `matches` counts the rows carrying a label, and
     reading a different value per row is what it is for.
+
+    A rule with an **`index`** is judged by the element it names rather than by its selector's
+    matches, for the same kind of reason: it reads one element, so what the others read says
+    nothing about it. Judging it by them marked every "the Nth of a repeated class" rule as
+    ambiguous — and that rule is the only way to point at one item of a page that lists several
+    (measured on PMC: six authors, each in its own block, named by `a.usa-link span` + an index).
+    Judging it by nothing at all is just as wrong: on the album above, `itemprop="author"` is on
+    six blocks and the *first* of them is the works block, so an indexed rule into it reads 作品名
+    while the person picked 作者名. Both are decided by reading what the rule names.
     """
     counts: dict[str, Any] = {}
     for candidate in registry.all():
@@ -1949,6 +2151,16 @@ def _flag_conflicting_rules(registry: _Registry, root: Element, base: str) -> No
                 continue
             selector = str(rule.get("select") or "")
             if not selector or rule.get("matches", 1) <= 1:
+                continue
+            if "index" in rule:
+                # An indexed rule reads one element — the one it names — so its selector's other
+                # matches say nothing about it. What decides is whether the element it names *is*
+                # this candidate's value: a rule that names some other block's element reads a
+                # different value here however specific it looks.
+                reads = _rule_reads(root, rule, selector, base, counts,
+                                    index=int(rule.get("index") or 0))
+                if not reads or next(iter(reads)) != text_identity(str(candidate.value)):
+                    rule["conflict"] = True
                 continue
             if len(_rule_reads(root, rule, selector, base, counts)) > 1:
                 rule["conflict"] = True
@@ -1987,6 +2199,19 @@ def harvest(capture: Capture) -> Harvest:
     # After the variants are merged, so one picture is one member of its group.
     build_image_collections(registry)
     score(registry, visible_text, {d.name: d for d in capture.documents}, base)
+    # A value the page itself cut off is that page's *summary* of a field, not the field: PMC's
+    # `meta description` ends in "…" while the abstract it summarizes is in the page, a few
+    # hundred characters above the meta's ceiling. Demoted rather than dropped — on a site whose
+    # only description is its own summary there is nothing else to offer — and demoted below
+    # prose the page did not cut, so the person meets the real text first.
+    for candidate in registry.all():
+        if is_cut_short(candidate.value):
+            candidate.score -= 2
+            # Marked as well as demoted: the page shows the difference, because a value that
+            # ends in "…" looks exactly like one this tool displayed only halfway — and reading
+            # it as "we captured it and showed a preview" is how a page's own truncated summary
+            # came to be accepted as the work's description.
+            candidate.context["cut_short"] = True
     if markup is not None:
         _flag_conflicting_rules(registry, parse_html(markup.text), base)
 

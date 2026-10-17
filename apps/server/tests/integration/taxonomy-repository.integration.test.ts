@@ -148,7 +148,40 @@ describe('taxonomy repository', () => {
       });
       const importedId = database.prepare("SELECT id FROM entries WHERE title = 'Later work'").pluck().get() as number;
       expect(listEntryTags(database, importedId)).toMatchObject([{ name: '鲍勃' }]);
-      expect(listTaxonomyAliases(database, 'entry')).toHaveLength(1);
+      // The catalog is the library's tags *and* the stored mappings: the mapping row, and the tag
+      // it resolves to — a tag in the library, so it reports itself as its own canonical.
+      expect(listTaxonomyAliases(database, 'entry')).toMatchObject([
+        { alias: 'Bob', canonicalName: '鲍勃' },
+        { alias: '鲍勃', canonicalName: '鲍勃' },
+      ]);
+    } finally {
+      database.close();
+    }
+  });
+
+  it('shows a tag a work brought in, before anyone has mapped it', () => {
+    const database = createMigratedMemoryDatabase();
+    try {
+      const section = createSection(database, { entryType: 'manga', name: 'Tags' });
+      const work = createEntry(database, { title: 'A work', type: 'manga' });
+      // The same call an import makes for every tag it brings in (`commit.ts` → `assignEntryTag`),
+      // so this is what a work arriving does to the catalog.
+      assignEntryTag(database, { entryId: work.id, facetId: section.defaultFacetId, name: 'NTR' });
+
+      // Nothing was imported from a dictionary: the catalog is a view of the library, so the tag is
+      // already there and says it has no mapping yet.
+      expect(listTaxonomyAliases(database, 'entry')).toMatchObject([
+        { alias: 'NTR', canonicalName: '', tagId: expect.any(Number) },
+      ]);
+
+      upsertTaxonomyAlias(database, { vocabulary: 'entry', alias: 'NTR', canonicalName: '牛头人' });
+
+      // Mapping it merges the tag into the canonical, so the catalog then carries the mapping and
+      // the canonical tag's own row.
+      expect(listTaxonomyAliases(database, 'entry')).toMatchObject([
+        { alias: 'NTR', canonicalName: '牛头人' },
+        { alias: '牛头人', canonicalName: '牛头人', tagId: expect.any(Number) },
+      ]);
     } finally {
       database.close();
     }

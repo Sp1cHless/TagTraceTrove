@@ -1,7 +1,7 @@
 import { File } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { indexedDB } from 'fake-indexeddb';
@@ -19,6 +19,7 @@ import { applySnapshot, readActiveSnapshot } from '../src/offline/snapshot-store
 import { buildPendingWorkExport } from '../src/offline/pending-work-export.js';
 import { preparePendingWork } from '../src/offline/pending-work-restore.js';
 import { nativeMutationContract, type SyncSnapshot } from '@t3/shared';
+import { LOCAL_FINAL_STATE_KEY, readLocalFinalState, emptyLocalFinalState } from '../src/offline/local-final-state.js';
 
 async function harness(withNative = false, nativeNeverAttempted = false, memory = false) {
  const [{createTempFileDatabase},{applyAllMigrations},{createEntry},{createApiApp}]=await Promise.all(['database/testing','database/migrations','repositories/entry-repository','http/app'].map(serverModule));
@@ -73,6 +74,17 @@ async function harness(withNative = false, nativeNeverAttempted = false, memory 
  return {temp,root,entry,trace,nativeTrace,online,file,get store(){return store;},get api(){return api;},
   assetFault(value: 'wrong' | 'missing' | 'failed' | null){assetFault=value;},correctSnapshot(){omitMedia=false;},rejectCover(){rejectCover=true;},loseUpload(){loseUpload=true;},loseReplay(){loseReplay=true;},loseAck(){loseAck=true;},omitMedia(){omitMedia=true;},downgrade(value: 'absent' | 'false' = 'absent'){downgrade=value;},
   async cold(){store.close();store=openStore();api=createOfflineAwareGalleryApi(online,store,native());await api.preferOfflineSnapshot!();},
+  async seal(){
+   const send=online.replaySyncOperation!;
+   online.replaySyncOperation=async()=>{throw new TypeError('Transport unavailable at submission boundary');};
+   try{await api.replayOfflineOperations!();}finally{online.replaySyncOperation=send;}
+  },
+  async projectionFacts(){
+   const local=readLocalFinalState(await store.readMeta(LOCAL_FINAL_STATE_KEY));
+   return {local,saved:(await readActiveSnapshot(store))?.snapshot.payload.entries.find(row=>row.id===entry.id),
+    receipts:await Promise.all(local.media.flatMap(intent=>intent.items.flatMap(item=>item.uploadId?[item.uploadId]:[]))
+     .map(async id=>({id,receipt:await store.readMeta('localMediaReceipt.'+id)})))};
+  },
   async cleanup(){store.close();await new Promise<void>(resolve=>server.close(()=>resolve()));temp.cleanup();rmSync(root,{recursive:true,force:true});}
  };
 }
@@ -87,7 +99,7 @@ describe('existing Entry real cold client/server media vertical',()=>{
    const entry=await h.api.getEntry(h.entry.id);
    for(const ref of [entry.coverRef!,...entry.previewRefs])cached.set(h.online.assetUrl(ref),new Response(readFileSync(join(h.root,ref.replace('/api/assets/','')))));
    const survivorUrl=h.online.assetUrl(entry.previewRefs[1]!);const originalBytes=Buffer.from(await cached.get(survivorUrl)!.clone().arrayBuffer());
-   await h.api.setEntryMediaOrder!(entry.id,[entry.coverRef!,entry.previewRefs[1]!]);const original=(await h.store.list())[0]!;
+   await h.api.setEntryMediaOrder!(entry.id,[entry.coverRef!,entry.previewRefs[1]!]);await h.seal();const original=(await h.store.list())[0]!;
    await h.cold();const base=await readActiveSnapshot(h.store);if(fault==='incomplete')h.omitMedia();else h.assetFault('wrong');
    await h.api.replayOfflineOperations!();
    expect(await h.store.list()).toEqual([expect.objectContaining({opId:original.opId,payload:original.payload,baseValues:original.baseValues,status:'pending'})]);
@@ -124,42 +136,43 @@ describe('existing Entry real cold client/server media vertical',()=>{
    Object.defineProperty(file,'arrayBuffer',{value:async()=>{entered();await gate;return original();}});
    const staging=h.api.uploadEntryMedia(h.entry.id,'preview',file).then(()=>null,error=>error);
    await started;await h.api.setEntryMediaOrder!(h.entry.id,[before.previewRefs[0]!]);
-   const queued=await h.store.list();expect(queued).toHaveLength(1);
+   const queued=await h.store.list();expect(queued).toEqual([]);
+   const selection=readLocalFinalState(await h.store.readMeta(LOCAL_FINAL_STATE_KEY));expect(selection.media).toHaveLength(1);
    release();expect(String(await staging)).toMatch(/changed|review|capture|queue|stale/iu);
    expect(await h.store.listMedia()).toEqual([]);expect(await h.store.list()).toEqual(queued);
+   expect(readLocalFinalState(await h.store.readMeta(LOCAL_FINAL_STATE_KEY))).toEqual(selection);
   }finally{release?.();await h.cleanup();}
  },30000);
- it('pauses the actual native mirror and rejects staged cancellation without durable native never-attempted proof',async()=>{
+ it('retains frozen native originals while saving a later local selection without a cancellation gate',async()=>{
   const h=await harness(true);try{
    await h.api.uploadEntryMedia(h.entry.id,'preview',h.file());const before=await h.store.listMedia();
-   await expect(h.api.setEntryMediaOrder!(h.entry.id,[])).rejects.toThrow(/Native.*attempt/u);
-   expect(h.nativeTrace.filter(row=>row.method==='pause').at(-1)?.args).toMatchObject({captureUploadIds:[before[0]!.uploadId]});
+   await h.store.captureLocalFinalState(true);
+   await h.api.setEntryMediaOrder!(h.entry.id,[]);
    expect(await h.store.listMedia()).toEqual(before);expect(await h.store.list()).toEqual([]);
-   // The API answers with a code; the page turns it into the sentence.
-   expect(await h.api.getEntryMediaRemovalBlockReason!(h.entry.id)).toBe('native-uncertain');
-   // A cover that was never sent is not an uncertain attempt (reported from the
-   // device, where the editor refused a fresh work's cover with the wrong
-   // sentence). The reason must name that situation.
+   expect((await h.api.getEntry(h.entry.id)).previewRefs).toEqual([]);
+   expect(readLocalFinalState(await h.store.readMeta(LOCAL_FINAL_STATE_KEY)).media[0]!.desired).toEqual([]);
+   expect(await h.api.getEntryMediaRemovalBlockReason!(h.entry.id)).toBeNull();
    await h.api.uploadEntryMedia(h.entry.id,'cover',new File(['cover'],'cover.png',{type:'image/png'}) as unknown as globalThis.File);
-   expect(await h.api.getEntryMediaRemovalBlockReason!(h.entry.id)).toBe('cover-not-uploaded');
+   expect(await h.api.getEntryMediaRemovalBlockReason!(h.entry.id)).toBeNull();
   }finally{await h.cleanup();}
  },30000);
 
- it('does not upload a predecessor for an already conflicted media order while an independent Entry advances',async()=>{
+ it('keeps failed media and its final selection while an independent Entry advances',async()=>{
   const h=await harness();try{
    const {createEntry}=await serverModule('repositories/entry-repository');const peer=createEntry(h.temp.database,{title:'Peer',type:'comic'});
    await h.online.uploadEntryMedia(h.entry.id,'cover',h.file());await h.online.uploadEntryMedia(h.entry.id,'preview',h.file());
    await applySnapshot(await h.online.fetchSyncSnapshot({media:'none'}),{store:h.store,expectedBase:await readActiveSnapshot(h.store)});
    await h.api.uploadEntryMedia(h.entry.id,'preview',h.file());const entry=await h.api.getEntry(h.entry.id);
    await h.api.setEntryMediaOrder!(entry.id,[entry.coverRef!,entry.previewRefs[1]!]);
-   const order=(await h.store.list())[0]!;await h.store.update(order.opId,{status:'conflict',lastError:'review required'});
+   const upload=(await h.store.listMedia())[0]!;await h.store.updateMedia(upload.uploadId,{status:'failed',lastError:'review required'});
    await h.api.updateEntry(peer.id,{title:'Advanced'});const media=await h.store.listMedia();
    await h.cold();await h.api.replayOfflineOperations!();
    expect(h.trace.filter(row=>row.metadata)).toEqual([]);expect(await h.store.listMedia()).toEqual(media);
-   expect((await h.online.getEntry(peer.id)).title).toBe('Advanced');expect(await h.store.list()).toHaveLength(1);
+   expect((await h.online.getEntry(peer.id)).title).toBe('Advanced');expect(await h.store.list()).toEqual([]);
+   expect(readLocalFinalState(await h.store.readMeta(LOCAL_FINAL_STATE_KEY)).media).toHaveLength(1);
   }finally{await h.cleanup();}
  },30000);
- it('restores and replays title upload title deletion in one same-Entry causal revision chain with exact retries and cold ACK-loss bytes',async()=>{
+ it('coalesces title drafts and restores final media selection through exact retries and cold ACK loss',async()=>{
   const h=await harness();try{
    await h.online.uploadEntryMedia(h.entry.id,'cover',h.file());await h.online.uploadEntryMedia(h.entry.id,'preview',h.file());
    await applySnapshot(await h.online.fetchSyncSnapshot({media:'none'}),{store:h.store,expectedBase:await readActiveSnapshot(h.store)});
@@ -168,11 +181,15 @@ describe('existing Entry real cold client/server media vertical',()=>{
    const entry=await h.api.getEntry(h.entry.id);await h.api.setEntryMediaOrder!(entry.id,[entry.coverRef!,entry.previewRefs[1]!]);
    const original=await h.store.list();const media=await h.store.listMedia();const backup=JSON.stringify(await buildPendingWorkExport(h.store));
    for(const row of original)await h.store.remove(row.opId);for(const row of media)await h.store.removeMedia(row.uploadId);
+   await h.store.writeMeta(LOCAL_FINAL_STATE_KEY,JSON.stringify(emptyLocalFinalState()));
    await h.api.restorePendingWork!(backup);await h.cold();expect(await h.store.list()).toEqual(original);
    h.loseReplay();await h.api.replayOfflineOperations!();await h.cold();h.loseAck();await h.api.replayOfflineOperations!();
-   expect(h.trace.filter(row=>row.path.includes('/sync/replay') || row.metadata).map(row=>row.metadata?'media':(row.body as {operationKind:string}).operationKind)).toEqual(['entry.update','entry.update','media','entry.update','entry.media.set']);
-   expect(await h.store.list()).toHaveLength(3);expect(await h.store.listMedia()).toHaveLength(1);
-   await h.cold();const displayed=await h.api.getEntry(entry.id);expect(displayed.title).toBe('After');expect(displayed.previewRefs).toHaveLength(1);
+   const updates=h.trace.filter(row=>row.path.includes('/sync/replay') && (row.body as {operationKind:string}).operationKind==='entry.update');
+   expect(updates).toHaveLength(2);expect(updates[0]!.body).toEqual(updates[1]!.body);
+   expect((updates[0]!.body as {payload:{title:string}}).payload.title).toBe('After');
+   // An upload may already be acknowledged while its later final selection still needs ACK.
+   expect((await h.store.list()).length).toBeGreaterThan(0);
+   await h.cold();const displayed=await h.api.getEntry(entry.id);expect(displayed.title).toBe('After');expect(displayed.previewRefs,JSON.stringify(await h.projectionFacts())).toHaveLength(1);
    expect(readFileSync(join(h.root,displayed.previewRefs[0]!.replace('/api/assets/','')))).toEqual(Buffer.from(await h.file().arrayBuffer()));
    await h.api.replayOfflineOperations!();expect(await h.store.list()).toEqual([]);expect(await h.store.listMedia()).toEqual([]);
    expect((await h.online.getEntry(entry.id)).title).toBe('After');
@@ -199,17 +216,20 @@ describe('existing Entry real cold client/server media vertical',()=>{
    expect(h.trace.filter(row=>row.metadata).map(row=>(row.metadata as {ordinal:number}).ordinal)).toEqual([0]);
    expect(h.trace.filter(row=>row.metadata).map(row=>row.path)).toEqual([`/api/sync/media/${before[1]!.uploadId}`]);
    expect(h.trace.find(row=>row.metadata)!.hash).toBe(before[1]!.sha256);
-   if(native){expect(h.nativeTrace.some(row=>row.method==='activateStandaloneMedia')).toBe(true);expect(h.nativeTrace.find(row=>row.method==='authorizePreviewCancel')?.args.uploads).toHaveLength(2);}
+   if(native){expect(h.nativeTrace.some(row=>row.method==='authorizePreviewCancel')).toBe(false);}
    expect(await h.store.listMedia()).toEqual([]);
    const current=await h.online.getEntry(entry.id);expect(readFileSync(join(h.root,current.previewRefs[0]!.replace('/api/assets/','')))).toEqual(Buffer.from(await later.arrayBuffer()));
   }finally{await h.cleanup();}
  },30000);
- it('rejects cancellation of an attempted uncertain staged preview without changing its exact retry identity',async()=>{
+ it('records removal of an uncertain preview while retaining the exact upload for receipt recovery',async()=>{
   const h=await harness();try{
    await h.api.uploadEntryMedia(h.entry.id,'preview',h.file());h.loseUpload();await h.api.replayOfflineOperations!();await h.cold();
    const before=await h.store.listMedia();
-   await expect(h.api.setEntryMediaOrder!(h.entry.id,[])).rejects.toThrow(/attempt|uncertain/u);
+   await h.api.setEntryMediaOrder!(h.entry.id,[]);
    expect(await h.store.listMedia()).toEqual(before);expect(await h.store.list()).toEqual([]);
+   expect((await h.api.getEntry(h.entry.id)).previewRefs).toEqual([]);
+   await h.api.replayOfflineOperations!();expect(await h.store.listMedia()).toEqual([]);expect(await h.store.list()).toEqual([]);
+   expect((await h.online.getEntry(h.entry.id)).previewRefs).toEqual([]);
   }finally{await h.cleanup();}
  },30000);
  it.each(['absent','false'] as const)('holds dependent media order unchanged when upload capability is %s while an independent Entry advances',async flag=>{
@@ -222,11 +242,13 @@ describe('existing Entry real cold client/server media vertical',()=>{
    const entry=await h.api.getEntry(h.entry.id);
    await h.api.setEntryMediaOrder!(entry.id,[entry.coverRef!,entry.previewRefs[1]!]);
    await h.api.updateEntry(peer.id,{title:'Advanced'});
-   const queued=await h.store.list();const original=queued[0]!;const independentUid=queued[1]!.entityUid;const media=await h.store.listMedia();
+   const queued=await h.store.list();const independentUid=queued[0]!.entityUid;const media=await h.store.listMedia();
+   const selection=readLocalFinalState(await h.store.readMeta(LOCAL_FINAL_STATE_KEY)).media;
    await h.cold();h.downgrade(flag);await h.api.replayOfflineOperations!();
    expect(h.trace.filter(row=>row.metadata)).toEqual([]);
    expect(h.trace.filter(row=>row.path.includes('/sync/replay')).map(row=>(row.body as {entityUid:string}).entityUid)).toEqual([independentUid]);
-   expect(await h.store.list()).toEqual([original]);expect(await h.store.listMedia()).toEqual(media);
+   expect(await h.store.list()).toEqual([]);expect(await h.store.listMedia()).toEqual(media);
+   expect(readLocalFinalState(await h.store.readMeta(LOCAL_FINAL_STATE_KEY)).media).toEqual(selection);
    expect((await h.online.getEntry(peer.id)).title).toBe('Advanced');
   }finally{await h.cleanup();}
  },30000);
@@ -239,12 +261,14 @@ describe('existing Entry real cold client/server media vertical',()=>{
    await applySnapshot(await h.online.fetchSyncSnapshot({media:'none'}),{store:h.store,expectedBase:await readActiveSnapshot(h.store)});
    const entry=await h.api.getEntry(h.entry.id);
    await h.api.setEntryMediaOrder!(entry.id,[entry.coverRef!,entry.previewRefs[0]!]);
+   await h.seal();
    const original=(await h.store.list())[0]!;
    const prepared=await preparePendingWork(JSON.stringify(await buildPendingWorkExport(h.store)));
    expect(prepared.operations[0]).toEqual(original);
    // Restore into an actually empty durable queue, not just parse the export.
    const backup=JSON.stringify(await buildPendingWorkExport(h.store));
    await h.store.remove(original.opId);
+   await h.store.writeMeta(LOCAL_FINAL_STATE_KEY,JSON.stringify(emptyLocalFinalState()));
    await h.api.restorePendingWork!(backup);
    expect(await h.store.list()).toEqual([original]);
    await h.cold();h.loseReplay();await h.api.replayOfflineOperations!();
@@ -278,10 +302,11 @@ describe('existing Entry real cold client/server media vertical',()=>{
    expect((await preparePendingWork(JSON.stringify(await buildPendingWorkExport(h.store)))).operations).toEqual(original);
    await h.cold();h.loseReplay();await h.api.replayOfflineOperations!();
    await h.cold();h.loseAck();await h.api.replayOfflineOperations!();
-   expect(await h.store.list()).toHaveLength(2);
+   expect(await h.store.list()).toHaveLength(1);
    await h.cold();const displayed=await h.api.getEntry(h.entry.id);
    expect(displayed.previewRefs).toHaveLength(1);
    const shown=displayed.previewRefs[0]!;
+   if(!shown.startsWith('blob:'))expect(existsSync(join(h.root,shown.replace('/api/assets/',''))),JSON.stringify(await h.projectionFacts())).toBe(true);
    const shownBytes=shown.startsWith('blob:') ? Buffer.from(await (await fetch(shown)).arrayBuffer()) : readFileSync(join(h.root,shown.replace('/api/assets/','')));
    expect(shownBytes).toEqual(Buffer.from(await images[3]!.arrayBuffer()));
    await h.api.replayOfflineOperations!();
@@ -291,7 +316,7 @@ describe('existing Entry real cold client/server media vertical',()=>{
    expect(readFileSync(join(h.root,current.previewRefs[0]!.replace('/api/assets/','')))).toEqual(Buffer.from(await images[3]!.arrayBuffer()));
    const sent=h.trace.filter(row=>row.path.includes('/sync/replay'));
    expect(sent[0]!.body).toEqual(sent[1]!.body);
-   expect(h.temp.database.prepare('SELECT COUNT(*) FROM sync_operation_receipts').pluck().get()).toBe(2);
+   expect(h.temp.database.prepare('SELECT COUNT(*) FROM sync_operation_receipts').pluck().get()).toBe(1);
   }finally{await h.cleanup();}
  },30000);
 
@@ -306,7 +331,8 @@ describe('existing Entry real cold client/server media vertical',()=>{
    await h.api.uploadEntryMedia(entry.id,'preview',images[3]!);
    const original=await h.store.list();const media=await h.store.listMedia();
    const backup=JSON.stringify(await buildPendingWorkExport(h.store));
-   await h.store.remove(original[0]!.opId);await h.store.removeMedia(media[0]!.uploadId);
+   expect(original).toEqual([]);for(const row of original)await h.store.remove(row.opId);await h.store.removeMedia(media[0]!.uploadId);
+   await h.store.writeMeta(LOCAL_FINAL_STATE_KEY,JSON.stringify(emptyLocalFinalState()));
    await h.api.restorePendingWork!(backup);await h.cold();
    expect(await h.store.list()).toEqual(original);
    expect(Buffer.from(await (await h.store.listMedia())[0]!.blob.arrayBuffer())).toEqual(Buffer.from(await images[3]!.arrayBuffer()));
@@ -314,7 +340,7 @@ describe('existing Entry real cold client/server media vertical',()=>{
    const current=await h.online.getEntry(entry.id);
    expect(current.previewRefs).toHaveLength(2);
    for(const [i,ref] of current.previewRefs.entries())expect(readFileSync(join(h.root,ref.replace('/api/assets/','')))).toEqual(Buffer.from(await images[i+2]!.arrayBuffer()));
-   expect(h.trace.filter(row=>row.body && row.path.includes('/sync/replay') || row.metadata).map(row=>row.metadata?'media':'operation')).toEqual(['operation','media']);
+   expect(h.trace.filter(row=>row.body && row.path.includes('/sync/replay') || row.metadata).map(row=>row.metadata?'media':'operation')).toEqual(['media','operation']);
    expect(await h.store.list()).toEqual([]);expect(await h.store.listMedia()).toEqual([]);
   }finally{await h.cleanup();}
  },30000);
@@ -344,6 +370,7 @@ describe('existing Entry real cold client/server media vertical',()=>{
    await applySnapshot(await h.online.fetchSyncSnapshot({media:'none'}),{store:h.store,expectedBase:await readActiveSnapshot(h.store)});
    const entry=await h.api.getEntry(h.entry.id);
    await h.api.setEntryMediaOrder!(entry.id,[entry.coverRef!,entry.previewRefs[0]!]);
+   await h.seal();
    const original=(await h.store.list())[0]!;
    // Peer keeps the OTHER picture. Renaming makes its URL equal to our desired
    // URL, but the reviewed Entry revision is no longer valid.

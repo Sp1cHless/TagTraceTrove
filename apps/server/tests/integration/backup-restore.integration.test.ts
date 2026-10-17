@@ -186,7 +186,7 @@ describe('library restore', () => {
     try {
       const version = restored.prepare('SELECT MAX(version) AS version FROM schema_migrations')
         .get() as { version: number };
-      expect(version.version).toBe(43);
+      expect(version.version).toBe(44);
       expect(getSyncIdentity(restored).syncEpoch).toMatch(/^[0-9a-f-]{36}$/u);
     } finally {
       restored.close();

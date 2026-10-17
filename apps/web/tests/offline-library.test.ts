@@ -41,7 +41,7 @@ function makeSnapshot(): SyncSnapshot {
 }
 
 describe('offline library read model', () => {
-  it('does not leak NSFW-only Entry Tag suggestions into SFW Relation search', () => {
+  it('does not leak hideable-only Entry Tag suggestions into visible Relation search', () => {
     const snapshot = makeSnapshot();
     snapshot.payload.gallerySettings = [{ entryType: 'game', nsfw: true }];
     const library = createOfflineLibrary(snapshot);
@@ -66,7 +66,7 @@ describe('offline library read model', () => {
     expect(library.suggestProducers({ q: '鹰角', excludeIds: [9], limit: 20 })).toEqual([]);
   });
 
-  it('suggests used Entry and Author Tags from their own vocabularies with alias and SFW boundaries', () => {
+  it('suggests used Entry and Author Tags from their own vocabularies with alias and hideable boundaries', () => {
     const snapshot = makeSnapshot();
     snapshot.payload.producerTags.push({ id: 50, name: 'Painter', normalizedName: 'painter' });
     snapshot.payload.producerTagAssignments.push({ producerId: 9, tagId: 50 });

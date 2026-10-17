@@ -160,10 +160,21 @@ def frozen_clock(today: "date | None" = None):
 SPLIT_RE = re.compile(r"\s*[,，、;；|]\s*")
 
 # What separates the members of a multi-value field that a page writes as one string:
-# commas in every width, the CJK enumeration comma, semicolons, slashes, pipes, and
-# whitespace — which is what a characters block uses. Measured across three sites: one
-# joined its tags with `,`, one with `、`, and one with a space.
-MEMBERS_RE = re.compile(r"\s*[,，、;；/／|]\s*|\s+")
+# commas in every width, the CJK enumeration comma, semicolons, slashes and pipes — and
+# whitespace, which is what a characters block uses, but only for a value that carries no
+# comma-class separator at all. Deciding between the two by whether the strong one is
+# present is what keeps a comma-joined list of multi-word members whole: measured on
+# pmc.ncbi.nlm.nih.gov (2026-10-15), `regulatory T cells, acute respiratory distress
+# syndrome, …` came out as thirteen words instead of five keywords, because whitespace
+# split every member that happens to contain a space.
+MEMBERS_RE = re.compile(r"\s*[,，、;；/／|]\s*")
+SPACE_MEMBERS_RE = re.compile(r"\s+")
+
+# The list's own label, glued in front of its first member: `<strong>Keywords:</strong>
+# regulatory T cells, …` reads as `Keywords: regulatory T cells`. A label is letters only
+# — no whitespace, no digits, shorter than a member — so `IL-33:ST2 axis` is left alone
+# while `Keywords:` and `关键词：` are dropped.
+LABEL_RE = re.compile(r"^[^\s,，、;；/／|\d]{1,14}[:：]\s*")
 
 
 def _split_csv(value: Any) -> list[str]:
@@ -188,7 +199,16 @@ def split_members(value: Any) -> list[str]:
         for item in value:
             members.extend(split_members(item))
         return members
-    return [part.strip() for part in MEMBERS_RE.split(str(value)) if part.strip()]
+    text = str(value)
+    pattern = MEMBERS_RE if MEMBERS_RE.search(text) else SPACE_MEMBERS_RE
+    members = [part.strip() for part in pattern.split(text) if part.strip()]
+    if members:
+        # The label in front of a list is the list's name, not one of its members. Only the
+        # first member can carry it, and only when what is left still has a value.
+        unlabelled = LABEL_RE.sub("", members[0]).strip()
+        if unlabelled:
+            members[0] = unlabelled
+    return members
 
 
 _TRANSFORMS = {

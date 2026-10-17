@@ -29,7 +29,7 @@ export const tagSuggestionQuerySchema = suggestionQueryBaseSchema.extend({
   vocabulary: suggestionVocabularySchema,
   entryType: z.string().trim().min(1).max(200).optional(),
   facetId: z.coerce.number().int().positive().optional(),
-  /** Visibility boundary: SFW mode must not offer a tag only NSFW Galleries use. */
+  /** Visibility boundary: while hideable Galleries are hidden, a tag only they use is not offered. */
   includeNsfw: z.enum(['true', 'false']).optional(),
 });
 

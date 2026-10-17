@@ -118,7 +118,7 @@ it.each(['author-version', 'other-work', 'target-race', 'foreign-target-uid'] as
 it('holds unsupported schema capability without migrating or mutating business rows', () => {
   const { db, operation } = fixture();
   try {
-    db.prepare('DELETE FROM schema_migrations WHERE version = 43').run();
+    db.prepare('DELETE FROM schema_migrations WHERE version >= 43').run();
     const before = businessState(db);
     expect(replaySyncOperation(db, operation)).toMatchObject({ status: 'failed', errorCode: 'invalid-author-data' });
     expect(businessState(db)).toEqual(before);

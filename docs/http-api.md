@@ -37,7 +37,7 @@ route-local DTOs. `packages/shared/src/schemas/suggestions.ts` holds the Relatio
 - **Producer**: create, partial update, record, Entry linking parameters, Producer Tags, independent Author/work-Tag filter options, same-work AND Tag search, and Author work summaries carrying view/like/last-viewed usage.
 - **Producer pages**: bounded Author summaries for ID-backed lists, ranked search, Tag filters, usage/name/source ordering, and one-shot random samples.
 - **Usage**: record-a-view / add-a-like mutations returning the updated `entry_usage` record; the same usage fields ride on Entry and Author summaries and details. **Sorting-only by design** — no numeric or date condition schemas.
-- **Gallery partition**: `{ nsfw: boolean }` body on `PUT /api/galleries/:entryType/partition`; `nsfw` flags on Gallery and Producer summaries drive every visibility boundary.
+- **Gallery partition** (the "can be hidden" flag): `{ nsfw: boolean }` body on `PUT /api/galleries/:entryType/partition`; the `nsfw` flags on Gallery and Producer summaries drive every visibility boundary.
 - **Collections**: create/read/update/delete per kind (`entry | producer`), compact trees with member counts/cover previews, folder-level `{ nsfw }` switch, per-kind reorder lists (duplicate IDs rejected), idempotent member put/delete routes, and `for-entry` / `for-producer` membership queries. Member cards use the bounded Entry/Producer page contracts with `collectionId`; the legacy non-compact detail response remains compatible.
 - **View later**: strict `{ entryIds: number[], producerIds: number[] }` shared-state response; GET reads both independent library-wide lists. PUT/DELETE by Entry or Producer id are idempotent. `{ entryIds }` merge only imports the legacy browser Entry list without replacing either server list. Duplicate wire IDs are rejected; the client deduplicates legacy input first.
 - **Gallery templates**: `GET /api/templates` returns per-Gallery summaries (structure, tag→facet assignments, local file paths, existence flags); apply responses keep relaxed objects (unknown fields ignored) so a version-mismatched server or cached page can never turn a successful apply into a spurious 400.
@@ -62,6 +62,9 @@ filter body and adds optional source constraints: `entryType`, `entryIds`, `incl
   `source-order` requires `entryIds` and preserves their wire order, while random accepts a stable request seed.
 - `page` is positive and one-based, `pageSize` is bounded to 1–100. Defaults: newest-first, page 1, 30 cards.
 - Strict response: `{ items, total, page, pageSize }`; `total` is the complete filtered count, not the current page length.
+- `POST /api/entries/query?coverText=1` opts into optional `items[].coverText` for image-less cards (Content → tags →
+  null, URL rows excluded). The current web client sends this query flag for all Entry-page surfaces, including search.
+  Without the flag the key is absent, preserving the strict response schema frozen into the 1.0.14 app.
 - Usage count fields (`views`, `likes`) take non-negative integers; `lastViewed` takes `yyyy-mm-dd`.
 - **Sort precedence** when generic, rating, and usage sorts coexist: usage sort wins over rating sort, which wins over
   generic sort. Upload-date nulls retain the old Gallery behavior (last under descending, first under ascending). Title
@@ -100,6 +103,11 @@ Offline sync contracts (`schemas/sync.ts`) are strict end to end: see `offline-s
 are strict as well: see `import-and-source.md` §5.
 
 ### Errors
+
+Native pairing claims can include controlled `error.pairingReason` values (`CLAIM_INVALID_REQUEST`,
+`CLAIM_LIBRARY_MISMATCH`, `CLAIM_CODE_UNAVAILABLE`) in a 401 response; 500 identifies authorization-storage failure.
+`X-T3-Pairing-Attempt` correlates native claim/verification and fixed-field desktop diagnostics, and grants no authority.
+The QR/claim success format, bearer authorization, TLS pinning and library-identity checks are unchanged.
 
 ```json
 {
@@ -317,7 +325,7 @@ GET    /api/search/tags?q=...&includeNsfw=false
 
 Entry and Author search submit `searchQuery` to their bounded page endpoints; only Tag search retains a dedicated GET
 route. Search text is trimmed and limited to 200 characters. Tag search accepts `includeNsfw`; with `false`, tags used
-only by NSFW Galleries are omitted and shared-tag counts include only SFW usage. Tag hits return
+only by hideable Galleries are omitted and shared-tag counts include only visible usage. Tag hits return
 `{ tagId, name, normalizedName, entryCount }` and open the cross-Gallery Tag results view.
 
 ### Offline sync
@@ -414,7 +422,7 @@ POST   /api/producers/merge
 
 `POST /api/producers/query` is the bounded summary counterpart to the compatibility `GET /api/producers` route (which
 remains only for editor autocomplete). It supports ID-backed lists, Collection membership, ranked name search,
-dominant-Gallery and NSFW boundaries, the two Tag filter sets, usage/name/source ordering, and seeded random ordering;
+dominant-Gallery and hideable boundaries, the two Tag filter sets, usage/name/source ordering, and seeded random ordering;
 filtering, stable sorting, count, and `LIMIT/OFFSET` occur before card cover enrichment. Page size is capped at 100.
 `GET /api/producers/:producerId` returns Author metadata, counts, cover previews, Tags, Ratings, and compact Directory
 summaries; works are paged through `/api/entries/query`. `ownTagIds` searches only the Producer Tag vocabulary.
@@ -422,7 +430,7 @@ summaries; works are paged through `/api/entries/query`. `ownTagIds` searches on
 related Entry to carry every selected Entry Tag; the two sets AND together.
 `GET /api/producers/filter-options` returns the assigned Author Tag and related-work Tag vocabularies used by eligible
 Authors; `entryType` optionally scopes Authors by dominant Gallery and `includeNsfw=false` excludes options belonging only
-to hidden NSFW Authors. Producer responses carry `galleryType` (the Author's dominant Gallery, derived at read time,
+to Authors hidden by that boundary. Producer responses carry `galleryType` (the Author's dominant Gallery, derived at read time,
 never stored). `GET /api/producers`, `POST /api/producers/query`, and name search **exclude Producers with no linked
 Entries** (a read-time visibility rule, not automatic deletion); `GET /api/producers/:producerId` still permits direct
 create/edit access to a workless Producer.
@@ -466,13 +474,25 @@ one request are a 400; spellings equal to the display name are dropped as no-ops
 ### Taxonomy aliases
 
 ```text
-GET    /api/taxonomy-aliases?vocabulary=entry|producer
+GET    /api/taxonomy-aliases?vocabulary=entry|producer[&includeTags=1]
 POST   /api/taxonomy-aliases
 POST   /api/taxonomy-aliases/import
 DELETE /api/taxonomy-aliases/:aliasId
 ```
 
 See `import-and-source.md` §7.
+
+Without `includeTags=1`, GET returns stored alias rows in the original strict shape. With it, the response also includes
+library tags not already represented by an alias row; `tagId` identifies those catalog rows. An unmapped library tag has
+an empty canonical name; a canonical target reports itself as mapped. The current Tags page requests the Entry
+vocabulary and this extension explicitly. Removing an alias and deleting a tag remain separate operations.
+
+### Gallery card layout
+
+`GET /api/galleries/card-layouts` returns `{ layouts: [{ type, layout }] }`.
+`PUT /api/galleries/:entryType/card-layout` accepts `{ layout: 'vertical' | 'horizontal' }` and returns `{ ok: true }`.
+An unstored Gallery defaults to vertical; updating the layout leaves its partition untouched. These are online display
+preferences, separate from Gallery summaries and sync contracts, so installed older clients keep their original DTOs.
 
 ## 4. Error boundary
 

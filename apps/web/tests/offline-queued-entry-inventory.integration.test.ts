@@ -99,7 +99,7 @@ it('converts a queued Entry to multiple author and settles to one Author', async
     // Both names already exist in the catalog, so they link; only the
     // multiple-author Author is created.
     expect((await f.store.list()).map(row=>row.operationKind))
-      .toEqual(['entry.create','entry.authors.set','entry.authors.set','entry.author.create-and-link','entry.authors.set']);
+      .toEqual(['entry.create','entry.authors.set','entry.author.create-and-link','entry.authors.set']);
 
     const cold = f.cold(); await cold.preferOfflineSnapshot!();
     expect((await cold.getEntry(localId)).producers.map(row=>row.name)).toEqual(['multiple author']);
@@ -111,24 +111,26 @@ it('converts a queued Entry to multiple author and settles to one Author', async
   } finally { f.close(); }
 });
 
-it('refuses to delete a queued Entry and keeps its originals, with an actionable message', async () => {
+it('cancels an unsubmitted queued Entry and its unobserved drafts without creating it on the server', async () => {
   const f = await fixture(); try {
     await f.offline();
-    const {localId} = await f.queued('Doomed');
+    const {localId,uid} = await f.queued('Doomed');
     await f.api.assignEntryTag(localId,{name:'Manga',facetId:f.facet.id});
-    const before = await f.store.list();
-    await expect(f.api.deleteEntry(localId)).rejects.toThrow(/created offline and is still pending/iu);
-    expect(await f.store.list()).toEqual(before);
+    await f.api.deleteEntry(localId);
+    expect(await f.store.list()).toEqual([]);expect(await f.store.listMedia()).toEqual([]);
+    await expect(f.api.getEntry(localId)).rejects.toThrow();
+    expect(f.db.prepare('SELECT count(*) FROM entries WHERE sync_uid=?').pluck().get(uid)).toBe(0);
   } finally { f.close(); }
 });
 
-it('documents the gestures a queued Entry still refuses, with an actionable message', async () => {
+it('allows local images and removal on a queued Entry while still requiring two Authors for conversion', async () => {
   const f = await fixture(); try {
     await f.offline();
     const {localId} = await f.queued('Queued');
-    await expect(f.api.uploadEntryMedia(localId,'cover',new File(['x'],'c.png',{type:'image/png'}) as unknown as globalThis.File))
-      .rejects.toThrow(/let it sync before adding more images/iu);
-    await expect(f.api.setEntryMediaOrder!(localId,[])).rejects.toThrow(/not in the offline copy yet/iu);
+    await f.api.uploadEntryMedia(localId,'cover',new File(['x'],'c.png',{type:'image/png'}) as unknown as globalThis.File);
+    expect((await f.api.getEntry(localId)).coverRef).toContain('#t3-upload=');
+    await f.api.setEntryMediaOrder!(localId,[]);
+    expect((await f.api.getEntry(localId)).coverRef).toBeNull();expect(await f.store.listMedia()).toEqual([]);
     await expect(f.api.convertEntryAuthors(localId)).rejects.toThrow(/at least two Authors/iu);
   } finally { f.close(); }
 });

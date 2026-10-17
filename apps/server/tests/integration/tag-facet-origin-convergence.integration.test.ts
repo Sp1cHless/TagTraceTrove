@@ -96,7 +96,7 @@ it('migration 035 preserves populated schema34 origins receipts edges and enforc
       expect(f.db.prepare(`PRAGMA foreign_key_list("${row.name}")`).all()).not.toEqual(expect.arrayContaining([expect.objectContaining({ table: 'sync_offline_created_entry_facets' })]));
     }
     expect(f.db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND (sql LIKE '%sync_offline_created_entry_tags%' OR sql LIKE '%sync_offline_created_entry_facets%')").all()).toEqual([]);
-    expect(applyAllMigrations(f.db)).toEqual({ applied: [35, 36, 37, 38, 39, 40, 41, 42, 43], currentVersion: 43 });
+    expect(applyAllMigrations(f.db)).toEqual({ applied: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44], currentVersion: 44 });
     expect(tables.map(table => f.db.prepare(`SELECT * FROM ${table}`).all())).toEqual(before);
     const b = f.creates('B');
     for (const op of [b.tag, b.facet]) expect(replaySyncOperation(f.db, op).status).toBe('applied');

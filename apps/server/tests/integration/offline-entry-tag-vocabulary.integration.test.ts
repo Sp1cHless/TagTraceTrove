@@ -72,7 +72,7 @@ it('migration 034 gives Entry Tags and shared per-type layout rows stable sync i
 it('advertises and snapshots the complete schema-34 Tag vocabulary capability', () => {
   const database = createNodeSqliteMemoryDatabase();
   try {
-    expect(applyAllMigrations(database).currentVersion).toBe(43);
+    expect(applyAllMigrations(database).currentVersion).toBe(44);
     createEntry(database, { title: 'Seed', type: 'comic' });
     const section = createSection(database, { entryType: 'comic', name: 'Details' });
     const facet = createFacet(database, { sectionId: section.id, name: 'Theme' });

@@ -4,6 +4,7 @@ import { normalizeTag, parseDurationSeconds } from '@t3/shared';
 import type { ImportAuthorRating, ImportBatch, ImportCommitMapping, ImportCommitResult, ImportEntry, ImportPreview, RatingSlotDto } from '@t3/shared';
 import type { GalleryApi } from './api/gallery.js';
 import AdvancedImportPanel from './components/AdvancedImportPanel.vue';
+import AppIcon from './components/AppIcon.vue';
 import RuleBuilderPanel from './components/RuleBuilderPanel.vue';
 import SuggestionInput from './components/SuggestionInput.vue';
 import { entryStackLayerStyle, entryStackLayers } from './entry-media-stack.js';
@@ -102,7 +103,7 @@ const importTypeCombobox = ref<HTMLElement | null>(null);
 
 /**
  * What the type field offers: the Galleries the sidebar would show, in the same order and under the
- * same preference — SFW only while that is the mode, everything once NSFW is on. A type that is not
+ * same preference — visible ones only while hideable content is hidden, everything once it is shown. A type that is not
  * in this list is not offered, because it does not exist yet; typing it creates it.
  */
 const selectableGalleries = computed(() => (
@@ -1475,8 +1476,8 @@ onBeforeUnmount(() => {
                   @click="chooseGallery(gallery.type)"
                 >
                   <span>{{ gallery.type }}</span>
-                  <!-- The same mark the sidebar puts beside a Gallery: this one is NSFW. -->
-                  <span v-if="gallery.nsfw" class="nsfw-mark" data-testid="gallery-nsfw-mark">🔞</span>
+                  <!-- The same mark the sidebar puts beside a Gallery: this one can be hidden. -->
+                  <AppIcon v-if="gallery.nsfw" class="nsfw-mark" name="shelded" :size="16" data-testid="gallery-nsfw-mark" />
                 </button>
               </li>
               <li v-if="selectableGalleries.length === 0" class="type-combobox-empty">
@@ -1740,7 +1741,7 @@ onBeforeUnmount(() => {
                   @click="chooseImportGallery(gallery.type)"
                 >
                   <span>{{ gallery.type }}</span>
-                  <span v-if="gallery.nsfw" class="nsfw-mark">🔞</span>
+                  <AppIcon v-if="gallery.nsfw" class="nsfw-mark" name="shelded" :size="16" />
                 </button>
               </li>
               <li v-if="selectableGalleries.length === 0" class="type-combobox-empty">
@@ -2052,6 +2053,9 @@ onBeforeUnmount(() => {
 .type-combobox-list button:hover, .type-combobox-list button:focus-visible { background: var(--surface-muted); outline: none; }
 .type-combobox-list button.selected { color: var(--accent); }
 .type-combobox-empty { padding: 0.45rem 0.55rem; color: var(--text-muted); font-size: 0.82rem; }
+/* The "this Gallery can be hidden" shield, kept as dim as the rest of the row's secondary ink: it
+   is a note about the row, not a warning about it. */
+.nsfw-mark { flex: 0 0 auto; color: var(--text-muted); opacity: 0.65; }
 .add-page-section { display: grid; gap: 1rem; }
 .media-dropzone, .folder-dropzone { position: relative; overflow: hidden; display: grid; place-items: center; align-content: center; gap: .45rem; border: 1px dashed var(--border-subtle); border-radius: 16px; color: var(--text-muted); cursor: pointer; background: var(--surface-muted); }
 .media-dropzone { flex: 1; min-height: 310px; }

@@ -36,12 +36,13 @@ from urllib.parse import urlparse
 
 from ..generic.document import Document as RuntimeDocument
 from ..generic.document import DocumentBag
-from ..generic.select import resolve
+from ..generic.select import MEMBERS_RE, resolve
 from ..generic.unknown_url import jsonld_nodes
-from .annotate import FIELD_LIMITS, FIELDS, rule_for
+from .annotate import FIELD_LIMITS, FIELDS, normalise_selected_members, rule_for
 from .capture import Capture
 from ..generic.select import split_members
-from .harvest import (COLLECTION_JOIN, JSONLD_DOCUMENT, Harvest, flatten_json, harvest, joined_value,
+from .harvest import (COLLECTION_JOIN, JSONLD_DOCUMENT, Harvest, covers_members, flatten_json,
+                     harvest, joined_value,
                       members_of, parse_loose, same_members)
 from src.generic.select import _assemble, json_path
 
@@ -73,6 +74,12 @@ class Sample:
     #: title and its character list are the same word, so matching by value handed `characters` the
     #: *title's* rule and the confirm page showed the work's title as its character list.
     picks: dict[str, str] = field(default_factory=dict)
+    #: The fields the person answered in 「多个」 — with a set, built from one click per member.
+    #: One id and one-of-many ids look the same in `picks`, and they mean different things: a
+    #: creator answered as a set is "the pages write their authors this way", and the rule is
+    #: then allowed to read more than was picked, while a field answered with a single value
+    #: still has to read exactly it.
+    multi: tuple[str, ...] = ()
     #: positional document name -> the name its request has, once the sample set says which part of
     #: the address is the work's id (`network_documents`). Empty when nothing can be derived, and
     #: then every rule reads exactly what it read before.
@@ -82,6 +89,8 @@ class Sample:
     served: str | None = None
     #: Preserve the user's date meaning even when equal timestamps merge or candidate ids change.
     date_kinds: dict[str, str] = field(default_factory=dict)
+    #: The rule accepted or reselected on this page, not the earlier proposal.
+    selected_rules: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @property
     def url(self) -> str:
@@ -108,15 +117,23 @@ class Reading:
     # A person said this page has no value for the field. Silence then means what it
     # says; silence where a value *was* expected means the rule could not find it.
     absent: bool = False
+    superseded: bool = False
+    #: The person answered this field in 「多个」, naming a set one value at a time. A rule that
+    #: reads *more* than they picked still describes what they accepted — naming three of a
+    #: page's five authors means the other two as well — so the reading is not a disagreement.
+    set_answer: bool = False
 
     @property
     def agrees(self) -> bool:
-        return self.expected is not None and self.value is not None \
-            and same_members(self.value, self.expected)
+        if self.expected is None or self.value is None:
+            return False
+        if same_members(self.value, self.expected):
+            return True
+        return self.set_answer and covers_members(self.value, self.expected)
 
     @property
     def checked(self) -> bool:
-        return self.expected is not None and not self.source and not self.absent
+        return self.expected is not None and not self.source and not self.absent and not self.superseded
 
     @property
     def missing(self) -> bool:
@@ -132,12 +149,11 @@ class Hypothesis:
     from_candidate: str
     sources: list[str]
     readings: list[Reading] = field(default_factory=list)
+    preferred: bool = False
 
     @property
     def verdict(self) -> str:
         checked = [reading for reading in self.readings if reading.checked]
-        if not checked:
-            return UNPROVEN
         own = next((reading for reading in self.readings if reading.source), None)
         if own is not None and own.value is None:
             # It cannot reproduce what was annotated, so it is not a rule.
@@ -149,6 +165,8 @@ class Hypothesis:
             # half that let a rule reading all sixteen of a work's tags pass against an
             # annotation that had recorded the first five.
             return PRUNE
+        if not checked:
+            return UNPROVEN
         if any(reading.value is not None and not reading.agrees for reading in checked):
             return PRUNE
         if any(reading.missing for reading in checked):
@@ -186,6 +204,10 @@ class Hypothesis:
                            if r.absent and r.source is False]
         if accepted_absent:
             parts.append("absent on " + ", ".join(accepted_absent) + " (no rule needed there)")
+        superseded = [r.sample for r in self.readings if r.superseded]
+        if superseded:
+            parts.append("earlier answers differ on " + ", ".join(superseded)
+                         + "; the latest annotation takes precedence")
         return "; ".join(parts) or "nothing but the annotated page could check it"
 
 
@@ -208,7 +230,13 @@ class FieldReport:
 
         A preview set is many pictures for the same reason a tag list is many strings,
         so an `images` field wants the list-shaped rules too.
+
+        A `multi` field — one value or several, decided by the person — takes either
+        shape, because the answer decides it: one name picked as "this work's author" and
+        six picked as "the pages' authors" are the same field with different answers.
         """
+        if self.kind == "multi":
+            return items
         wants_list = self.kind in ("collection", "images")
         matching = [item for item in items if bool(item.rule.get("list")) == wants_list]
         return matching or items
@@ -226,12 +254,14 @@ class FieldReport:
         `title` (`Mornye`) both passed while only one of them is what a person wrote — and
         the shorter rule won, so the library would have shown the slug.
         """
-        candidates = self.shaped(self.kept() or self.hypotheses)
+        latest_choice = [item for item in self.hypotheses if item.preferred and item.verdict != PRUNE]
+        candidates = self.shaped(latest_choice or self.kept() or self.hypotheses)
         if not candidates:
             return None
         structured = [item for item in candidates
                       if (item.rule or {}).get("from") in ("json", "meta")]
-        pool = structured or candidates
+        preferred = [item for item in candidates if item.preferred and item.verdict != PRUNE]
+        pool = preferred or structured or candidates
 
         def exact(item: Hypothesis) -> int:
             return 0 if any(reading.source and reading.value == reading.expected
@@ -249,6 +279,7 @@ class Learning:
     fields: list[FieldReport]
     notes: list[str] = field(default_factory=list)
     acquisition: str = "http"
+    prefer_latest: bool = False
 
     def chosen_rules(self) -> dict[str, dict[str, Any]]:
         """The rule to install for each field, with its verified alternatives behind it.
@@ -282,17 +313,18 @@ class Learning:
     def to_json(self) -> dict[str, Any]:
         return {
             "acquisition": self.acquisition,
+            "rule_policy": "latest_annotation" if self.prefer_latest else "cross_sample",
             "notes": self.notes,
             "fields": {
                 report.field: {
                     "kind": report.kind,
                     "chosen": (report.chosen().rule if report.chosen() else None),
                     "hypotheses": [
-                        {"rule": item.rule, "from": item.from_candidate,
+                        {"rule": item.rule, "from": item.from_candidate, "preferred": item.preferred,
                          "sources": item.sources, "verdict": item.verdict,
                          "reason": item.reason(),
                          "readings": [{"sample": reading.sample, "value": reading.value,
-                                       "expected": reading.expected}
+                                       "expected": reading.expected, "superseded": reading.superseded}
                                       for reading in item.readings]}
                         for item in report.hypotheses
                     ],
@@ -365,9 +397,18 @@ def answer_members(field: str, value: Any) -> Any:
     carries a usable rule" and then as "the two sides read different values" for the very
     same members, and the install was refused (a real bilinovel build, 2026-10-03).
     """
-    if field in COLLECTION_FIELDS and isinstance(value, str):
-        parts = split_members(value)
-        return parts if len(parts) > 1 else value
+    if field in COLLECTION_FIELDS:
+        text = value
+        if isinstance(value, (list, tuple)):
+            # A block clicked into the field is recorded as a one-member list and *reads* as its
+            # members, so the answer's members are that block's members — the same rule the
+            # split on the rule's side follows, and the two sides have to agree.
+            if len(value) != 1 or not isinstance(value[0], str) or not MEMBERS_RE.search(value[0]):
+                return value
+            text = value[0]
+        if isinstance(text, str):
+            parts = split_members(text)
+            return parts if len(parts) > 1 else value
     return value
 
 
@@ -383,10 +424,22 @@ def _with_split(rule: dict[str, Any], field: str, answer: Any) -> dict[str, Any]
     A rule that already reads a repeated group carries `list` and needs nothing; one that
     reads a single block of joined members needs this, and then produces exactly what the
     person accepted.
+
+    A block clicked into a collection field arrives as a one-member list — that is the shape a
+    single click is recorded in — and it is the same block. Only a block that *writes* its
+    members with separators is split from that shape: one member that merely contains a space
+    (`Only One` is one tag) is one member, while a block written with spaces and a block written
+    with slashes are the same answer for a field the page writes as members (both recorded).
     """
-    if field not in COLLECTION_FIELDS or not isinstance(answer, str) or rule.get("list"):
+    if isinstance(answer, (list, tuple)):
+        if len(answer) != 1 or not isinstance(answer[0], str) or not MEMBERS_RE.search(answer[0]):
+            return rule
+        text = answer[0]
+    else:
+        text = answer
+    if field not in COLLECTION_FIELDS or not isinstance(text, str) or rule.get("list"):
         return rule
-    if len(split_members(answer)) < 2:
+    if len(split_members(text)) < 2:
         return rule
     return {**rule, "transform": [*(rule.get("transform") or []), "split"]}
 
@@ -409,7 +462,7 @@ def _with_field_limit(rule: dict[str, Any], field: str) -> dict[str, Any]:
 
 
 def _is_what_was_annotated(expected: Any, candidate_value: str,
-                           field: str | None = None) -> bool:
+                           field: str | None = None, many: bool = False) -> bool:
     """Whether a candidate is the thing a person accepted.
 
     A candidate's value is one line — a collection's members joined — while an
@@ -435,15 +488,35 @@ def _is_what_was_annotated(expected: Any, candidate_value: str,
         return all(same_members(one, other) for one, other in zip(wanted, offered))
     if same_members(joined_value(expected), candidate_value):
         return True
-    if field not in COLLECTION_FIELDS:
+    if field not in MULTI_FIELDS:
         return False
     # The candidate on the field's own terms: its separators become members, and the two sides are
     # compared member against member. The exact test above runs first, so a member that itself
     # contains a separator (`A/B` as one tag) still matches the line it was recorded as.
     as_members = split_members(candidate_value)
-    if len(wanted) != len(as_members):
+    if len(wanted) == len(as_members):
+        return all(same_members(one, other) for one, other in zip(wanted, as_members))
+    # A field answered one value at a time is allowed to be named by a candidate that holds only
+    # some of it — one author's name inside the answer of six — or by one that holds more, the
+    # page's whole author block. Both are candidates for the field; which of them becomes the
+    # rule is decided later, on the annotated page and by the person's own pick.
+    if not many:
         return False
-    return all(same_members(one, other) for one, other in zip(wanted, as_members))
+    # The candidate compared as *one member* of the answer, not split as a line: `Wen Tan` is one
+    # name, and splitting it would make it two and match nothing.
+    if any(same_members(one, candidate_value) for one in wanted):
+        return True
+    return _in_order(wanted, as_members) or _in_order(as_members, wanted)
+
+
+def _in_order(needle: list[str], haystack: list[str]) -> bool:
+    """Whether `needle` appears inside `haystack`, in order — the members, not the line."""
+    if not needle or len(needle) > len(haystack):
+        return False
+    for start in range(len(haystack) - len(needle) + 1):
+        if all(same_members(one, other) for one, other in zip(needle, haystack[start:])):
+            return True
+    return False
 
 
 def capture_to_bag(capture: Capture, names: dict[str, str] | None = None,
@@ -515,8 +588,11 @@ def _reads_the_annotation(rule: dict[str, Any], candidate: Candidate, expected: 
     what the rest of this file does; this is the proposal path doing the same.
     """
     names = reference.document_names
+    kind = next((kind for name, kind, _label in FIELDS if name == field), None)
     for alternative in [rule, *(source.rule for source in candidate.sources)]:
         if not alternative or alternative.get("conflict"):
+            continue
+        if kind in ("scalar", "image") and alternative.get("list"):
             continue
         measured = _with_field_limit(_with_split(alternative, field,
                                                  reference.annotated.get(field)), field)
@@ -655,17 +731,28 @@ def _whole_token(text: str, part: str) -> bool:
     return not before.isalnum() and not after.isalnum()
 
 
-def _field_candidates(reference: Sample, field: str, expected: Any) -> list[Any]:
+def _field_candidates(reference: Sample, field: str, expected: Any,
+                      many: bool = False) -> list[Any]:
     candidates = list(reference.harvest.candidates)
     if field not in ("date", "date_added"):
         return candidates
     meaning = reference.date_kinds.get(field)
     picked = next((candidate for candidate in candidates
                    if candidate.candidate_id == reference.picks.get(field)
-                   and _is_what_was_annotated(expected, candidate.value, field)), None)
+                   and _is_what_was_annotated(expected, candidate.value, field, many)), None)
     meaning = meaning or (picked.context.get("date_kind") if picked else None)
     return ([candidate for candidate in candidates if candidate.context.get("date_kind") == meaning]
             if meaning else candidates)
+
+
+def latest_annotation_sources(samples: Iterable[Sample]) -> dict[str, Sample]:
+    """Last actual answer per field; an unanswered field does not erase an earlier answer."""
+    answers: dict[str, Sample] = {}
+    for sample in samples:
+        for field, value in sample.annotated.items():
+            if value not in (None, "", []) and field not in sample.absent:
+                answers[field] = sample
+    return answers
 
 
 def apply_to(references: Sample | Iterable[Sample], capture: Capture) -> dict[str, dict[str, Any]]:
@@ -677,7 +764,7 @@ def apply_to(references: Sample | Iterable[Sample], capture: Capture) -> dict[st
     choice again. A field whose rule reads nothing is kept as `None` rather than
     dropped — a rule that fails on the second page is a finding, not an absence.
 
-    Every sample answered so far is consulted and the first answer for a field wins,
+    Every sample answered so far is consulted and the latest answer for a field wins,
     because a work is not required to carry every field: measured in a real session, the
     first work had no 登場人物 and no 系列, the person filled them in on the second, and the
     third page was offered nothing at all for either.
@@ -694,25 +781,31 @@ def apply_to(references: Sample | Iterable[Sample], capture: Capture) -> dict[st
     target_names = network_names(capture.final_url or capture.url, capture,
                                 key_at(capture.final_url or capture.url, index))
     answers: dict[str, tuple[Sample, Any]] = {}
-    for reference in references:
-        for field, expected in reference.annotated.items():
-            answers.setdefault(field, (reference, expected))
+    for field, reference in latest_annotation_sources(references).items():
+        answers[field] = (reference, reference.annotated[field])
     applied: dict[str, dict[str, Any]] = {}
     for field, (reference, expected) in answers.items():
         expected = answer_members(field, expected)
-        candidates = _field_candidates(reference, field, expected)
+        candidates = _field_candidates(reference, field, expected, field in reference.multi)
         picked = reference.picks.get(field)
+        if isinstance(picked, (list, tuple)):
+            # An answer built from several clicks: any of them names the field's kind, and the
+            # value check below is what decides whether the candidate is this answer's.
+            picked = picked[0] if picked else None
         if picked:
             # The person's own click first. Two fields can carry the same word — a work's title and
             # the character named after it — and matching by value then proposes one field with
             # another field's rule; the session records which candidate was clicked, so use it.
             clicked = next((c for c in candidates if c.candidate_id == picked), None)
-            if clicked is not None and _is_what_was_annotated(expected, clicked.value, field):
+            if clicked is not None and _is_what_was_annotated(
+                    expected, clicked.value, field, field in reference.multi):
                 candidates = [clicked]
         for candidate in candidates:
-            if not _is_what_was_annotated(expected, candidate.value, field):
+            if not _is_what_was_annotated(
+                    expected, candidate.value, field, field in reference.multi):
                 continue
-            rule = rule_for(candidate)
+            kind = next((kind for name, kind, _label in FIELDS if name == field), None)
+            rule = reference.selected_rules.get(field) or rule_for(candidate, kind=kind)
             if rule is None:
                 continue
             # …but the candidate may carry several rules for one value, and the ranking is not a
@@ -745,6 +838,7 @@ def load_session(directory: Path, name: str | None = None) -> Sample:
     result = harvest(capture)
     annotated: dict[str, Any] = {}
     annotations = directory / "annotations.json"
+    multi: tuple[str, ...] = ()
     if annotations.is_file():
         payload = json.loads(annotations.read_text(encoding="utf-8"))
         # `fields` holds the value a person accepted. A collection's value is the list
@@ -760,22 +854,44 @@ def load_session(directory: Path, name: str | None = None) -> Sample:
             text = str(recorded)
             annotated[key] = by_id.get(text, text)
         explicitly_absent = {str(name) for name in (payload.get("absent") or [])}
-        picks = {str(field): str(candidate)
-                 for field, candidate in (payload.get("picks") or {}).items()}
+        # A field answered in 「多个」 records the ids it was built from, in the order they were
+        # clicked; every other field records the one it was clicked from.
+        picks = {str(field): ([str(item) for item in value] if isinstance(value, (list, tuple))
+                              else str(value))
+                 for field, value in (payload.get("picks") or {}).items()}
         date_kinds = {str(field): hypothesis["date_kind"]
                       for field, hypothesis in (payload.get("hypotheses") or {}).items()
                       if isinstance(hypothesis, dict)
                       and hypothesis.get("date_kind") in ("published", "updated", "created", "unknown")}
+        selected_rules = {str(field): hypothesis["rule"]
+                          for field, hypothesis in (payload.get("hypotheses") or {}).items()
+                          if isinstance(hypothesis, dict) and isinstance(hypothesis.get("rule"), dict)}
+        # Replay old single clicks with their actual shape. Earlier annotation code
+        # saved a group rule for one member, which discarded that field during learning.
+        annotated = normalise_selected_members(annotated, result, picks)
+        for field, kind, _label in FIELDS:
+            candidate = next((item for item in result.candidates if item.candidate_id == picks.get(field)), None)
+            if (kind == "collection" and candidate is not None and candidate.kind != "collection"
+                    and annotated.get(field) == [candidate.value] and selected_rules.get(field, {}).get("list")):
+                single_rule = rule_for(candidate, kind=kind)
+                if single_rule is not None and not single_rule.get("list"):
+                    selected_rules[field] = single_rule
+        # Which answers were sets, recorded beside them. A session that never used the switch
+        # has none, and every field then compares exactly as it always did.
+        multi = tuple(str(field) for field in (payload.get("multi") or []))
     else:
         explicitly_absent = set()
         picks = {}
         date_kinds = {}
+        selected_rules = {}
     return Sample(name=name or directory.name, capture=capture, harvest=result,
-                  annotated=annotated, absent=explicitly_absent, picks=picks, date_kinds=date_kinds)
+                  annotated=annotated, absent=explicitly_absent, picks=picks, date_kinds=date_kinds,
+                  selected_rules=selected_rules, multi=multi)
 
 
 def learn(samples: list[Sample],
-          fields: tuple[tuple[str, str, str], ...] = FIELDS) -> Learning:
+          fields: tuple[tuple[str, str, str], ...] = FIELDS, *,
+          prefer_latest: bool = False) -> Learning:
     """Every hypothesis the first sample offers, judged by all the samples.
 
     `fields` is the vocabulary the annotation was keyed by: a work's, or a listing card's
@@ -800,13 +916,14 @@ def learn(samples: list[Sample],
                      "and none of them is a rule yet")
 
     reports: list[FieldReport] = []
+    latest_sources = latest_annotation_sources(samples) if prefer_latest else {}
     for field, kind, _label in fields:
         # Whichever sample answered this field is the one that offers hypotheses. It used
         # to be the first sample for every field, which meant a field the first work
         # happened not to carry was never learned at all: measured in a real session whose
         # first work had no 登場人物 and no 系列 and whose second had both, the person
         # filled them in on the second page and the third was offered nothing.
-        source = next((sample for sample in samples
+        source = latest_sources.get(field) if prefer_latest else next((sample for sample in samples
                        if sample.annotated.get(field) is not None), None)
         if source is None:
             continue
@@ -814,15 +931,33 @@ def learn(samples: list[Sample],
         expected = answer_members(field, answer)
         hypotheses: list[Hypothesis] = []
         seen: set[str] = set()
-        for candidate in _field_candidates(source, field, expected):
-            if not _is_what_was_annotated(expected, candidate.value, field):
+        candidates = _field_candidates(source, field, expected, field in source.multi)
+        preferred_rule = source.selected_rules.get(field) if prefer_latest else None
+        if prefer_latest and source.picks.get(field):
+            clicked = next((candidate for candidate in candidates
+                            if candidate.candidate_id == source.picks[field]
+                            and _is_what_was_annotated(expected, candidate.value, field,
+                                                       field in source.multi)), None)
+            if clicked is not None:
+                candidates = [clicked]
+                preferred_rule = preferred_rule or rule_for(clicked, kind=kind)
+        preferred_key = (json.dumps(_with_field_limit(_with_split(
+            named_document(preferred_rule, source.document_names), field, answer), field), sort_keys=True)
+            if preferred_rule else None)
+        for candidate in candidates:
+            if not _is_what_was_annotated(
+                    expected, candidate.value, field, field in source.multi):
                 continue
             # Every source that carries a rule is its own hypothesis. The plan's
             # §13.2 keeps several per field rather than choosing one at Example 1,
             # because one page cannot say which of them will survive the next: the
             # same title arrives in `og:title` and in the `h1`, and only another page
             # decides between them.
-            for rule_source in candidate.sources:
+            sources = list(candidate.sources)
+            if preferred_rule:
+                # A confirmed proposal can be more precise than the raw harvested rule.
+                sources = [*sources, replace(candidate.sources[0], rule=preferred_rule)] if sources else sources
+            for rule_source in sources:
                 rule = rule_source.rule
                 if not rule:
                     continue
@@ -833,10 +968,14 @@ def learn(samples: list[Sample],
                 if key in seen:
                     continue
                 seen.add(key)
+                shaped_rule = _with_field_limit(_with_split(rule, field, answer), field)
+                if kind in ("scalar", "image") and shaped_rule.get("list"):
+                    continue
                 hypotheses.append(Hypothesis(
-                    rule=_with_field_limit(_with_split(rule, field, answer), field),
+                    rule=shaped_rule,
                     from_candidate=candidate.candidate_id,
                     sources=[rule_source.channel],
+                    preferred=json.dumps(shaped_rule, sort_keys=True) == preferred_key,
                 ))
         # A value no rule could read may still be an address its own fields make up — the cover of a
         # site that publishes only the pieces. Offered *beside* whatever the page offered, not only
@@ -856,8 +995,14 @@ def learn(samples: list[Sample],
                 _read(hypothesis.rule, field, sample, is_source=sample is source)
                 for sample in samples
             ]
+            if prefer_latest:
+                for reading in hypothesis.readings:
+                    if not reading.source and reading.expected is not None and not reading.agrees:
+                        reading.superseded = True
         reports.append(FieldReport(field=field, kind=kind, hypotheses=hypotheses))
-    return Learning(fields=reports, notes=notes)
+    if prefer_latest:
+        notes.append("later annotations override earlier answers per field; earlier disagreements are advisory")
+    return Learning(fields=reports, notes=notes, prefer_latest=prefer_latest)
 
 
 def learn_for_runtime(samples: list[Sample], *, browser_capture: bool = False) -> Learning:
@@ -867,7 +1012,13 @@ def learn_for_runtime(samples: list[Sample], *, browser_capture: bool = False) -
     pruned merely because the served page has not rendered it. Change the declared reader
     only when the rendered samples recover that field without losing the HTTP fields.
     """
-    http_learning = learn(samples)
+    http_learning = learn(samples, prefer_latest=True)
+    manually_verified = any(sample.capture.manual_verified for sample in samples)
+    if manually_verified:
+        rendered = learn([replace(sample, served=None) for sample in samples], prefer_latest=True)
+        rendered.acquisition = "browser"
+        rendered.notes.append("runtime keeps the browser profile used for manual verification")
+        return rendered
     if not browser_capture:
         return http_learning
     if not any(sample.served is not None for sample in samples):
@@ -875,7 +1026,7 @@ def learn_for_runtime(samples: list[Sample], *, browser_capture: bool = False) -
         http_learning.notes.append("runtime uses the browser-rendered page; "
                                    "no served sample was available to verify HTTP")
         return http_learning
-    rendered = learn([replace(sample, served=None) for sample in samples])
+    rendered = learn([replace(sample, served=None) for sample in samples], prefer_latest=True)
     http_fields = set(http_learning.chosen_rules())
     rendered_fields = set(rendered.chosen_rules())
     if rendered_fields - http_fields and http_fields <= rendered_fields:
@@ -916,7 +1067,7 @@ def _read(rule: dict[str, Any], field: str, sample: Sample, *,
                       # tags row is the members, however the page wrote them, and a rule that read
                       # `a / b / c` off a page whose row says `a b c` read the field correctly.
                       expected=answer_members(field, sample.annotated.get(field)), source=is_source,
-                      absent=field in sample.absent)
+                      absent=field in sample.absent, set_answer=field in tuple(sample.multi))
     if sample_error:
         reading.value = None
     return reading
@@ -1065,7 +1216,19 @@ def url_pattern_for(samples: list[Sample], prefer: str | None = None) -> str | N
     # become a step of its own and put a `//` in the middle of the pattern.
     paths = [[part for part in item.path.split("/") if part] for item in parsed]
     if len({len(parts) for parts in paths}) != 1:
-        return rf"^https?://{re.escape(host)}/"
+        # A work URL can stop at its numeric key or continue into a chapter/slug.
+        # Keep the shared keyed prefix, rather than dropping the identity entirely.
+        # Require a common literal route before the key; unrelated path shapes do
+        # not justify claiming every URL on the host.
+        prefix_keys = [
+            index for index in range(1, min(map(len, paths)))
+            if all(re.fullmatch(r"\d+", parts[index]) for parts in paths)
+            and all(len({parts[step] for parts in paths}) == 1 for step in range(index))
+        ]
+        if not prefix_keys:
+            return rf"^https?://{re.escape(host)}/"
+        depth = max(prefix_keys) + 1
+        paths = [parts[:depth] for parts in paths]
     if not paths[0]:
         # An address with no path at all (`https://site.test/`) — a listing card's own page, and the
         # host is the whole of what can be said about it. Without this the step below indexes an
@@ -1074,7 +1237,7 @@ def url_pattern_for(samples: list[Sample], prefer: str | None = None) -> str | N
     steps = []
     for index in range(len(paths[0])):
         column = {parts[index] for parts in paths}
-        steps.append(re.escape(next(iter(column))) if len(column) == 1 else "[^/]+")
+        steps.append(re.escape(next(iter(column))) if len(column) == 1 else "[^/?#]+")
     # The last step that varies has to *capture*: the registry reads a target's id out
     # of the pattern's groups, and a pattern of non-capturing steps matches the URL and
     # still reports that no site claims it — which reads as "unknown site", not as
@@ -1091,7 +1254,7 @@ def url_pattern_for(samples: list[Sample], prefer: str | None = None) -> str | N
     # `…-日本語-4201383`, where the first number belongs to the title and only the trailing one is the
     # work's. The tail after the digits stays optional and the whole step is anchored at the end, so a
     # site that drops its extension, or adds a query, still matches.
-    varying = [index for index, step in enumerate(steps) if step == "[^/]+"]
+    varying = [index for index, step in enumerate(steps) if step == "[^/?#]+"]
     # `prefer` is the segment the site's *own API* repeats (`api_identifier`) — the work's key as the
     # requests spell it. It only moves the capture when it is one of the steps that actually varies,
     # so a caller that passes nothing, or a site with no API evidence, derives exactly the pattern it
@@ -1099,8 +1262,11 @@ def url_pattern_for(samples: list[Sample], prefer: str | None = None) -> str | N
     chosen = (paths[0].index(prefer)
               if prefer and prefer in paths[0] and paths[0].index(prefer) in varying
               else max(varying, default=len(steps) - 1))
-    capture = (_identity_capture([parts[chosen] for parts in paths]) if varying
-               else f"({steps[chosen]})")
+    # Even one sample must generalise its numeric key: a literal capture would
+    # accept only the work used to create the adapter.
+    values = [parts[chosen] for parts in paths]
+    capture = (_identity_capture(values) if varying or all(re.search(r"\d", value) for value in values)
+               else f"({steps[chosen]})(?=[/?#]|$)")
     rendered = "".join(
         f"/{capture}" if index == chosen else f"(?:/{step})"
         for index, step in enumerate(steps))
@@ -1118,12 +1284,12 @@ def _identity_capture(values: list[str]) -> str:
     for value in values:
         digits = list(re.finditer(r"\d+", value))
         if not digits:
-            return "(?P<id>[^/]+)"
+            return "(?P<id>[^/?#]+)(?=[/?#]|$)"
         last = digits[-1]
         found.append((value[:last.start()], value[last.end():]))
     tails = {tail for _head, tail in found}
     if len(tails) != 1:
-        return "(?P<id>[^/]+)"
+        return "(?P<id>[^/?#]+)(?=[/?#]|$)"
     heads = {head for head, _tail in found}
     if heads == {""}:
         head = ""
@@ -1169,15 +1335,46 @@ FIELD_TO_RUNTIME = {
 }
 PASSTHROUGH_FIELDS = ("description",)
 
-# The fields whose value is the members it holds rather than one string.
+# The fields whose value is the members it holds rather than one string, and the fields that
+# may hold several because the person said so. Both are compared member against member; only
+# the first is *always* many.
 COLLECTION_FIELDS = frozenset(key for key, kind, _label in FIELDS if kind == "collection")
+MULTI_FIELDS = COLLECTION_FIELDS | frozenset(key for key, kind, _label in FIELDS if kind == "multi")
+
+
+def runtime_names(field: str) -> tuple[str, ...]:
+    """Every runtime name an annotation field can be written under.
+
+    A creator answered with one name is the work's `author`; the same field answered with several
+    is its `authors`, which is the name T³ already expands into one link per name. The draft picks
+    between them by the rule's shape, so anything resolving the annotation back has to allow both —
+    and a reader that only knew `author` reported a finished draft as "the annotated field was
+    discarded", which is what refused a real install (PMC, 2026-10-16).
+    """
+    name = FIELD_TO_RUNTIME.get(field)
+    if name is None:
+        return ()
+    return (name, "authors") if field == "creator" else (name,)
+
+
+def wants_a_list(field: str, rule: dict[str, Any]) -> bool:
+    """Whether this field's answer, as this rule reads it, is a set.
+
+    A creator answered with a set is the work's several *authors*, which is the name T³
+    already expands into one link per name; the same field answered with one name is its
+    author. The runtime record has both names, so the rule's own shape decides.
+    """
+    return bool(rule.get("list")) or field in COLLECTION_FIELDS
 
 
 def runtime_fields(learning: Learning) -> dict[str, dict[str, Any]]:
     """The learned rules, under the names the runtime reads them by."""
     mapped: dict[str, dict[str, Any]] = {}
     for field, rule in learning.chosen_rules().items():
-        mapped[FIELD_TO_RUNTIME.get(field, field)] = rule
+        name = FIELD_TO_RUNTIME.get(field, field)
+        if field == "creator" and wants_a_list(field, rule):
+            name = "authors"
+        mapped[name] = rule
     return mapped
 
 
@@ -1249,6 +1446,11 @@ def draft_site_json(samples: list[Sample], learning: Learning) -> dict[str, Any]
                      "label": "Work", "single": True},
         },
         "documents": documents,
+        **({"session": {"profile_dir": next(sample.capture.browser_profile
+                                             for sample in reversed(samples)
+                                             if sample.capture.browser_profile)}}
+           if learning.acquisition == "browser" and any(sample.capture.browser_profile for sample in samples)
+           else {}),
         "work": {
             "acquisition": learning.acquisition,
             "fields": runtime_fields(learning),
@@ -1258,5 +1460,6 @@ def draft_site_json(samples: list[Sample], learning: Learning) -> dict[str, Any]
                             if name in runtime_fields(learning)],
         },
         "_draft": {"generated_from": [sample.name for sample in samples],
+                   "rule_policy": "latest_annotation" if learning.prefer_latest else "cross_sample",
                    "review": review},
     }

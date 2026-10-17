@@ -196,7 +196,7 @@ it('bulk validates every frozen Entry before mutation and rolls back assignments
  }finally{f.close();}
 });
 it('a rejected durable enqueue creates neither partial queue nor optimistic Tag projection',async()=>{
- const f=await fixture();try{await f.offline();const spy=vi.spyOn(f.store,'enqueue').mockRejectedValueOnce(new Error('IDB abort'));
+ const f=await fixture();try{await f.offline();const spy=vi.spyOn(f.store,'editLocalFinalState').mockRejectedValueOnce(new Error('IDB abort'));
   await expect(f.api.addCollectionTag(f.parent.id,'Winter')).rejects.toThrow('IDB abort');spy.mockRestore();
   expect(await f.store.list()).toEqual([]);expect(JSON.stringify(await f.api.getEntry(f.work.id))).not.toContain('Winter');
  }finally{f.close();}
@@ -305,8 +305,8 @@ for(const oldCopy of [false,true])it(`retained connected ${oldCopy?'old copy new
   if(oldCopy){await f.offline();f.reconnect();}
   const {createCollection,addCollectionEntry}=await serverModule('repositories/collection-repository');
   const folder=createCollection(f.db,{kind:'entry',title:'New server shelf',galleryType:'Comic'});addCollectionEntry(f.db,folder.id,f.work.id);addCollectionEntry(f.db,folder.id,f.other.id);
-  const connected=oldCopy?f.cold():f.api;f.calls.length=0;let beforeEnqueue:string[]=[];const enqueue=f.store.enqueue.bind(f.store);
-  const spy=vi.spyOn(f.store,'enqueue').mockImplementation(async operation=>{beforeEnqueue=[...f.calls];return enqueue(operation);});
+  const connected=oldCopy?f.cold():f.api;f.calls.length=0;let beforeEnqueue:string[]=[];const edit=f.store.editLocalFinalState.bind(f.store);
+  const spy=vi.spyOn(f.store,'editLocalFinalState').mockImplementation(async(...args)=>{beforeEnqueue=[...f.calls];return edit(...args);});
   f.loseResponse();expect(await connected.addCollectionTag(folder.id,'Winter')).toMatchObject({entriesAffected:2,alreadyPresent:0,skipped:0});spy.mockRestore();
   expect(beforeEnqueue.some(call=>call.includes('common-tag-context'))).toBe(true);
   expect(beforeEnqueue.every(call=>!call.includes('snapshot')&&!call.includes('media')&&!call.startsWith('POST '))).toBe(true);

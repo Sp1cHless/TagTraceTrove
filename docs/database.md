@@ -47,7 +47,7 @@ WAL behavior. Data directory default is `.data` under `apps/server` (holding `li
 | 006 | `006_rating_slots.sql` | Shared rating slots per subject kind + Gallery; the two value tables. |
 | 007 | `007_entry_usage.sql` | `entry_usage` (lazy per-Entry view counter + last-viewed, FK CASCADE). |
 | 008 | `008_entry_likes.sql` | `like_count` on `entry_usage` (unlimited, re-clickable). |
-| 009 | `009_gallery_partitions.sql` | `gallery_settings` (per Entry-type SFW/NSFW, default SFW). |
+| 009 | `009_gallery_partitions.sql` | `gallery_settings` (per Entry-type hideable flag `nsfw`, default not hideable). |
 | 010 | `010_collections.sql` | `collections` (entry/producer kinds, one-level entry nesting, title/description/nsfw/sort order) + `collection_entries` / `collection_producers`. |
 | 011 | `011_view_later.sql` | Library-wide ordered `view_later_entries` (FK CASCADE, idempotent, position preserved). |
 | 012 | `012_view_later_producers.sql` | Independent ordered `view_later_producers` list. |
@@ -82,6 +82,7 @@ WAL behavior. Data directory default is `.data` under `apps/server` (holding `li
 | 041 | `041_works_summary_follows_gallery.sql` | Backfills every Gallery's works summary to match its work dimensions. |
 | 042 | `042_standalone_author_directory_seed.sql` | New standalone creates may pre-supply an independent Directory-set identity. |
 | 043 | `043_gallery_partition_sync.sql` | Dedicated per-type partition overlay revision; Gallery stays derived from `entries.type`. |
+| 044 | `044_gallery_card_layout.sql` | Per-Gallery `card_layout` (`vertical` default / `horizontal`) on `gallery_settings`; independent of `nsfw`, excluded from snapshot/journal contracts. |
 
 ## 3. Database-backed behavior verification
 

@@ -9,8 +9,9 @@
     "db:probe": "pnpm --filter @t3/server db:probe",
     "db:backup": "pnpm --filter @t3/server db:backup",
     "db:restore": "pnpm --filter @t3/server db:restore",
-    "dev:server": "pnpm --filter @t3/server dev",
-    "typecheck": "pnpm -r typecheck",
+    "dev:server": "node tools/ensure-web-build.mjs && pnpm --filter @t3/server dev",
+    "typecheck": "pnpm -r typecheck && pnpm typecheck:integration",
+    "typecheck:integration": "pnpm --filter @t3/web exec vue-tsc -p ../../tsconfig.integration.json --noEmit",
     "lint": "eslint .",
     "import:site-probe": "pnpm --filter @t3/server import:site-probe",
     "import:commit": "pnpm --filter @t3/server import:commit",
@@ -19,7 +20,8 @@
     "media:thumbnails": "pnpm --filter @t3/server media:thumbnails",
     "test": "vitest run --exclude '**/*.integration.test.ts'",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "start:server": "pnpm --filter @t3/server start"
+  "test:triage": "node tools/test-triage.mjs",
+    "start:server": "node tools/ensure-web-build.mjs && pnpm --filter @t3/server start"
   },
   "devDependencies": {
     "@eslint/js": "^9.34.0",

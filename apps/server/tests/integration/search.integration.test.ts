@@ -55,7 +55,7 @@ describe('global search', () => {
       .toEqual(['Hypergryph']);
   });
 
-  it('hides tags used only by NSFW Galleries when search is in SFW mode', async () => {
+  it('hides tags used only by hideable Galleries while those are hidden', async () => {
     const database = createMigratedMemoryDatabase();
     databases.push(database);
     const safeSection = createSection(database, { entryType: 'comic', name: 'Basic' });

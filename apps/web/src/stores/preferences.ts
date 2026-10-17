@@ -13,9 +13,9 @@ function restore(): boolean {
 }
 
 /**
- * Show-NSFW is a display preference (never persisted to the database): the
+ * Show-hideable is a display preference (never persisted to the database): the
  * partition of a Gallery lives in gallery_settings, this switch only controls
- * whether NSFW galleries and authors are visible in the UI.
+ * whether hideable galleries and authors are visible in the UI.
  */
 export const showNsfw = ref<boolean>(restore());
 

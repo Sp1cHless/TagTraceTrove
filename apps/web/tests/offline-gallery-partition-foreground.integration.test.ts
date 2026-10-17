@@ -236,7 +236,10 @@ it('held creator and conflict partition block own successors while independent p
  for(const globalOff of [false,true]){
   const f=await fixture();try{
    await f.offline();await f.api.enqueueOfflineEntryCreate!({title:'Held',type:'Held Type',uploadDate:null,pageCount:null,ratings:[],viewLater:false,coverFile:null,previewFile:null});await f.api.setGalleryPartition('Held Type',true);
-   await f.api.setGalleryPartition('Comic',true);await f.api.setGalleryPartition('Comic',false);await f.api.setGalleryPartition('Unstructured',true);await f.api.updateEntry(f.work.id,{title:'Independent Entry'});
+   await f.api.setGalleryPartition('Comic',true);
+   // The first toggle must be an immutable original to model a conflicted predecessor.
+   await f.store.captureLocalFinalState(true);
+   await f.api.setGalleryPartition('Comic',false);await f.api.setGalleryPartition('Unstructured',true);await f.api.updateEntry(f.work.id,{title:'Independent Entry'});
    const rows=await f.store.list();await f.store.update(rows[0]!.opId,{status:'conflict'});await f.store.update(rows[2]!.opId,{status:'conflict'});const fingerprints=rows.map(operationFingerprint);
    f.reconnect();await f.api.getSyncCapabilities({replay:false});if(globalOff)await f.store.writeMeta('capability.offlineMutations','0');await f.api.replayOfflineOperations!();
    const kinds=f.bodies.map(body=>JSON.parse(body));expect(kinds.map(row=>row.opId)).toEqual(globalOff?[]:[rows[4]!.opId,rows[5]!.opId]);
@@ -246,7 +249,7 @@ it('held creator and conflict partition block own successors while independent p
   }finally{f.close();}
  }
 });
-it('cold canonical snapshot hides whole Gallery on query search author filter random saved rating Collection members counts covers and Author ANY NSFW then restores SFW',async()=>{
+it('cold canonical snapshot hides whole Gallery on query search author filter random saved rating Collection members counts covers and Author ANY hideable then restores visible',async()=>{
  const f=await fixture();try{
   f.db.prepare('UPDATE entries SET cover_ref=? WHERE id=?').run('entries/'+f.work.id+'/cover.webp',f.work.id);
   const {linkEntryProducer}=await serverModule('repositories/producer-repository');linkEntryProducer(f.db,f.skipped.id,f.author.id);

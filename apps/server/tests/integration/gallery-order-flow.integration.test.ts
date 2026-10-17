@@ -22,7 +22,9 @@ it('cold-restarts through a lost committed receipt, verified delta and durable A
   }}));
   const options={clientId:'gallery-phone'};let api=facade.createOfflineAwareGalleryApi(online,store,options);
   await api.getSyncCapabilities({replay:false});expect((await sync.downloadOfflineSnapshot({api,store})).ok).toBe(true);
-  await api.preferOfflineSnapshot();await api.setGalleryOrder(['Alpha','Hidden','Zebra']);await api.setGalleryOrder(['Hidden','Alpha','Zebra']);
+  await api.preferOfflineSnapshot();await api.setGalleryOrder(['Alpha','Hidden','Zebra']);
+  await store.captureLocalFinalState(true); // Preserve the first submitted order while queuing its successor.
+  await api.setGalleryOrder(['Hidden','Alpha','Zebra']);
   const queued=await store.list();expect(queued).toHaveLength(2);
   lose=true;await api.flushOfflineOutbox();expect(await store.list()).toHaveLength(2);
   store.close();store=stores.createIndexedDbOfflineStore({indexedDB,databaseName:name});api=facade.createOfflineAwareGalleryApi(online,store,options);

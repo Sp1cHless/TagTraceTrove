@@ -29,6 +29,9 @@ import {
   createTemporaryCollectionRequestSchema,
   temporaryCollectionResponseSchema,
   galleryPartitionRequestSchema,
+  galleryCardLayoutRequestSchema,
+  galleryCardLayoutsResponseSchema,
+  type GalleryCardLayout,
   syncGalleryPartitionContextSchema,
   syncEntryRatingLayoutContextSchema,
   syncEntryRatingLayoutSettlementSchema,
@@ -249,6 +252,8 @@ export interface GalleryEntrySummary {
   uploadDate: string | null;
   pageCount: number | null;
   durationSeconds?: number | null | undefined;
+  /** What the card shows in place of an image; absent in a list read before this existed. */
+  coverText?: string | null | undefined;
   viewCount: number;
   likeCount: number;
   lastViewedAt: string | null;
@@ -462,7 +467,7 @@ export interface GalleryApi {
   replayOfflineOperations?(): Promise<void>;
   /** Open an installed snapshot first on cold start; probe the server separately. */
   preferOfflineSnapshot?(reason?: 'startup' | 'disconnect'): Promise<boolean>;
-  /** Sidebar numbers that follow the Show NSFW preference. */
+  /** Sidebar numbers that follow the show-hideable preference. */
   getNavigationCounts?(includeNsfw?: boolean): Promise<NavigationCounts>;
   fetchSyncSnapshot(options?: { media: 'none' | 'thumbnails' }): Promise<SyncSnapshot>;
   fetchSnapshotDelta?(request: SyncDeltaRequest): Promise<SyncDeltaPage>;
@@ -566,6 +571,12 @@ export interface GalleryApi {
   deleteSection(sectionId: number): Promise<void>;
   getGalleryPartitionContext?(entryType: string, predecessorOpId?: string): Promise<import('@t3/shared').SyncGalleryPartitionContext>;
   setGalleryPartition(entryType: string, nsfw: boolean): Promise<void>;
+  /**
+   * The card shape a Gallery shows: the wall, or the horizontal card a long title needs. It is the
+   * Gallery's own choice, stored beside its hideable flag, so it is set once instead of every visit.
+   */
+  listGalleryCardLayouts(): Promise<Array<{ type: string; layout: GalleryCardLayout }>>;
+  setGalleryCardLayout(entryType: string, layout: GalleryCardLayout): Promise<void>;
   listCollections(kind: CollectionKind, includeNsfw?: boolean): Promise<CollectionRecordDto[]>;
   createCollection(input: { kind: CollectionKind; title: string; description?: string; parentId?: number; galleryType?: string | undefined }): Promise<CollectionRecordDto>;
   createTemporaryCollection(entryIds: number[]): Promise<TemporaryCollectionResponse>;
@@ -745,6 +756,7 @@ export function createGalleryApi(
     async queryEntryPage(input) {
       return entryPageResponseSchema.parse(await client.request('entries/query', {
         method: 'POST',
+        query: { coverText: '1' },
         body: entryPageQueryRequestSchema.parse(input),
       }));
     },
@@ -952,7 +964,7 @@ export function createGalleryApi(
     },
     async listTaxonomyAliases(vocabulary) {
       return taxonomyAliasSchema.array().parse(await client.request('taxonomy-aliases', {
-        query: { vocabulary },
+        query: { vocabulary, includeTags: '1' },
       }));
     },
     async upsertTaxonomyAlias(input) {
@@ -1415,6 +1427,17 @@ export function createGalleryApi(
       await client.request(`galleries/${encodeURIComponent(entryType)}/partition`, {
         method: 'PUT',
         body: galleryPartitionRequestSchema.parse({ nsfw }),
+      });
+    },
+    async listGalleryCardLayouts() {
+      return galleryCardLayoutsResponseSchema.parse(
+        await client.request('galleries/card-layouts'),
+      ).layouts;
+    },
+    async setGalleryCardLayout(entryType, layout) {
+      await client.request(`galleries/${encodeURIComponent(entryType)}/card-layout`, {
+        method: 'PUT',
+        body: galleryCardLayoutRequestSchema.parse({ layout }),
       });
     },
     async recordEntryView(entryId) {

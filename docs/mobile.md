@@ -31,7 +31,7 @@ byte-identically under `.hermes/archive/docs-pre-consolidation/docs/`.
   on Chrome” is not cross-engine proof.
 - The final goal (outside import) is **full read/write parity**: Home, Gallery,
   Entry, Author, Search; Recently viewed / View later / Random / Collections;
-  all filtering/sorting/paging/rating/Like/source-open and SFW-NSFW behaviour;
+  all filtering/sorting/paging/rating/Like/source-open and hideable / not-hideable behaviour;
   manual Entry/Author creation; Entry/Author editing, Tag/Facet/Content/Rating
   editing; Author Directory and Collection sub-folder create/move/sort/remove;
   all existing Advanced-editing non-import abilities; all existing delete
@@ -145,6 +145,7 @@ Native Java lives in `android/app/src/main/java/com/speechless666/t3/spike/`:
 - `PairingState` — pairing/capability identity (`verify()` is itself a
   `GET /api/sync/capabilities`)
 - `PairingVault` — Android Keystore-backed credential storage
+- `PairingDiagnostics` — bounded local stage journal, separately persisted from authorization
 - `TrustedLanPairing` / `SecurePairing*` — pairing handshake
 - `NativeMutationPlan`, `AppliedReceipt`, `TransferLedger` — durable mutation
   planning/ledger
@@ -156,6 +157,20 @@ inside the Capacitor shell (unregisters registrations, deletes only `t3-shell-*`
 caches, one guarded reload per WebView lifecycle) so an APK upgrade cannot keep
 running an old bundle; IndexedDB, Outbox, staged media and the offline media
 cache are untouched.
+
+### Local pairing diagnostics
+
+The current native implementation keeps at most 8 local attempts with 40 stage events each. A shared UUID correlates
+native claim/verification requests with fixed-field desktop `[T3 pairing]` logs. Scan, QR checks, network/TLS,
+authorization, and vault save/read-back are recorded without QR contents, bearer tokens, certificate fingerprints or
+arbitrary exception messages. Cold startup marks interrupted attempts; diagnostic-storage failures do not block
+pairing. The report is readable before pairing and while the desktop is unreachable. Web reads are independently
+bounded to 2 seconds and old bridges report unsupported diagnostics. Failure dialogs and Advanced/System copy the
+local report. Native availability follows the installed APK: the frozen 1.0.14 app keeps its original bridge behavior.
+
+Online response extensions use `coverText=1` and `includeTags=1`; requests from the frozen 1.0.14 app retain the strict
+DTO shapes it was built with. Gallery card layout has separate online endpoints and never adds a field to that app's
+sync snapshot/journal contracts. Published package identity and hashes are in `status.md` §3.
 
 ### LAN pairing (desktop side)
 
@@ -183,7 +198,7 @@ cache are untouched.
   successful start and then removed. No WebSocket/SSE: another device may be
   briefly stale but converges on refresh/re-enter/focus, and requests are
   serialized so a slow stale response cannot overwrite a newer one.
-- `locale`, `accent`, Show NSFW, rows-per-page and tab order remain **device-
+- `locale`, `accent`, **Show hideable galleries**, rows-per-page and tab order remain **device-
   local** preferences.
 
 ---
@@ -487,7 +502,7 @@ build device evidence ticks a case.
 
 `spikes/001-android-webview-shell/RELEASE.md`:
 
-- Display name **T3**; versionName and versionCode come from root `release.json`, currently **1.0.10 / 110**;
+- Display name **T3**; versionName and versionCode come from root `release.json`, currently **1.0.14 / 114**;
   package name stays `com.speechless666.t3.spike` (an existing
   app identity, not the display name). Later updates must bump `versionCode` and
   use the same release private key.
@@ -516,7 +531,13 @@ and produces Windows and Android artifacts from one frozen Web build. The underl
 3. In `android/`: `./gradlew.bat assembleRelease --console=plain`
    (output `android/app/build/outputs/apk/release/app-release.apk`).
 
-1.0.10 packaged-asset verification measured **18 packaged Web files**: 16 prepared `web-dist`
+The 1.0.11 formal pipeline verified versionCode 111, unchanged Release signer/application ID and
+non-debuggable identity. The frozen-asset check matched 18 APK Web files and all six published
+checksums. APK SHA256 `8052616de3816dd9542dd8205619e34a4b2ca9e06e9382f0d44544e3c32183f7`;
+the Windows/Android outputs share this release's frozen Web build. Evidence:
+`.hermes/artifacts/release-1.0.11-verification.json`.
+
+Earlier 1.0.10 packaged-asset verification measured **18 packaged Web files**: 16 prepared `web-dist`
 files plus the two Capacitor-generated Cordova bridge files. All match the copied Android assets;
 prepared files match their APK bytes, and shared assets match Windows (Android-specific index/SW
 bootstrap excluded). All six published checksums passed. APK SHA256

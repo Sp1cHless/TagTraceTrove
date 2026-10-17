@@ -48,6 +48,6 @@ it('automatic offline UX checks support and storage automatically and removes th
   expect(wrapper.get('[data-testid="offline-download"]').text()).toContain('Update');
   for(const id of ['offline-sync-now','offline-export-pending','offline-restore-file','offline-check-support','offline-request-persistence','native-transfer-resume'])expect(wrapper.find(`[data-testid="${id}"]`).exists()).toBe(false);
   expect(wrapper.get('[data-testid="offline-system-information"]').text()).toContain('Persistence granted');
-  expect(wrapper.get('[data-testid="copy-report"]').exists()).toBe(true);
+  expect(wrapper.find('[data-testid="copy-report"]').exists()).toBe(true);
   await wrapper.setProps({online:false});await flushPromises();expect(f.api.getSyncCapabilities).toHaveBeenCalledOnce();wrapper.unmount();
 });

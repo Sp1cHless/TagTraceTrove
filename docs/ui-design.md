@@ -296,6 +296,19 @@ This stage adds no setting and no upload UI.
 
 The canonical UX rule list. These are decisions, not suggestions.
 
+Current Gallery cards have two layouts, selected by the layout control beside the Gallery heading. Vertical is the
+default; horizontal uses a portrait cover at the left and a four-line-clamped title at the right, with at most two
+columns and twice the configured rows. Each card starts at its column's left edge, including the right-hand column at
+the page's centre axis. Narrow screens use one column. The server stores the choice per Gallery; changing it requires
+a connection, independently of the partition control.
+
+Image-less cards use `CardCoverFallback`: first readable Content, then tags, then the title's first letter. The
+placeholder fills the exact cover box with absolute inset and `min-height: 0`, keeping its four lines vertically
+centred even at the smallest card width. Online lists and pending local works use this rule; saved offline snapshots
+keep their previous placeholder. Gallery navigation retains the visible page until the next card page is ready;
+filter aggregation loads independently into a cached or disabled bar that reserves its height. Superseded requests
+cannot replace the current Gallery or restore a deleted Entry.
+
 - Daily use first.
 - Fast tagging over perfect metadata.
 - Gallery before table.
@@ -367,7 +380,7 @@ files most relevant to desktop visual work.
 | `apps/web/src/components/IconButton.vue` | ~36 | Pure icon button wrapper |
 | `apps/web/src/components/icons.ts` | ~101 | Icon vocabulary (`IconName` + inline SVG markup) |
 | `apps/web/src/i18n.ts` | ~2256 | en / zh-CN copy boundary (flat dictionaries) |
-| `apps/web/src/stores/preferences.ts` | ~211 | Entry/Author View later sync store, plus device-local prefs (NSFW, rows, accent) |
+| `apps/web/src/stores/preferences.ts` | ~211 | Entry/Author View later sync store, plus device-local prefs (show hideable galleries, rows, accent) |
 | `apps/web/src/entry-media-stack.ts` | ~57 | Cover/preview stack geometry |
 | `apps/web/src/armable.ts` | ~42 | Two-step arm/confirm destructive pattern |
 | `apps/web/src/navigation-memory.ts` | ~25 | Per-view ephemeral navigation state |
@@ -590,9 +603,9 @@ starts with one record." Primary: `Add the first entry`; secondary: `Create gall
 Entry must currently belong to a Gallery, the buttons still call the existing create flow
 — do not implement new creation logic in Home.
 
-Shipped Home also has a dedicated **NSFW-filtered** empty state
+Shipped Home also has a dedicated **hideable-filtered** empty state
 (`data-testid="home-nsfw-hidden"`) for the case where the server has entries but every
-Gallery is filtered out; its primary action reveals NSFW content.
+Gallery is filtered out; its primary action reveals hideable content.
 
 ### 6.8 Root route
 

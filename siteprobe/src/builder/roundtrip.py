@@ -26,6 +26,7 @@ stayed silent about it would be claiming more than it checked.
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,9 +41,9 @@ from ..generic.extract import build_bag, extract_work
 from ..generic.select import resolve
 from ..generic.template import SiteTemplate, load_template
 from .capture import Capture
-from .harvest import Harvest, joined_value, members_of, parse_loose, same_members
-from .learn import (FIELD_TO_RUNTIME, Sample, answer_members, key_at, key_index,
-                      capture_to_bag, network_names)
+from .harvest import Harvest, covers_members, joined_value, members_of, parse_loose, same_members
+from .learn import (FIELD_TO_RUNTIME, Sample, answer_members, key_at, key_index, runtime_names,
+                      capture_to_bag, network_names, latest_annotation_sources, load_session)
 
 AGREE = "agree"
 DISAGREE = "disagree"
@@ -271,8 +272,11 @@ def compare(sample: Sample, draft: dict[str, Any], directory: Path) -> RoundTrip
     record = extract_work(template, runtime_item(template, sample.capture, sample.document_names, served))
     for annotation_name, accepted in sample.annotated.items():
         field_name = FIELD_TO_RUNTIME.get(annotation_name)
+        # The draft writes a field under whichever of its runtime names its shape calls for
+        # (`author` for one name, `authors` for several), so all of them count as present.
+        present = any(name in fields for name in runtime_names(annotation_name))
         if (field_name and accepted is not None and accepted != "" and accepted != []
-                and field_name not in fields and annotation_name not in sample.absent):
+                and not present and annotation_name not in sample.absent):
             result.comparisons.append(Comparison(
                 field=field_name, accepted=accepted, builder=None, runtime=None, verdict=DISAGREE,
                 detail="the annotated field was discarded from the draft; it was not verified"))
@@ -289,8 +293,8 @@ def compare(sample: Sample, draft: dict[str, Any], directory: Path) -> RoundTrip
     for field_name, rule in fields.items():
         # The draft names a field the way the runtime does; the annotation is keyed by
         # the name a person saw, and those differ for `creator`, `date`, `cover`.
-        annotation_name = next((name for name, runtime_name in FIELD_TO_RUNTIME.items()
-                                if runtime_name == field_name), field_name)
+        annotation_name = next((name for name in FIELD_TO_RUNTIME
+                                if field_name in runtime_names(name)), field_name)
         # The answer as the members it holds, the same reading the learner uses: a tags block the
         # page writes with spaces and the list a rule reads back are the same answer, and comparing
         # the two written forms instead refused the install of a real bilinovel adapter over
@@ -324,6 +328,10 @@ def compare(sample: Sample, draft: dict[str, Any], directory: Path) -> RoundTrip
             if _same(runtime_value, accepted):
                 detail = "the runtime read the accepted value"
                 verdict = AGREE
+            elif annotation_name in tuple(sample.multi) and covers_members(runtime_value, accepted):
+                detail = (f"the runtime read {_text(runtime_value)!r}, which holds the accepted "
+                          f"{_text(accepted)!r} and more — the field was answered as a set")
+                verdict = AGREE
             else:
                 detail = (f"both sides read {_text(runtime_value)!r}, not the accepted "
                           f"{_text(accepted)!r}")
@@ -341,6 +349,41 @@ def compare(sample: Sample, draft: dict[str, Any], directory: Path) -> RoundTrip
             field=field_name, accepted=accepted, builder=builder_value,
             runtime=runtime_value, verdict=verdict, detail=detail, in_record=carried))
     return result
+
+
+def compare_latest(samples: list[Sample], draft: dict[str, Any], directory: Path) -> RoundTrip:
+    """Check each field against the page with its latest answer, not the first page."""
+    if not samples:
+        return RoundTrip(url="", notes=["no annotated samples available"])
+    result = RoundTrip(url=samples[-1].url)
+    checked: dict[str, RoundTrip] = {}
+    for field, sample in latest_annotation_sources(samples).items():
+        if sample.name not in checked:
+            checked[sample.name] = compare(sample, draft, directory)
+        # Every name the draft may have written this field under: a creator answered with several
+        # names is `authors`, and looking only for `author` dropped the field's comparison here —
+        # so it was never verified at all.
+        wanted = runtime_names(field) or (field,)
+        result.comparisons.extend(item for item in checked[sample.name].comparisons
+                                  if item.field in wanted)
+    result.notes.append("each field is checked against its latest annotation; earlier disagreements are advisory")
+    return result
+
+
+def draft_samples(directory: Path, draft: dict[str, Any]) -> list[Sample]:
+    """Reload the recorded pages needed by a latest-answer draft for later verification."""
+    metadata = draft.get("_draft") or {}
+    if metadata.get("rule_policy") != "latest_annotation":
+        return [load_session(directory)]
+    names = metadata.get("generated_from") or [directory.name]
+    parent = directory.resolve().parent
+    samples: list[Sample] = []
+    for name in names:
+        path = (parent / str(name)).resolve()
+        if path.parent != parent or not (path / "capture.json").is_file():
+            raise ValueError(f"recorded session {name!r} is unavailable beside the draft")
+        samples.append(load_session(path))
+    return samples
 
 
 def _read(rule: Any, bag: DocumentBag, url: str) -> Any:
@@ -505,6 +548,14 @@ def _merged_with_what_is_already_there(target: Path, draft: dict[str, Any],
     for half in ("work", "listings"):
         if not draft.get(half) and existing.get(half):
             merged[half] = existing[half]
+    session = dict(merged.get("session") or {})
+    profile = session.get("profile_dir")
+    if profile and Path(str(profile)).is_absolute():
+        try:
+            session["profile_dir"] = Path(os.path.relpath(str(profile), target.resolve())).as_posix()
+        except ValueError:  # A custom profile on another Windows drive keeps its explicit location.
+            pass
+        merged["session"] = session
     return {**merged, "tool": name}
 
 

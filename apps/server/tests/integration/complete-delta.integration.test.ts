@@ -55,6 +55,7 @@ it.each(['lost response','HTTP rejection'] as const)('cold IndexedDB reconnect r
     disconnected=true;await api.preferOfflineSnapshot('disconnect');
     const bytes=await sharp({create:{width:2,height:2,channels:3,background:'#ff0000'}}).png().toBuffer();
     const created=await api.enqueueOfflineEntryCreate({title:'Created',type:'game',uploadDate:null,pageCount:null,ratings:[],viewLater:false,coverFile:new File([new Uint8Array(bytes)],'cover.png',{type:'image/png'}),previewFile:null});
+    await store.captureLocalFinalState(true); // A submitted original is the boundary this retry test exercises.
     await api.enqueueOfflinePendingEntryMetadata(created.localKey,{title:'Final',uploadDate:null,pageCount:7});
     const original=await store.list();const media=await store.listMedia();
     const originalBlob=new Uint8Array(await media[0].blob.arrayBuffer());

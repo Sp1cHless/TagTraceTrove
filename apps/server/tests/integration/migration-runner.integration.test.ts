@@ -22,9 +22,9 @@ describe('migration runner', () => {
     const database = createMemoryDatabase();
 
     try {
-      expect(applyAllMigrations(database)).toEqual({ applied: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43], currentVersion: 43 });
-      expect(applyAllMigrations(database)).toEqual({ applied: [], currentVersion: 43 });
-      expect(database.prepare('SELECT COUNT(*) FROM schema_migrations').pluck().get()).toBe(43);
+      expect(applyAllMigrations(database)).toEqual({ applied: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44], currentVersion: 44 });
+      expect(applyAllMigrations(database)).toEqual({ applied: [], currentVersion: 44 });
+      expect(database.prepare('SELECT COUNT(*) FROM schema_migrations').pluck().get()).toBe(44);
       for (const row of database.prepare('SELECT name, checksum FROM schema_migrations').all() as Array<{name: string; checksum: string}>) {
         const sql = readFileSync(join(sourceMigrationsDirectory, row.name), 'utf8').replace(/\r\n?/gu, '\n');
         expect(row.checksum).toBe(createHash('sha256').update(sql).digest('hex'));
@@ -65,7 +65,7 @@ describe('migration runner', () => {
       expect(applyAllMigrations(database, directory).currentVersion).toBe(31);
       const entry = insertLegacyEntry(database, { title: 'Preserved', type: 'game' });
       expect(inspectDatabase(database)).toEqual({ ok: true, issues: [] });
-      expect(applyAllMigrations(database)).toEqual({ applied: [32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43], currentVersion: 43 });
+      expect(applyAllMigrations(database)).toEqual({ applied: [32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44], currentVersion: 44 });
       expect(database.prepare('SELECT id FROM entries WHERE sync_uid = ?').pluck().get(
         database.prepare('SELECT sync_uid FROM entries WHERE id = ?').pluck().get(entry.id),
       )).toBe(entry.id);

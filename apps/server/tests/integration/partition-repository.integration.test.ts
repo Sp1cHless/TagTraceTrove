@@ -4,7 +4,8 @@ import { createApiApp } from '../../src/http/app.js';
 import { createEntry, listGalleries } from '../../src/repositories/entry-repository.js';
 import { createProducer, deleteProducer, linkEntryProducer } from '../../src/repositories/producer-repository.js';
 import { findProducers } from '../../src/repositories/producer-tag-repository.js';
-import { isNsfwGallery, setGalleryPartition } from '../../src/repositories/partition-repository.js';
+import { isNsfwGallery, galleryCardLayout, listGalleryCardLayouts, setGalleryCardLayout, setGalleryPartition } from '../../src/repositories/partition-repository.js';
+import { buildSyncSnapshot } from '../../src/sync/sync-service.js';
 import {
   addViewLaterEntry,
   addViewLaterProducer,
@@ -25,7 +26,7 @@ describe('gallery partitions (real SQL)', () => {
     const database = createMigratedMemoryDatabase();
     databases.push(database);
 
-    // Default partition is SFW, even before any row exists.
+    // Default partition is not hideable, even before any row exists.
     expect(isNsfwGallery(database, 'comic')).toBe(false);
 
     const comicAuthor = createProducer(database, { name: 'Comic Author' });
@@ -79,7 +80,7 @@ describe('gallery partitions (real SQL)', () => {
     expect(galleries[0]?.nsfw).toBe(true);
   });
 
-  it('starts a Gallery that did not exist yet on the SFW side', () => {
+  it('starts a Gallery that did not exist yet on the not-hideable side', () => {
     const database = createMigratedMemoryDatabase();
     databases.push(database);
     const established = createEntry(database, { title: 'Established', type: 'comic' });
@@ -93,6 +94,89 @@ describe('gallery partitions (real SQL)', () => {
     expect(galleries.find((gallery) => gallery.type === 'comic')?.nsfw).toBe(true);
     expect(established.type).toBe('comic');
     expect(fresh.type).toBe('doujin');
+  });
+
+  it('keeps the layout out of the sync snapshot and the partition journal', () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    createEntry(database, { title: 'Paper', type: 'paper' });
+    setGalleryCardLayout(database, 'paper', 'horizontal');
+
+    // The snapshot ships the partition and nothing else about the Gallery row: an older installed
+    // client parses this shape strictly, so an extra key here is a parse failure on every row, not
+    // a field it can ignore.
+    const snapshot = buildSyncSnapshot(database);
+    const gallerySettings = snapshot.payload.gallerySettings as Array<Record<string, unknown>>;
+    expect(gallerySettings).toEqual([{ entryType: 'paper', nsfw: false }]);
+
+    // Only `nsfw` moving is a partition revision, so a layout write journals nothing.
+    const journal = database.prepare(
+      "SELECT COUNT(*) FROM sync_changes WHERE entity_kind = 'gallery_partition'",
+    ).pluck().get();
+    setGalleryCardLayout(database, 'paper', 'vertical');
+    expect(database.prepare(
+      "SELECT COUNT(*) FROM sync_changes WHERE entity_kind = 'gallery_partition'",
+    ).pluck().get()).toBe(journal);
+  });
+
+  it('stores a layout per Gallery without moving the partition', async () => {
+    const database = createMigratedMemoryDatabase();
+    databases.push(database);
+    createEntry(database, { title: 'Paper', type: 'paper' });
+    createEntry(database, { title: 'Comic', type: 'comic' });
+    setGalleryPartition(database, 'comic', true);
+    setGalleryCardLayout(database, 'paper', 'horizontal');
+
+    // Per Gallery, and the Gallery that was not touched keeps the wall it always had.
+    expect(galleryCardLayout(database, 'paper')).toBe('horizontal');
+    expect(galleryCardLayout(database, 'comic')).toBe('vertical');
+    expect(galleryCardLayout(database, 'never-seen')).toBe('vertical');
+
+    // Writing a layout never moves the hideable flag, and re-marking a partition never moves a
+    // layout — the two columns live on one row and have to stay independent.
+    expect(isNsfwGallery(database, 'paper')).toBe(false);
+    setGalleryCardLayout(database, 'comic', 'horizontal');
+    expect(isNsfwGallery(database, 'comic')).toBe(true);
+    setGalleryPartition(database, 'comic', false);
+    expect(galleryCardLayout(database, 'comic')).toBe('horizontal');
+
+    expect(listGalleryCardLayouts(database)).toEqual([
+      { type: 'comic', layout: 'horizontal' },
+      { type: 'paper', layout: 'horizontal' },
+    ]);
+
+    // Through the routes the Gallery page uses, including the refusal of an unknown layout.
+    const app = createApiApp(database);
+    const toggled = await app.request('/api/galleries/paper/card-layout', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ layout: 'vertical' }),
+    });
+    expect(toggled.status).toBe(200);
+    expect(galleryCardLayout(database, 'paper')).toBe('vertical');
+
+    const refused = await app.request('/api/galleries/paper/card-layout', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ layout: 'sideways' }),
+    });
+    expect(refused.status).toBe(400);
+
+    // A Gallery with no row yet reads as vertical, and a freshly written row is not hideable.
+    const fresh = await app.request('/api/galleries/doujin/card-layout', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ layout: 'horizontal' }),
+    });
+    expect(fresh.status).toBe(200);
+    expect(isNsfwGallery(database, 'doujin')).toBe(false);
+    expect(await (await app.request('/api/galleries/card-layouts')).json()).toEqual({
+      layouts: [
+        { type: 'comic', layout: 'horizontal' },
+        { type: 'doujin', layout: 'horizontal' },
+        { type: 'paper', layout: 'vertical' },
+      ],
+    });
   });
 
   it('counts only what the current boundary can show', async () => {

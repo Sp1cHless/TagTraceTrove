@@ -37,7 +37,10 @@ export type IconName =
   | 'expand'
   | 'collapse'
   | 'add'
-  | 'delete';
+  | 'delete'
+  | 'layoutshift'
+  | 'shelded'
+  | 'unshelded';
 
 export const iconMarkup: Record<IconName, string> = {
   'thumb-up':
@@ -98,4 +101,25 @@ export const iconMarkup: Record<IconName, string> = {
   // kept under its own semantic name for the media editors that use it.
   'delete':
     '<path d="m6 6 12 12"/><path d="M18 6 6 18"/>',
+  // Traced from the approved master (apps/web/icon/layoutshift.png): the two card shapes — the tall
+  // one upper left, the wide one lower right — with a curved arrow between them in each direction.
+  // That pair of arrows is the whole meaning ("these two change places"), so the portrait and the
+  // landscape rectangle keep the same area and one arrow is the other's mirror.
+  //
+  // Laid out with more white space than the master shows, and drawn at the set's own 20px. The
+  // master packs its four elements so tightly that its gaps are under a pixel at any toolbar size,
+  // so a faithful trace renders as one solid shape — which is exactly what a first attempt did: the
+  // walls of two rectangles plus a short arrow came out 1.7px apart and antialiased into a black
+  // blob beside the set's open outlines. Four elements fit at 20px only if the arrows keep their
+  // length (a stubby arrow is the blob) and nothing touches anything else.
+  'layoutshift':
+    '<rect x="2.5" y="2.5" width="7" height="11" rx="1.6"/><rect x="13" y="13" width="7.5" height="6" rx="1.6"/><path d="M13 5h4a3 3 0 0 1 3 3v1"/><path d="m17.5 7 2.5 2.5 2.5-2.5"/><path d="M11 20H7a3 3 0 0 1-3-3v-1"/><path d="m1.5 18.5 2.5-2.5 2.5 2.5"/>',
+  // The two halves of the "can be hidden" state, traced from the approved masters
+  // (apps/web/icon/shelded.png, unshelded.png): one shield, with a slash across it when the Gallery
+  // is kept out of view and a check when it is not. Same shield path in both, so the pair reads as
+  // one state changing rather than two unrelated pictures.
+  'shelded':
+    '<path d="M12 2.7 20.5 6.4v5.6c0 5.4-3.5 8.5-8.5 9.7-5-1.2-8.5-4.3-8.5-9.7V6.4Z"/><path d="m8.4 15.6 7.2-7.2"/>',
+  'unshelded':
+    '<path d="M12 2.7 20.5 6.4v5.6c0 5.4-3.5 8.5-8.5 9.7-5-1.2-8.5-4.3-8.5-9.7V6.4Z"/><path d="m7.6 12.6 3.5 3.5 6.5-7"/>',
 };

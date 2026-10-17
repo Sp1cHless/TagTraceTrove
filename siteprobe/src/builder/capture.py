@@ -81,6 +81,8 @@ class Capture:
     content_type: str = ""
     documents: list[Document] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    browser_profile: str = ""
+    manual_verified: bool = False
 
     def of_format(self, kind: str) -> list[Document]:
         return [document for document in self.documents if document.format == kind]
@@ -100,6 +102,8 @@ class Capture:
             "content_type": self.content_type,
             "documents": [document.to_json() for document in self.documents],
             "notes": self.notes,
+            "browser_profile": self.browser_profile,
+            "manual_verified": self.manual_verified,
         }
 
     def write(self, path: Path) -> Path:
@@ -120,6 +124,8 @@ class Capture:
                                 source_url=str(d.get("source_url") or ""))
                        for d in payload.get("documents") or []],
             notes=[str(note) for note in payload.get("notes") or []],
+            browser_profile=str(payload.get("browser_profile") or ""),
+            manual_verified=bool(payload.get("manual_verified")),
         )
 
     @classmethod
@@ -189,8 +195,10 @@ def captured_nothing(capture: "Capture") -> bool:
     click and read as the tool hanging. No status means navigation itself failed; an empty body with
     no status is the same fact.
     """
+    if capture.markup and unknown_url.challenge_of(capture.markup.text):
+        return True
     if capture.status is not None:
-        return False
+        return not (200 <= capture.status < 300) or capture.markup is None or not capture.markup.text.strip()
     return capture.markup is None or not capture.markup.text.strip()
 
 
@@ -212,13 +220,16 @@ def capture_browser(url: str, *, settle_ms: int = SETTLE_MS,
     what it returns into the `Capture` the Harvester reads, keeping the Builder-only parts — the
     inline scripts and the network log — here.
     """
-    plan = plan_for("browser", profile=Path(profile) if profile is not None else None,
+    persistent = Path(profile) if profile is not None else profile_for(urlparse(url).hostname or "unknown")
+    plan = plan_for("browser", profile=persistent, manual_verification=True,
                     login=login, settle_ms=settle_ms)
     with BrowserSession(plan) as reader:
         read = reader.read(url, mention=lambda html, resources: mentions_the_work(url, html, resources))
     capture = Capture(url=url, final_url=read.final_url, status=read.status,
                       content_type=read.content_type)
     capture.notes = list(read.notes)
+    capture.browser_profile = str(persistent.resolve())
+    capture.manual_verified = read.manual_verified
     capture.documents = plain_documents(read.html) + [
         Document(name=resource.name, text=resource.text, format="json", source_url=resource.url)
         for resource in read.resources

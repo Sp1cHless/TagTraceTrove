@@ -44,28 +44,17 @@ if defined T3_NODE_EXE (
   )
 )
 
-rem Build the web app on first run, or when its sources are newer than the last
-rem build: a stale dist/ silently serves old front-end code to the browser.
-if not exist "apps\web\dist\index.html" (
-  echo First run: building the web app...
-  set "T3_WEB_BUILD=1"
-) else (
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "$dist = (Get-Item 'apps\web\dist\index.html').LastWriteTime; $newest = Get-ChildItem 'apps\web\src','apps\web\index.html','apps\web\vite.config.ts','apps\web\public','packages\shared\src' -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if ($newest -and $newest.LastWriteTime -gt $dist) { exit 1 } else { exit 0 }"
-  if errorlevel 1 (
-    echo Web sources changed: rebuilding the web app...
-    set "T3_WEB_BUILD=1"
-  )
-  rem Clear the PowerShell exit code so it cannot be mistaken for a build failure.
-  ver >nul
-)
-if defined T3_WEB_BUILD (
-  call npm exec --yes --package=pnpm@10.15.0 -- pnpm run build
-  if errorlevel 1 (
-    echo.
-    echo Build failed - see the output above.
-    pause
-    exit /b 1
-  )
+rem The web bundle must never be older than the source it is built from: a stale
+rem dist/ silently serves old front-end code to a browser that is talking to the
+rem current server, and the first symptom is a schema error in the page. One
+rem script owns that decision, so this file, the tray launcher and the dev script
+rem cannot disagree about it.
+node "tools\ensure-web-build.mjs"
+if errorlevel 1 (
+  echo.
+  echo Building the web app failed - see the output above.
+  pause
+  exit /b 1
 )
 
 rem Encrypted pairing (Settings - Connect to APP) needs the private address the

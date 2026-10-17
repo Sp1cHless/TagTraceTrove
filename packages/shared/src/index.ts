@@ -3,6 +3,17 @@ export { normalizeTag } from './normalize/tag.js';
 export { formatDuration, parseDurationSeconds } from './duration.js';
 export { DEFAULT_CONTENT_KINDS } from './constants/content-kinds.js';
 export {
+  COVER_TEXT_BUDGET,
+  SOURCE_URL_CONTENT_KIND,
+  isSourceUrlContentKind,
+  isUrlContentValue,
+  pickDefaultCoverText,
+  truncateToCoverText,
+  type CoverTextBudget,
+  type CoverTextContentRow,
+  type CoverTextInput,
+} from './cover-text.js';
+export {
   rankRelationSuggestions,
   type RelationSuggestion,
   type RelationSuggestionCandidate,

@@ -251,6 +251,7 @@ export function createSiteprobeJobStore(options: SiteprobeJobStoreOptions): Site
       };
       jobs.set(id, state);
 
+      try {
         if (request.build) {
           // The builder's clock is a person annotating pages; its lines are guidance. Everything
           // after its exit — learning, verification, installation — happened inside the tool, and an
@@ -392,6 +393,14 @@ export function createSiteprobeJobStore(options: SiteprobeJobStoreOptions): Site
       });
 
       return structuredClone(state.snapshot);
+      } catch (error) {
+        // A synchronous launch failure (for example a missing login door) must not leave a
+        // running snapshot with no child behind it, which would block every subsequent import.
+        jobs.delete(id);
+        stopWatch(state);
+        state.process?.kill();
+        throw error;
+      }
     },
 
     finishLogin(runId) {

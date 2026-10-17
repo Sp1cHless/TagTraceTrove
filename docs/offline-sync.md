@@ -23,6 +23,13 @@ unreachable and, within a bounded allowlist, edit it durably and replay those
 edits when the server returns. The server is always authoritative; the offline
 copy is a cache plus a queue.
 
+Online card-display extensions are negotiated independently of this queue: `coverText=1` opts into text covers and
+`includeTags=1` opts into the library-tag mapping catalog. Frozen 1.0.14 clients keep the original response shapes.
+Migration 044's `gallery_settings.card_layout` is excluded from snapshots and partition journal records; its API calls
+go straight to the server. A running offline session keeps a layout already loaded, while a cold offline session uses
+the vertical default. Saved snapshot entries retain their original cover placeholder; pending local works can derive
+text covers from their own Content/tags with the shared helper.
+
 Web client (`apps/web/src/offline/`):
 
 | File | Role |
@@ -312,15 +319,28 @@ current desired result** in the existing IndexedDB metadata store:
   envelopes are never inferred editable**. A submitted/uncertain/legacy command
   keeps its original; later edits are saved as a local result and compiled into
   a successor request only once the receipt and the acknowledged baseline exist.
+  A queued rating is also an observation of its slot: later layout edits cannot
+  merge the slot creator past that rating, preserving export/restore order.
+  Facet creation likewise preserves the preceding tag-layout edit and its
+  version boundary. Coalescing a fresh Gallery layout retains its `entryType`
+  so the first replay can materialize the layout owner.
 - Media additions, replacement, deletion and order save a persistent local
   selection on both saved and locally-created Entries. Unsubmitted,
   unobserved images can be removed without upload. Attempted/mirrored originals
   retain UUID/bytes and a later selection is compiled only after verified
   receipts and an acknowledged baseline.
+  Selection writes compare the captured local revision atomically, including
+  an explicitly absent intent, so hashing an image cannot overwrite a newer
+  selection. Cold projection resolves stable image keys through staged bytes
+  or persisted upload receipts; renamed paths require the matching installed,
+  receipt-verified snapshot. Subsequent edits use the same key mapping.
 - Fresh unobserved Entries can cancel with their staged bytes;
   uncertain/dependent creates retain their originals and record local deletion
   for subsequent settlement. No ordinary media-deletion gate depends on a
   server row or pending cover.
+  Once a saved work has a local deletion intent, new edits and media changes
+  touching it are rejected inside the same storage transaction; the deletion
+  and its predecessor requests remain unchanged.
 - Foreground replay freezes a capture; Android mirroring freezes bodies at
   background handoff rather than on every foreground gesture. Deferred media is
   excluded from native delivery until its canonical preconditions exist.
@@ -337,6 +357,11 @@ current desired result** in the existing IndexedDB metadata store:
 The focused validation family `apps/web/tests/offline-local-final-state.integration.test.ts`
 is 20/20, using isolated SQL, temporary assets, fake IndexedDB, a memory adapter
 and a native-bridge mock.
+
+On 2026-10-17 the existing-entry media vertical, offline tag-layout and local
+final-state regression files passed **54/54** cases, including concurrent hashing,
+cold media paths, uncertain ACKs, first-layout creation and Facet ordering. These
+checks used isolated SQL and temporary assets with memory/IndexedDB adapters.
 
 ---
 
@@ -658,7 +683,7 @@ core reads fail, and a visible banner (“Viewing the saved offline copy…” /
 - C1.1 added snapshot adapters for Author pages and filters, Author View Later,
   Random Authors/Tags, Tag search, producer Collections, taxonomy aliases and
   author-scoped Entry filters. Collection projection reapplies the
-  whole-Gallery SFW boundary; offline-created top-level Entry Collections retain
+  whole-Gallery hideable boundary; offline-created top-level Entry Collections retain
   the Gallery type supplied by their page, and a nested folder inherits its
   parent's Gallery type.
 - Offline-created Collections retain deterministic, presentation-only
@@ -666,9 +691,9 @@ core reads fail, and a visible banner (“Viewing the saved offline copy…” /
   queued, related edits stay in the Outbox even after a capability probe
   switches reads online. After an authoritative snapshot covers the replay
   receipt, the facade resolves their stable UUID to the server ID and notifies an
-  open Collections page to refresh its active selection. The SFW display filter
+  open Collections page to refresh its active selection. The hideable display filter
   never narrows the full top-level Collection order vector sent to the server, so
-  hidden NSFW siblings keep their place when visible siblings move.
+  siblings hidden by that boundary keep their place when visible siblings move.
 - The offline composer's `local:<uuid>` identity never gets a fake numeric
   route; pending creates render as non-clickable “Pending sync” cards.
 - `v33` exposes the persisted create-operation reason in the local pending Entry

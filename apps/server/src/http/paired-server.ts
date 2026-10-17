@@ -31,6 +31,10 @@ export async function startPairedApiServers(options: PairedApiServersOptions) {
   try { secure = await startSecurePairingListener(secureOptions); }
   catch (error) {
     const message = error instanceof Error ? error.message : '';
+    // Startup failures precede any QR/claim. Do not print private authorization contents.
+    console.warn(`[T3 pairing] ${JSON.stringify({ at: new Date().toISOString(), stage: 'listener_start',
+      reason: /live owner|lock/i.test(message) ? 'OWNER_LOCK_UNAVAILABLE'
+        : /identity|certificate|TLS/i.test(message) ? 'TLS_OR_LIBRARY_IDENTITY_UNAVAILABLE' : 'LISTENER_START_FAILED' })}`);
     // A lock problem must never take the desktop page down with it: the operator
     // needs the running app to reach the recovery form. `live owner` belongs
     // here too — a PID that has been reused by an unrelated process looks alive

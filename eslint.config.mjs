@@ -24,6 +24,13 @@ export default tseslint.config(
       'apps/server/scripts/**',
     ],
   },
+  {
+    // Launch and build tooling under `tools/` is Node code rather than application source: it runs
+    // under Node's globals instead of the app's runtime. Declared rather than ignored, so a real
+    // problem in these scripts is still reported.
+    files: ['tools/**/*.mjs'],
+    languageOptions: { globals: { console: 'readonly', process: 'readonly' } },
+  },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
 );

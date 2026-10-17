@@ -44,15 +44,17 @@ it('actual positive Entry facade hands off parent-free immutable media and never
     static createObjectURL() { return 'blob:native-handoff'; }
     static revokeObjectURL() {}
   });
-  const {fixture}=await import('./existing-entry-media.test.js');
+  const {fixture}=await import('./fixtures/existing-entry-media.js');
   const factory=new IDBFactory();const store=createIndexedDbOfflineStore({indexedDB:factory,databaseName:'standalone-native'});
   await store.writeGeneration(1,JSON.stringify(fixture()));await store.writeMeta('activeGeneration','1');
-  await store.writeMeta('capability.existingEntryMedia','1');await store.writeMeta('capability.offlineMediaMultiplePreviews','1');
+  await store.writeMeta('capability.existingEntryMedia','1');await store.writeMeta('capability.offlineMediaUpload','1');await store.writeMeta('capability.offlineMediaMultiplePreviews','1');
   const call=vi.fn(async(method:string,args:Record<string,unknown>)=>{void args;return method==='status'?{protocolVersion:1,planVersion:1,operationKinds:Object.keys(nativeMutationContract)}:method==='stageStandaloneMedia'?{stageId:'standalone'}:{};});
   const native=createNativeTransfers(store,{call});const api=createOfflineAwareGalleryApi({} as GalleryApi,store,{nativeTransfers:native});
   await api.preferOfflineSnapshot!();
   await api.uploadEntryMedia(1,'preview',new File(['original'],'a.png',{type:'image/png'}) as unknown as globalThis.File);
-  expect(call.mock.calls.map(args=>args[0])).toEqual(['allocateUploadId','status','foregroundOnlyUploads','stageStandaloneMedia','chunk','seal','activateStandaloneMedia']);
+  expect(call).not.toHaveBeenCalled();
+  await native.handoff();
+  expect(call.mock.calls.map(args=>args[0])).toEqual(['status','foregroundOnlyUploads','stageStandaloneMedia','chunk','seal','activateStandaloneMedia']);
   expect(await store.list()).toEqual([]);const image=(await store.listMedia())[0]!;
   const args=call.mock.calls.find(([method])=>method==='stageStandaloneMedia')![1];
   expect(args).not.toHaveProperty('opId');expect(args).not.toHaveProperty('body');

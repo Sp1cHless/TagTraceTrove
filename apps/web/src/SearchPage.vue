@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { normalizeTag, type SearchScope, type TagSearchHit } from '@t3/shared';
+import { normalizeTag, pickDefaultCoverText, type SearchScope, type TagSearchHit } from '@t3/shared';
 import type {
   GalleryApi,
   GalleryAuthorSummary,
@@ -10,6 +10,7 @@ import type {
 } from './api/gallery.js';
 import { entryCardMediaRef, entryStackLayerStyle, entryStackLayers } from './entry-media-stack.js';
 import PagedCardGrid from './components/PagedCardGrid.vue';
+import CardCoverFallback from './components/CardCoverFallback.vue';
 import LazyCardImage from './components/LazyCardImage.vue';
 import PendingEntryTagEditor from './components/PendingEntryTagEditor.vue';
 import PendingEntryAuthorEditor from './components/PendingEntryAuthorEditor.vue';
@@ -114,6 +115,17 @@ const resultCount = computed(() => {
   if (scope.value === 'tags') return tags.value.length;
   return authorTotal.value;
 });
+
+/**
+ * The cover text of a work that is still queued. Its Content exists only here, so the app runs the
+ * same rule the server runs for a stored work rather than waiting for the queued create to land.
+ */
+function pendingCoverText(entry: PendingOfflineEntryCreate): string | null {
+  return pickDefaultCoverText({
+    contents: (entry.contents ?? []).map((row) => ({ contentType: row.contentType, content: row.content })),
+    tags: (entry.tags ?? []).map((tag) => tag.name),
+  });
+}
 
 function openPendingContent(entry: PendingOfflineEntryCreate): void {
   if (pendingSaving.value || pendingTagsSaving.value || pendingAuthorsSaving.value || pendingMetadataSaving.value || pendingContentsSaving.value) return;
@@ -505,7 +517,7 @@ onMounted(() => {
         >
           <div class="search-card-main">
             <div class="search-entry-stack">
-              <span class="search-placeholder t3-library-text">{{ entry.title.slice(0, 1).toUpperCase() }}</span>
+              <span class="search-placeholder t3-library-text"><CardCoverFallback :title="entry.title" :text="pendingCoverText(entry)" /></span>
             </div>
             <span class="search-meta">
               <strong class="t3-library-text">{{ entry.title }}</strong>
@@ -603,7 +615,7 @@ onMounted(() => {
                 loading="lazy"
                 decoding="async"
               />
-              <span v-if="entryStackLayers(entry).length === 0" class="search-placeholder t3-library-text">{{ entry.title.slice(0, 1).toUpperCase() }}</span>
+              <span v-if="entryStackLayers(entry).length === 0" class="search-placeholder t3-library-text"><CardCoverFallback :title="entry.title" :text="entry.coverText" /></span>
               <span v-if="entry.likeCount > 0" class="search-like">👍 {{ entry.likeCount }}</span>
             </div>
             <span class="search-meta"><strong class="t3-library-text">{{ entry.title }}</strong><small>{{ entry.type }}</small></span>
@@ -694,6 +706,9 @@ onMounted(() => {
 .search-entry-stack { position: relative; aspect-ratio: 4 / 3; overflow: hidden; isolation: isolate; perspective: 28rem; perspective-origin: 50% 50%; transform-style: preserve-3d; }
 .search-entry-image { position: absolute; display: block; box-sizing: border-box; border: 1px solid var(--border-subtle); box-shadow: 0 0.2rem 0.5rem rgb(15 23 42 / 18%); transform-style: preserve-3d; }
 .search-placeholder { display: grid; min-height: 8rem; place-items: center; color: var(--tag-text); background: var(--tag-background); font-size: 2rem; font-weight: 850; }
+/* Cover the slot exactly, as the Gallery grid does; the base rule still sizes the Author card's
+   own letter block, which has no cover box to fill. */
+.search-entry-stack .search-placeholder { position: absolute; inset: 0; height: 100%; min-height: 0; }
 .search-like { position: absolute; z-index: 20; bottom: 0.35rem; left: 0.35rem; padding: 0.1rem 0.35rem; border-radius: 999px; color: white; background: rgb(15 23 42 / 72%); font-size: 0.68rem; }
 .search-meta { display: grid; gap: 0.2rem; padding: 0.75rem; }
 .search-meta small { color: var(--text-muted); }

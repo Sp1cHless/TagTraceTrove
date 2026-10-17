@@ -103,6 +103,19 @@ describe('GalleryApi asset origin', () => {
 });
 
 describe('GalleryApi Entry Content', () => {
+  it('opts into the library tag catalog while validating its mapped and unmapped rows', async () => {
+    const catalog = [
+      { id: 17, vocabulary: 'entry', partition: '', alias: 'Unmapped keyword', normalizedAlias: 'unmapped keyword', canonicalName: '', normalizedCanonical: '', tagId: 17 },
+      { id: 18, vocabulary: 'entry', partition: '', alias: 'youth', normalizedAlias: 'youth', canonicalName: '青春', normalizedCanonical: '青春' },
+    ];
+    const request = vi.fn(async () => catalog);
+    const api = createGalleryApi({ request } as unknown as ApiClient);
+    await expect(api.listTaxonomyAliases('entry')).resolves.toEqual(catalog);
+    expect(request).toHaveBeenCalledWith('taxonomy-aliases', {
+      query: { vocabulary: 'entry', includeTags: '1' },
+    });
+  });
+
   it('requests strict bounded relation suggestions through dedicated read endpoints', async () => {
     const suggestions = [{
       id: 3,
@@ -171,6 +184,7 @@ describe('GalleryApi Entry Content', () => {
     await expect(api.queryEntryPage(input)).resolves.toEqual(page);
     expect(request).toHaveBeenCalledWith('entries/query', {
       method: 'POST',
+      query: { coverText: '1' },
       body: input,
     });
   });
@@ -192,7 +206,7 @@ describe('GalleryApi Entry Content', () => {
     };
 
     await expect(api.queryEntryPage(input)).resolves.toEqual(page);
-    expect(request).toHaveBeenCalledWith('entries/query', { method: 'POST', body: input });
+    expect(request).toHaveBeenCalledWith('entries/query', { method: 'POST', query: { coverText: '1' }, body: input });
   });
 
   it('reads and mutates the shared Entry and Author View later lists', async () => {
@@ -321,7 +335,7 @@ describe('GalleryApi Entry Content', () => {
     await expect(api.queryEntryPage(entryInput)).resolves.toMatchObject({ total: 1 });
     await expect(api.searchTags('end', false)).resolves.toHaveLength(1);
     await expect(api.queryProducerPage(producerInput)).resolves.toMatchObject({ total: 1 });
-    expect(request).toHaveBeenNthCalledWith(1, 'entries/query', { method: 'POST', body: entryInput });
+    expect(request).toHaveBeenNthCalledWith(1, 'entries/query', { method: 'POST', query: { coverText: '1' }, body: entryInput });
     expect(request).toHaveBeenNthCalledWith(2, 'search/tags', { query: { q: 'end', includeNsfw: 'false' } });
     expect(request).toHaveBeenNthCalledWith(3, 'producers/query', { method: 'POST', body: producerInput });
   });
@@ -340,7 +354,7 @@ describe('GalleryApi Entry Content', () => {
     };
 
     await expect(api.queryEntryPage(input)).resolves.toEqual(response);
-    expect(request).toHaveBeenCalledWith('entries/query', { method: 'POST', body: input });
+    expect(request).toHaveBeenCalledWith('entries/query', { method: 'POST', query: { coverText: '1' }, body: input });
   });
 
   it('creates Content under the active Entry through the HTTP boundary', async () => {

@@ -51,6 +51,18 @@ public class PairedTransportPlugin extends Plugin {
         if (getActivity() instanceof MainActivity) ((MainActivity)getActivity()).markPageBooted();
         pairingExecutor.execute(() -> { try { PairingState state = new PairingVault(getContext()).load(); JSObject result = new JSObject(); result.put("paired",state != null); if (state != null) result.put("libraryId",state.libraryId); call.resolve(result); } catch (Exception e) { call.reject("Pairing storage invalid; pair again without clearing offline work"); } });
     }
+    @PluginMethod public void diagnostics(PluginCall call) {
+        String document = getBridge().getAppUrl();
+        if (document == null || !(document.startsWith("https://localhost/") || document.equals("https://localhost"))) { call.reject("Untrusted document"); return; }
+        pairingExecutor.execute(() -> {
+            try {
+                JSObject result = new JSObject(PairingDiagnostics.snapshot().toString());
+                try { result.put("paired", new PairingVault(getContext()).load() != null); result.put("storageReadable", true); }
+                catch (Exception stored) { result.put("paired", false); result.put("storageReadable", false); result.put("storageErrorClass", stored.getClass().getSimpleName()); }
+                call.resolve(result);
+            } catch (Exception error) { call.reject("Pairing diagnostics unavailable"); }
+        });
+    }
     @PluginMethod public void request(PluginCall call) {
         // Plugins are callable only by the bundled local document; navigation outside it is external.
         // The bridge's app URL is a plain field readable from any thread; reading

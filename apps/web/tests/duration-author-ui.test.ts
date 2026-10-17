@@ -27,8 +27,8 @@ it('touch duration actual facade rejects invalid, stores 0/clear and Enter plus 
   const editor=wrapper.get('[data-testid="duration-input"]');await editor.trigger('keydown',{key:'Enter'});await editor.trigger('blur');await flushPromises();
   expect(await store.list()).toHaveLength(1);expect((await store.list())[0]!.payload).toEqual({durationSeconds:0});
   await wrapper.setProps({durationSeconds:0});await wrapper.get('[data-testid="duration-value"]').trigger('click');await wrapper.get('[data-testid="duration-input"]').setValue('');await wrapper.get('[data-testid="duration-input"]').trigger('blur');await flushPromises();
-  expect((await store.list())[1]!.payload).toEqual({durationSeconds:null});expect(wrapper.emitted('saved')).toHaveLength(2);
-  await wrapper.setProps({durationSeconds:null});await wrapper.get('[data-testid="add-duration"]').trigger('click');await wrapper.get('[data-testid="duration-input"]').setValue('7:50');await wrapper.get('[data-testid="duration-input"]').trigger('keydown',{key:'Enter'});await flushPromises();expect((await store.list())[2]!.payload).toEqual({durationSeconds:470});
+  expect(await store.list()).toHaveLength(1);expect((await store.list())[0]!.payload).toEqual({durationSeconds:null});expect(wrapper.emitted('saved')).toHaveLength(2);
+  await wrapper.setProps({durationSeconds:null});await wrapper.get('[data-testid="add-duration"]').trigger('click');await wrapper.get('[data-testid="duration-input"]').setValue('7:50');await wrapper.get('[data-testid="duration-input"]').trigger('keydown',{key:'Enter'});await flushPromises();expect(await store.list()).toEqual([]);expect((await api.getEntry(1)).durationSeconds).toBe(470);
  }finally{wrapper.unmount();vi.unstubAllGlobals();}
 });
 it('AuthorPage self group saves half-star through actual facade without writing works-summary partition',async()=>{

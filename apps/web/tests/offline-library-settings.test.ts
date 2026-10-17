@@ -7,6 +7,7 @@ import OfflineLibrarySettings from '../src/components/OfflineLibrarySettings.vue
 import { createMemorySnapshotStore, readActiveSnapshot } from '../src/offline/snapshot-store.js';
 import { createMemoryOutboxStore, createPendingSyncOperation } from '../src/offline/outbox-store.js';
 import { setLocale } from '../src/i18n.js';
+import { buildPendingWorkExport } from '../src/offline/pending-work-export.js';
 
 const capabilities: SyncCapabilities = {
   libraryId: 'library-1', syncEpoch: 'epoch-1', sqliteSchemaVersion: 21,
@@ -97,13 +98,11 @@ describe('OfflineLibrarySettings', () => {
     } });
     await flushPromises();
     expect(wrapper.get('[data-testid="offline-storage-status"]').text()).toContain('1.0 MiB');
-    await wrapper.get('[data-testid="offline-request-persistence"]').trigger('click');
-    await flushPromises();
     expect(persist).toHaveBeenCalledOnce();
-    expect(wrapper.get('[data-testid="offline-storage-status"]').text()).toMatch(/not granted/i);
+    expect(wrapper.get('[data-testid="offline-persistence-status"]').text()).toMatch(/not granted/i);
   });
 
-  it('exposes explicit Sync now even in offline mode and probes before replay', async () => {
+  it('keeps offline settings readable without starting network work or exposing manual sync', async () => {
     setLocale('en');
     const store = createMemorySnapshotStore();
     await store.writeGeneration(1, JSON.stringify(await makeSnapshot()));
@@ -118,10 +117,11 @@ describe('OfflineLibrarySettings', () => {
       },
     } });
     await flushPromises();
-    await wrapper.get('[data-testid="offline-sync-now"]').trigger('click');
-    await flushPromises();
-    expect(probe).toHaveBeenCalledWith({replay:false});
-    expect(fetchSnapshot).toHaveBeenCalledOnce();
+    expect(wrapper.find('[data-testid="offline-sync-now"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="offline-download"]').attributes('disabled')).toBeDefined();
+    expect(probe).not.toHaveBeenCalled();
+    expect(fetchSnapshot).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-testid="offline-status"]').text()).toContain('1 Entry');
   });
 
   it('exports pending work without removing the Outbox or active snapshot', async () => {
@@ -146,12 +146,11 @@ describe('OfflineLibrarySettings', () => {
       },
     } });
     await flushPromises();
-    await wrapper.get('[data-testid="offline-export-pending"]').trigger('click');
-    await flushPromises();
-    expect(createObjectURL).toHaveBeenCalledOnce();
-    const exported = createObjectURL.mock.calls[0]![0] as Blob;
-    expect((await exported.text())).toContain('Queued title');
-    expect(click).toHaveBeenCalledOnce();
+    expect(wrapper.find('[data-testid="offline-export-pending"]').exists()).toBe(false);
+    const exported = await buildPendingWorkExport(store);
+    expect(exported.operations[0]?.payload.title).toBe('Queued title');
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(click).not.toHaveBeenCalled();
     expect(await store.list()).toHaveLength(1);
     expect(await readActiveSnapshot(store)).not.toBeNull();
   });
@@ -245,14 +244,13 @@ describe('OfflineLibrarySettings', () => {
       store, api: { assetUrl: (ref: string) => ref, getSyncCapabilities, fetchSyncSnapshot },
     } });
     await flushPromises();
-    expect(wrapper.get('[data-testid="offline-content-support"]').text()).toContain('not enabled');
-    await wrapper.get('[data-testid="offline-check-support"]').trigger('click');
-    await flushPromises();
     expect(wrapper.get('[data-testid="offline-content-support"]').text()).toContain('ready');
+    expect(getSyncCapabilities).toHaveBeenCalledExactlyOnceWith({replay:false});
+    expect(wrapper.find('[data-testid="offline-check-support"]').exists()).toBe(false);
     expect(fetchSyncSnapshot).not.toHaveBeenCalled();
     expect((await readActiveSnapshot(store))?.generationId).toBe(1);
     await wrapper.setProps({ online: false });
-    expect(wrapper.get('[data-testid="offline-check-support"]').attributes('disabled')).toBeDefined();
+    expect(getSyncCapabilities).toHaveBeenCalledOnce();
     expect(wrapper.get('[data-testid="offline-download"]').attributes('disabled')).toBeDefined();
   });
 });

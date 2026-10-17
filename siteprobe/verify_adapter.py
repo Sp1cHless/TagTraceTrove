@@ -21,8 +21,8 @@ from pathlib import Path
 from src.builder import paths
 from src.builder.harvest import joined_value
 from src.builder.learn import load_session
-from src.builder.roundtrip import (AGREE, UNRUNNABLE, compare, format_probe_report, install,
-                                   probe_draft, unnameable_targets)
+from src.builder.roundtrip import (AGREE, UNRUNNABLE, compare, compare_latest, draft_samples,
+                                   format_probe_report, install, probe_draft, unnameable_targets)
 from src.generic import diagnostics as diag
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -44,8 +44,15 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     draft = json.loads(draft_path.read_text(encoding="utf-8"))
 
-    sample = load_session(directory)
-    result = compare(sample, draft, directory)
+    try:
+        samples = draft_samples(directory, draft)
+    except ValueError as error:
+        print(f"[STOP] {error}; nothing was installed.")
+        return 1
+    sample = samples[-1]
+    result = (compare_latest(samples, draft, directory)
+              if (draft.get("_draft") or {}).get("rule_policy") == "latest_annotation"
+              else compare(sample, draft, directory))
 
     print(f"=== {sample.url}")
     print(f"    draft  {draft_path}")
@@ -80,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         # The same gate the two interactive builders use: a draft whose target cannot name the
         # address it was learned from installs successfully and then resolves through no code path.
-        unnameable = unnameable_targets(draft, [sample.url])
+        unnameable = unnameable_targets(draft, [page.url for page in samples])
         if unnameable:
             print()
             for problem in unnameable:

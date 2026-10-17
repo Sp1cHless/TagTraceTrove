@@ -120,8 +120,8 @@ export function suggestTags(
   const entryJoin = input.vocabulary === 'entry'
     ? 'LEFT JOIN entries AS entry ON entry.id = assignment.entry_id'
     : '';
-  // Usage that the current SFW/NSFW boundary can show. A tag reaching zero here
-  // is offered by NSFW Galleries only, so SFW mode must not suggest it — the same
+  // Usage that the current hideable boundary can show. A tag reaching zero here
+  // is offered by hideable Galleries only, so while they are hidden it must not be suggested — the same
   // rule the Tag search applies.
   const boundaryJoin = input.vocabulary === 'entry'
     ? 'LEFT JOIN gallery_settings AS gallery ON gallery.entry_type = entry.type'

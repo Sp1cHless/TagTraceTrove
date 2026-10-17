@@ -78,7 +78,7 @@ it('restores a genuinely populated schema-33 library through staging and backfil
     expect(result.doctorOk).toBe(true);
     const restored = openDatabase(f.path);
     try {
-      expect(restored.prepare('SELECT MAX(version) FROM schema_migrations').pluck().get()).toBe(43);
+      expect(restored.prepare('SELECT MAX(version) FROM schema_migrations').pluck().get()).toBe(44);
       expect(canonical(restored)).toEqual(before);
       expect(getSyncIdentity(restored)).toMatchObject({ libraryId: identity.libraryId, syncEpoch: expect.not.stringMatching(identity.syncEpoch) });
       const snapshot = buildSyncSnapshot(restored);

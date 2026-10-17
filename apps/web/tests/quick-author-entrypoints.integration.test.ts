@@ -84,7 +84,7 @@ it('Author rating never leaks a stale value from the previous anchor partition i
  }finally{f.db.close();rmSync(f.root,{recursive:true,force:true});}
 });
 
-it('Author options use full-author NSFW eligibility and distinguish same-name dimensions across anchor Galleries',async()=>{
+it('Author options use full-author hideable eligibility and distinguish same-name dimensions across anchor Galleries',async()=>{
  const f=await fixture();
  try{
   const {createProducerRatingSlot}=await serverModule('repositories/rating-repository');

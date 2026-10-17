@@ -20,6 +20,8 @@ import { createGalleryApi } from '../src/api/gallery.js';
 import { createApiClient } from '../src/api/client.js';
 import { originalMutationEnvelope } from '../src/offline/sync-mutation-plan.js';
 import { buildPendingWorkExport } from '../src/offline/pending-work-export.js';
+import { preparePendingWork } from '../src/offline/pending-work-restore.js';
+import { LOCAL_FINAL_STATE_KEY, readLocalFinalState, emptyLocalFinalState } from '../src/offline/local-final-state.js';
 const serverModule = async (path: string) => { const target = `../../server/src/${path}.js`; return import(/* @vite-ignore */ target); };
 async function fixture(install = true) {
  const { createMigratedMemoryDatabase } = await serverModule('database/testing');
@@ -32,6 +34,14 @@ async function fixture(install = true) {
  const {createSection}=await serverModule('repositories/layout-repository');createSection(db,{entryType:'comic',name:'Tags'});
  const app=createApiApp(db,{assetRoot:root});const indexedDB=new IDBFactory(),name=randomUUID();
  let store=createIndexedDbOfflineStore({indexedDB,databaseName:name});let disconnected=false,loseReplay=false,loseAck=false;
+ const originalFetch=globalThis.fetch;
+ // Node fetch has no document origin; route relative asset proofs through this isolated server.
+ vi.stubGlobal('fetch',async(input:RequestInfo|URL,init?:RequestInit)=>{
+  const url=new URL(String(input),'http://isolated/');
+  if(url.origin!=='http://isolated')return originalFetch(input,init);
+  if(disconnected)throw new TypeError('Known offline');
+  return app.request(url.pathname+url.search,init);
+ });
  const bodies:string[]=[], business:string[]=[];
  const online=createGalleryApi(createApiClient({baseUrl:'http://isolated/api',fetchImplementation:async(input,init)=>{
   const url=new URL(String(input));business.push(url.pathname);
@@ -48,16 +58,23 @@ async function fixture(install = true) {
  return {db,root,entry,survivor,author,online,current,bodies,business,get store(){return store;},
   connect(){disconnected=false;},disconnect(){disconnected=true;},loseReplay(){loseReplay=true;},loseAck(){loseAck=true;},
   cold(state?: import('../src/offline/offline-api.js').OfflineApiState){store.close();store=createIndexedDbOfflineStore({indexedDB,databaseName:name});return api(state);},
-  close(){store.close();db.close();rmSync(root,{recursive:true,force:true});}};
+  async seal(){
+   if(!disconnected)throw new Error('The fixture seals originals only against its disconnected transport');
+   await current.flushOfflineOutbox!();business.length=0;
+  },
+  close(){store.close();db.close();rmSync(root,{recursive:true,force:true});vi.unstubAllGlobals();}};
 }
 it('ordinary existing Entry deletion is durable and cold projected; real SQL receipt-loss retry and ACK settle without resurrecting it',async()=>{
  const f=await fixture();try{
   await f.current.deleteEntry(f.entry.id);expect(f.business).toEqual([]);
+  expect(await f.store.list()).toEqual([]);expect(readLocalFinalState(await f.store.readMeta(LOCAL_FINAL_STATE_KEY)).deleted).toHaveLength(1);
+  await f.seal();
   const original=(await f.store.list())[0]!;expect(original).toMatchObject({operationKind:'entry.delete',entityKind:'entry',status:'pending'});
   expect((await f.current.queryEntryPage(entryPageQueryRequestSchema.parse({entryType:'comic'}))).items.map(row=>row.id)).toEqual([f.survivor.id]);
   expect((await f.current.queryProducerPage(producerPageQueryRequestSchema.parse({}))).total).toBe(0);
   expect(f.db.prepare('SELECT count(*) FROM producers WHERE id=?').pluck().get(f.author.id)).toBe(1);
   const backup=JSON.stringify(await buildPendingWorkExport(f.store));await f.store.removeMany([original.opId]);
+  await f.store.writeMeta(LOCAL_FINAL_STATE_KEY,JSON.stringify(emptyLocalFinalState()));
   const cold=f.cold();await cold.restorePendingWork!(backup);await cold.preferOfflineSnapshot!();
   expect((await cold.queryEntryPage(entryPageQueryRequestSchema.parse({entryType:'comic'}))).items.map(row=>row.id)).toEqual([f.survivor.id]);
   f.connect();f.loseReplay();await cold.flushOfflineOutbox!();
@@ -89,12 +106,15 @@ it('committed media reorder and removal then Entry deletion settle with exact or
   for(const ref of refs)writeFileSync(join(dir,ref.split('/').at(-1)!),'committed bytes');
   f.db.prepare('UPDATE entries SET cover_ref=?,preview_ref=?,preview_refs=? WHERE id=?').run(refs[0],refs[1],JSON.stringify(refs.slice(1)),f.entry.id);
   f.connect();await f.store.writeGeneration(2,JSON.stringify(await f.online.fetchSyncSnapshot()));await f.store.writeMeta('activeGeneration','2');f.disconnect();
-  await f.current.setEntryMediaOrder!(f.entry.id,[refs[0]!,refs[2]!]);await f.current.deleteEntry(f.entry.id);
+  await f.current.setEntryMediaOrder!(f.entry.id,[refs[0]!,refs[2]!]);
+  f.connect();f.loseReplay();await f.current.flushOfflineOutbox!();f.disconnect();
+  await f.current.deleteEntry(f.entry.id);
   const originals=(await f.store.list()).map(originalMutationEnvelope);f.connect();
   const state:import('../src/offline/offline-api.js').OfflineApiState={mode:'offline',lastFallbackAt:null};
   await f.cold(state).flushOfflineOutbox!();expect(await f.store.list(),state.lastReplayError??undefined).toEqual([]);
   expect(f.db.prepare('SELECT count(*) FROM entries WHERE id=?').pluck().get(f.entry.id)).toBe(0);
-  expect(f.bodies.map(body=>JSON.parse(body))).toEqual(originals);
+  for(const original of originals)for(const body of f.bodies.map(body=>JSON.parse(body)).filter(body=>body.opId===original.opId))expect(body).toEqual(original);
+  expect(JSON.parse(f.bodies.at(-1)!)).toMatchObject({operationKind:'entry.delete'});
  }finally{f.close();}
 });
 it('uncertain pending create Content and metadata settle when a later authoritative existing Entry delete wins',async()=>{
@@ -134,7 +154,8 @@ it('rating layout values Collection and Directory predecessors retain independen
   const collections=await f.online.listCollections('entry',true);expect(collections.find(row=>row.title==='Keep collection')?.entries.map(row=>row.id)).toEqual([f.survivor.id]);
   const author=await f.online.getAuthor(f.author.id);expect(author.directories.find(row=>row.title==='Keep directory')?.entries.map(row=>row.id)).toEqual([f.survivor.id]);
   expect((await f.online.listRatingSlots('comic')).some(row=>row.name==='Quality')).toBe(true);
-  expect(f.bodies.map(body=>JSON.parse(body))).toEqual(originals);
+  expect(f.bodies.slice(0,originals.length).map(body=>JSON.parse(body))).toEqual(originals);
+  expect(JSON.parse(f.bodies.at(-1)!)).toMatchObject({operationKind:'entry.delete'});
  }finally{f.close();}
 });
 it.each(['collection','directory'] as const)('%s held membership blocks dependent deletion without blocking independent owners',async(kind)=>{
@@ -144,24 +165,25 @@ it.each(['collection','directory'] as const)('%s held membership blocks dependen
   await f.store.writeGeneration(2,JSON.stringify(await f.online.fetchSyncSnapshot()));await f.store.writeMeta('activeGeneration','2');f.disconnect();
   const add=(api:import('../src/api/gallery.js').GalleryApi,id:number)=>kind==='collection'?api.addCollectionEntry(container.id,id):api.moveEntryToAuthorDirectory(f.author.id,container.id,id);
   await add(f.current,f.entry.id);await f.current.deleteEntry(f.entry.id);await f.current.updateEntry(f.survivor.id,{title:'Independent changed'});
-  const deletion=(await f.store.list()).find(row=>row.operationKind==='entry.delete')!;
+  const deletion=readLocalFinalState(await f.store.readMeta(LOCAL_FINAL_STATE_KEY)).deleted[0]!;
+  expect((await f.store.list()).some(row=>row.operationKind==='entry.delete')).toBe(false);
   const held=(await f.store.list())[0]!;await f.store.update(held.opId,{status:'conflict',lastError:'Reviewed membership remains held'});
   f.connect();await f.cold().flushOfflineOutbox!();
   expect(f.db.prepare('SELECT count(*) FROM entries WHERE id=?').pluck().get(f.entry.id)).toBe(1);
   expect(f.db.prepare('SELECT title FROM entries WHERE id=?').pluck().get(f.survivor.id)).toBe('Independent changed');
-  expect(f.bodies.some(body=>JSON.parse(body).opId===deletion.opId)).toBe(false);
-  const retained=(await f.store.list()).find(row=>row.opId===deletion.opId)!;expect(originalMutationEnvelope(retained)).toEqual(originalMutationEnvelope(deletion));expect(retained.lastAttemptAt).toBeNull();
+  expect(f.bodies.some(body=>JSON.parse(body).operationKind==='entry.delete')).toBe(false);
+  expect(readLocalFinalState(await f.store.readMeta(LOCAL_FINAL_STATE_KEY)).deleted).toEqual([deletion]);
  }finally{f.close();}
 });
 it('duration edit then delete settles the final deleted owner timeline after cold exact retries',async()=>{
  const f=await fixture();try{
   await f.current.updateEntry(f.entry.id,{title:'Changed',durationSeconds:0});
-  await f.current.deleteEntry(f.entry.id);const originals=(await f.store.list()).map(originalMutationEnvelope);
+  await f.current.deleteEntry(f.entry.id);expect(await f.store.list()).toEqual([]);
   f.connect();const state:import('../src/offline/offline-api.js').OfflineApiState={mode:'offline',lastFallbackAt:null};
   const cold=f.cold(state);await cold.flushOfflineOutbox!();
   expect(f.db.prepare('SELECT count(*) FROM entries WHERE id=?').pluck().get(f.entry.id)).toBe(0);
   expect(await f.store.list(),state.lastReplayError ?? undefined).toEqual([]);
-  expect(f.bodies.map(body=>JSON.parse(body))).toEqual(originals);
+  expect(f.bodies.map(body=>JSON.parse(body).operationKind)).toEqual(['entry.delete']);
  }finally{f.close();}
 });
 it('Author Tag Content usage View-later and media predecessors settle only against final authoritative delete',async()=>{
@@ -173,18 +195,32 @@ it('Author Tag Content usage View-later and media predecessors settle only again
   await f.current.likeEntry(f.entry.id);await f.current.addViewLaterEntry(f.entry.id);
   const sharp=(await import('../../server/node_modules/sharp/lib/index.js')).default;const png=await sharp({create:{width:2,height:2,channels:4,background:'#ff0000'}}).png().toBuffer();
   await f.current.uploadEntryMedia(f.entry.id,'preview',new File([new Uint8Array(png)],'preview.png',{type:'image/png'}));
+  await f.store.captureLocalFinalState(true); // These are submitted predecessors, not cancellable drafts.
   await f.current.deleteEntry(f.entry.id);const operations=await f.store.list();const media=await f.store.listMedia();expect(media).toHaveLength(1);
   f.connect();const state:import('../src/offline/offline-api.js').OfflineApiState={mode:'offline',lastFallbackAt:null};const cold=f.cold(state);await cold.flushOfflineOutbox!();
-  expect(f.db.prepare('SELECT count(*) FROM entries WHERE id=?').pluck().get(f.entry.id)).toBe(0);
+  expect(f.db.prepare('SELECT count(*) FROM entries WHERE id=?').pluck().get(f.entry.id),state.lastReplayError??undefined).toBe(0);
   expect(await f.store.list(),state.lastReplayError ?? undefined).toEqual([]);expect(await f.store.listMedia()).toEqual([]);
   expect(operations.length).toBeGreaterThan(4);expect(f.db.prepare('SELECT count(*) FROM producers').pluck().get()).toBe(2);
  }finally{f.close();}
 });
+it('restoring its own export retains an identical local deletion rather than treating it as newer work',async()=>{
+ const f=await fixture();try{
+  await f.current.deleteEntry(f.entry.id);
+  const before=await f.store.captureLocalFinalState();
+  const backup=JSON.stringify(await buildPendingWorkExport(f.store));
+  const prepared=await preparePendingWork(backup);
+  expect(prepared.localFinalState?.deleted).toEqual(before.local.deleted);
+  await expect(f.current.restorePendingWork!(backup)).resolves.toMatchObject({addedOperations:0,identicalOperations:1});
+  const after=await f.store.captureLocalFinalState();
+  expect(after.local).toEqual(before.local);expect(after.operations).toEqual(before.operations);expect(after.media).toEqual(before.media);
+ }finally{f.close();}
+});
+
 it('restore rejects a later write to a deleted owner atomically and retains current exact operations',async()=>{
  const f=await fixture();try{
   await f.current.updateEntry(f.entry.id,{title:'Before'});const update=originalMutationEnvelope((await f.store.list())[0]!);
   await f.current.deleteEntry(f.entry.id);const before=await f.store.list();const backup=await buildPendingWorkExport(f.store);
-  const bad={...backup,operations:[...backup.operations,{...before[0]!,...update,opId:randomUUID(),baseVersion:before[1]!.baseVersion+1,clientCreatedAt:new Date(Date.parse(before[1]!.clientCreatedAt)+1).toISOString()}]};
+  const bad={...backup,operations:[...backup.operations,{...update,status:'pending',lastAttemptAt:null,lastError:null,opId:randomUUID(),baseVersion:update.baseVersion+1,clientCreatedAt:new Date(Date.parse(update.clientCreatedAt)+1).toISOString()}]};
   await expect(f.current.restorePendingWork!(JSON.stringify(bad))).rejects.toThrow(/delet/i);expect(await f.store.list()).toEqual(before);
  }finally{f.close();}
 });
@@ -193,7 +229,7 @@ it('known-offline deleted detail refuses locally rather than business HTTP; post
   await f.current.deleteEntry(f.entry.id);f.business.length=0;
   await expect(f.current.getEntry(f.entry.id)).rejects.toThrow();expect(f.business).toEqual([]);
   await expect(f.current.updateEntry(f.entry.id,{title:'Resurrection'})).rejects.toThrow(/delet/i);
-  expect(await f.store.list()).toHaveLength(1);
+  expect(await f.store.list()).toEqual([]);expect(readLocalFinalState(await f.store.readMeta(LOCAL_FINAL_STATE_KEY)).deleted).toHaveLength(1);
  }finally{f.close();}
 });
 it.each([false,undefined])('cold capability %s refuses deletion with zero business HTTP and no new envelope',async value=>{
@@ -202,12 +238,12 @@ it.each([false,undefined])('cold capability %s refuses deletion with zero busine
   if(value===undefined)delete caps.featureFlags.offlineEntryDelete;else caps.featureFlags.offlineEntryDelete=value;
   f.online.getSyncCapabilities=async()=>caps;await f.current.getSyncCapabilities({replay:false});
   const cold=f.cold();await cold.preferOfflineSnapshot!();f.business.length=0;
-  await expect(cold.deleteEntry(f.entry.id)).rejects.toThrow(/refresh/i);expect(f.business).toEqual([]);expect(await f.store.list()).toEqual([]);
+  await expect(cold.deleteEntry(f.entry.id)).rejects.toThrow('This library does not support Entry deletion');expect(f.business).toEqual([]);expect(await f.store.list()).toEqual([]);
  }finally{f.close();}
 });
 it('exact delete replay after numeric ID reuse never removes replacement media',async()=>{
  const f=await fixture();try{
-  await f.current.deleteEntry(f.survivor.id);const op=originalMutationEnvelope((await f.store.list())[0]!);f.connect();await f.online.replaySyncOperation!(op);
+  await f.current.deleteEntry(f.survivor.id);await f.seal();const op=originalMutationEnvelope((await f.store.list())[0]!);f.connect();await f.online.replaySyncOperation!(op);
   const {createEntry}=await serverModule('repositories/entry-repository');const replacement=createEntry(f.db,{title:'Replacement',type:'comic'});expect(replacement.id).toBe(f.survivor.id);
   const {mkdirSync,writeFileSync,readFileSync}=await import('node:fs');const path=join(f.root,'entries',String(replacement.id));mkdirSync(path,{recursive:true});writeFileSync(join(path,'cover.webp'),'replacement bytes');
   expect((await f.online.replaySyncOperation!(op)).status).toBe('applied');expect(readFileSync(join(path,'cover.webp'),'utf8')).toBe('replacement bytes');
@@ -215,7 +251,7 @@ it('exact delete replay after numeric ID reuse never removes replacement media',
 });
 it.each(['corrupt','foreign','body'])('changed stored delete proof %s cannot authorize cleanup after ACK loss',async mode=>{
  const f=await fixture();try{
-  await f.current.deleteEntry(f.entry.id);const row=(await f.store.list())[0]!;f.connect();f.loseAck();await f.current.flushOfflineOutbox!();expect(await f.store.list()).toHaveLength(1);
+  await f.current.deleteEntry(f.entry.id);await f.seal();const row=(await f.store.list())[0]!;f.connect();f.loseAck();await f.current.flushOfflineOutbox!();expect(await f.store.list()).toHaveLength(1);
   const key='entryDeleteProof.'+row.opId;const original=await f.store.readMeta(key);expect(original).not.toBeNull();
   const proof=JSON.parse(original!);if(mode==='foreign')proof.receipt.entityId=999;else if(mode==='body')proof.fingerprint='changed';
   await f.store.writeMeta(key,mode==='corrupt'?'native raw proof':JSON.stringify(proof));const state:import('../src/offline/offline-api.js').OfflineApiState={mode:'offline',lastFallbackAt:null};
@@ -233,7 +269,7 @@ it('absence without an authoritative matching delete journal cannot authorize re
 });
 it('strict version conflict holds deletion but lets an independent Entry settle; collision and identity mismatch never delete',async()=>{
  const f=await fixture();try{
-  await f.current.deleteEntry(f.entry.id);await f.current.updateEntry(f.survivor.id,{title:'Updated survivor'});
+  await f.current.deleteEntry(f.entry.id);await f.seal();await f.current.updateEntry(f.survivor.id,{title:'Updated survivor'});
   const operation=originalMutationEnvelope((await f.store.list())[0]!);if(operation.operationKind!=='entry.delete')throw new Error('Expected delete');f.connect();
   f.db.prepare('UPDATE entries SET title=? WHERE id=?').run('Server update',f.entry.id);
   await f.current.flushOfflineOutbox!();const held=await f.store.list();expect(held).toHaveLength(1);expect(held[0]!.status).toBe('conflict');
@@ -250,7 +286,7 @@ it('actual GalleryApp double-confirm uses durable offline deletion and returns t
   await wrapper.get(`[data-entry-id="${f.entry.id}"]`).trigger('click');await settle();
   await wrapper.get('[data-testid="start-entry-editing"]').trigger('click');
   f.business.length=0;const button=wrapper.get('[data-testid="delete-entry"]');await button.trigger('click');expect(await f.store.list()).toEqual([]);
-  await button.trigger('click');await settle();expect(await f.store.list()).toHaveLength(1);
+  await button.trigger('click');await settle();expect(await f.store.list()).toEqual([]);expect(readLocalFinalState(await f.store.readMeta(LOCAL_FINAL_STATE_KEY)).deleted).toHaveLength(1);
   expect(wrapper.find('[data-testid="entry-list"]').exists()).toBe(true);
   expect(wrapper.find(`[data-entry-id="${f.entry.id}"]`).exists()).toBe(false);expect(f.business).toEqual([]);
   const cold=f.cold();await cold.preferOfflineSnapshot!();expect((await cold.queryEntryPage(entryPageQueryRequestSchema.parse({entryType:'comic'}))).total).toBe(1);

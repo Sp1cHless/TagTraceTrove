@@ -115,7 +115,7 @@ describe('shared View later (real SQL)', () => {
     expect(missing.status).toBe(404);
   });
 
-  it('partitions the saved Entry ids by the Gallery SFW/NSFW flag', async () => {
+  it('partitions the saved Entry ids by the Gallery hideable flag', async () => {
     const database = createMigratedMemoryDatabase();
     databases.push(database);
     const safe = createEntry(database, { title: 'Safe Work', type: 'comic' });

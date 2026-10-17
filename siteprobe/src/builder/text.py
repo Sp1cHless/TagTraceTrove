@@ -54,11 +54,50 @@ CHROME: dict[str, dict[str, str]] = {
               "answer too.",
     },
     "needField": {"zh": "先选一个左侧字段。", "en": "Pick a field on the left first."},
+    "singleValueHint": {
+        "zh": "只显示可读取单个值的候选，整组内容不能用于此字段；分数仅供参考。",
+        "en": "Only single-value candidates are shown; whole groups do not fit this field. Scores are suggestions.",
+    },
+    "wrongShape": {
+        "zh": "该候选的值形状不适合此字段，请选单独正文或匹配的集合。",
+        "en": "This candidate does not fit the field; choose a single value or a matching collection.",
+    },
     "searchPlaceholder": {
         "zh": "搜索候选的值或来源",
         "en": "Search a value or where it came from",
     },
     "kindAll": {"zh": "全部", "en": "All"},
+    # The one/many switch. A page that shows one author at a time has no group to point at, so
+    # the answer has to be buildable one value at a time — and the words have to say which way
+    # the next click will be read.
+    "modeAsk": {"zh": "这个字段：", "en": "This field:"},
+    "modeOne": {"zh": "一个", "en": "One"},
+    "modeMany": {"zh": "多个", "en": "Several"},
+    "chosenCount": {"zh": "已选 {count} 项", "en": "{count} chosen"},
+    # A long value is shown shortened so the row stays readable, and the note is what makes that
+    # an honest preview: the whole text is what the answer holds and what the import writes.
+    "preview": {
+        "zh": "（这里只显示前 {shown} 字，共 {total} 字；导入的是全文）",
+        "en": "(showing the first {shown} of {total} characters; the whole text is what gets imported)",
+    },
+    # The other kind of "…": the page wrote it that way. Saying which one it is is the point —
+    # a summary that looks like our own preview is how a cut value came to be accepted.
+    "pageCut": {
+        "zh": "⚠ 这是网站自己截断的（它只给了这么多），不是上面那种预览",
+        "en": "⚠ the page itself cut this text short — this is all it gives, not a preview of ours",
+    },
+    # A several-value field answered with one block: what gets imported is its members, so the
+    # row has to say that rather than "one chosen".
+    "splitInto": {"zh": "拆分为 {count} 个标签", "en": "splits into {count} tags"},
+    "splitFrom": {
+        "zh": "（上面这些是你点的那整块按分隔符拆开的，导入时就是它们）",
+        "en": "(the block you clicked, split by its own separators — these are what gets imported)",
+    },
+    "clearChosen": {"zh": "清空", "en": "Clear"},
+    "readsMore": {
+        "zh": "注意：这条规则在这页还会读到（也会一起导入）：{items}",
+        "en": "Note: this rule also reads these here, and they will be imported too: {items}",
+    },
     "unassigned": {"zh": "未指派", "en": "Not set"},
     "absentValue": {
         "zh": "（本作品没有这项，不记录）",
@@ -151,7 +190,10 @@ FIELD_LABELS: dict[str, dict[str, str]] = {
 #: What each field is asking for, in the page's own words rather than the schema's.
 FIELD_HINTS: dict[str, dict[str, str]] = {
     "title": {"zh": "点页面上的作品标题", "en": "Click the work's title on the page"},
-    "creator": {"zh": "点作者 / 创作者的名字", "en": "Click the author's name"},
+    "creator": {
+        "zh": "点作者 / 创作者的名字；有多个作者时切到「多个」，把他们一个个点选进来",
+        "en": "Click the author's name; with several authors, switch to \"Several\" and pick them one by one",
+    },
     "date": {"zh": "点发布日期；混合文本会提供独立日期候选，注意区分发布和更新",
              "en": "Pick the release date; mixed text offers separate dates. Distinguish published from updated."},
     "description": {

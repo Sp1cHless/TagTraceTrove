@@ -7,9 +7,13 @@ import { browserCssCompatibility } from './browser-build-compat.js';
 const browserTarget = 'chrome90';
 
 function serviceWorkerPlugin(): Plugin {
+  let outputDirectory = resolve(__dirname, 'dist');
   return {
     name: 't3-service-worker',
     apply: 'build',
+    configResolved(config) {
+      outputDirectory = resolve(config.root, config.build.outDir);
+    },
     closeBundle: {
       order: 'post',
       async handler() {
@@ -18,7 +22,7 @@ function serviceWorkerPlugin(): Plugin {
         if (process.env.T3_SW_BUILD === '1') return;
         process.env.T3_SW_BUILD = '1';
         try {
-          const builtHtml = await readFile(resolve(__dirname, 'dist/index.html'), 'utf8');
+          const builtHtml = await readFile(resolve(outputDirectory, 'index.html'), 'utf8');
           const precacheUrls = [...builtHtml.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/gu)]
             .map((match) => match[1])
             .filter((url): url is string => url !== undefined);
@@ -29,11 +33,15 @@ function serviceWorkerPlugin(): Plugin {
               __T3_PRECACHE_URLS__: JSON.stringify(precacheUrls),
             },
             build: {
+              outDir: outputDirectory,
               target: browserTarget,
               emptyOutDir: false,
               lib: {
                 entry: resolve(__dirname, 'src/sw/service-worker.ts'),
-                formats: ['es'],
+                // Registration uses a classic worker (including Chromium 90).
+                // ES exports here make the browser reject sw.js at evaluation.
+                formats: ['iife'],
+                name: 'T3ServiceWorker',
                 fileName: () => 'sw.js',
               },
             },

@@ -38,6 +38,23 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        try
+        {
+            LauncherPolicy.AppendStartupLog(RepoRoot, "Launcher starting: " + typeof(Program).Assembly.GetName().Version);
+            MainCore(args);
+        }
+        catch (Exception error)
+        {
+            string? log = LauncherPolicy.AppendStartupLog(RepoRoot, "STARTUP FAILED: " + error);
+            StopServer();
+            MessageBox.Show("T3 could not start: " + error.Message + Environment.NewLine + Environment.NewLine
+                + "Log: " + (log ?? "unavailable; run Diagnose.cmd"), "T3", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            _tray?.Dispose();
+        }
+    }
+
+    private static void MainCore(string[] args)
+    {
         LauncherOptions options = LauncherPolicy.ParseOptions(args);
         _noBrowser = options.NoBrowser;
         _lanEnabled = options.LanEnabled;
@@ -52,17 +69,9 @@ internal static class Program
             string statePath = Path.Combine(RepoRoot, "installation.json");
             if (File.Exists(statePath))
             {
-                using var state = System.Text.Json.JsonDocument.Parse(File.ReadAllText(statePath));
                 using var release = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot, "release-manifest.json")));
-                string current = Path.GetFullPath(state.RootElement.GetProperty("currentDirectory").GetString()!);
-                if (state.RootElement.GetProperty("product").GetString() != "T3"
-                    || !current.StartsWith(Path.Combine(RepoRoot, "versions") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-                {
-                    MessageBox.Show("Invalid installation record.", "T3");
-                    return;
-                }
-                if (state.RootElement.GetProperty("version").GetString() == release.RootElement.GetProperty("version").GetString()
-                    && File.Exists(Path.Combine(current, "T3.exe")))
+                string? current = LauncherPolicy.InstalledProgramToLaunch(RepoRoot, File.ReadAllText(statePath), release.RootElement.GetProperty("version").GetString()!);
+                if (current != null)
                 {
                     var launch = new ProcessStartInfo(Path.Combine(current, "T3.exe")) { UseShellExecute = false, WorkingDirectory = current, CreateNoWindow = true };
                     foreach (string argument in args) launch.ArgumentList.Add(argument);
@@ -74,13 +83,26 @@ internal static class Program
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
+                WorkingDirectory = RepoRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = System.Text.Encoding.UTF8,
+                StandardErrorEncoding = System.Text.Encoding.UTF8,
             };
             foreach (string value in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
                 Path.Combine(RepoRoot, "Install.ps1"), "-InstallRoot", RepoRoot, "-BootstrapPid", Environment.ProcessId.ToString(), "-Start" }) setup.ArgumentList.Add(value);
-            using var installer = Process.Start(setup);
-            installer?.WaitForExit();
-            if (installer == null || installer.ExitCode != 0)
-                MessageBox.Show("Installation failed. Run Install.cmd to see the error.", "T3");
+            int installerExitCode = -1;
+            string? log = null;
+            using var progress = new InstallationProgressWindow(async report =>
+            {
+                (installerExitCode, log) = await RunInstallerAsync(setup, RepoRoot, report);
+            });
+            progress.ShowDialog();
+            if (progress.Failure != null) throw progress.Failure;
+            if (installerExitCode != 0)
+                MessageBox.Show("Installation failed. Details were saved." + Environment.NewLine
+                    + "Log: " + (log ?? "t3-install.log / Diagnose.cmd") + Environment.NewLine
+                    + "Run Diagnose.cmd to collect a report. Keep the current data folder.", "T3", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
         if (File.Exists(installMarker))
@@ -155,14 +177,17 @@ internal static class Program
         File.AppendAllText(ServerLog,
             $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] using Node.js: {_nodeExecutable}{Environment.NewLine}");
 
+        // The served Web bundle must never be older than the source it was built from. A browser
+        // holding the previous front end talks to the current API and fails on a field it does not
+        // know, which reads as a broken page rather than as a stale build.
         if (!File.Exists(WebIndex))
         {
             Notify("First run: building the web UI (one-time, may take a minute)...");
-            if (!RunBuild())
-            {
-                Notify("Build failed - see the output in t3-server.log");
-                return;
-            }
+        }
+        if (!RunEnsureWebBuild())
+        {
+            Notify("The web UI could not be prepared - see the output in t3-server.log");
+            return;
         }
 
         StartServer();
@@ -181,6 +206,42 @@ internal static class Program
         exitWait.Unregister(null);
     }
 
+    internal static async Task<(int ExitCode, string? Log)> RunInstallerAsync(ProcessStartInfo setup,
+        string root, Action<string> report)
+    {
+        using var installer = Process.Start(setup);
+        if (installer == null) throw new InvalidOperationException("The installation process could not be created.");
+        using var cancellation = new CancellationTokenSource();
+        var output = new System.Text.StringBuilder();
+        var errors = new System.Text.StringBuilder();
+        var streams = Task.WhenAll(
+            ReadInstallerStreamAsync(installer.StandardOutput, output, report, cancellation.Token),
+            ReadInstallerStreamAsync(installer.StandardError, errors, null, cancellation.Token));
+        LauncherPolicy.AppendStartupLog(root, "Installer running. Progress is recorded in t3-install.log.");
+        await installer.WaitForExitAsync();
+        // A newly launched child may inherit a stream handle; never wait indefinitely for EOF.
+        if (await Task.WhenAny(streams, Task.Delay(2000)) != streams) cancellation.Cancel();
+        await streams;
+        int exitCode = installer.ExitCode;
+        string? log = LauncherPolicy.AppendStartupLog(root, $"Installer exit={exitCode}{Environment.NewLine}{output}{Environment.NewLine}{errors}");
+        return (exitCode, log);
+    }
+
+    private static async Task ReadInstallerStreamAsync(StreamReader reader, System.Text.StringBuilder output,
+        Action<string>? report, CancellationToken cancellation)
+    {
+        try
+        {
+            string? line;
+            while ((line = await reader.ReadLineAsync(cancellation)) != null)
+            {
+                output.AppendLine(line);
+                report?.Invoke(line);
+            }
+        }
+        catch (OperationCanceledException) { output.AppendLine("Output stream still open; see t3-install.log."); }
+    }
+
     private static void ReadInstalledProfile(string marker)
     {
         using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(marker));
@@ -191,8 +252,7 @@ internal static class Program
             || !data.Equals(Path.Combine(root, "data"), StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Program and data must belong to this installation.");
         for (string? path = data; path != null; path = Path.GetDirectoryName(path))
-            if (Directory.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-                throw new InvalidOperationException("Redirected data directories are not supported.");
+            if (Directory.Exists(path)) T3Paths.WindowsPathPolicy.AssertNoRedirect(path);
         Port = profile.TryGetProperty("port", out var port) ? port.GetInt32() : 8765;
         TlsPort = profile.TryGetProperty("tlsPort", out var tlsPort) ? tlsPort.GetInt32() : 8766;
         if (Port is < 1024 or > 65535 || TlsPort is < 1024 or > 65535 || Port == TlsPort)
@@ -427,33 +487,47 @@ internal static class Program
             + "Use only on a trusted home network.";
     }
 
-    /// <summary>One-time `pnpm run build` when apps/web/dist is missing.</summary>
-    private static bool RunBuild()
+    /// <summary>
+    /// Rebuilds the Web bundle when the source has moved past it, by asking
+    /// <c>tools/ensure-web-build.mjs</c> — which owns that decision so this launcher and T3.bat
+    /// cannot come to different conclusions about whether the front end is current.
+    ///
+    /// An installed payload has no Web sources and no such script: its bundle is the frozen one the
+    /// release shipped, so a missing script is a successful no-op rather than a failure.
+    /// </summary>
+    private static bool RunEnsureWebBuild()
     {
+        var script = Path.Combine(RepoRoot, "tools", "ensure-web-build.mjs");
+        if (!File.Exists(script))
+        {
+            File.AppendAllText(ServerLog,
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] no web build guard here; serving the shipped front end{Environment.NewLine}");
+            return true;
+        }
         try
         {
             var start = new ProcessStartInfo
             {
-                FileName = "npm",
-                Arguments = "exec --yes --package=pnpm@10.15.0 -- pnpm run build",
+                FileName = _nodeExecutable!,
                 WorkingDirectory = RepoRoot,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             };
+            start.ArgumentList.Add(script);
             LauncherPolicy.PrependExecutableDirectory(start, _nodeExecutable!);
             using var build = Process.Start(start);
             if (build == null) { return false; }
             string output = build.StandardOutput.ReadToEnd() + build.StandardError.ReadToEnd();
             build.WaitForExit();
             File.AppendAllText(ServerLog,
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] build exit={build.ExitCode}{Environment.NewLine}{output}{Environment.NewLine}");
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] web build exit={build.ExitCode}{Environment.NewLine}{output}{Environment.NewLine}");
             return build.ExitCode == 0 && File.Exists(WebIndex);
         }
         catch (Exception error)
         {
-            File.AppendAllText(ServerLog, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] build error: {error}{Environment.NewLine}");
+            File.AppendAllText(ServerLog, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] web build error: {error}{Environment.NewLine}");
             return false;
         }
     }

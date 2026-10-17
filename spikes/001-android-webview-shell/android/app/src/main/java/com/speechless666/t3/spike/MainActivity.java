@@ -19,13 +19,31 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends BridgeActivity {
     private ActivityResultLauncher<ScanOptions> scanner;
+    private PairingDiagnostics.Trace scanTrace;
+    private static boolean journalInitialized;
     /** The bundled page reports itself through the status plugin; a silence means a blank document. */
     private volatile boolean pageBooted;
     void markPageBooted() { pageBooted = true; }
     @Override public void onCreate(Bundle state) {
+        if (!journalInitialized) {
+            android.content.SharedPreferences journal = getSharedPreferences("t3-pairing-diagnostics-v1", MODE_PRIVATE);
+            String saved;
+            try { saved = journal.getString("journal", null); } catch (Exception unreadable) { saved = null; }
+            PairingDiagnostics.initialize(saved, value -> {
+                if (!journal.edit().putString("journal", value).commit()) throw new IllegalStateException("Diagnostic storage unavailable");
+            });
+            try { PairingDiagnostics.environment(getPackageManager().getPackageInfo(getPackageName(),0).versionName, android.os.Build.VERSION.SDK_INT, android.os.Build.MODEL); }
+            catch (Exception unavailable) { /* Pairing itself must not depend on diagnostics. */ }
+            journalInitialized = true;
+        }
         registerPlugin(PairedTransportPlugin.class);
         registerPlugin(BackgroundTransferPlugin.class);
-        scanner = registerForActivityResult(new ScanContract(), result -> { if (result.getContents() != null) claim(result.getContents()); });
+        scanner = registerForActivityResult(new ScanContract(), result -> {
+            PairingDiagnostics.Trace trace = scanTrace == null ? PairingDiagnostics.start("camera") : scanTrace;
+            scanTrace = null;
+            if (result.getContents() != null) { trace.passed("scan"); claim(result.getContents(), trace); }
+            else trace.finish("cancelled");
+        });
         super.onCreate(state);
         bridge.setWebViewClient(new BridgeWebViewClient(bridge) {
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -74,50 +92,71 @@ public class MainActivity extends BridgeActivity {
     public void showPairingDialog() {
         EditText input = new EditText(this); input.setHint("Paste desktop pairing payload (fallback)"); input.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         new AlertDialog.Builder(this).setTitle("Pair encrypted T3 connection").setMessage("Scan the desktop Settings QR. Camera is used only for this explicit scan. Re-pairing does not delete your offline copy or queued edits.")
-            .setView(input).setPositiveButton("Scan QR",(dialog,which) -> scanner.launch(new ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setBeepEnabled(false).setPrompt("Scan desktop T3 pairing QR")))
+            .setView(input).setPositiveButton("Scan QR",(dialog,which) -> {
+                scanTrace = PairingDiagnostics.start("camera"); scanTrace.stage("scan");
+                try { scanner.launch(new ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setBeepEnabled(false).setPrompt("Scan desktop T3 pairing QR")); }
+                catch (Exception error) { showPairingFailure(scanTrace, scanTrace.fail(error)); scanTrace = null; }
+            })
             .setNeutralButton("Use pasted payload",(dialog,which) -> claim(input.getText().toString())).setNegativeButton("Cancel",null).show();
     }
     private void claim(String payload) {
+        claim(payload, PairingDiagnostics.start("paste"));
+    }
+    private void claim(String payload, PairingDiagnostics.Trace trace) {
         PairingState loaded;
-        try { loaded = new PairingVault(this).load(); }
-        catch (Exception stored) { loaded = null; }
+        trace.stage("vault_read");
+        try { loaded = new PairingVault(this).load(); trace.passed("vault_read"); }
+        catch (Exception stored) { trace.warning("vault_read", stored); loaded = null; }
         final PairingState previous = loaded;
         try {
+            trace.stage("replacement_check");
             if (previous != null) {
                 // Check foreign identity before showing any replacement action or sending a claim.
                 PairingState.validateReplacement(payload, previous, true);
                 new AlertDialog.Builder(this).setTitle("Confirm replacement pairing")
                     .setMessage("Trust only a new QR generated on your desktop for the same library. Replace the saved certificate and device authorization? Existing offline copy and queued edits stay intact; normal same-library reconnect can resume synchronization. If the library identity differs, keep this connection and export queued work first.")
-                    .setPositiveButton("Replace pairing; keep offline work", (d,w) -> claimConfirmed(payload, previous))
-                    .setNegativeButton("Keep current pairing", null).show(); return;
+                    .setPositiveButton("Replace pairing; keep offline work", (d,w) -> claimConfirmed(payload, previous, trace))
+                    .setNegativeButton("Keep current pairing", (d,w) -> trace.finish("cancelled"))
+                    .setOnCancelListener(d -> trace.finish("cancelled")).show(); return;
             }
             // An unreadable vault self-heals here: the fresh claim simply overwrites it.
-            claimConfirmed(payload, null);
+            claimConfirmed(payload, null, trace);
         } catch (Exception e) {
             boolean foreignLibrary = e instanceof SecurityException
                 && String.valueOf(e.getMessage()).startsWith("Different library");
+            String failureCode = trace.fail(foreignLibrary ? new PairingDiagnostics.Failure("DIFFERENT_LIBRARY") : e);
+            if (!foreignLibrary) { showPairingFailure(trace, failureCode); return; }
             AlertDialog.Builder builder = new AlertDialog.Builder(this).setTitle("Re-pair refused")
                 .setMessage("Re-pair refused: different library or unreadable saved authorization. Keep your offline copy and queued edits; export queued work before choosing a separate library."
                     + (foreignLibrary ? "\n\nThe QR belongs to another library. You may explicitly forget this device's saved pairing and pair that library instead; what this device stored for the old library stays on disk but can never synchronize again."
                     : ""))
                 .setPositiveButton("Keep current pairing", null);
-            if (foreignLibrary) builder.setNegativeButton("Forget pairing; pair the new library", (d,w) -> { new PairingVault(this).clear(); claimConfirmed(payload, null); });
+            if (foreignLibrary) builder.setNegativeButton("Forget pairing; pair the new library", (d,w) -> { new PairingVault(this).clear(); claimConfirmed(payload, null, PairingDiagnostics.start("paste")); });
             builder.show();
         }
     }
-    private void claimConfirmed(String payload, PairingState previous) {
+    private void claimConfirmed(String payload, PairingState previous, PairingDiagnostics.Trace trace) {
         Executors.newSingleThreadExecutor().execute(() -> {
-            try { PairingState.validateReplacement(payload, previous, true); PairingState paired = PairingState.claim(payload); new PairingVault(this).save(paired); runOnUiThread(() -> { new AlertDialog.Builder(this).setMessage("Encrypted connection paired. Offline work was kept.").setPositiveButton("OK",(d,w) -> bridge.getWebView().reload()).show(); }); }
+            try {
+                trace.stage("replacement_check"); PairingState.validateReplacement(payload, previous, true);
+                PairingState paired = PairingState.claim(payload, trace);
+                trace.stage("vault_save"); PairingVault vault = new PairingVault(this); vault.save(paired);
+                trace.stage("vault_readback"); PairingState stored = vault.load();
+                if (stored == null || !paired.libraryId.equals(stored.libraryId) || !paired.deviceId.equals(stored.deviceId) || !paired.token.equals(stored.token)) throw new SecurityException("Pairing readback failed");
+                trace.passed("vault_readback"); trace.finish("success");
+                runOnUiThread(() -> { new AlertDialog.Builder(this).setMessage("Encrypted connection paired. Offline work was kept.").setPositiveButton("OK",(d,w) -> bridge.getWebView().reload()).show(); });
+            }
             catch (Exception e) {
-                // The generic verdict told the person nothing; name the actual cause.
-                String reason;
-                if (e instanceof java.io.IOException) reason = "the desktop could not be reached at the QR's address";
-                else if (e instanceof javax.net.ssl.SSLException) reason = "the desktop certificate did not match the QR's fingerprint";
-                else reason = e.getMessage() == null || e.getMessage().isEmpty() ? e.getClass().getSimpleName() : e.getMessage();
-                runOnUiThread(() -> new AlertDialog.Builder(this).setMessage("Pairing failed — " + reason
-                    + ".\n\nCreate a fresh QR on the desktop (Settings → Encrypted mobile connection); it expires in 2 minutes, so scan it right away. Offline work was kept.")
-                    .setPositiveButton("OK",null).show());
+                String code = trace.fail(e); runOnUiThread(() -> showPairingFailure(trace, code));
             }
         });
+    }
+    private void showPairingFailure(PairingDiagnostics.Trace trace, String code) {
+        new AlertDialog.Builder(this).setTitle("配对失败 · " + code)
+            .setMessage(PairingDiagnostics.explanation(code) + "\n\n诊断编号：" + trace.id() + "\n离线副本和待同步改动已保留。")
+            .setNeutralButton("复制诊断", (dialog, which) -> {
+                android.content.ClipboardManager clipboard = (android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("T3 pairing diagnostics", PairingDiagnostics.snapshot().toString()));
+            }).setPositiveButton("确定", null).show();
     }
 }

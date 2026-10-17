@@ -22,7 +22,7 @@ describe('browser compatibility', () => {
   it('guards variable colours and provides viewport/container layout fallbacks', async () => {
     const source = '.panel { --accent-soft: color-mix(in srgb, var(--accent) 12%, var(--surface)); height: calc(100dvh - 2rem); border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent); } @container (max-width: 44rem) { .row { display: block } }';
     const result = await postcss([browserCssCompatibility()]).process(source, { from: undefined });
-    const base = result.root.nodes[0];
+    const base = result.root.nodes[0]!;
     expect(base.toString()).toContain('--accent-soft: var(--surface-muted)');
     expect(base.toString()).toContain('calc(100vh - 2rem)');
     expect(base.toString()).toContain('border: 1px solid var(--border-subtle)');

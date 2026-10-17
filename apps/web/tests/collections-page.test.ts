@@ -324,7 +324,7 @@ describe('CollectionsPage touch organization', () => {
     expect(reorderCollections).toHaveBeenCalledWith('entry', [3, 1]);
   });
 
-  it('keeps hidden NSFW siblings in the full reorder vector while showing only SFW cards', async () => {
+  it('keeps hidden hideable siblings in the full reorder vector while showing only visible cards', async () => {
     showNsfw.value = false;
     const records = [
       collection(1, 'First safe'),
@@ -351,7 +351,7 @@ describe('CollectionsPage touch organization', () => {
     wrapper.unmount();
   });
 
-  it('does not apply a late NSFW-inclusive child summary after SFW mode reloads', async () => {
+  it('does not apply a late hideable-inclusive child summary after the visible list reloads', async () => {
     showNsfw.value = true;
     let resolveInclusive!: (records: CollectionRecordDto[]) => void;
     const inclusiveRecords = new Promise<CollectionRecordDto[]>((resolve) => {
@@ -400,7 +400,7 @@ describe('CollectionsPage touch organization', () => {
     wrapper.unmount();
   });
 
-  it('hides cached NSFW child previews while SFW list and child-summary reads are pending', async () => {
+  it('hides cached hideable child previews while the visible list and child-summary reads are pending', async () => {
     showNsfw.value = true;
     const privateMember = {
       ...entry(205, 'Sensitive cached work'),
@@ -684,7 +684,7 @@ describe('CollectionsPage Gallery pages', () => {
     expect(listedTitles(wrapper)).toEqual(['Loose shelf']);
   });
 
-  it('drops an NSFW Gallery page and its folders in SFW mode', async () => {
+  it('drops a hideable Gallery page and its folders while hideable galleries are hidden', async () => {
     const { api } = createScopedApi([gallery('Comic', true), gallery('Hentai', true)]);
     const wrapper = mount(CollectionsPage, { props: { api } });
     await flushPromises();
@@ -694,7 +694,7 @@ describe('CollectionsPage Gallery pages', () => {
     expect(wrapper.get('[data-collection-gallery-tab="__unfiled__"]').attributes('aria-selected')).toBe('true');
     expect(listedTitles(wrapper)).toEqual(['Loose shelf']);
 
-    // Turning NSFW back on offers the Gallery pages again without moving the
+    // Showing hideable content again offers the Gallery pages without moving the
     // folder list the user was already looking at.
     showNsfw.value = true;
     await flushPromises();
@@ -723,7 +723,7 @@ describe('CollectionsPage Gallery pages', () => {
     await flushPromises();
 
     // With no entry page left to show, Authors is the only reachable page — the
-    // NSFW folders are gone rather than listed on a page nobody can see.
+    // Hideable folders are gone rather than listed on a page nobody can see.
     expect(wrapper.get('[data-testid="collections-page-tabs"] [data-testid="collections-kind-producer"]')
       .attributes('aria-selected')).toBe('true');
     expect(wrapper.find('[data-collection-gallery-tab="Comic"]').exists()).toBe(false);
@@ -750,7 +750,7 @@ describe('CollectionsPage Gallery pages', () => {
     await wrapper.get('[data-collection-id="1"]').trigger('click');
     await flushPromises();
 
-    // The control belongs to edit mode and sits next to the SFW switch.
+    // The control belongs to edit mode and sits next to the hideable switch.
     expect(wrapper.find('[data-testid="collection-common-tag-toggle"]').exists()).toBe(false);
     await wrapper.get('[data-testid="collections-edit-toggle"]').trigger('click');
     await flushPromises();

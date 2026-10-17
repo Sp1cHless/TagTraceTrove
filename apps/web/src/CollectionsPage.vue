@@ -5,6 +5,7 @@ import type { GalleryApi } from './api/gallery.js';
 import { showNsfw } from './stores/preferences.js';
 import EntryCard from './components/EntryCard.vue';
 import CoverComposition from './components/CoverComposition.vue';
+import AppIcon from './components/AppIcon.vue';
 import IconButton from './components/IconButton.vue';
 import PagedCardGrid from './components/PagedCardGrid.vue';
 import { useArmableAction } from './armable.js';
@@ -51,7 +52,7 @@ const kind = computed<CollectionKind>(() => activePage.value.kind);
 const activeGallery = computed<string | null | undefined>(() => activePage.value.gallery);
 const galleries = ref<GallerySummary[]>([]);
 const collections = ref<CollectionRecordDto[]>([]);
-// Reorder is a whole-kind operation even when SFW mode hides some siblings.
+// Reorder is a whole-kind operation even when hideable siblings are hidden.
 // Keep the complete ID vector separate from the visible folder records.
 const topLevelOrderIds = ref<number[]>([]);
 /** Which kind `collections` currently holds; a switch never renders the other kind's rows. */
@@ -172,7 +173,7 @@ async function load(): Promise<void> {
   const requestId = ++listRequestId.value;
   const summaryRequestId = ++childSummaryRequestId;
   if (!requestedNsfw && loadedNsfw.value === true) {
-    // Do not leave inclusive folder/member previews on screen while the SFW list is pending.
+    // Do not leave inclusive folder/member previews on screen while the visible list is pending.
     collections.value = [];
     memberEntries.value = [];
     memberProducers.value = [];
@@ -188,7 +189,7 @@ async function load(): Promise<void> {
       requestedNsfw ? Promise.resolve(null) : props.api.listCollections(requestedKind, true),
     ]);
     // A slower response from a previous Gallery kind or visibility mode must not
-    // replace the current tree (the compact child previews can contain NSFW works).
+    // replace the current tree (the compact child previews can contain hideable works).
     if (requestId !== listRequestId.value
         || requestedKind !== kind.value
         || requestedNsfw !== showNsfw.value) return;
@@ -227,8 +228,8 @@ interface CollectionGalleryTab {
 }
 
 /**
- * Entry folders are paged by the Gallery they were curated into, so an NSFW
- * Gallery page carries its folders out of SFW mode with it. A scope whose Entry
+ * Entry folders are paged by the Gallery they were curated into, so a hideable
+ * Gallery page carries its folders out of the hidden state with it. A scope whose Entry
  * type has no works left still gets a page: hiding it would strand its folders.
  */
 const galleryTabs = computed<CollectionGalleryTab[]>(() => {
@@ -273,7 +274,7 @@ function selectPage(next: CollectionPageTab): void {
   void load();
 }
 
-// Pages come and go with the SFW toggle, so the active one is re-picked whenever
+// Pages come and go with the hideable toggle, so the active one is re-picked whenever
 // it stops being offered — but never before the first page list exists, or the
 // unfiled page would win by default.
 watch(visibleGalleryTabs, (tabs) => {
@@ -883,14 +884,14 @@ onUnmounted(() => { unsubscribeReconciliation?.(); });
                 >×</button>
               </form>
             </template>
-            <button
+            <!-- A folder carries the same choice as a Gallery, in the same words and the same
+                 shield pair: the icon is the state the click leads to. -->
+            <IconButton
               data-testid="collection-nsfw-toggle"
-              class="secondary-button"
-              type="button"
+              :icon="activeCollection.nsfw ? 'unshelded' : 'shelded'"
+              :label="t(activeCollection.nsfw ? 'gallery.unshieldAction' : 'gallery.shieldAction')"
               @click="toggleNsfw"
-            >
-              {{ activeCollection.nsfw ? t('gallery.nsfwBadge') : t('gallery.sfwBadge') }}
-            </button>
+            />
           </div>
         </div>
         <p
@@ -977,7 +978,7 @@ onUnmounted(() => { unsubscribeReconciliation?.(); });
                 :asset-url="api.assetUrl"
               />
               <span class="entry-meta">
-                <strong class="t3-library-text">{{ child.title }}<span v-if="child.nsfw" class="collection-nsfw-mark"> 🔞</span></strong>
+                <strong class="t3-library-text">{{ child.title }}<AppIcon v-if="child.nsfw" class="collection-nsfw-mark" name="shelded" :size="16" /></strong>
                 <small class="entry-usage-note">
                   {{ t('collections.entryCount', { count: entryCountOf(child) }) }}
                 </small>
@@ -1111,7 +1112,7 @@ onUnmounted(() => { unsubscribeReconciliation?.(); });
               :asset-url="api.assetUrl"
             />
             <span class="entry-meta">
-              <strong class="t3-library-text">{{ record.title }}<span v-if="record.nsfw" class="collection-nsfw-mark"> 🔞</span></strong>
+              <strong class="t3-library-text">{{ record.title }}<AppIcon v-if="record.nsfw" class="collection-nsfw-mark" name="shelded" :size="16" /></strong>
               <small class="entry-usage-note">
                 {{ record.kind === 'entry'
                   ? t('collections.entryCount', { count: entryCountOf(record) })
@@ -1157,7 +1158,7 @@ onUnmounted(() => { unsubscribeReconciliation?.(); });
 
 <style scoped>
 .recent-grid-compact { grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.8rem; }
-.collection-nsfw-mark { font-size: 0.8rem; }
+.collection-nsfw-mark { display: inline-block; margin-left: 0.25rem; vertical-align: -0.15rem; color: var(--text-muted); opacity: 0.65; }
 .recent-page { display: grid; gap: 1rem; }
 .recent-toolbar { display: flex; align-items: center; gap: 1rem; }
 .recent-toolbar h2 { margin: 0; flex: 1; }

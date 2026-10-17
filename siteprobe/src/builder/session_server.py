@@ -50,6 +50,10 @@ class Session:
     directory: Path
     url: str
     mode: str = "annotate"
+    # The page as it was read, when the caller has it. A field answered in 「多个」 derives its
+    # rule from the values that were clicked, and the only way to know a rule really reads them
+    # is to run it — with the same runtime that will later execute it.
+    capture: Any = None
     # Example 2's proposals: what the tool read on this page for each field, so a
     # confirmed value keeps the rule that read it without asking for the choice again.
     applied: dict[str, Any] | None = None
@@ -156,6 +160,9 @@ def _handler_for(session: Session, token: str):
             try:
                 payload = json.loads(self.rfile.read(length).decode("utf-8"))
                 annotation = Annotation.from_json(payload)
+                annotation.fields = annotate.normalise_selected_members(
+                    annotation.fields, session.harvest, annotation.picks, session.fields,
+                    annotation.multi)
             except (json.JSONDecodeError, UnicodeDecodeError) as error:
                 self._send_json(400, {"ok": False, "error": f"bad json: {error}"})
                 return
@@ -163,10 +170,15 @@ def _handler_for(session: Session, token: str):
             # Written by the tool, into the session directory: nothing lands in a
             # download folder and nothing has to be moved afterwards.
             path = session.directory / "annotations.json"
-            hypotheses = annotate.hypotheses(
-                annotation.fields, session.harvest,
-                picks=annotation.picks, applied=session.applied,
-                fields=session.fields)
+            try:
+                hypotheses = annotate.hypotheses(
+                    annotation.fields, session.harvest,
+                    picks=annotation.picks, applied=session.applied,
+                    fields=session.fields, multi=annotation.multi,
+                    capture=session.capture)
+            except ValueError as error:
+                self._send_json(400, {"ok": False, "error": str(error)})
+                return
             path.write_text(json.dumps({
                 **annotation.to_json(),
                 "hypotheses": hypotheses,
@@ -176,8 +188,13 @@ def _handler_for(session: Session, token: str):
             # not be able to observe the answer first and read the flag as unset.
             if session.done is not None:
                 session.done.set()
+            # What the derived rules read beyond what was picked: the page says it, because
+            # "these are the authors" and "these, and the rest of the page's" are different
+            # answers and the person is the one who knows which they meant.
+            extra = [member for hypothesis in hypotheses.values()
+                     for member in (hypothesis.get("extra") or [])]
             self._send_json(200, {"ok": True, "path": str(path),
-                                  "fields": sorted(hypotheses)})
+                                  "fields": sorted(hypotheses), "extra": extra})
 
     return Handler
 

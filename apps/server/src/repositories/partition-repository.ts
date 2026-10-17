@@ -1,10 +1,11 @@
+import type { GalleryCardLayout } from '@t3/shared';
 import type { T3Database } from '../database/connection.js';
 
 /**
- * Whole-Gallery partition: every Entry of one type shares SFW/NSFW. The
- * partition row is created lazily on first toggle (default SFW). Author
- * partitioning is derived: an Author with any work in an NSFW Gallery is an
- * NSFW Author.
+ * Whole-Gallery partition: every Entry of one type is hideable or not, together (the `nsfw`
+ * column). The partition row is created lazily on first toggle (a Gallery with no row is not
+ * hideable). Author partitioning is derived: an Author with any work in a hideable Gallery is a
+ * hideable Author.
  */
 export function isNsfwGallery(database: T3Database, entryType: string): boolean {
   const row = database.prepare(
@@ -25,8 +26,56 @@ export function setGalleryPartition(
 }
 
 /**
- * One aggregate query: the set of Gallery types currently marked NSFW. The
- * caller keeps the visibility switch (show NSFW) out of the database.
+ * What layout a Gallery's cards are drawn in.
+ *
+ * The Gallery's own choice, like its hideable flag: the vertical wall, or the horizontal card with
+ * the cover on the left and the title on the right, which is what a long title needs. Anything
+ * unexpected — no row yet, an older value — reads as the vertical wall, so a Gallery with nothing
+ * stored behaves exactly as every Gallery did before this existed.
+ */
+export function galleryCardLayout(database: T3Database, entryType: string): GalleryCardLayout {
+  const row = database.prepare(
+    'SELECT card_layout FROM gallery_settings WHERE entry_type = ?',
+  ).get(entryType) as { card_layout: string } | undefined;
+  return row?.card_layout === 'horizontal' ? 'horizontal' : 'vertical';
+}
+
+/**
+ * Set one Gallery's layout, touching that column alone.
+ *
+ * A Gallery with no row yet gets one (never hideable, which is what a Gallery without a
+ * partition is), and every other Gallery keeps its own row untouched — writing the layout must
+ * never move a Gallery's hideable flag.
+ */
+export function setGalleryCardLayout(
+  database: T3Database,
+  entryType: string,
+  layout: GalleryCardLayout,
+): void {
+  database.prepare(`
+    INSERT INTO gallery_settings (entry_type, nsfw, card_layout) VALUES (?, 0, ?)
+    ON CONFLICT (entry_type) DO UPDATE SET card_layout = excluded.card_layout
+  `).run(entryType, layout);
+}
+
+/** The stored layouts of every Gallery that has one; Galleries with no row are absent. */
+export function listGalleryCardLayouts(
+  database: T3Database,
+): Array<{ type: string; layout: GalleryCardLayout }> {
+  const rows = database.prepare(`
+    SELECT entry_type AS type, card_layout AS layout
+    FROM gallery_settings
+    ORDER BY entry_type COLLATE NOCASE
+  `).all() as Array<{ type: string; layout: string }>;
+  return rows.map((row) => ({
+    type: row.type,
+    layout: row.layout === 'horizontal' ? 'horizontal' : 'vertical',
+  }));
+}
+
+/**
+ * One aggregate query: the set of Gallery types currently marked hideable. The
+ * caller keeps the visibility switch (show hideable galleries) out of the database.
  */
 export function listNsfwGalleryTypes(database: T3Database): Set<string> {
   const rows = database.prepare(
@@ -36,8 +85,8 @@ export function listNsfwGalleryTypes(database: T3Database): Set<string> {
 }
 
 /**
- * Derives Author partitioning: true when ANY work of the Author sits in an
- * NSFW Gallery.
+ * Derives Author partitioning: true when ANY work of the Author sits in a
+ * hideable Gallery.
  */
 export function authorHasNsfwWorks(
   database: T3Database,
@@ -69,7 +118,7 @@ const AUTHOR_HAS_WORK = `EXISTS (
   WHERE visible_relation.producer_id = producer.id
 )`;
 
-/** Author is NSFW when any of their works sits in an NSFW Gallery. */
+/** Author is hideable when any of their works sits in a hideable Gallery. */
 const NSFW_AUTHOR = `EXISTS (
   SELECT 1
   FROM entry_producers AS relation

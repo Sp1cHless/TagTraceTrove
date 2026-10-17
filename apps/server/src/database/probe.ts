@@ -72,7 +72,10 @@ import {
 } from '../repositories/usage-repository.js';
 import {
   authorHasNsfwWorks,
+  galleryCardLayout,
+  listGalleryCardLayouts,
   listNsfwGalleryTypes,
+  setGalleryCardLayout,
   setGalleryPartition,
 } from '../repositories/partition-repository.js';
 import {
@@ -610,8 +613,8 @@ export function runDatabaseProbe(): DatabaseProbeResult {
     });
 
     check('partition whole galleries and derive the author partition', () => {
-      // Only whole Galleries are partitioned; an Author with any work in an
-      // NSFW Gallery is an NSFW Author, and flipping the Gallery flips them.
+      // Only whole Galleries are partitioned; an Author with any work in a
+      // hideable Gallery is a hideable Author, and flipping the Gallery flips them.
       const partitionOwner=database.prepare("SELECT sync_uid AS uid,sync_version AS version FROM gallery_partition_scopes WHERE entry_type='game'").get() as {uid:string;version:number};
       setGalleryPartition(database, 'game', true);
       const nsfwTypes = listNsfwGalleryTypes(database);
@@ -623,6 +626,32 @@ export function runDatabaseProbe(): DatabaseProbeResult {
         && authorNsfw
         && !listNsfwGalleryTypes(database).has('game')
         && !authorHasNsfwWorks(database, 1, listNsfwGalleryTypes(database));
+    });
+
+    check('keep a gallery’s card layout beside its partition, not inside it', () => {
+      // The layout is a Gallery's own display choice, stored on the same row as its hideable flag.
+      // The two must not move each other: writing one column leaves the other exactly as it was,
+      // and a Gallery that never had a row reads as the vertical wall every Gallery used before.
+      const columns = database.prepare("SELECT name FROM pragma_table_info('gallery_settings')").pluck().all() as string[];
+      if (!columns.includes('card_layout')) return false;
+      if (galleryCardLayout(database, 'game') !== 'vertical') return false;
+
+      setGalleryCardLayout(database, 'game', 'horizontal');
+      const afterLayout = galleryCardLayout(database, 'game');
+      const nsfwAfterLayout = database.prepare("SELECT nsfw FROM gallery_settings WHERE entry_type='game'").pluck().get();
+      const stored = listGalleryCardLayouts(database).find((row) => row.type === 'game');
+
+      // The other direction: flipping the partition leaves the layout alone.
+      setGalleryPartition(database, 'game', true);
+      const layoutAfterPartition = galleryCardLayout(database, 'game');
+
+      // A Gallery with no row at all is the vertical wall; the default is in the table, so the
+      // reader must answer it without a row existing.
+      const noRow = galleryCardLayout(database, 'no-such-gallery');
+
+      return afterLayout === 'horizontal' && nsfwAfterLayout === 0 && stored?.layout === 'horizontal'
+        && layoutAfterPartition === 'horizontal'
+        && noRow === 'vertical';
     });
 
     check('curate collections with members and one-level nesting', () => {

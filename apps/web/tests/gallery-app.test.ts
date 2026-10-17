@@ -64,6 +64,9 @@ function createMemoryApi(options: {
     entries.map((entry) => [entry.id, authors.filter((author) => author.id === 9).map((author) => author.id)]),
   );
   let authorTags = [{ tagId: 30, name: 'Studio', normalizedName: 'studio' }];
+  // The Gallery card shape the fixture stores, exactly as the server keeps it: per Gallery, and
+  // absent until someone chooses one.
+  const cardLayoutStore: Array<{ type: string; layout: 'vertical' | 'horizontal' }> = [];
   let authorDirectories: Array<{
     id: number;
     producerId: number;
@@ -479,6 +482,14 @@ function createMemoryApi(options: {
     },
     async setGalleryPartition() {
       // The fixture never hides galleries; partition state is display-only here.
+    },
+    async listGalleryCardLayouts() {
+      return cardLayoutStore.map((row) => ({ ...row }));
+    },
+    async setGalleryCardLayout(entryType, layout) {
+      const row = cardLayoutStore.find((value) => value.type === entryType);
+      if (row) row.layout = layout;
+      else cardLayoutStore.push({ type: entryType, layout });
     },
     async recordEntryView(entryId) {
       const existing = entryUsages.find((row) => row.entryId === entryId);
@@ -2915,7 +2926,7 @@ describe('GalleryApp', () => {
     // arrow (the same control the quick page uses) rather than a `<select>` with a closed set.
     expect(typeField.element.value).toBe('Comic');
     await wrapper.get('[data-testid="import-type-toggle"]').trigger('click');
-    // The list follows the app's SFW preference, like the sidebar and the quick page's own field —
+    // The list follows the app's visibility preference, like the sidebar and the quick page's own field —
     // and a Gallery that is not listed is still reachable by typing its name, which is the whole
     // reason this is an input.
     expect(wrapper.findAll('[data-testid="import-type-list"] [data-gallery-option]')
@@ -4089,6 +4100,83 @@ describe('GalleryApp', () => {
     expect(wrapper.get('[data-testid="active-gallery-title"]').text()).toBe('game');
     expect(wrapper.find('[data-entry-id="1"]').exists()).toBe(false);
     expect(wrapper.find('[data-entry-id="2"]').exists()).toBe(true);
+  });
+
+  it('transient error expires without leaving the app and gives a replacement its full duration', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const wrapper = mount(GalleryApp, { props: { api: createMemoryApi() } });
+    try {
+      await flushPromises();
+      await openGalleryType(wrapper);
+      const api = wrapper.props('api');
+      vi.spyOn(api, 'getEntry').mockRejectedValueOnce(new Error('Entry not found'));
+      await wrapper.get('[data-entry-id="1"]').trigger('click');
+      await flushPromises();
+      expect(wrapper.get('.error-message').text()).toBe('Entry not found');
+      await vi.advanceTimersByTimeAsync(4_000);
+      vi.spyOn(api, 'getEntry').mockRejectedValueOnce(new Error('Another read failed'));
+      await wrapper.get('[data-entry-id="2"]').trigger('click');
+      await flushPromises();
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(wrapper.get('.error-message').text()).toBe('Another read failed');
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(wrapper.find('.error-message').exists()).toBe(false);
+    } finally {
+      wrapper.unmount();
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('deletion refresh ignores an older detail failure and does not reread a deleting Entry', async () => {
+    const api = createMemoryApi();
+    const wrapper = mount(GalleryApp, { props: { api,
+      offlineState: { mode: 'online', lastFallbackAt: null, offlineCopyRevision: '1' } } });
+    await flushPromises();
+    await openGalleryType(wrapper);
+    await openEntryForEditing(wrapper, 1);
+    let rejectOldRead!: (cause: Error) => void;
+    const read = vi.spyOn(api, 'getEntry').mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectOldRead = reject; }));
+    await wrapper.setProps({ offlineState: { mode: 'online', lastFallbackAt: null, offlineCopyRevision: '2' } });
+    await flushPromises();
+    expect(read).toHaveBeenCalledOnce();
+    let finishDelete!: () => void;
+    const remove = api.deleteEntry.bind(api);
+    api.deleteEntry = vi.fn(async id => {
+      await remove(id);
+      await new Promise<void>(resolve => { finishDelete = resolve; });
+    });
+    const button = wrapper.get('[data-testid="delete-entry"]');
+    await button.trigger('click');
+    await button.trigger('click');
+    await flushPromises();
+    await wrapper.setProps({ offlineState: { mode: 'online', lastFallbackAt: null, offlineCopyRevision: '3' } });
+    await flushPromises();
+    expect(read).toHaveBeenCalledOnce();
+    rejectOldRead(new Error('Entry not found'));
+    finishDelete();
+    await flushPromises();
+    expect(wrapper.find('.error-message').exists()).toBe(false);
+    expect(wrapper.find('[data-entry-id="1"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="active-gallery-title"]').text()).toBe('game');
+    wrapper.unmount();
+    vi.restoreAllMocks();
+  });
+
+  it('deletion refresh still reports a genuine delete failure and leaves the Entry available', async () => {
+    const api = createMemoryApi();
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await openEntryForEditing(wrapper, 1);
+    api.deleteEntry = vi.fn().mockRejectedValue(new Error('Deletion refused'));
+    const button = wrapper.get('[data-testid="delete-entry"]');
+    await button.trigger('click');
+    await button.trigger('click');
+    await flushPromises();
+    expect(wrapper.get('.error-message').text()).toBe('Deletion refused');
+    expect(wrapper.find('[data-testid="delete-entry"]').exists()).toBe(true);
+    expect((await api.getEntry(1)).id).toBe(1);
+    wrapper.unmount();
   });
 
   it('keeps Tag mutation and dragging controls out of read mode', async () => {
@@ -6491,7 +6579,11 @@ describe('Facet filter bar', () => {
     // Edit mode is on: the title input carries the created name.
     expect((detail.get('input[name="collectionTitle"]').element as HTMLInputElement).value)
       .toBe('Read list');
-    expect(wrapper.get('[data-testid="collection-nsfw-toggle"]').text()).toBe('SFW');
+    // The folder's hideable toggle is the same shield pair as the Gallery's, and a fresh folder is
+    // not hideable: the icon shows the state the click leads to, the label says the click.
+    const hideable = wrapper.get('[data-testid="collection-nsfw-toggle"]');
+    expect(hideable.attributes('aria-label')).toBe('Make this gallery hideable');
+    expect(hideable.find('svg.app-icon').exists()).toBe(true);
   });
   it('returns from a Collection Entry to the exact collection and walks the top-bar Back hierarchy', async () => {
     const api = createMemoryApi();
@@ -7366,7 +7458,7 @@ describe('Home page', () => {
     expect(wrapper.find('[data-testid="add-entry-page"]').exists()).toBe(true);
   });
 
-  it('distinguishes an NSFW-filtered library from a genuinely empty library', async () => {
+  it('distinguishes a hideable-filtered library from a genuinely empty library', async () => {
     showNsfw.value = false;
     const api = createMemoryApi();
     const listGalleries = api.listGalleries.bind(api);
@@ -7375,7 +7467,8 @@ describe('Home page', () => {
     await flushPromises();
 
     expect(wrapper.find('[data-testid="home-empty"]').exists()).toBe(false);
-    expect(wrapper.get('[data-testid="home-nsfw-hidden"]').text()).toContain('hidden by your NSFW setting');
+    expect(wrapper.get('[data-testid="home-nsfw-hidden"]').text())
+      .toContain('hidden by your hideable-galleries setting');
 
     await wrapper.get('[data-testid="home-show-nsfw"]').trigger('click');
     await flushPromises();
@@ -7564,6 +7657,73 @@ describe('Card grid pagination', () => {
     }
   });
 
+  it('keeps the horizontal card shape with the Gallery that was given it', async () => {
+    const api = createLargeApi(4);
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-gallery-type="game"]').trigger('click');
+    await flushPromises();
+
+    // No Gallery has been given a shape yet, so everything shows the wall.
+    expect(wrapper.get('[data-testid="entry-list"]').attributes('data-layout')).toBe('vertical');
+    expect(wrapper.findAll('[data-testid="entry-list"] .entry-card.is-horizontal')).toHaveLength(0);
+
+    await wrapper.get('[data-testid="gallery-card-layout-toggle"]').trigger('click');
+    await flushPromises();
+
+    expect(await api.listGalleryCardLayouts()).toEqual([{ type: 'game', layout: 'horizontal' }]);
+    expect(wrapper.get('[data-testid="entry-list"]').attributes('data-layout')).toBe('horizontal');
+    expect(wrapper.findAll('[data-testid="entry-list"] .entry-card.is-horizontal').length).toBeGreaterThan(0);
+
+    // It belongs to that Gallery alone: another one keeps the wall it always had.
+    await wrapper.get('[data-gallery-type="manga"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="entry-list"]').attributes('data-layout')).toBe('vertical');
+    expect(wrapper.findAll('[data-testid="entry-list"] .entry-card.is-horizontal')).toHaveLength(0);
+
+    // And it survives leaving and coming back, which is the whole point of storing it.
+    await wrapper.get('[data-gallery-type="game"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="entry-list"]').attributes('data-layout')).toBe('horizontal');
+
+    // Toggling again is the wall, and the server is told each time.
+    await wrapper.get('[data-testid="gallery-card-layout-toggle"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="entry-list"]').attributes('data-layout')).toBe('vertical');
+    expect(await api.listGalleryCardLayouts()).toEqual([{ type: 'game', layout: 'vertical' }]);
+    wrapper.unmount();
+  });
+
+  it('packs the horizontal grid at two cards a row and doubles the page rows', async () => {
+    const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 900 });
+    let wrapper: ReturnType<typeof mount> | undefined;
+    try {
+      const api = createLargeApi(50);
+      wrapper = mount(GalleryApp, { props: { api } });
+      await flushPromises();
+      await wrapper.get('[data-gallery-type="game"]').trigger('click');
+      await flushPromises();
+
+      // The wall: six columns × the five configured rows.
+      expect(wrapper.findAll('[data-testid="entry-list"] [data-entry-id]')).toHaveLength(30);
+
+      await wrapper.get('[data-testid="gallery-card-layout-toggle"]').trigger('click');
+      await flushPromises();
+
+      const grid = wrapper.get('[data-testid="entry-list"]');
+      expect(grid.classes()).toContain('is-horizontal');
+      expect(grid.attributes('data-layout')).toBe('horizontal');
+      // One card on each side of the centre axis, and twice the rows — so the page carries a
+      // comparable number of works rather than a quarter of them.
+      expect(wrapper.findAll('[data-testid="entry-list"] [data-entry-id]')).toHaveLength(20);
+    } finally {
+      wrapper?.unmount();
+      if (originalClientWidth) Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth);
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth');
+    }
+  });
+
   it('returns from a phone Gallery Entry to page five instead of clamping to the desktop page count', async () => {
     const originalWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
     const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
@@ -7597,7 +7757,7 @@ describe('Card grid pagination', () => {
     }
   });
 
-  it('does not show the previous Gallery entries when switching to a Gallery fails to load', async () => {
+  it('Gallery switching keeps the current Gallery when the destination fails to load', async () => {
     const api = createMemoryApi();
     const query = api.queryEntryPage.bind(api);
     api.queryEntryPage = vi.fn(async (input) => {
@@ -7613,7 +7773,88 @@ describe('Card grid pagination', () => {
     await wrapper.get('[data-gallery-type="manga"]').trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('Gallery unavailable');
-    expect(wrapper.find('[data-testid="entry-list"] [data-entry-id]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="active-gallery-title"]').text()).toBe('game');
+    expect(wrapper.find('[data-entry-id="1"]').exists()).toBe(true);
+    expect(wrapper.find('[data-entry-id="3"]').exists()).toBe(false);
+    expect(wrapper.get('.content-panel').attributes('aria-busy')).toBe('false');
+  });
+
+  it('Gallery switching shows cards before slow filters with a disabled filter shell', async () => {
+    const api = createMemoryApi();
+    const query = api.queryEntryPage.bind(api);
+    const options = api.listFacetFilterOptions.bind(api);
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-gallery-type="game"]').trigger('click');
+    await flushPromises();
+    const originalGrid = wrapper.get('[data-testid="entry-list"]').element;
+    const originalFilters = wrapper.get('.gallery-filter-wrap').text();
+    let finishEntries!: () => void;
+    let finishFilters!: () => void;
+    api.queryEntryPage = vi.fn(async input => {
+      const result = await query(input);
+      if (input.entryType === 'manga') await new Promise<void>(resolve => { finishEntries = resolve; });
+      return result;
+    });
+    api.listFacetFilterOptions = vi.fn(async type => {
+      const result = await options(type);
+      if (type === 'manga') await new Promise<void>(resolve => { finishFilters = resolve; });
+      return result;
+    });
+    await wrapper.get('[data-gallery-type="manga"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="active-gallery-title"]').text()).toBe('game');
+    expect(wrapper.get('[data-testid="entry-list"]').element).toBe(originalGrid);
+    expect(wrapper.get('.gallery-filter-wrap').text()).toBe(originalFilters);
+    expect(wrapper.find('[data-entry-id="1"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="home-page"]').exists()).toBe(false);
+    expect(wrapper.get('.content-panel').attributes('aria-busy')).toBe('true');
+    finishEntries();
+    await flushPromises();
+    expect(wrapper.get('[data-testid="active-gallery-title"]').text()).toBe('manga');
+    expect(wrapper.find('[data-entry-id="3"]').exists()).toBe(true);
+    expect(wrapper.find('[data-entry-id="1"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="facet-filter-bar"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.get('[data-testid="facet-filter-bar"]').attributes('aria-busy')).toBe('true');
+    expect(wrapper.get('.content-panel').attributes('aria-busy')).toBe('false');
+    finishFilters();
+    await flushPromises();
+    expect(wrapper.get('[data-testid="active-gallery-title"]').text()).toBe('manga');
+    expect(wrapper.find('[data-entry-id="3"]').exists()).toBe(true);
+    expect(wrapper.find('[data-entry-id="1"]').exists()).toBe(false);
+    expect(wrapper.get('.content-panel').attributes('aria-busy')).toBe('false');
+  });
+
+  it('Gallery switching ignores an older response after a newer choice or leaving for Home', async () => {
+    const api = createMemoryApi();
+    const query = api.queryEntryPage.bind(api);
+    const wrapper = mount(GalleryApp, { props: { api } });
+    await flushPromises();
+    await wrapper.get('[data-gallery-type="game"]').trigger('click');
+    await flushPromises();
+    let finish!: () => void;
+    api.queryEntryPage = vi.fn(async input => {
+      const result = await query(input);
+      if (input.entryType === 'manga') await new Promise<void>(resolve => { finish = resolve; });
+      return result;
+    });
+    await wrapper.get('[data-gallery-type="manga"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-gallery-type="game"]').trigger('click');
+    await flushPromises();
+    finish();
+    await flushPromises();
+    expect(wrapper.get('[data-testid="active-gallery-title"]').text()).toBe('game');
+    expect(wrapper.find('[data-entry-id="3"]').exists()).toBe(false);
+    await wrapper.get('[data-gallery-type="manga"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="sidebar-home"]').trigger('click');
+    await flushPromises();
+    finish();
+    await flushPromises();
+    expect(wrapper.find('[data-testid="home-page"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="active-gallery-title"]').exists()).toBe(false);
+    expect(wrapper.get('.content-panel').attributes('aria-busy')).toBe('false');
   });
 
   it('requests the current Gallery page from the server', async () => {

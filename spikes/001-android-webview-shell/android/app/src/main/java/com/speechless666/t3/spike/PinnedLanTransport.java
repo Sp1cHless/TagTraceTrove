@@ -111,11 +111,14 @@ public final class PinnedLanTransport {
      * re-checked. Only pairing and write confirmations use this.
      */
     public Result requestFreshConnection(String path, String method, String contentType, byte[] body, String token) throws Exception {
+        return requestFreshConnection(path, method, contentType, body, token, null, null);
+    }
+    public Result requestFreshConnection(String path, String method, String contentType, byte[] body, String token, PairingDiagnostics.Trace trace, String phase) throws Exception {
         synchronized (this) {
             if (readClient != null) readClient.connectionPool().evictAll();
             if (healthProbeClient != null) healthProbeClient.connectionPool().evictAll();
         }
-        return request(path,method,contentType,body,token);
+        return request(path,method,contentType,body,token,trace,phase);
     }
     /** Package-private test seam: how many read connections are held open right now. */
     int pooledReadConnections() {
@@ -124,14 +127,25 @@ public final class PinnedLanTransport {
             + (health == null ? 0 : health.connectionPool().connectionCount());
     }
     public Result request(String path, String method, String contentType, byte[] body, String token) throws Exception {
+        return request(path, method, contentType, body, token, null, null);
+    }
+    public Result request(String path, String method, String contentType, byte[] body, String token, PairingDiagnostics.Trace trace, String phase) throws Exception {
         if (!path.startsWith("/api/") || path.contains("\\") || path.contains("#") || path.contains("\r") || path.contains("\n")) throw new SecurityException("API path required");
         URI target = URI.create(endpoint).resolve(path);
         if (!target.toString().startsWith(endpoint + "/api/") || !target.getRawAuthority().equals(URI.create(endpoint).getRawAuthority())) throw new SecurityException("Off-origin request");
         if (!method.matches("GET|POST|PUT|PATCH|DELETE|HEAD")) throw new SecurityException("Method rejected");
         if (token != null && !token.matches("[A-Za-z0-9_-]{43}")) throw new SecurityException("Invalid authorization");
         okhttp3.OkHttpClient client = clientFor(path,method);
+        if (trace != null) client = client.newBuilder().eventListener(new okhttp3.EventListener() {
+            @Override public void connectStart(okhttp3.Call call, java.net.InetSocketAddress address, java.net.Proxy proxy) { trace.stage(phase + "_connect"); }
+            @Override public void secureConnectStart(okhttp3.Call call) { trace.stage(phase + "_tls"); }
+            @Override public void secureConnectEnd(okhttp3.Call call, okhttp3.Handshake handshake) { trace.passed(phase + "_tls"); }
+            @Override public void requestHeadersStart(okhttp3.Call call) { trace.stage(phase + "_send"); }
+            @Override public void responseHeadersEnd(okhttp3.Call call, okhttp3.Response response) { trace.http(phase, response.code(), response.header("Date")); }
+        }).build();
         for (int redirect = 0; redirect < 5; redirect++) {
             okhttp3.Request.Builder builder = new okhttp3.Request.Builder().url(target.toString());
+            if (trace != null) builder.header("X-T3-Pairing-Attempt", trace.id());
             if (token != null) builder.header("Authorization","Bearer " + token);
             okhttp3.RequestBody requestBody = body == null && !("POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method)) ? null
                 : okhttp3.RequestBody.create(body == null ? new byte[0] : body,contentType == null ? null : okhttp3.MediaType.parse(contentType));

@@ -781,15 +781,27 @@ def test_a_field_that_keeps_only_some_members_says_so_on_the_page():
 def test_an_ambiguous_rule_is_recorded_but_never_proposed():
     """Measured: a candidate from `<a>` carries the selector `a`, which matches every link,
     so it reads the first one. The rule is *recorded* — Phase 5's validation is what judges
-    it, and a person may still need it — but it is not what the page proposes, because a
-    proposal that reads another element's value is how 登場人物 came to be filled with the
-    works block."""
-    result = harvest(capture_of(PAGE))
+    it, and a person may still need it — but what the page *proposes* has to read the value
+    the person picked: a proposal that reads another element's value is how 登場人物 came to
+    be filled with the works block.
+
+    What it proposes now is the rule that names *which* of them (`index`), not the block of
+    all three: the block reads `One Two Three` for a person who picked `One`. This assertion
+    used to demand no proposal at all, which the code never promised — the ranking's job is
+    to pick the rule that reads the annotated value, and an indexed rule does exactly that.
+    """
+    capture = capture_of(PAGE)
+    result = harvest(capture)
     link = next(c for c in result.candidates if c.value == "One")
     recorded = [source.rule for source in link.sources if source.rule]
 
     assert any(rule["matches"] > 1 for rule in recorded), "the ambiguity is recorded"
-    assert rule_for(link) is None, "and it is not what a person is shown"
+    proposed = rule_for(link)
+    assert proposed is not None, "a rule that reads this value is offered"
+    assert not proposed.get("list"), "not the whole block: that reads a different value"
+    from src.builder.learn import read_rule
+
+    assert read_rule(proposed, capture) == "One", "and what it is shown reads what was picked"
 
 
 def test_a_unique_rule_says_it_matches_one_element():
@@ -880,12 +892,24 @@ def test_an_id_minted_for_one_page_is_not_an_identity():
 
 def test_two_lists_sharing_a_class_become_two_collections():
     """Which is what the fix above is for: one selector over both lists read the artist
-    as the series, and the series could not be learned because of it."""
-    result = harvest(capture_of(SIBLING_LISTS))
-    selectors = {candidate.context["selector"] for candidate in result.by_kind("collection")}
+    as the series, and the series could not be learned because of it.
 
-    assert "#series li" in selectors
-    assert "ul.comma-list li" not in selectors
+    Asserted against what each group *reads*, not the element level its selector happens to be
+    written over — `#series a` and `#series li` read the same three values, and the id is what
+    names one list. The shared class spans both lists, so a group over it holds both; junk
+    groups are candidates too (the samples discard them), so what is checked is that it is
+    honest about holding both and that the series still has a name of its own.
+    """
+    result = harvest(capture_of(SIBLING_LISTS))
+    groups = {candidate.context["selector"]: candidate.context["members"]
+              for candidate in result.by_kind("collection")}
+    named = [members for selector, members in groups.items() if selector.startswith("#series")]
+    merged = [members for selector, members in groups.items() if selector.startswith("ul.comma-list")]
+
+    assert named, "the series has a name of its own, and the id is what names it"
+    assert named[0] == ["boku no kokoro", "meitantei precure", "bang dream"]
+    assert merged and merged[0] == ["cloth tsugutoshi", "boku no kokoro",
+                                    "meitantei precure", "bang dream"]
 
 
 def test_a_collection_candidate_carries_every_member():
@@ -931,19 +955,27 @@ def test_an_element_that_declares_what_it_is_is_named_by_that():
             '<span itemprop="author" data-type="author">'
             '<a class="btn btn-sm" href="/s?q=a">作者名</a></span>'
             '</div></body></html>')
-    result = harvest(capture_of(html))
-    author = next(c for c in result.candidates if c.value == "作者名")
-    # The rules that would read one value, which is what a scalar field can use. The block
-    # also offers itself as a group (`list`), which is how a field with several values is
-    # marked — junk groups are candidates too, and the samples are what discard them.
-    scalar = {source.rule["select"] for source in author.sources
-              if source.rule and not source.rule.get("list")}
+    from src.builder.learn import read_rule
 
-    # `itemprop="author"` is on the works block too, and on this page that variant reads
-    # 作品名 — so it is rejected for the same reason it was rejected on the real album:
-    # not because it matches more elements, but because it reads a different value.
+    capture = capture_of(html)
+    result = harvest(capture)
+    author = next(c for c in result.candidates if c.value == "作者名")
+    # The rules that would read one value, which is what a single-value answer can use — and
+    # only the ones a person could be shown: a rule measured to read a different value here is
+    # recorded but never proposed. The block also offers itself as a group (`list`), which is
+    # how a field with several values is marked; junk groups are candidates too, and the
+    # samples are what discard them.
+    offered = [source.rule for source in author.sources
+               if source.rule and not source.rule.get("list") and not source.rule.get("conflict")]
+    scalar = {rule["select"] for rule in offered}
+
+    # `itemprop="author"` is on the works block too, and that variant reads 作品名 — so what
+    # matters is what each rule *reads*, not the selector's own matches: an indexed rule over
+    # it names this block (the second) and reads the author, which is why a member can be
+    # named by its position. The variant that reads the works block is refused either way.
     assert 'span[data-type="author"] a' in scalar
-    assert 'span[itemprop="author"] a' not in scalar
+    assert offered and all(read_rule(rule, capture) == "作者名" for rule in offered)
+    assert read_rule(rule_for(author, kind="multi"), capture) == "作者名"
 
 
 def test_a_cover_inside_a_named_block_beats_a_shared_declaration():

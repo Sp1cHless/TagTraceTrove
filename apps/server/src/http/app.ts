@@ -47,6 +47,8 @@ import {
   createCollectionRequestSchema,
   createTemporaryCollectionRequestSchema,
   temporaryCollectionResponseSchema,
+  galleryCardLayoutRequestSchema,
+  galleryCardLayoutsResponseSchema,
   galleryPartitionRequestSchema,
   syncGalleryPartitionContextSchema,
   syncEntryRatingLayoutContextSchema,
@@ -294,7 +296,14 @@ import {
   setProducerRating,
 } from '../repositories/rating-repository.js';
 import { likeEntry, recordEntryView } from '../repositories/usage-repository.js';
-import { readNavigationCounts, setGalleryPartition } from '../repositories/partition-repository.js';
+import {
+  galleryCardLayout,
+  isNsfwGallery,
+  listGalleryCardLayouts,
+  readNavigationCounts,
+  setGalleryCardLayout,
+  setGalleryPartition,
+} from '../repositories/partition-repository.js';
 import {
   listAuthorAliasGroups,
   writeAuthorAliasGroup,
@@ -864,13 +873,27 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     if (!tooling.ok) {
       return context.json(errorPayload('CONFLICT', tooling.detail ?? 'SiteProbe is unavailable'), 503);
     }
-    // One crawl at a time: two runs of one site would race over the same listing directory and the
-    // same crawl state, and the tool is written for a person doing one thing at a time. The running
-    // run's id is in the message so a caller can follow it instead.
-    const running = siteprobeJobs.list().find((job) => job.status === 'running');
+    // Imports share export/crawl files, so only one export writer may run at once. Builders use
+    // their own capture sessions and temporary probes: waiting on an annotation must not block
+    // an import through an already installed adapter. Sign-ins still need exclusive profile use.
+    const importing = 'input' in request || 'selection' in request;
+    const running = siteprobeJobs.list().find((job) => job.status === 'running'
+      && !(importing && job.command === 'build')
+      && !('build' in request && (job.command === 'run' || job.command === 'selection')));
     if (running) {
+      let logPath: string | null = null;
+      try {
+        logPath = await writeSiteprobeErrorLog(dataDir, {
+          kind: 'run-conflict',
+          context: { request, blockingRun: running },
+          environment: { tool: tooling.tool, python: tooling.python, home: tooling.home },
+        });
+      } catch {
+        // Keep the conflict and its recovery information even if diagnostics cannot be written.
+      }
       return context.json(
-        errorPayload('CONFLICT', `another SiteProbe run is still going: ${running.id}`), 409);
+        errorPayload('CONFLICT', `another SiteProbe run is still going: ${running.id}`,
+          { runId: running.id, logPath }), 409);
     }
     return context.json(siteprobeRunSchema.parse(siteprobeJobs.start(request)), 201);
   });
@@ -943,8 +966,12 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
   });
 
   app.get('/api/taxonomy-aliases', (context) => {
-    const { vocabulary } = taxonomyAliasesQuerySchema.parse(context.req.query());
-    return context.json(taxonomyAliasSchema.array().parse(listTaxonomyAliases(database, vocabulary)));
+    const { vocabulary, includeTags } = taxonomyAliasesQuerySchema.parse(context.req.query());
+    const aliases = listTaxonomyAliases(database, vocabulary);
+    // 1.0.14's frozen app rejects tagId in its strict alias schema. A catalog is an explicit
+    // extension of this response, not a change to the response an installed app already knows.
+    return context.json(taxonomyAliasSchema.array().parse(includeTags === '1'
+      ? aliases : aliases.filter((alias) => alias.tagId === undefined)));
   });
 
   app.post('/api/taxonomy-aliases', async (context) => {
@@ -1270,6 +1297,24 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
     return context.json(syncGalleryPartitionContextSchema.parse({...getSyncIdentity(database),entryType,...owner,nsfw:owner.nsfw===1,...(predecessor ? {predecessor} : {})}));
   });
 
+  /**
+   * A Gallery's card layout, on its own endpoints.
+   *
+   * Deliberately not folded into `gallerySummarySchema` / the partition route: those shapes travel
+   * to an installed app, and a new key in a strict schema is a parse failure there rather than a
+   * field it can ignore.
+   */
+  app.get('/api/galleries/card-layouts', (context) => context.json(
+    galleryCardLayoutsResponseSchema.parse({ layouts: listGalleryCardLayouts(database) }),
+  ));
+
+  app.put('/api/galleries/:entryType/card-layout', async (context) => {
+    const { entryType } = entryTypeParamsSchema.parse({ entryType: context.req.param('entryType') });
+    const input = await parseJson(context.req.raw, galleryCardLayoutRequestSchema);
+    setGalleryCardLayout(database, entryType, input.layout);
+    return context.json(mutationSuccessResponseSchema.parse({ ok: true }));
+  });
+
   app.put('/api/galleries/:entryType/partition', async (context) => {
     const { entryType } = entryTypeParamsSchema.parse({ entryType: context.req.param('entryType') });
     const input = await parseJson(context.req.raw, galleryPartitionRequestSchema);
@@ -1360,7 +1405,13 @@ export function createApiApp(database: T3Database, options: ApiAppOptions = {}):
 
   app.post('/api/entries/query', async (context) => {
     const input = await parseJson(context.req.raw, entryPageQueryRequestSchema);
-    return context.json(entryPageResponseSchema.parse(queryEntryPage(database, input)));
+    const page = queryEntryPage(database, input);
+    // A new desktop and an installed 1.0.14 app can share this server. Only the new client asks
+    // for cover text; adding the key unconditionally breaks the old app's strict entry schema.
+    if (context.req.query('coverText') !== '1') {
+      for (const entry of page.items) delete entry.coverText;
+    }
+    return context.json(entryPageResponseSchema.parse(page));
   });
 
   // One interface for the sidebar's visibility-aware numbers.

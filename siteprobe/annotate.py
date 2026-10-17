@@ -116,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
         result, root = record(capture, replay)
         print(f"=== replay {capture.final_url or capture.url}")
         report(result, root)
-        serve(Session(harvest=result, directory=root,
+        serve(Session(harvest=result, directory=root, capture=capture,
                       url=capture.final_url or capture.url))
         return show_annotations(root)
 
@@ -142,7 +142,7 @@ def main(argv: list[str] | None = None) -> int:
                                  for field, entry in applied.items())
             print(f"    applied from {confirm_from.name}: {readable or '(nothing)'}")
         print(f"    opening the annotation page ({mode}); submit it to continue")
-        serve(Session(harvest=result, directory=root, mode=mode, applied=applied,
+        serve(Session(harvest=result, directory=root, mode=mode, applied=applied, capture=capture,
                       url=capture.final_url or capture.url))
         exit_code = max(exit_code, show_annotations(root))
     return exit_code

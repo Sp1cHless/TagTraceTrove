@@ -395,7 +395,7 @@ export const ratingSlotsQuerySchema = z.strictObject({
 });
 
 /**
- * The sidebar's numbers under the current SFW/NSFW boundary. One interface owns
+ * The sidebar's numbers under the current hideable boundary. One interface owns
  * them so no surface re-derives "is this Author / saved work visible".
  */
 export const navigationCountsQuerySchema = z.strictObject({
@@ -586,6 +586,12 @@ export const entrySummarySchema = z.strictObject({
   uploadDate: nullableTextSchema,
   pageCount: z.number().int().nullable(),
   durationSeconds: z.number().int().nonnegative().nullable().optional(),
+  /**
+   * What this work's card shows when it has no image (`pickDefaultCoverText`). Absent rather than
+   * null in a payload that predates it, so an already-cached list still parses; the app then shows
+   * the title's first letter, which is what every card showed before.
+   */
+  coverText: nullableTextSchema.optional(),
   viewCount: z.number().int().min(0),
   likeCount: z.number().int().min(0),
   lastViewedAt: nullableTextSchema,
@@ -617,12 +623,34 @@ export const galleryOrderResponseSchema = z.strictObject({
 export const gallerySummarySchema = z.strictObject({
   type: requiredTextSchema,
   entryCount: z.number().int().positive(),
-  // Whole-Gallery SFW/NSFW partition; Authors inherit from their works.
+  // Whole-Gallery hideable partition (the `nsfw` flag); Authors inherit from their works.
   nsfw: z.boolean(),
 });
 
 export const galleryPartitionRequestSchema = z.strictObject({
   nsfw: z.boolean(),
+});
+
+/**
+ * How a Gallery's cards are laid out.
+ *
+ * A choice of the Gallery rather than of the view (`vertical` is what every Gallery looked like
+ * before this existed), so it is read and written on its own endpoints instead of riding along in
+ * `gallerySummarySchema`: that summary travels to an installed app, whose schemas are strict, and a
+ * new key there is a parse failure for it rather than a new field to ignore.
+ */
+export const galleryCardLayoutSchema = z.enum(['vertical', 'horizontal']);
+export type GalleryCardLayout = z.infer<typeof galleryCardLayoutSchema>;
+
+export const galleryCardLayoutRequestSchema = z.strictObject({
+  layout: galleryCardLayoutSchema,
+});
+
+export const galleryCardLayoutsResponseSchema = z.strictObject({
+  layouts: z.array(z.strictObject({
+    type: requiredTextSchema,
+    layout: galleryCardLayoutSchema,
+  })),
 });
 
 export const createEntryContentRequestSchema = z.strictObject({
@@ -889,7 +917,7 @@ export const producerSummarySchema = z.strictObject({
   viewCount: z.number().int().min(0),
   likeCount: z.number().int().min(0),
   lastViewedAt: nullableTextSchema,
-  // Derived: any work of the Author sits in an NSFW Gallery.
+  // Derived: any work of the Author sits in a hideable Gallery.
   nsfw: z.boolean(),
 });
 
@@ -960,6 +988,8 @@ export const taxonomyAliasSchema = z.strictObject({
   normalizedAlias: requiredTextSchema,
   canonicalName: taxonomyCanonicalSchema,
   normalizedCanonical: taxonomyCanonicalSchema,
+  /** A row for a Tag in the library rather than for a stored mapping; it has no alias to delete. */
+  tagId: apiIdSchema.nullable().optional(),
 });
 
 export const upsertTaxonomyAliasRequestSchema = z.strictObject({
@@ -1018,6 +1048,8 @@ export const importTaxonomyAliasesRequestSchema = z.strictObject({
 
 export const taxonomyAliasesQuerySchema = z.strictObject({
   vocabulary: taxonomyVocabularySchema.optional(),
+  /** New clients opt into library-tag catalog rows; installed older clients keep alias-only DTOs. */
+  includeTags: z.enum(['0', '1']).optional(),
 });
 
 const mergeWorkCountSchema = z.number().int().nonnegative();

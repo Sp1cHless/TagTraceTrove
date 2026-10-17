@@ -160,12 +160,12 @@ Each repository owns one concern; routes and the UI never touch SQLite directly.
   Gallery derivation, so a value always belongs to the partition its author currently sits in.
 - `usage-repository.ts` — lazily creates each Entry's `entry_usage` row, records views and likes, returns the updated
   record; Producer aggregates are composed at read time.
-- `partition-repository.ts` — reads and flips the per-Gallery SFW/NSFW flags and annotates Gallery/Author summaries.
+- `partition-repository.ts` — reads and flips the per-Gallery hideable flag (the `nsfw` column) and annotates Gallery/Author summaries.
 - `collection-repository.ts` — manages Collections and their membership (two kinds, one-level nesting for entry folders,
-  folder-level NSFW, per-kind ordering, member composition with preview refs and covers). Collection cards prefer each
+  folder-level hideable flag, per-kind ordering, member composition with preview refs and covers). Collection cards prefer each
   work's primary cover, fall back to its first preview, and use the canonical paged Entry query to repair empty/stale
   nested-folder summaries when a parent folder is opened; count/preview fallbacks prevent a stale zero from hiding known
-  members. Collection list requests are generation- and visibility-guarded; switching from NSFW-visible to SFW clears
+  members. Collection list requests are generation- and visibility-guarded; switching from showing hideable folders to hiding them clears
   inclusive folder/member previews immediately, then rejects late requests, so an in-flight response cannot repopulate
   hidden content.
 - `template-export.ts` — turns each applied layout/tag layout into the Gallery's canonical template files under
@@ -274,7 +274,7 @@ the visible author count. These common actions do not require dialogs.
 two explicit filter groups: `Author tags` queries the independent Producer Tag vocabulary, while `Works contain tags`
 queries Entry Tags without copying them onto the Author. Multiple work Tags must coexist on one related Entry. Both
 groups combine through `POST /api/producers/query`; filter options come from `/api/producers/filter-options` and respect
-the current SFW/NSFW visibility boundary.
+the current hideable visibility boundary.
 
 ## 9. Author and Directory projection
 
@@ -353,8 +353,8 @@ Collections (`010_collections.sql`, Gallery scope added by `017_collection_galle
   `producer` collections (flat).
 - The collection tree is compact: each node returns filtered counts and at most three cover-preview members. Opening a
   node pages members independently through the Entry or Producer query contract.
-- A **folder-level NSFW switch** hides the entire folder regardless of its members' own states; SFW mode also filters
-  NSFW members from previews, counts, and pages.
+- A **folder-level hideable switch** hides the entire folder regardless of its members' own states; hiding those folders also filters
+  hideable members from previews, counts, and pages.
 - A folder's edit view can put one Tag on every work it holds (child folders included) through
   `POST /api/collections/:collectionId/tags`, reusing each Gallery's own placement rule for that name; it reports how
   many works were tagged, already carried it, or could not take it because their Gallery has no structure yet.
@@ -367,7 +367,7 @@ Producer folders are unaffected — never Gallery-scoped, so an Author's menu ke
 
 **Gallery scope.** Entry folders are curated onto one Gallery page: `collections.gallery_type` names it. The Collections
 page is ONE flat row of pages — every Gallery, then "Unfiled" when such folders exist, then Authors last — so there is no
-Works/Authors level above the Galleries. Hiding an NSFW Gallery in SFW mode therefore takes its page and its folders with
+Works/Authors level above the Galleries. Hiding such a Gallery therefore takes its page and its folders with
 it. When every Gallery page is hidden, Authors is the only page left and the page list hands over to it. Folders whose
 members span Galleries, or that have no members yet, stay unfiled (`gallery_type` is NULL) and appear on their own
 "Unfiled" page, which no Gallery partition can hide; the migration backfills existing folders from their members and
@@ -404,7 +404,7 @@ same way; rows written before the column read as unfiled.
 
 - `RecentViewPage.vue` groups the current mode by Gallery with browser-style tabs whose active edge joins the content
   panel. It opens in ★ Last-viewed mode by default, hides works with no view record at all, shows at most 72 cards
-  (about three pages), and removes every NSFW Gallery tab while Show NSFW is off.
+  (about three pages), and removes every hideable Gallery tab while hideable galleries are hidden.
 - `ViewLaterPage.vue` uses the same shell and adds independent Entries/Authors pages. Membership is library data:
   `011_view_later.sql` and `012_view_later_producers.sql` create ordered Entry and Producer lists with unique membership
   and `ON DELETE CASCADE`. `GET /api/view-later` returns both authorities; idempotent PUT/DELETE routes mutate one Entry
@@ -419,30 +419,30 @@ same way; rows written before the column read as unfiled.
   unrelated renders. The usage switches are **toggles**: clicking the active mode again exits it. Their compact card
   grids use bounded card geometry so media cannot escape into neighboring cards.
 
-## 14. Gallery partitions (SFW / NSFW)
+## 14. Gallery partitions (hideable / not hideable)
 
-`gallery_settings` (`009_gallery_partitions.sql`) marks a whole Entry type (Gallery) SFW or NSFW — individual Entries are
-never partitioned, and the **default is SFW**. Author partitioning is **derived** (any work in an NSFW Gallery makes the
-Author NSFW) and flips instantly with the Gallery switch.
+`gallery_settings` (`009_gallery_partitions.sql`) marks a whole Entry type (Gallery) hideable or not hideable — individual Entries are
+never partitioned, and the **default is not hideable**. Author partitioning is **derived** (any work in a hideable Gallery makes the
+Author hideable) and flips instantly with the Gallery switch.
 
-The client's **Show NSFW** preference (localStorage `t3.showNsfw`, toggled in Settings) is a global visibility boundary:
-it hides NSFW Galleries from the sidebar and Recently viewed tabs, NSFW Authors, NSFW members/covers/counts inside
-Collections, and NSFW Works/Authors/Tags from Random pick. View later is inside the same boundary: its Entries page
-reloads with the current preference and drops both the NSFW works and their Gallery tab. Every one of these surfaces
+The client's **Show hideable galleries** preference (localStorage `t3.showNsfw`, toggled in Settings) is a global visibility boundary:
+it hides hideable Galleries from the sidebar and Recently viewed tabs, hideable Authors, hideable members/covers/counts inside
+Collections, and hideable Works/Authors/Tags from Random pick. View later is inside the same boundary: its Entries page
+reloads with the current preference and drops both the hideable works and their Gallery tab. Every one of these surfaces
 reads the stored partition flag or the server's `includeNsfw` answer — **never the Gallery type name**.
 
 - Sidebar Author and View later numbers come from the single `GET /api/navigation-counts` interface, which answers the
   same question for all of them under one boundary instead of each surface counting its own raw list. The endpoint is
-  the one place that knows an Author is NSFW when any of their works is, so the numbers cannot drift from what those
+  the one place that knows an Author is hideable when any of their works is, so the numbers cannot drift from what those
   pages list.
-- Search routes and Tag relation suggestions use their `includeNsfw` contract so tags used only by NSFW Galleries do not
+- Search routes and Tag relation suggestions use their `includeNsfw` contract so tags used only by hideable Galleries do not
   leak through visibility filters.
 - For a **Tag input** the boundary follows the **subject being edited**, not the browser-wide switch: an Entry editor
   offers only the vocabulary its own Gallery's partition can show, and an Author editor follows that Author's derived
-  partition. The global dictionary editor (Advanced editing) stays on the Show NSFW switch, because it manages the
+  partition. The global dictionary editor (Advanced editing) stays on the **Show hideable galleries** switch, because it manages the
   vocabulary itself rather than one subject.
-- A Gallery that does not exist yet is its own partition and starts SFW: nothing about a new type is inherited.
-- Turning Show NSFW off while Random results are visible clears that deal immediately.
+- A Gallery that does not exist yet is its own partition and starts not hideable: nothing about a new type is inherited.
+- Turning **Show hideable galleries** off while Random results are visible clears that deal immediately.
 
 ## 15. Global search
 
@@ -450,8 +450,8 @@ The permanent sidebar owns a compact search field. Focusing it or submitting a q
 mutually exclusive full ladder view; the page has **Entry, Tag, and Author** scopes and deliberately stays separate from
 the Gallery facet-filter state.
 
-- Entry and Author hits reuse card-style presentation and preserve the existing NSFW visibility preference. Tag search
-  sends that same preference to the server: SFW mode omits tags used only by NSFW Galleries and reports SFW-only counts
+- Entry and Author hits reuse card-style presentation and preserve the existing hideable visibility preference. Tag search
+  sends that same preference to the server: with hideable Galleries hidden it omits tags used only by them and reports counts from the visible side
   for shared tags. Tag hits open the existing cross-Gallery Tag results page.
 - Navigation into an Entry, Tag result, or Author carries the current query and scope so Back reconstructs the same
   search state instead of resetting it.
@@ -468,6 +468,20 @@ the Gallery facet-filter state.
 All work cards — Gallery grid, Author works (including Directory contents), Recently viewed, View later, Random picks,
 Collection member lists, tag results — use the shared `components/EntryCard.vue` (multi-cover perspective stack + title +
 type + optional usage note, with a `corner` slot for extra buttons). Pages must not re-implement card layout.
+
+The current Gallery grid also supports a per-Gallery **horizontal** layout: a portrait cover on the left, a title
+clamped to four lines on the right, at most two cards per row (one on narrow screens), and twice the configured rows.
+Both columns align to their own left edge. Migration `044_gallery_card_layout.sql` stores the choice in
+`gallery_settings.card_layout`; changing it does not change the Gallery's partition. This preference uses its own HTTP
+routes and is excluded from the offline snapshot and mutation journal. An offline session retains the layout already
+loaded; a cold offline start uses the vertical default, and changing the preference requires a server connection.
+When the session is already offline, layout reads and writes are rejected locally without an HTTP request.
+
+`CardCoverFallback.vue` fills an image-less card with its first readable Content, falling back to its tags, then its
+title's first letter. Source URL rows and URL-only values are skipped. `packages/shared/src/cover-text.ts` owns the
+selection and the 50-wide/100-narrow-character mixed-text budget; the component clamps the displayed text to four
+lines. Online pages request `coverText=1`; an older installed app receives the original summary without that key.
+Pending local works use the same helper. Saved offline-snapshot entries retain their original placeholder behavior.
 
 - `LazyCardImage.vue` children receive their real asset URL only after `IntersectionObserver` approval, request
   immediately after approval without a second native-lazy gate, retain async decoding, and stay visually hidden over the
@@ -536,18 +550,24 @@ Its header Settings entry contains the `en` / `zh-CN` language selector plus an 
 
 ### Advanced editing tabs
 
-Advanced editing has five tabs: **Tags** (Entry-vocabulary taxonomy aliases with partitions and placeholder rows, plus
+Advanced editing includes **Tags** (the library's Entry tags and their mappings, grouped as unmapped/mapped, plus
 a Tag-merge module — pick the kept tag and the tags to absorb via the relation autocomplete; assignments re-point to the
 kept tag and the merged tag rows are deleted outright, with a pre-transaction database backup), **Authors** (a compact
 one-button Author merge — first tap plans duplicate groups, second tap executes with backup + integrity report — above
 the Author-aliases groups whose name inputs use the relation autocomplete with fill-on-select), **Gallery templates**
 (per-Gallery template file preview: structure dimensions, tag→facet assignments, local file paths of
 `<type>.template.json` / `<type>.tag-layout.json`, with an explanation that saving/applying happens from any Entry card
-of that Gallery), **Title shortening**, and **Source maintenance**. Title shortening is now a `.advanced-subcard` inside
+of that Gallery), and **Source maintenance**. Title shortening is a `.advanced-subcard` inside
 the Templates card (its `data-testid="advanced-titles"` kept, its tab removed). The former Unassigned-tags tab was
 removed; author identity aliases are managed only in the Authors tab (they share the same `taxonomy_aliases`
 producer-vocabulary storage, so import-time resolution is unchanged). Unassigned Entry tags are surfaced instead through
 `GET /api/tags/unassigned` + `POST /api/tags/unassigned/move` (see `http-api.md`).
+
+The Tags catalog is derived from existing library tags plus dictionary rows, so importing a work adds its new tags to
+the catalog without a separate dictionary-file import. Canonical targets appear as already mapped. Catalog rows use
+`tagId` to distinguish a library tag from a stored alias with a possibly equal numeric ID; deleting a tag uses the
+two-step library-wide deletion action, while removing an alias removes only that mapping. The catalog extension is
+requested with `includeTags=1`; legacy alias requests retain their original response shape.
 
 **Title shortening.** Handles Entries titled `<original> | <translation>`, where the second half duplicates the title and
 only lengthens every card: planning lists each candidate with both sides and a suggested side — the translated one when
@@ -567,9 +587,9 @@ simplifies; one reversed pair can 500 the whole batch; delete-before-update on t
 
 `GET /api/navigation-counts?includeNsfw=` returns `{ authors, viewLaterEntries, viewLaterAuthors }` — one interface for
 the sidebar's visibility-aware numbers. `authors` counts the same universe the Authors page can list (a workless Author
-is never counted); with `includeNsfw=false` an Author counts only when none of their works sits in an NSFW Gallery. A
+is never counted); with `includeNsfw=false` an Author counts only when none of their works sits in a hideable Gallery. A
 saved work/Author counts only when the current boundary can actually show it. The web client refreshes these on startup,
-when Show NSFW is toggled, and whenever either View later list changes.
+when **Show hideable galleries** is toggled, and whenever either View later list changes.
 
 ## 20. Running modes (summary)
 

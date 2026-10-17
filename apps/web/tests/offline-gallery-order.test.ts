@@ -22,18 +22,18 @@ describe('durable offline Gallery ordering',()=>{
    await api.setGalleryOrder(['Alpha','Hidden','Zebra']);
    await api.setGalleryOrder(['Hidden','Alpha','Zebra']);
    expect(online).not.toHaveBeenCalled();
-   expect((await store.list()).map(row=>row.baseVersion)).toEqual([1,2]);
+   expect((await store.list()).map(row=>row.baseVersion)).toEqual([1]);
    store.close();store=createIndexedDbOfflineStore({indexedDB,databaseName:name});
    const cold=createOfflineAwareGalleryApi({} as GalleryApi,store,{clientId:'phone'});await cold.preferOfflineSnapshot!();
    expect((await cold.listGalleries()).map(row=>row.type)).toEqual(['Hidden','Alpha','Zebra']);
    const work=await preparePendingWork(JSON.stringify(await buildPendingWorkExport(store)));
-   expect(work.operations).toHaveLength(2);
+   expect(work.operations).toHaveLength(1);
    const plan=[...mutationQueuePlan(await store.list()).values()];
    expect(plan[0]).toMatchObject({eligible:true,requiredFlags:['offlineMutations','offlineGalleryOrder']});
-   expect(plan[1]!.dependencies).toEqual([(await store.list())[0]!.opId]);
+   expect(plan[0]!.dependencies).toEqual([]);
    const restored=createIndexedDbOfflineStore({indexedDB,databaseName:`restore-${name}`});
    try { await restored.writeGeneration(1,JSON.stringify(fixture()));await restored.writeMeta('activeGeneration','1');await restored.bindPendingWorkClient('phone');
-    expect((await restored.restorePendingWork(work,'phone',true)).addedOperations).toBe(2);
+    expect((await restored.restorePendingWork(work,'phone',true)).addedOperations).toBe(1);
    } finally {restored.close();}
   }finally{store.close();}
  });

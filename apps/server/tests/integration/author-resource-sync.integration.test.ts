@@ -44,7 +44,7 @@ describe('Author resource sync boundaries', () => {
   it('publishes independent rating-layout, Collection, and Entry-Author capabilities at the current schema', () => {
     const { database } = setup();
     const capabilities = buildSyncCapabilities(database, 'test');
-    expect(capabilities.sqliteSchemaVersion).toBe(43);
+    expect(capabilities.sqliteSchemaVersion).toBe(44);
     expect(capabilities.featureFlags).toMatchObject({
       offlineRatingSlotLayout: true,
       offlineCollectionProducerMembership: true,

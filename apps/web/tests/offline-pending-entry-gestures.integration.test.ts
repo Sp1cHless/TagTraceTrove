@@ -69,8 +69,8 @@ it('every ordinary Entry gesture is reachable on a queued (offline-created) Entr
 
     const kinds = (await f.store.list()).map(row => row.operationKind);
     expect(kinds).toEqual([
-      'entry.create','entry.tag.create','entry.tags.set',
-      // The rename adds the new name and replaces the assignment.
+      'entry.create',
+      // The unused first name cancels; the final renamed assignment remains.
       'entry.tag.create','entry.tags.set',
       'entry.authors.set','entry.content.append','entry.rating.set','entry.view-later.set','entry.usage','entry.usage',
     ]);

@@ -8,9 +8,9 @@
 
 ## 1. Delivered product surface
 
-### Independent installed libraries (current 1.0.8, 2026-10-13)
+### Independent installed libraries (1.0.8 acceptance, 2026-10-13)
 
-The current Demo location is **`D:/Project/T3-1.0.4-windows-x64/TagTraceTrove`**, running Release **1.0.8**. The outer
+The 1.0.8 Demo acceptance used **`D:/Project/T3-1.0.4-windows-x64/TagTraceTrove`**, running Release **1.0.8**. The outer
 directory keeps the user's original extraction name. The supplied 1.0.4 payload was moved into its `versions/1.0.4`
 slot; existing Demo data was copied and byte-verified before startup. The same library identity, content count and
 8785/8786 ports survived migration and a real extraction/merge update to 1.0.5. The former AppData installation was
@@ -44,11 +44,11 @@ Instructions are in `release-installation.md`.
 `ee4b238659ee2cc8f8fe78426df1779d8c2107888b2caa5c8959a29e0d3b1105`; Windows ZIP SHA256
 `0674848a826389e4c86841cb9dfeb9f5908408362e46b2213443ba0d86ee7d19`. The measured instance behavior above is Windows.
 
-Everything in the current scope is implemented, tested and accepted on the desktop/server side:
+The delivered desktop/server surface includes:
 
 - Desktop web app: Gallery browsing, Entry detail/editing, Entry creation, entry media (cover/preview + thumbnails),
   Author pages + Directories, Collections, View later, Recently viewed, Random, global Search, tag-first filtering/sort,
-  ratings (three classes), usage tracking, SFW/NSFW partitions, i18n (en / zh-CN), Advanced editing, and an in-app
+  ratings (three classes), usage tracking, hideable / not-hideable partitions, i18n (en / zh-CN), Advanced editing, and an in-app
   SiteProbe import/rule surface.
 - Shared server + web packages: `apps/server`, `apps/web`, `packages/shared`, plus the `siteprobe` Python tool and the
   C# tray launcher `T3.exe`.
@@ -56,10 +56,32 @@ Everything in the current scope is implemented, tested and accepted on the deskt
   ordering, idempotent replay, media replay, and the desktop System page. Full detail is in
   `offline-sync.md`.
 
+### Current source behavior (2026-10-16)
+
+The frozen published baseline is **1.0.14**; the source behavior below is separate from that package:
+
+- Galleries support a persisted vertical/horizontal card preference. Horizontal cards show cover left/title right,
+  two columns at most, with twice the configured rows. Migration 044 adds only this display preference; its column
+  is excluded from offline snapshots/journals, and switching it requires a server connection.
+- Image-less online cards show readable Content, then tags, then an initial. URL rows are skipped. Local pending works
+  use the same selector; saved offline snapshots keep their original placeholders.
+- The Tags mapping catalog is derived from current library tags and mappings, grouped as unmapped/mapped. New tags
+  appear without a separate dictionary import. Tag deletion and mapping removal are separate actions.
+- SiteProbe supports One/Several annotation, split-member previews, full long-description candidates with explicit
+  preview/source-truncation notices, and latest-answer-per-field verification. Running imports/builders/sign-ins can
+  be recovered from the panel; a builder can coexist with an installed-adapter import, with export writers serialized.
+- Source startup checks Web freshness through one shared guard; the classic Service Worker follows the actual staged
+  output directory. Pairing diagnostics add bounded local stage reports and matching desktop attempt IDs without
+  credentials. Their installed availability follows the native app version (`mobile.md`).
+
+Response extensions are opt-in (`coverText=1`, `includeTags=1`) so an installed 1.0.14 app retains its original strict
+DTOs. The focused mixed-version HTTP integration check on 2026-10-16 passed **2/2**, using in-memory SQL and the current
+web API client for both original and extended requests. Full details: `architecture.md`, `http-api.md`, `siteprobe.md`.
+
 ## 2. Android / offline device status
 
 The Android shell (Capacitor WebView over the same web bundle) has a deep history of measured device acceptance. The
-**current packaged formal release is 1.0.10**, Android versionCode **110**, with the same application ID and Release signer.
+**current packaged formal release is 1.0.14**, Android versionCode **114**. Its frozen release manifest records the same application ID and expected Release signer.
 On 2026-10-13 the user confirmed that mobile acceptance for the 1.0 formal release is complete. This records user
 acceptance before the subsequent 1.0.8 packaging; the older per-build measured device results below remain their original historical records.
 Before the formal release line, the offline-parity line was
@@ -119,9 +141,21 @@ No minification or unrelated runtime behavior changed.
 | 1.0.5 | `T3-1.0.5.apk` | Earlier formal artifact, Android code 105. APK SHA256 `2bf0d8a18baa8846aba726f9d5e96075f811749623caa1ffa299ba54ac0dde16`; unchanged Release signer and non-debuggable identity verified. Mobile acceptance for the 1.0 release confirmed by the user on 2026-10-13 (`mobile.md` §8). |
 | 1.0.7 | `T3-1.0.7.apk` | Earlier formal artifact, Android code 107. APK SHA256 `7229f788ba3e38fa9931d6a54c2f6bb3fa099d823ed5c9a0dfba2f861075b13d`; formal pipeline verified the unchanged signer and non-debuggable identity. |
 | 1.0.8 | `T3-1.0.8.apk` | Earlier packaged formal artifact, Android code 108. APK SHA256 `b59ecd88b52adc2108d9717f7866bd175245c32f69a998c47f2fbff41e011d72`; formal pipeline verified the unchanged signer and non-debuggable identity. |
-| 1.0.10 | `T3-1.0.10.apk` | Current packaged formal artifact, Android code 110. APK SHA256 `6456814df7b6ac052c3a1a6a57245af86828c02b9eab222484fad51f17e3da95`; unchanged signer, application ID and non-debuggable identity verified. Chromium 90 build target, JS/CSS capability fallbacks and unpaired diagnostic access passed focused tests and four frozen-package browser simulations (`mobile.md`). |
+| 1.0.10 | `T3-1.0.10.apk` | Earlier packaged formal artifact, Android code 110. APK SHA256 `6456814df7b6ac052c3a1a6a57245af86828c02b9eab222484fad51f17e3da95`; unchanged signer, application ID and non-debuggable identity verified. Chromium 90 build target, JS/CSS capability fallbacks and unpaired diagnostic access passed focused tests and four frozen-package browser simulations (`mobile.md`). |
+| 1.0.11 | `T3-1.0.11.apk` | Earlier packaged formal artifact, Android code 111. APK SHA256 `8052616de3816dd9542dd8205619e34a4b2ca9e06e9382f0d44544e3c32183f7`; unchanged signer/application ID and non-debuggable identity verified. Windows bootstrap resumes the installer's 0.0.0/null state; installation progress/errors and diagnostic entry points ship together. Focused synthetic recovery and frozen-package checks passed (`development.md`). |
+| 1.0.14 | `T3-1.0.14.apk` | Published frozen baseline, Android code 114. Release manifest dated 2026-10-13 records APK SHA256 `b703b4efa1b73af8cf12de03d3a24be0b442cd7f8b0db5de0d86c7fdd30100ad`, application ID `com.speechless666.t3.spike`, expected signer `62916b230436fdff08764004af8acbaf47b225b6f961b137c2479f714acfbb13`. |
 
-Current Windows ZIP: `T3-1.0.10-windows-x64.zip`, SHA256
+Current Windows ZIP: `T3-1.0.14-windows-x64.zip`, published SHA256
+`ab3f6ed14f2751bbe0a16b7e6dfe8c4be30c2e615094cb4aebad4c49ceb1e301`.
+The frozen manifest and published `SHA256SUMS.txt` under `.releases/1.0.14/` define this baseline.
+
+Earlier Windows ZIP: `T3-1.0.11-windows-x64.zip`, SHA256
+`1e44d93018781574d1379d0f365a0bc31b42a356e3af535c17ef7c9a217f2929`.
+The 1.0.11 formal pipeline completed frozen-input, identity, signature, path-budget and checksum checks;
+six published checksums, 18 APK Web files and the Windows recovery/diagnosis payload were verified.
+The 1.0.8 Demo acceptance above is a historical installation record, separate from later package metadata.
+
+Earlier Windows ZIP: `T3-1.0.10-windows-x64.zip`, SHA256
 `ad3dba40d62428bea699e14f3496e8c78526c370bf37eccdee90b0bd92c9e44b`.
 The 1.0.10 formal pipeline completed its frozen-input, signature, identity, path-budget and checksum steps;
 the focused package check verified six published checksums and all 18 APK Web files. The Demo installation
@@ -147,7 +181,7 @@ script's Windows PowerShell 5.1, before the subsequent documentation-only correc
 See `release-installation.md` for the correction to the unchanged 1.0.5 bundled installation guide.
 
 The signer certificate has been identical across the v43–v49 chain; those builds used the **debug keystore**. A
-dedicated release key now exists (§2b). The 1.0.1–1.0.10 line is signed with that release key, so the two chains cannot
+dedicated release key now exists (§2b). The formal line uses that Release identity, so the two chains cannot
 upgrade into each other in place.
 
 ## 4. Not a core-plan gap

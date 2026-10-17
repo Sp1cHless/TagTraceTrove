@@ -27,6 +27,8 @@ import json
 import re
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Callable, Iterator
 from urllib.parse import urlparse
@@ -37,6 +39,27 @@ TIMEOUT_MS = 45_000
 SETTLE_MS = 3500
 #: How many times a page that has not rendered yet is read again, with a longer settle each time.
 SETTLE_RETRIES = 2
+TRANSIENT_HTTP_STATUSES = {408, 429, 500, 502, 503, 504}
+RETRY_DELAYS_MS = (2_000, 5_000)
+MAX_RETRY_WAIT_MS = 30_000
+
+
+def retry_delay_ms(response: Any, attempt: int) -> int | None:
+    """Respect Retry-After; do not retry early when the requested wait exceeds our bound."""
+    delay = RETRY_DELAYS_MS[min(attempt, len(RETRY_DELAYS_MS) - 1)]
+    value = str((getattr(response, "headers", {}) or {}).get("retry-after", "")).strip()
+    if value:
+        try:
+            seconds = int(value)
+        except ValueError:
+            try:
+                until = parsedate_to_datetime(value)
+                until = until if until.tzinfo is not None else until.replace(tzinfo=timezone.utc)
+                seconds = max(0, (until - datetime.now(timezone.utc)).total_seconds())
+            except (TypeError, ValueError, OverflowError):
+                seconds = 0
+        delay = max(delay, int(seconds * 1000))
+    return delay if delay <= MAX_RETRY_WAIT_MS else None
 # A page can fire hundreds of XHRs. The first few dozen carry everything a rule would want, and
 # reading a body is a round-trip to the browser.
 MAX_NETWORK_DOCUMENTS = 40
@@ -69,6 +92,8 @@ class AcquisitionPlan:
     capture_network: bool = True
     retries: int = SETTLE_RETRIES
     timeout_ms: int = TIMEOUT_MS
+    manual_verification: bool = False
+    verification_timeout_ms: int = 300_000
 
     @property
     def browser(self) -> bool:
@@ -110,6 +135,7 @@ class PageRead:
     html: str = ""
     resources: list[NetworkResource] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    manual_verified: bool = False
 
     @property
     def readable(self) -> bool:
@@ -120,6 +146,8 @@ class PageRead:
         and neither is a body with a non-2xx status.
         """
         if not self.html.strip():
+            return False
+        if unknown_url.challenge_of(self.html):
             return False
         return self.status is None or 200 <= self.status < 300
 
@@ -187,6 +215,81 @@ def profile_for(host: str) -> Path:
     return adapter_root() / "browser_profiles" / host
 
 
+def windows_default_browser_channel() -> str | None:
+    """Only map known Windows URL associations to supported Playwright channels."""
+    try:
+        import winreg
+    except ImportError:
+        return None
+    for scheme in ("https", "http"):
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                rf"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\{scheme}\UserChoice") as key:
+                prog_id = str(winreg.QueryValueEx(key, "ProgId")[0]).casefold()
+        except OSError:
+            continue
+        if prog_id.startswith("chromehtml"):
+            return "chrome"
+        if prog_id == "msedgehtm":
+            return "msedge"
+        if prog_id.startswith("firefoxurl"):
+            return "firefox"
+        return None
+    return None
+
+
+def bundled_browser_options(playwright: Any, engine: str = "chromium") -> dict[str, str]:
+    """Resolve the browser revision belonging to this Playwright runtime, never system Chrome."""
+    executable = Path(getattr(playwright, engine).executable_path)
+    if not executable.is_file():
+        raise RuntimeError(f"T3 自带浏览器（{engine}）文件缺失或版本不匹配，请重新解压完整安装包后重试。")
+    return {"executable_path": str(executable)}
+
+
+def launch_browser(playwright: Any, *, profile: Path | None = None, **options: Any) -> Any:
+    """Prefer the supported default browser; a missing channel uses the shipped browser."""
+    from playwright.sync_api import Error
+
+    channel = windows_default_browser_channel()
+    if channel == "firefox":
+        # Playwright uses its patched Firefox, not the user's installed binary.
+        # A Firefox profile must never share Chromium's cookies/database files.
+        firefox_options = dict(options)
+        firefox_options.pop("user_agent", None)
+        arguments = [arg for arg in firefox_options.get("args", [])
+                     if not arg.startswith("--disable-blink-features=")]
+        if arguments:
+            firefox_options["args"] = arguments
+        else:
+            firefox_options.pop("args", None)
+        launch = (playwright.firefox.launch if profile is None
+                  else playwright.firefox.launch_persistent_context)
+        if profile is not None:
+            firefox_options["user_data_dir"] = str(Path(profile) / "firefox")
+        return launch(**bundled_browser_options(playwright, "firefox"), **firefox_options)
+    launch = (playwright.chromium.launch if profile is None
+              else playwright.chromium.launch_persistent_context)
+    if profile is not None:
+        options["user_data_dir"] = str(profile)
+    if channel is not None:
+        try:
+            return launch(channel=channel, **options)
+        except Error as error:
+            message = str(error).casefold()
+            # A stale default association must not require another browser installation.
+            # Profile locks, permissions and genuine startup errors remain visible.
+            if "is not found" not in message and "executable doesn't exist" not in message:
+                raise
+    return launch(**bundled_browser_options(playwright), **options)
+
+
+def browser_context_options(browser: Any) -> dict[str, Any]:
+    options: dict[str, Any] = {"viewport": {"width": 1440, "height": 900}}
+    if getattr(getattr(browser, "browser_type", None), "name", None) != "firefox":
+        options["user_agent"] = unknown_url.UA
+    return options
+
+
 def launch_profile(playwright: Any, profile: Path, *, headful: bool) -> Any:
     """Open a persistent browser profile — the one place that does it.
 
@@ -195,15 +298,13 @@ def launch_profile(playwright: Any, profile: Path, *, headful: bool) -> Any:
     drift into different browsers, different user agents or a profile that one of them cannot read
     back.
 
-    Chrome through the channel, not Playwright's bundled Chromium: the bundled build is
-    version-mismatched in this workspace, the download is large, and the system Chrome is the browser
-    a person is already logged into. `navigator.webdriver` is removed only when a person is in the
-    loop — Chrome is then being driven as the browser they signed into. Nothing else is spoofed.
+    Capture and login share Chrome/Edge, dedicated Firefox and the Chromium fallback.
+    The profile stays in T3's per-host directory. Nothing else is spoofed.
     """
     profile = Path(profile)
     profile.mkdir(parents=True, exist_ok=True)
-    return playwright.chromium.launch_persistent_context(
-        user_data_dir=str(profile), headless=not headful, channel="chrome",
+    return launch_browser(
+        playwright, profile=profile, headless=not headful,
         user_agent=unknown_url.UA, viewport={"width": 1440, "height": 900},
         args=["--disable-blink-features=AutomationControlled"],
     )
@@ -260,21 +361,23 @@ class BrowserSession(PageSession):
         self._playwright: Any = None
         self._browser: Any = None
         self._context: Any = None
+        self._headful = plan.login
 
     def __enter__(self) -> "BrowserSession":
         from playwright.sync_api import sync_playwright
 
         self._playwright = sync_playwright().start()
-        if self.plan.profile is not None:
-            # A persistent profile *is* the browser: there is no separate handle to launch, and the
-            # session inside it is the whole point — cookies and storage live in that directory.
-            self._context = launch_profile(self._playwright, Path(self.plan.profile),
-                                           headful=self.plan.login)
-        else:
-            self._browser = self._playwright.chromium.launch(headless=not self.plan.login,
-                                                             channel="chrome")
-            self._context = self._browser.new_context(
-                user_agent=unknown_url.UA, viewport={"width": 1440, "height": 900})
+        try:
+            if self.plan.profile is not None:
+                # A persistent profile *is* the browser: there is no separate handle to launch.
+                self._context = launch_profile(self._playwright, Path(self.plan.profile),
+                                               headful=self.plan.login)
+            else:
+                self._browser = launch_browser(self._playwright, headless=not self.plan.login)
+                self._context = self._browser.new_context(**browser_context_options(self._browser))
+        except Exception:
+            self.__exit__()
+            raise
         return self
 
     def __exit__(self, *exception: Any) -> None:
@@ -288,6 +391,89 @@ class BrowserSession(PageSession):
             finally:
                 if self._playwright is not None:
                     self._playwright.stop()
+
+    def _visible_page(self, url: str, on_response: Callable) -> Any:
+        """Reopen the same profile visibly; the person, not the tool, solves the check."""
+        state = self._context.storage_state() if self.plan.profile is None else None
+        self._context.close()
+        self._context = None
+        if self._browser is not None:
+            self._browser.close()
+            self._browser = None
+        self._headful = True
+        if self.plan.profile is not None:
+            self._context = launch_profile(self._playwright, self.plan.profile, headful=True)
+        else:
+            self._browser = launch_browser(self._playwright, headless=False)
+            self._context = self._browser.new_context(
+                **browser_context_options(self._browser), storage_state=state)
+        page = self._context.new_page()
+        page.on("response", on_response)
+        response = page.goto(url, wait_until="domcontentloaded", timeout=self.plan.timeout_ms)
+        return page, response
+
+    def _wait_for_verification(self, page: Any, url: str, read: PageRead) -> tuple[str, str]:
+        """Observe manual completion without clicking, solving or repeatedly reloading."""
+        print("[VERIFY] 请在弹出的浏览器中手动完成网站安全验证；通过后自动继续，请勿关闭窗口。", flush=True)
+        expected = urlparse(url)
+        elapsed = 0
+        while elapsed < self.plan.verification_timeout_ms:
+            if page.is_closed():
+                read.notes.append("manual verification cancelled: the browser page was closed")
+                return "", url
+            html, final = page.content(), page.url
+            current = urlparse(final)
+            if (not unknown_url.challenge_of(html) and html.strip()
+                    and current.netloc == expected.netloc and current.path == expected.path
+                    and read.status is not None and 200 <= read.status < 300):
+                read.manual_verified = True
+                read.notes.append("manual verification completed in the browser profile")
+                print("[VERIFY] 已读取到验证后的原作品页面，继续采集。", flush=True)
+                return html, final
+            step = min(1000, self.plan.verification_timeout_ms - elapsed)
+            page.wait_for_timeout(step)
+            elapsed += step
+            if elapsed and elapsed % 30_000 == 0:
+                print("[VERIFY] 仍在等待手动验证；未通过前不会生成候选。", flush=True)
+        read.notes.append("manual verification timed out; no work page was captured")
+        print("[VERIFY] 验证尚未通过，已停止本次采集。", flush=True)
+        return "", url
+
+    def _navigate_with_retries(self, page: Any, url: str, read: PageRead,
+                               resources: list[NetworkResource], retries: int) -> Any:
+        from playwright.sync_api import TimeoutError as NavigationTimeout
+
+        retry_count = max(0, retries)
+        for attempt in range(retry_count + 1):
+            response = None
+            read.status = None
+            try:
+                response = page.goto(url, wait_until="load", timeout=self.plan.timeout_ms)
+                read.status = response.status if response else None
+                if (read.status not in TRANSIENT_HTTP_STATUSES
+                        or unknown_url.challenge_of(page.content())):
+                    return response
+                reason = f"HTTP {read.status}"
+            except NavigationTimeout:
+                reason = "页面加载超时"
+                if attempt >= retry_count:
+                    read.notes.append("navigation retries exhausted after timeout")
+                    print(f"[RETRY] {reason}，已达到 {retry_count} 次重试上限。", flush=True)
+                    raise
+            if attempt >= retry_count:
+                read.notes.append(f"navigation retries exhausted: {reason}")
+                print(f"[RETRY] {reason}，已达到 {retry_count} 次重试上限。", flush=True)
+                return response
+            delay = retry_delay_ms(response, attempt)
+            if delay is None:
+                read.notes.append("Retry-After exceeds the 30-second wait limit; not retrying early")
+                print("[STOP] 网站要求等待超过 30 秒，请稍后重试；本次不提前重复请求。", flush=True)
+                return response
+            print(f"[RETRY] {reason}，{delay / 1000:g} 秒后重试（{attempt + 1}/{retry_count}）：{url}", flush=True)
+            read.notes.append(f"{reason}; retry {attempt + 1}/{retry_count} after {delay}ms")
+            page.wait_for_timeout(delay)
+            resources.clear()
+        return None
 
     def read(self, url: str, *, settle_ms: int | None = None, scroll: bool | None = None,
              capture_network: bool | None = None, retries: int | None = None,
@@ -305,6 +491,9 @@ class BrowserSession(PageSession):
         responses: list[NetworkResource] = []
 
         def on_response(response) -> None:
+            if (response.request.resource_type == "document"
+                    and getattr(response, "frame", None) is getattr(page, "main_frame", None)):
+                read.status = response.status
             if not want_network or len(responses) >= MAX_NETWORK_DOCUMENTS:
                 return
             try:
@@ -345,23 +534,42 @@ class BrowserSession(PageSession):
                     input()
                 except EOFError:  # no console to answer: carry on with what is there
                     pass
-            response = page.goto(url, wait_until="load", timeout=timeout)
-            read.status = response.status if response else None
+            response = self._navigate_with_retries(page, url, read, responses, attempts)
             page.wait_for_timeout(settle)
-            if should_scroll:
-                scroll_until_settled(page)
             html = page.content()
             final = page.url
+            challenge = unknown_url.challenge_of(html)
+            if challenge:
+                read.notes.append(f"{challenge} verification page was returned, not a work page")
+                if not self.plan.manual_verification:
+                    html = ""
+                else:
+                    if not self._headful:
+                        responses.clear()
+                        page, response = self._visible_page(url, on_response)
+                        read.status = response.status if response else None
+                    html, final = self._wait_for_verification(page, url, read)
+                if not html:
+                    read.final_url, read.html, read.resources = final, "", []
+                    return read
+            if read.status is not None and not (200 <= read.status < 300):
+                read.notes.append(f"HTTP {read.status}: the body was not read as a page")
+                read.final_url, read.html, read.resources = final, "", []
+                return read
+            if should_scroll:
+                scroll_until_settled(page)
             # A JavaScript-driven page can be read before it has rendered: measured on iwara
             # (2026-10-11), whose second page came back as its own loading screen. One more go, with a
             # longer settle, is what a person does when a page is not there yet.
             if mention is not None:
                 for attempt in range(attempts):
+                    if unknown_url.challenge_of(html):
+                        break
                     if mention(html, responses):
                         break
                     read.notes.append("the page did not mention the work yet; reading it again")
                     try:
-                        page.reload(wait_until="load", timeout=timeout)
+                        self._navigate_with_retries(page, url, read, responses, attempts)
                     except Exception as error:  # noqa: BLE001 - reported, not raised
                         read.notes.append(f"reload failed: {type(error).__name__}")
                         break
@@ -370,6 +578,9 @@ class BrowserSession(PageSession):
                         scroll_until_settled(page)
                     html = page.content()
                     final = page.url
+                    if read.status is not None and not (200 <= read.status < 300):
+                        html = ""
+                        break
                 if not mention(html, responses):
                     read.notes.append(
                         "the page never mentioned the work it was asked for: what came back is not "
@@ -384,7 +595,7 @@ class BrowserSession(PageSession):
 
         read.final_url = final
         read.content_type = "text/html"
-        read.html = html
+        read.html = "" if unknown_url.challenge_of(html) else html
         read.resources = responses
         if want_network and not responses:
             read.notes.append("the network log held no usable JSON response")

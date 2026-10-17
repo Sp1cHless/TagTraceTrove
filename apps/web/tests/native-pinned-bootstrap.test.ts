@@ -7,7 +7,7 @@ function bootstrap(nativePromise: (plugin: string, method: string, args: Record<
  const script = source.match(/<script>([\s\S]*?)<\/script>/)![1]!;
  const originalFetch = vi.fn<typeof fetch>(async()=>Response.json({external:true}));
  const window = {fetch:originalFetch,Capacitor:{nativePromise},addEventListener:vi.fn()};
- runInNewContext(script,{window,Request,Response,URL,Uint8Array,DOMException,TypeError,location:{href:'https://localhost/'},btoa,atob});
+ runInNewContext(script,{window,Request,Response,URL,Uint8Array,DOMException,TypeError,navigator:{language:'en'},location:{href:'https://localhost/'},btoa,atob});
  return {window,originalFetch};
 }
 it('actual prepared native bootstrap carries typed API JSON and multipart through the bridge without JS authorization and preserves final media URL',async()=>{

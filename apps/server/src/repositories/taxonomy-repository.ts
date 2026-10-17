@@ -12,6 +12,12 @@ export interface TaxonomyAlias {
   normalizedAlias: string;
   canonicalName: string;
   normalizedCanonical: string;
+  /**
+   * Set when this row stands for a *Tag in the library* rather than for one stored mapping.
+   * There is no alias row to delete then: the thing itself is the tag, and mapping it inserts
+   * the alias rather than editing one.
+   */
+  tagId?: number;
 }
 
 export interface UpsertTaxonomyAliasInput {
@@ -356,6 +362,54 @@ export function importTaxonomyAliases(
   })();
 }
 
+/** The Tag table a vocabulary's names live in. */
+const CATALOG_TAG_TABLE: Record<TaxonomyVocabulary, string> = {
+  entry: 'tags',
+  producer: 'producer_tags',
+};
+
+/**
+ * Every Tag of one vocabulary with the mapping it has, as catalog rows.
+ *
+ * The catalog is a view of the *library*, not a copy of a dictionary file. That is what makes
+ * "Not mapped yet" mean "this library has a tag nobody has mapped" instead of "this file listed a
+ * name nobody has": a work whose import creates a tag puts it here, with nothing to import. A tag
+ * whose own name is already a stored mapping is left out — that row is the same entry — and a tag
+ * that is the *target* of mappings reports itself as its own canonical, which is what it is.
+ */
+function catalogTagRows(database: T3Database, vocabulary: TaxonomyVocabulary): TaxonomyAlias[] {
+  const table = CATALOG_TAG_TABLE[vocabulary];
+  const rows = database.prepare(`
+    SELECT tag.id, tag.name, tag.normalized_name,
+           COALESCE(target.canonical_name, '') AS canonical_name,
+           COALESCE(target.normalized_canonical, '') AS normalized_canonical
+    FROM ${table} AS tag
+    LEFT JOIN (
+      SELECT normalized_canonical, MIN(canonical_name) AS canonical_name
+      FROM taxonomy_aliases
+      WHERE vocabulary = ?
+      GROUP BY normalized_canonical
+    ) AS target ON target.normalized_canonical = tag.normalized_name
+    WHERE NOT EXISTS (
+      SELECT 1 FROM taxonomy_aliases AS own
+      WHERE own.vocabulary = ? AND own.normalized_alias = tag.normalized_name
+    )
+  `).all(vocabulary, vocabulary) as Array<{
+    id: number; name: string; normalized_name: string;
+    canonical_name: string; normalized_canonical: string;
+  }>;
+  return rows.map((row) => ({
+    id: row.id,
+    vocabulary,
+    partition: '',
+    alias: row.name,
+    normalizedAlias: row.normalized_name,
+    canonicalName: row.canonical_name,
+    normalizedCanonical: row.normalized_canonical,
+    tagId: row.id,
+  }));
+}
+
 export function listTaxonomyAliases(
   database: T3Database,
   vocabulary?: TaxonomyVocabulary,
@@ -366,7 +420,15 @@ export function listTaxonomyAliases(
     ${vocabulary === undefined ? '' : 'WHERE vocabulary = ?'}
     ORDER BY vocabulary, partition, normalized_alias, id
   `).all(...(vocabulary === undefined ? [] : [vocabulary])) as AliasRow[];
-  return rows.map(aliasFromRow);
+  const vocabularies: TaxonomyVocabulary[] = vocabulary === undefined
+    ? ['entry', 'producer']
+    : [vocabulary];
+  return [...rows.map(aliasFromRow), ...vocabularies.flatMap((kind) => catalogTagRows(database, kind))]
+    .sort((left, right) => left.vocabulary.localeCompare(right.vocabulary)
+      || left.partition.localeCompare(right.partition)
+      || (left.normalizedAlias < right.normalizedAlias ? -1
+        : left.normalizedAlias > right.normalizedAlias ? 1 : 0)
+      || left.id - right.id);
 }
 
 export function deleteTaxonomyAlias(database: T3Database, id: number): void {

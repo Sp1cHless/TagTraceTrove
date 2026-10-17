@@ -11,7 +11,7 @@ import { suggestProducers, suggestTags } from '../../src/repositories/suggestion
 import { upsertTaxonomyAlias } from '../../src/repositories/taxonomy-repository.js';
 
 describe('relation suggestion repository', () => {
-  it('offers no tag that only NSFW Galleries use while Show NSFW is off', async () => {
+  it('offers no tag that only hideable Galleries use while show-hideable is off', async () => {
     const database = createMigratedMemoryDatabase();
     try {
       const safeSection = createSection(database, { entryType: 'comic', name: 'Basic' });
@@ -32,7 +32,7 @@ describe('relation suggestion repository', () => {
       const sfw = suggestTags(database, {
         vocabulary: 'entry', q: 'tag', limit: 20, excludeIds: [], includeNsfw: 'false',
       });
-      // A tag both Galleries use stays; one only the NSFW Gallery uses does not.
+      // A tag both Galleries use stays; one only the hideable Gallery uses does not.
       expect(sfw.map((hit) => hit.name)).toEqual(['Shared tag']);
       expect(sfw[0]?.totalUsageCount).toBe(2);
 
@@ -41,7 +41,7 @@ describe('relation suggestion repository', () => {
       });
       expect(everything.map((hit) => hit.name)).toEqual(['Shared tag', 'Adult only tag']);
 
-      // The route carries the same flag, so the client's SFW mode is the boundary.
+      // The route carries the same flag, so the client's hidden state is the boundary.
       const app = createApiApp(database);
       const response = await app.request(
         '/api/suggestions/tags?vocabulary=entry&q=tag&includeNsfw=false',

@@ -22,7 +22,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { copyText } from '../clipboard.js';
 
 import type { GalleryApi } from '../api/gallery.js';
-import { describeFindings, type ImportPreview, type SiteprobeSite, type SiteprobeTarget } from '@t3/shared';
+import { ApiError } from '../api/client.js';
+import { apiErrorResponseSchema, describeFindings, type ImportPreview, type SiteprobeSite, type SiteprobeTarget } from '@t3/shared';
 import { useI18n, type MessageKey } from '../i18n.js';
 import { siteForHost } from '../siteprobe/adapter-status.js';
 
@@ -77,6 +78,7 @@ const sites = ref<SiteprobeSite[]>([]);
 const unavailable = ref<string | null>(null);
 const loading = ref(true);
 const busy = ref(false);
+const starting = ref(false);
 const error = ref<string | null>(null);
 /** A refusal of the *input*: the page asks again instead of reporting a bug. */
 const inputProblem = ref<string | null>(null);
@@ -154,11 +156,13 @@ const readmeLoading = ref(false);
 const folderNotice = ref<string | null>(null);
 
 const running = computed(() => run.value?.status === 'running');
+const importBlocked = computed(() => running.value && run.value?.command !== 'build');
 const waitingForSelection = computed(() => awaitingSelection.value && run.value?.selection === null);
 const canApply = computed(() => site.value !== null
   && kind.value !== null
   && source.value.trim().length > 0
-  && !running.value);
+  && !loading.value && !busy.value && !starting.value
+  && !importBlocked.value);
 const chosen = computed(() => offered.value.find((item) => item.key === kind.value) ?? null);
 /** The run said there is more than one item to decide about. */
 const askingToFilter = computed(() => reviewHtml.value !== null && run.value?.status === 'done');
@@ -198,6 +202,7 @@ function resetRun(): void {
   run.value = null;
   log.value = [];
   error.value = null;
+  errorLogPath.value = null;
   inputProblem.value = null;
   reviewHtml.value = null;
   reviewCount.value = null;
@@ -208,7 +213,7 @@ function resetRun(): void {
 
 /** The address decides the site, and — when it matches a rule — which kind it is. */
 async function checkAddress(): Promise<void> {
-  resetRun();
+  if (!running.value && !starting.value) resetRun();
   resolvedKind.value = null;
   const text = address.value.trim();
   if (!text) {
@@ -234,7 +239,7 @@ async function checkAddress(): Promise<void> {
       if (suggested && kind.value === null) selectKind(suggested.key);
       // The address that decided the site is usually the answer the kind then asks for, so it is
       // carried over — a person pasting a work page should not have to paste it into a second field.
-      if (!source.value.trim()) source.value = text;
+      source.value = text;
     }
   } catch {
     // A miss is not a failure: the site is already known from the host, and the person picks a kind.
@@ -269,28 +274,34 @@ async function validateSource(): Promise<string | null> {
 
 async function apply(): Promise<void> {
   const chosenKind = chosen.value;
-  if (!chosenKind || !site.value || running.value) return;
-  error.value = null;
-  inputProblem.value = null;
-  const path = chosenKind.targets.includes(resolvedKind.value ?? '') ? resolvedKind.value : null;
-  if (path === null) {
-    try {
-      inputProblem.value = await validateSource();
-    } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : String(cause);
-      return;
+  if (!chosenKind || !site.value || importBlocked.value || busy.value || starting.value) return;
+  busy.value = true;
+  try {
+    error.value = null;
+    inputProblem.value = null;
+    const path = chosenKind.targets.includes(resolvedKind.value ?? '') ? resolvedKind.value : null;
+    if (path === null) {
+      try {
+        inputProblem.value = await validateSource();
+      } catch (cause) {
+        error.value = cause instanceof Error ? cause.message : String(cause);
+        return;
+      }
+      if (inputProblem.value) return;
     }
-    if (inputProblem.value) return;
+    const toolKind = resolvedKind.value ?? chosenKind.targets[0];
+    if (!toolKind) return;
+    // Scan listing cards before asking whether to filter; a single work needs no review scan.
+    await start({ input: source.value.trim(), site: site.value.key, kind: toolKind,
+                  review: !chosenKind.single });
+  } finally {
+    busy.value = false;
   }
-  const toolKind = resolvedKind.value ?? chosenKind.targets[0];
-  if (!toolKind) return;
-  // Several items → scan for review first: that reads the listing's cards only, which is what makes
-  // it affordable to ask "do you want to filter this?" *before* reading (and downloading) everything.
-  await start({ input: source.value.trim(), site: site.value.key, kind: toolKind,
-                review: !chosenKind.single });
 }
 
 async function start(request: Parameters<GalleryApi['startSiteprobeRun']>[0]): Promise<void> {
+  if (starting.value || importBlocked.value || (running.value && 'login' in request)) return;
+  starting.value = true;
   resetRun();
   try {
     const started = await props.api.startSiteprobeRun(request);
@@ -298,6 +309,19 @@ async function start(request: Parameters<GalleryApi['startSiteprobeRun']>[0]): P
     startPolling(started.id);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause);
+    if (cause instanceof ApiError && cause.status === 409) {
+      const payload = apiErrorResponseSchema.safeParse(cause.payload);
+      const details = payload.success ? payload.data.error.details : null;
+      if (details && typeof details === 'object' && 'logPath' in details
+        && typeof details.logPath === 'string') errorLogPath.value = details.logPath;
+      // Another tab or a forgotten builder can acquire the run between mounting and this request.
+      // Recover it here so the person can see its progress and stop it without restarting T³.
+      const runId = details && typeof details === 'object' && 'runId' in details
+        && typeof details.runId === 'string' ? details.runId : undefined;
+      if (await adoptRunningRun(false, runId)) error.value = t('siteprobe.runConflict');
+    }
+  } finally {
+    starting.value = false;
   }
 }
 
@@ -463,7 +487,7 @@ async function cancel(): Promise<void> {
 /** The login door: the tool's own bat, in the console window T³ was started from. */
 async function signIn(): Promise<void> {
   const target = address.value.trim();
-  if (!target || running.value) return;
+  if (!target || running.value || busy.value || starting.value) return;
   signingIn.value = true;
   loginDoneSent.value = false;
   await start({ login: target });
@@ -524,13 +548,13 @@ async function openAdaptorFolder(): Promise<void> {
  * A run is a child process on the server, so switching tabs or leaving the page does not end it —
  * the panel used to forget it entirely, and a crawl of a few hundred works kept going with nothing
  * left to watch it, no progress and no cancel. Mounting asks the server what it still holds and
- * adopts the newest **running** run.
+ * adopts the newest **running** job, including builders, sign-ins and selection imports.
  *
  * Running only: a finished run has already written its export and left a review page, and adopting
  * one long afterwards would show a state the person has moved past. The orphan this exists for is
  * the live process.
  */
-async function adoptRunningRun(): Promise<boolean> {
+async function adoptRunningRun(restoreInput = true, runId?: string): Promise<boolean> {
   let runs: Awaited<ReturnType<GalleryApi['listSiteprobeRuns']>>;
   try {
     runs = await props.api.listSiteprobeRuns();
@@ -539,22 +563,25 @@ async function adoptRunningRun(): Promise<boolean> {
     return false;
   }
   const running = runs
-    .filter((job) => job.command === 'run' && job.status === 'running')
-    .sort((left, right) => right.startedAt.localeCompare(left.startedAt))[0];
+    .filter((job) => job.status === 'running' && (runId === undefined || job.id === runId))
+    .sort((left, right) => Number(left.command === 'build') - Number(right.command === 'build')
+      || right.startedAt.localeCompare(left.startedAt))[0];
   if (!running) return false;
-  // The site and the kind the run is *for*, back in the chooser it was started from. This is not
-  // decoration: the stop control lives inside the chosen kind's block, so a run adopted without its
-  // kind would be visible and unstoppable — the same complaint one layer down.
+  // Recover the chooser when returning to the page; a conflict keeps the new link the person typed.
   const known = running.site === null
-    ? null
+    ? siteForHost(sites.value, running.input.split(' ')[0] ?? '')
     : sites.value.find((candidate) => candidate.key === running.site) ?? null;
-  site.value = known;
-  offered.value = known ? offeredFor(known) : [];
-  noRule.value = known === null;
-  kind.value = offered.value.find((item) => running.kind !== null
-    && item.targets.includes(running.kind))?.key ?? null;
-  address.value = running.input;
-  error.value = null;
+  if (restoreInput) {
+    site.value = known;
+    offered.value = known ? offeredFor(known) : [];
+    noRule.value = known === null;
+    kind.value = offered.value.find((item) => running.kind !== null
+      && item.targets.includes(running.kind))?.key ?? null;
+    address.value = running.command === 'build' ? running.input.split(' ')[0] ?? '' : running.input;
+    source.value = address.value;
+  }
+  signingIn.value = running.command === 'login';
+  loginDoneSent.value = false;
   run.value = running;
   log.value = running.events.flatMap((event) => (event.event === 'progress' ? [event.message] : []));
   startPolling(running.id, Date.parse(running.startedAt));
@@ -570,9 +597,9 @@ onMounted(async () => {
   } catch (cause) {
     unavailable.value = cause instanceof Error ? cause.message : String(cause);
   } finally {
+    await adoptRunningRun();
     loading.value = false;
   }
-  await adoptRunningRun();
 });
 
 onBeforeUnmount(stopPolling);
@@ -664,6 +691,7 @@ onBeforeUnmount(stopPolling);
             :class="{ 'advanced-import__kind--on': kind === item.key }"
             type="button"
             role="radio"
+            :disabled="importBlocked || starting || busy"
             :aria-checked="kind === item.key"
             @click="selectKind(item.key)"
           >
@@ -721,19 +749,10 @@ onBeforeUnmount(stopPolling);
               data-testid="siteprobe-login"
               class="secondary-button"
               type="button"
-              :disabled="running"
+              :disabled="running || starting || busy || loading"
               @click="signIn"
             >
               {{ t('siteprobe.signIn') }}
-            </button>
-            <button
-              v-if="running"
-              data-testid="siteprobe-cancel"
-              class="secondary-button"
-              type="button"
-              @click="cancel"
-            >
-              {{ t('siteprobe.stop') }}
             </button>
           </div>
         </template>
@@ -742,6 +761,11 @@ onBeforeUnmount(stopPolling);
       <!-- While it works: what the tool last said, and how long it has been saying it. -->
       <div v-if="running || lastProgress" data-testid="siteprobe-status" class="advanced-import__status">
         <p>{{ t('siteprobe.working') }}<span v-if="running"> · {{ elapsed }}s</span></p>
+        <p v-if="running" data-testid="siteprobe-active-run" class="muted">
+          {{ t('siteprobe.activeRun', { input: run?.input ?? '' }) }}
+        </p>
+        <button v-if="running" data-testid="siteprobe-cancel" class="secondary-button"
+          type="button" @click="cancel">{{ t('siteprobe.stop') }}</button>
         <p v-if="lastProgress" class="muted">{{ lastProgress }}</p>
         <!-- The sign-in is finished in the browser, and answered here: a console window the person
              has to find is not an interaction (their words, after the first real sign-in). -->
@@ -789,12 +813,12 @@ onBeforeUnmount(stopPolling);
 
       <div v-if="failure" data-testid="siteprobe-error" class="advanced-import__problem">
         <p>{{ failure.message }}</p>
+        <p v-if="errorLogPath" class="muted">{{ t('siteprobe.bugLog', { path: errorLogPath }) }}</p>
         <!-- The stage that read nothing, before the "report this" ask: a person who sees "the listing
              produced no card" does not need to file a bug (plan §5-E). -->
         <p v-if="failure.kind === 'input'" class="muted">{{ t('siteprobe.inputHint') }}</p>
         <template v-else-if="failure.kind === 'bug'">
           <p class="muted">{{ t('siteprobe.bugHint') }}</p>
-          <p v-if="errorLogPath" class="muted">{{ t('siteprobe.bugLog', { path: errorLogPath }) }}</p>
           <button data-testid="siteprobe-copy-diagnostics" class="secondary-button" type="button"
             @click="copyDiagnostics">
             {{ t('entry.copyDiagnostics') }}

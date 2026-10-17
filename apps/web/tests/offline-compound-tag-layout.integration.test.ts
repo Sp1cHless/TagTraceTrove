@@ -162,7 +162,7 @@ it('counts a move between two UID-addressed local Facets before B10, including n
     const tag=(await namedFacet(f.api,work.id,'','Cuisine')).tags[0]!;
     await f.api.moveEntryTag(work.id,tag.id,other.id);await f.api.applyEntryTagLayout(work.id);
     const rows=await f.store.list(),apply=rows.at(-1)!;
-    expect(apply.baseVersion).toBe(3);
+    expect(apply.baseVersion).toBe(2);
     expect(mutationQueuePlan(rows).get(apply.opId)?.dependencies).toContain(rows.find(row=>row.operationKind==='entry.facet.create')!.opId);
     expect(f.calls).toEqual([]);await f.cold();await f.reconnect();
     expect(f.state.lastReplayError).toBeNull();expect(await f.store.list()).toEqual([]);

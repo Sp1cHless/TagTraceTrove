@@ -1,5 +1,5 @@
 <script setup lang="ts" generic="T extends { id: number }">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import CardPagination from './CardPagination.vue';
 import { rowsPerPage } from '../stores/preferences.js';
 import { useNavigationMemory } from '../navigation-memory.js';
@@ -11,6 +11,11 @@ import { useNavigationMemory } from '../navigation-memory.js';
  * width, matching the auto-fill minmax(7.5rem, 1fr) layout below). The page
  * bar appears above AND below the cards; with a single page it disappears
  * entirely.
+ *
+ * `layout` is the Gallery's own card shape. A horizontal card needs room for a
+ * title beside its cover, so it never packs the way the wall does: at most two
+ * per row — one on each side of the page's centre axis — and the page then
+ * carries twice the rows, which keeps the page count in the same range.
  */
 const props = withDefaults(defineProps<{
   items: T[];
@@ -21,10 +26,12 @@ const props = withDefaults(defineProps<{
   /** When supplied with externalPage, items is already one server page. */
   totalItems?: number | undefined;
   externalPage?: number | undefined;
+  layout?: 'vertical' | 'horizontal';
 }>(), {
   gridClass: '',
   gridTestid: undefined,
   pageKey: '',
+  layout: 'vertical',
 });
 
 const emit = defineEmits<{
@@ -42,11 +49,26 @@ let observer: ResizeObserver | undefined;
 // auto-fill minmax(7.5rem, 1fr) + 0.8rem gap → columns from the real width.
 const MIN_CARD_PX = 120;
 const GAP_PX = 12.8;
+// No horizontal card is wider than half the page, so the two of them always fit a row: the count is
+// a property of the screen, not of how wide the titles happen to be.
+const NARROW_SCREEN = '(max-width: 44rem)';
+
+const horizontal = computed(() => props.layout === 'horizontal');
+
+function narrowScreen(): boolean {
+  return typeof window.matchMedia === 'function'
+    ? window.matchMedia(NARROW_SCREEN).matches
+    : window.innerWidth <= 704;
+}
 
 function measure(): void {
-  rowMultiplier.value = typeof window.matchMedia === 'function'
-    ? (window.matchMedia('(max-width: 44rem)').matches ? 2 : 1)
-    : (window.innerWidth <= 704 ? 2 : 1);
+  rowMultiplier.value = narrowScreen() ? 2 : 1;
+  if (horizontal.value) {
+    // The axis needs the room: on a phone there is one card a row and it fills it, which is what
+    // the stylesheet does with the same query.
+    columns.value = narrowScreen() ? 1 : 2;
+    return;
+  }
   const width = gridElement.value?.clientWidth ?? 0;
   if (width > 0) {
     columns.value = Math.max(1, Math.floor((width + GAP_PX) / (MIN_CARD_PX + GAP_PX)));
@@ -70,7 +92,9 @@ onBeforeUnmount(() => {
 
 const pageSize = computed(() => Math.max(
   1,
-  columns.value * rowsPerPage.value * rowMultiplier.value,
+  // Doubled rows in the horizontal shape: two cards per row against the wall's six means twice the
+  // rows keeps a page carrying a comparable number of cards.
+  columns.value * rowsPerPage.value * (horizontal.value ? 2 : rowMultiplier.value),
 ));
 const serverPaging = computed(() => props.totalItems !== undefined && props.externalPage !== undefined);
 const serverPageSize = computed(() => Math.min(100, pageSize.value));
@@ -90,6 +114,16 @@ watch(() => props.pageKey, (nextKey) => {
 
 watch(() => props.externalPage, (nextPage) => {
   if (serverPaging.value && nextPage !== undefined) page.value = nextPage;
+});
+
+// Switching the card shape changes how many cards fit, and the cards themselves have to be
+// re-measured: the column count is read from the element, so it follows the new shape only on the
+// next measurement.
+watch(horizontal, () => {
+  void nextTick(() => {
+    measure();
+    if (page.value > pageCount.value) setPage(pageCount.value);
+  });
 });
 
 watch([serverPaging, serverPageSize, layoutMeasured], ([isServerPaging, nextPageSize, measured]) => {
@@ -131,7 +165,13 @@ function setPage(next: number): void {
     :page-count="pageCount"
     @update:page="setPage"
   />
-  <div ref="gridElement" class="paged-grid" :class="gridClass" :data-testid="gridTestid">
+  <div
+    ref="gridElement"
+    class="paged-grid"
+    :class="[gridClass, { 'is-horizontal': horizontal }]"
+    :data-testid="gridTestid"
+    :data-layout="layout"
+  >
     <slot :items="visibleItems" />
   </div>
   <CardPagination
@@ -155,5 +195,15 @@ function setPage(next: number): void {
 
 @media (max-width: 30rem) {
   .paged-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* The horizontal shape: two tracks around the page's invisible centre axis, never the packed wall.
+   The breakpoints above would otherwise give a narrow screen a single full-width track, which is
+   what this query says too — and the component's own column count is read from the same query, so
+   what the page bar counts and what the stylesheet lays out cannot drift apart. */
+.paged-grid.is-horizontal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+@media (max-width: 44rem) {
+  .paged-grid.is-horizontal { grid-template-columns: minmax(0, 1fr); }
 }
 </style>

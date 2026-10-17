@@ -194,6 +194,10 @@ borrow). <b>Rating filters</b> still look at the work's own value only.</p>
 <p>The pager under the grid pages by the cards the layout can actually show; on phones the rows-per-page preference doubles.
 Changing the filter or sort returns to page 1.</p>
 
+<h3>Horizontal cards and image-less covers</h3>
+<p>The <b>card layout button</b> beside the Gallery heading switches between the vertical grid and horizontal cards. Horizontal cards show a cover on the left and a title on the right, at most two per row (one on narrow screens), with twice the configured rows per page. The choice is saved per Gallery; changing it requires a connection to the desktop, and offline copies do not store it.</p>
+<p>In online lists, a work without a cover or preview shows its first readable Content, then its tags, then its title's first letter. Source URLs are skipped and long text is shortened to fit. Saved offline copies retain the original placeholder style.</p>
+
 <!-- ============================================================ -->
 <h2 id="s4">5. Entry detail</h2>
 
@@ -362,10 +366,9 @@ queue and lands automatically when you're back online. See §13.</div>
 
 <h3>Tags (dictionary)</h3>
 <ul>
-  <li>Manages <b>aliases</b> for the Entry vocabulary: a spelling → a canonical name, optionally with a partition label
-      (series / characters / types / tags / …).</li>
-  <li><b>Placeholder rows</b> (empty canonical) just record a pending name and never resolve anything; they can be filled with one
-      click into the alias form.</li>
+  <li>Automatically lists the library's work tags and their mappings, grouped as <b>Unmapped / Mapped</b>. Tags brought in by new works appear directly, ready to translate into Chinese or unify under another name.</li>
+  <li><b>Unmapped</b> means no canonical name has been assigned. Fill in a mapping or keep the original name; author names are managed under Author aliases.</li>
+  <li><b>Delete tag</b> requires a second confirmation and removes the tag from every linked work. Removing a mapping deletes only that mapping; these actions have separate controls.</li>
   <li><b>Tag merge</b>: pick the tag to keep and the tags to absorb; after confirming, all assignments re-point to the kept tag and
       the merged rows are deleted (with a pre-transaction backup).</li>
 </ul>
@@ -412,6 +415,7 @@ queue and lands automatically when you're back online. See §13.</div>
 <h3>System</h3>
 <ul>
   <li><b>Errors and log</b>: shows the desktop server's log tail and recent client errors, with <b>Copy for a bug report</b>.</li>
+  <li><b>Phone pairing diagnostics</b>: shows this app's local scan, connection, authorization verification, and storage stages. A pairing-failure dialog can copy the report directly, even before pairing or when the desktop is unreachable. An installed older app only provides diagnostics supported by that version.</li>
   <li><b>Database</b>: <b>Back up now</b>, <b>Export</b> (downloads as a real library file), <b>Restore from file</b>. A restore is
       <b>staged</b>: the upload is validated and kept aside, and you must exit the desktop from the tray and open it again to put it
       in place (the replaced library is backed up first).</li>
@@ -433,17 +437,18 @@ start to finish; the first adapter takes a few minutes of your attention.</p>
       the search box, and pick the closest match.</b> The tool scores candidates, but <b>the score is not the point — pick the best
       match</b>. Values like <code>$authorS$</code> or <code>123title456</code> look like page code and can score high, but if the
       clean value is shown on the page the tool has also harvested it.</li>
+  <li><b>One / Several</b>: author, tag, character, and other multi-value fields offer a mode switch. In Several mode, click members to add or remove them, or select one whole tag block to see its split members. If a derived rule reads additional members, the save message lists them; they will also be imported.</li>
+  <li><b>Long descriptions and later corrections</b>: long values are abbreviated on screen with their full character count; saving and importing retain the full text. A value already truncated by the website has a separate warning. A later selection takes priority for that field; fields you did not change keep their earlier choices.</li>
   <li>When it says the adapter is built, you can <b>import the first work for preview</b>.</li>
   <li>Optionally add a <b>listing adapter</b> (<span class="pill">search / artist / favorites / album / playlist</span>): give the
       listing's <b>first</b> and <b>second</b> page URLs (the second is required — it teaches pagination), then annotate the cards.</li>
 </ol>
-<div class="warn"><b>Current limits</b>Simple sites only. Sites that need a sign-in, or that defend themselves against scripts
-(blocking the debug port, scrambling covers), are beyond the generic mechanism; the shipped adapters cover those, or such a site
-needs a dedicated adapter.</div>
+<div class="note"><b>Browser acquisition</b>The tool can use system Edge / Chrome or bundled Chromium / Firefox. Complete sign-in or security checks manually in the browser, then continue the task. Site-specific encryption, private interfaces, or complex restrictions may still need dedicated adapter rules.</div>
 <div class="tip"><b>A rule must name its own addresses</b>A learned listing must be able to turn the page and locate each card's work
 address — a rule that knows only one address is a failed design. That is why the second page URL is required.</div>
 
 <h3>Step 2 — link import</h3>
+<p>Reopening the panel recovers running imports, sign-ins, and rule-building jobs, with a stop control. A builder waiting for annotation can run alongside an import using an installed adapter. If another export holds the shared output directory, the panel identifies that job and its log. Pasting a new address retains access to the running job's controls.</p>
 <ol>
   <li>The creation page (and the Advanced import panel) offers <b>Import an export folder</b> (drop or browse) and <b>Batch import</b>
       (drop a parent folder containing <code>items/&lt;id&gt;</code> subfolders).</li>
@@ -539,6 +544,7 @@ no manual export/restore control in the UI.</p>
 </ol>
 <p>The panel also lists <b>Authorized devices</b> (revoke a device or remove a record) and has a collapsed <b>manual encrypted
 connection recovery</b> section for a crash-left dead lock; it asks you to verify the real PID — never a guess.</p>
+<p>The current app's pairing failures identify stages such as QR expiry, connection or certificate validation, authorization, and storage, and show a diagnostic ID. Copy the local report before following the specific instructions; the desktop log can be correlated with the same ID. Reports omit QR contents, authorization tokens, and pairing keys.</p>
 
 <h3>Using it</h3>
 <ul>

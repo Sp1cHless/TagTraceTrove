@@ -42,6 +42,7 @@ import {
 import { clientErrors, clearClientErrors } from './client-errors.js';
 import { browserCompatibilityReport } from './browser-compat.js';
 import { copyText } from './clipboard.js';
+import { readNativePairingDiagnostics } from './pairing-diagnostics.js';
 
 const props = defineProps<{ api: GalleryApi; store: SnapshotStore; online: boolean; offlineCopyRevision?: string | null; initialTab?: Tab }>();
 const emit = defineEmits<{
@@ -175,7 +176,9 @@ const aliasGroups = computed<AliasGroup[]>(() => {
 
 async function loadAliases(): Promise<void> {
   try {
-    aliases.value = await props.api.listTaxonomyAliases();
+    // This page is about Tag names, so it asks for that vocabulary alone: the server returns the
+    // library's own tags for it, and the author dictionary has its own page.
+    aliases.value = await props.api.listTaxonomyAliases('entry');
     error.value = null;
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : t('advanced.loadError');
@@ -402,6 +405,32 @@ function pickDeleteTag(suggestion: TagMergePick): void {
 
 function removeDeletePick(): void {
   deletePick.value = null;
+}
+
+/**
+ * Deleting the *tag* from a catalog row: the same call the form below makes, with the same
+ * two-step arm, because a tag goes off every work that carries it. A row that came from the
+ * library has no alias row to remove — the row's × is not what this is — so the two are labelled
+ * differently rather than sharing one button that means two things.
+ */
+async function deleteCatalogTag(alias: { tagId?: number | null | undefined; alias: string }): Promise<void> {
+  const tagId = alias.tagId;
+  if (tagId === null || tagId === undefined) return;
+  const key = `delete-tag-${tagId}`;
+  if (!arm(key)) return;
+  disarm(key);
+  tagDeleteBusy.value = true;
+  tagDeleteError.value = null;
+  tagDeleteNotice.value = '';
+  try {
+    const result = await props.api.deleteTag({ vocabulary: 'entry', tagId });
+    tagDeleteNotice.value = t('tagDelete.done', { tag: result.tagName, n: result.removedAssignments });
+    await loadAliases();
+  } catch (cause) {
+    tagDeleteError.value = cause instanceof Error ? cause.message : t('tagDelete.error', { tag: alias.alias });
+  } finally {
+    tagDeleteBusy.value = false;
+  }
 }
 
 async function applyTagDelete(): Promise<void> {
@@ -660,6 +689,7 @@ onMounted(loadAliases);
 // Nothing here is part of the library API: these are the desktop's own endpoints, called
 // directly, and every one of them is about the machine T³ runs on.
 const diagnostics = ref<SystemDiagnostics | null>(null);
+const pairingDiagnostics = ref<unknown>(null);
 const backups = ref<BackupEntry[]>([]);
 const settings = ref<SystemSettings | null>(null);
 const stagedRestore = ref<StagedRestore | null>(null);
@@ -706,12 +736,16 @@ const reportText = computed(() => {
   lines.push(`user agent: ${navigator.userAgent}`);
   lines.push(`viewport: ${globalThis.innerWidth}x${globalThis.innerHeight} @${globalThis.devicePixelRatio}x`);
   lines.push(`browser compatibility: ${JSON.stringify(browserCompatibilityReport())}`);
+  lines.push('--- native pairing ---');
+  lines.push(JSON.stringify(pairingDiagnostics.value, null, 2));
   return lines.join('\n');
 });
 
 async function loadSystem(): Promise<void> {
   systemBusy.value = true;
   systemError.value = '';
+  // Read independently: an unpaired phone cannot fetch desktop diagnostics.
+  pairingDiagnostics.value = await readNativePairingDiagnostics();
   try {
     diagnostics.value = await fetchSystemDiagnostics();
     stagedRestore.value = diagnostics.value.stagedRestore;
@@ -727,6 +761,7 @@ async function loadSystem(): Promise<void> {
 async function copyReport(): Promise<void> {
   systemError.value = '';
   try {
+    pairingDiagnostics.value = await readNativePairingDiagnostics();
     await copyText(reportText.value);
     systemNotice.value = t('system.copied');
   } catch (cause) {
@@ -927,7 +962,7 @@ watch(tab, (value) => {
         :api="api"
         :store="store"
         :online="online"
-        :copy-revision="offlineCopyRevision"
+        :copy-revision="offlineCopyRevision ?? null"
         @updated="emit('updated')"
       >
         <template #diagnostics><slot name="offline-diagnostics" /></template>
@@ -1012,7 +1047,7 @@ watch(tab, (value) => {
           </span>
         </button>
         <ul v-if="expandedGroups.has(group.key)" data-testid="taxonomy-alias-list" class="taxonomy-alias-list">
-          <li v-for="alias in group.items" :key="alias.id">
+          <li v-for="alias in group.items" :key="`${alias.tagId ? 'tag' : 'alias'}-${alias.id}`">
                     <span class="alias-name t3-library-text">
               {{ alias.alias }} →
               <em v-if="alias.canonicalName === ''" class="alias-placeholder">
@@ -1045,6 +1080,19 @@ watch(tab, (value) => {
               {{ t('taxonomy.keepAsIs') }}
             </button>
             <button
+              v-if="alias.tagId"
+              type="button"
+              class="alias-action delete-tag-action"
+              :class="{ 'armable-armed': armedKey === `delete-tag-${alias.tagId}` }"
+              :disabled="busy || tagDeleteBusy"
+              :title="t('taxonomy.deleteTagHint')"
+              :data-testid="`taxonomy-delete-tag-${alias.tagId}`"
+              @click="deleteCatalogTag(alias)"
+            >
+              {{ armedKey === `delete-tag-${alias.tagId}` ? t('tagDelete.applyConfirm') : t('taxonomy.deleteTag') }}
+            </button>
+            <button
+              v-if="!alias.tagId"
               type="button"
               class="remove-tag-button"
               :disabled="busy"

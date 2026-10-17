@@ -228,7 +228,7 @@ describe('the two handovers the advanced page makes', () => {
   it('lets the review name a Gallery that does not exist yet', async () => {
     // An import may be the first work of a new Gallery, and the field was a `<select>`: a type that
     // is not in the list yet could not be said at all. It is the quick page's own control now —
-    // typed freely, with the same SFW-filtered list behind the arrow.
+    // typed freely, with the same visibility-filtered list behind the arrow.
     const { wrapper } = await mounted({
       siteprobeSites: vi.fn(async () => SITES),
       siteprobeResolve: vi.fn(async (): Promise<SiteprobeResolveEvent> => ({
@@ -256,7 +256,7 @@ describe('the two handovers the advanced page makes', () => {
     await field.setValue('brand-new-gallery');
     await flushPromises();
     expect((field.element as HTMLInputElement).value).toBe('brand-new-gallery');
-    // And the list is still there, SFW-filtered like the quick page's.
+    // And the list is still there, visibility-filtered like the quick page's.
     await wrapper.get('[data-testid="import-type-toggle"]').trigger('click');
     const options = wrapper.findAll('[data-testid="import-type-list"] [data-gallery-option]')
       .map((option) => option.attributes('data-gallery-option'));
@@ -662,7 +662,7 @@ describe('the address button and the Gallery field', () => {
     expect(wrapper.get('[data-testid="entry-link-status"]').text()).toBe('Done');
   });
 
-  it('opens the Gallery list on demand, SFW only while that is the mode', async () => {
+  it('opens the Gallery list on demand, visible ones only while hideable content is hidden', async () => {
     showNsfw.value = false;
     const { wrapper } = await mounted();
     // A native datalist gives no list until the second click; this one opens when asked.
@@ -672,14 +672,18 @@ describe('the address button and the Gallery field', () => {
     expect(options.map((option) => option.attributes('data-gallery-option'))).toEqual(['game', 'comic']);
     expect(wrapper.findAll('[data-testid="gallery-nsfw-mark"]')).toHaveLength(0);
 
-    // NSFW mode offers everything, and marks the ones that are NSFW — the sidebar's own mark.
+    // Showing hideable content offers everything, and marks the ones that can be hidden — the sidebar's own mark,
+    // which is the shield there too rather than a word.
     showNsfw.value = true;
     await flushPromises();
     const all = wrapper.get('[data-testid="type-gallery-list"]').findAll('[data-gallery-option]');
     expect(all.map((option) => option.attributes('data-gallery-option')))
       .toEqual(['game', 'comic', 'hentai']);
-    expect(wrapper.findAll('[data-testid="gallery-nsfw-mark"]')).toHaveLength(1);
-    expect(wrapper.get('[data-testid="gallery-nsfw-mark"]').text()).toBe('🔞');
+    const marks = wrapper.findAll('[data-testid="gallery-nsfw-mark"]');
+    expect(marks).toHaveLength(1);
+    // The mark is the icon itself, not a word beside it: the testid lands on the drawn <svg>.
+    expect(marks[0]!.element.tagName.toLowerCase()).toBe('svg');
+    expect(marks[0]!.classes()).toContain('app-icon');
     showNsfw.value = false;
   });
 

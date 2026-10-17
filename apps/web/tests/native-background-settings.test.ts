@@ -8,24 +8,32 @@ it('declared Android API 24 handoff does not reference API-26-only java.nio.file
  const source=readFileSync('spikes/001-android-webview-shell/android/app/src/main/java/com/speechless666/t3/spike/BackgroundTransferPlugin.java','utf8');
  expect(source).not.toContain('java.nio.file');
 });
-it('native-only Settings resume reads bounded native status and does not promise all-operation background coverage', async()=>{
- const resume=vi.fn(async()=>({active:1,completed:0,held:0,remainingOperations:2}));
- const wrapper=mount(OfflineLibrarySettings,{props:{store:createMemorySnapshotStore(), api:{assetUrl:(path:string)=>path,getSyncCapabilities:vi.fn(),fetchSyncSnapshot:vi.fn(),resumeNativeTransfers:resume} as never}});
- await flushPromises();expect(wrapper.find('[data-testid="native-transfer-resume"]').exists()).toBe(true);
- expect(wrapper.get('[data-testid="native-transfer-resume"]').text()).toBe('Resume supported queued edits and images');
- await wrapper.get('[data-testid="native-transfer-resume"]').trigger('click');await flushPromises();
- expect(resume).toHaveBeenCalledTimes(1);expect(wrapper.text()).toContain('2 foreground-only');wrapper.unmount();
+it('automatically probes support without manually resuming native transfers', async()=>{
+ const resume=vi.fn(),probe=vi.fn();
+ const wrapper=mount(OfflineLibrarySettings,{props:{store:createMemorySnapshotStore(),api:{assetUrl:(p:string)=>p,getSyncCapabilities:probe,fetchSyncSnapshot:vi.fn(),resumeNativeTransfers:resume} as never}});
+ try {
+  await flushPromises();expect(probe).toHaveBeenCalledExactlyOnceWith({replay:false});
+  expect(wrapper.find('[data-testid="native-transfer-resume"]').exists()).toBe(false);
+  expect(resume).not.toHaveBeenCalled();
+ } finally {wrapper.unmount();}
 });
-
-it('Settings distinguishes dependency waiting from scheduled and names current capability/protocol fallback',async()=>{
- const resume=vi.fn(async()=>({active:1,completed:0,held:1,dependencyHeld:2,capabilityHeld:1,remainingOperations:1,foregroundReason:'Current required capability unavailable; original work retained'}));
- const wrapper=mount(OfflineLibrarySettings,{props:{store:createMemorySnapshotStore(),api:{assetUrl:(path:string)=>path,getSyncCapabilities:vi.fn(),fetchSyncSnapshot:vi.fn(),resumeNativeTransfers:resume} as never}});
- await flushPromises();await wrapper.get('[data-testid="native-transfer-resume"]').trigger('click');await flushPromises();
- expect(wrapper.text()).toContain('2 waiting for dependencies');expect(wrapper.text()).toContain('1 current-capability held');expect(wrapper.text()).toContain('Current required capability unavailable');wrapper.unmount();
+it('shows saved editing support offline without scheduling or probing the native queue',async()=>{
+ const store=createMemorySnapshotStore();
+ await store.writeMeta('offlineCapabilityReport',JSON.stringify({featureFlags:{offlineMutations:true,offlineEntryUpdate:true,offlineEntryContents:true,offlineProducerProfile:false}}));
+ const probe=vi.fn(),resume=vi.fn();
+ const wrapper=mount(OfflineLibrarySettings,{props:{store,online:false,api:{assetUrl:(p:string)=>p,getSyncCapabilities:probe,fetchSyncSnapshot:vi.fn(),resumeNativeTransfers:resume} as never}});
+ try {
+  await flushPromises();expect(wrapper.get('[data-testid="offline-edit-support"]').text()).toMatch(/2.*3/u);
+  expect(probe).not.toHaveBeenCalled();expect(resume).not.toHaveBeenCalled();
+  expect(wrapper.get('[data-testid="offline-download"]').attributes('disabled')).toBeDefined();
+ } finally {wrapper.unmount();}
 });
-it('native status includes standalone images and actionable oversize foreground fallback',async()=>{
- const resume=vi.fn(async()=>({active:0,completed:0,held:1,remainingOperations:0,standaloneMedia:3,foregroundMedia:1}));
- const wrapper=mount(OfflineLibrarySettings,{props:{store:createMemorySnapshotStore(),api:{assetUrl:(path:string)=>path,getSyncCapabilities:vi.fn(),fetchSyncSnapshot:vi.fn(),resumeNativeTransfers:resume} as never}});
- await flushPromises();await wrapper.get('[data-testid="native-transfer-resume"]').trigger('click');await flushPromises();
- expect(wrapper.text()).toContain('3 existing-Entry images');expect(wrapper.text()).toContain('1 images require foreground Update');expect(wrapper.text()).toContain('20 MiB');wrapper.unmount();
+it('keeps the diagnostic export slot reachable when the server capability probe fails',async()=>{
+ const resume=vi.fn();
+ const wrapper=mount(OfflineLibrarySettings,{props:{store:createMemorySnapshotStore(),api:{assetUrl:(p:string)=>p,getSyncCapabilities:vi.fn().mockRejectedValue(new Error('Server unavailable')),fetchSyncSnapshot:vi.fn(),resumeNativeTransfers:resume} as never},slots:{diagnostics:'<button data-testid="local-report">Copy local report</button>'}});
+ try {
+  await flushPromises();expect(wrapper.get('[data-testid="offline-status"]').text()).toContain('Server unavailable');
+  expect(wrapper.get('[data-testid="offline-system-information"] button').text()).toBe('Copy local report');
+  expect(resume).not.toHaveBeenCalled();
+ } finally {wrapper.unmount();}
 });

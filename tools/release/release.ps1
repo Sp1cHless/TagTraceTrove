@@ -68,7 +68,7 @@ function Copy-T3Tree([string]$Source, [string]$Destination, [string[]]$Exclude =
     New-Item -ItemType Directory -Force -Path $Destination | Out-Null
     foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
         if ($item.Name -in $Exclude -or $item.Name -in @('__pycache__', '.git', '.data', '.env', '.pytest_cache') -or $item.Name -like '*.pyc') { continue }
-        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Cannot distribute a redirected runtime file: $($item.FullName)" }
+        [T3Paths.WindowsPathPolicy]::AssertNoRedirect($item.FullName)
         $to = Join-Path $Destination $item.Name
         if ($item.PSIsContainer) { Copy-T3Tree $item.FullName $to $Exclude } else { Copy-Item -LiteralPath $item.FullName -Destination $to }
     }
@@ -80,7 +80,7 @@ function Get-T3InputFingerprint {
             $file.FullName.Substring($repo.Length) + ':' + (Get-FileHash -LiteralPath $file.FullName).Hash
         }
     }
-    $lines += foreach ($relative in @('apps/web/browser-build-compat.ts', 'apps/web/package.json', 'spikes/001-android-webview-shell/prepare-web.mjs', 'spikes/001-android-webview-shell/capacitor.config.json')) {
+    $lines += foreach ($relative in @('tools/t3-launcher/InstallationProgressWindow.cs', 'apps/web/browser-build-compat.ts', 'apps/web/package.json', 'spikes/001-android-webview-shell/prepare-web.mjs', 'spikes/001-android-webview-shell/capacitor.config.json')) {
         $relative + ':' + (Get-FileHash -LiteralPath (Join-Path $repo $relative)).Hash
     }
     $lines += foreach ($file in Get-ChildItem -LiteralPath (Join-Path $repo 'siteprobe') -File | Sort-Object Name) {
@@ -153,7 +153,9 @@ try {
     Copy-T3Tree (Join-Path $repo 'siteprobe/adapters/builtin') (Join-Path $desktop 'siteprobe/adapters/builtin')
     $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $desktop 'tools/playwright'
     if ($BrowserDirectory) { Copy-T3Tree $BrowserDirectory $env:PLAYWRIGHT_BROWSERS_PATH @('.links') }
-    else { Invoke-T3Tool (Join-Path $pythonTarget 'python.exe') @('-m', 'playwright', 'install', 'chromium') (Join-Path $desktop 'siteprobe') }
+    # A reused browser cache may predate Firefox support. Install only missing matching builds.
+    Invoke-T3Tool (Join-Path $pythonTarget 'python.exe') @('-m', 'playwright', 'install', 'chromium', 'firefox') (Join-Path $desktop 'siteprobe')
+    Invoke-T3Tool (Join-Path $pythonTarget 'python.exe') @((Join-Path $PSScriptRoot 'check-browser.py'), (Join-Path $desktop 'siteprobe')) (Join-Path $desktop 'siteprobe')
     $links = Assert-T3Child (Join-Path $env:PLAYWRIGHT_BROWSERS_PATH '.links') $desktop
     if (Test-Path -LiteralPath $links) { Remove-Item -LiteralPath $links -Recurse -Force }
     $opensslTarget = Join-Path $desktop 'tools/openssl'
@@ -167,7 +169,7 @@ try {
     }
     # Minimal portable configuration; do not inherit the builder's absolute OpenSSL config path.
     [IO.File]::WriteAllText((Join-Path $opensslTarget 'openssl.cnf'), '[req]' + "`n" + 'distinguished_name=req_distinguished_name' + "`n" + '[req_distinguished_name]' + "`n")
-    foreach ($name in @('Install.ps1', 'Install.cmd', 'Install-Demo.cmd', 'Start.ps1', 'Start.cmd', 'Uninstall.ps1', 'Uninstall.cmd', 'lifecycle.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $desktop }
+    foreach ($name in @('Install.ps1', 'Install.cmd', 'Install-Demo.cmd', 'Start.ps1', 'Start.cmd', 'Uninstall.ps1', 'Uninstall.cmd', 'lifecycle.ps1', 'WindowsPathPolicy.cs', 'Diagnose.ps1', 'Diagnose.cmd', 'DIAGNOSE.zh.txt')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $desktop }
     Copy-Item -LiteralPath (Join-Path $repo 'docs/release-installation.md') -Destination (Join-Path $desktop 'INSTALL.md')
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Install-Android.ps1') -Destination $output
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Install-Android.cmd') -Destination $output

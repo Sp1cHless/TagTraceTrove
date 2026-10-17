@@ -83,7 +83,8 @@ it.each(['metadata','thumbnails','selected-originals'] as const)('mounted Settin
     expect(request.media).toBe(media); expect(request.clientId).toMatch(/^[0-9a-f-]{36}$/iu);
     await api.preferOfflineSnapshot!('disconnect'); await peerApi.preferOfflineSnapshot!('disconnect');
     await api.updateEntry(1,{title:'Queued A'}); await peerApi.updateEntry(1,{title:'Queued B'});
-    expect((await store.list()).map(row=>row.clientId)).toEqual([request.clientId,request.clientId]);
+    expect((await store.list()).map(row=>({clientId:row.clientId,title:row.payload.title})))
+      .toEqual([{clientId:request.clientId,title:'Queued B'}]);
     expect(await store.readMeta('t3.offline-client-id')).toBe(request.clientId);
     await vi.waitFor(()=>expect(wrapper.get('[data-testid="offline-download"]').attributes('disabled')).toBeUndefined());
     await wrapper.get('[data-testid="offline-download"]').trigger('click');
